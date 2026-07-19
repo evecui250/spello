@@ -107,11 +107,8 @@ export default function SettingsPage() {
 
         <div>
           <label className="block font-semibold text-slate-700 mb-1">
-            Words per study session
+            New words per day
           </label>
-          <p className="text-slate-400 text-sm mb-3">
-            New and in-progress words (round 1-4) pulled into each study batch.
-          </p>
           <div className="flex items-center gap-4">
             <input
               type="range" min={1} max={30} value={studyBatchSize}
@@ -130,7 +127,6 @@ export default function SettingsPage() {
           <label className="block font-semibold text-slate-700 mb-1">
             Review words per day
           </label>
-          <p className="text-slate-400 text-sm mb-3">Words that have earned at least one coin.</p>
           <div className="flex items-center gap-4">
             <input
               type="range" min={1} max={100} value={dailyReview}
@@ -160,7 +156,7 @@ export default function SettingsPage() {
 
         <div>
           <label className="block font-semibold text-slate-700 mb-1">
-            Reviews to fully master a word
+            Repetitions days
           </label>
           <p className="text-slate-400 text-sm mb-3">
             Coins (round 5 passes) a word needs to be fully mastered and retired.

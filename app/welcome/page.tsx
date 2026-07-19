@@ -55,11 +55,8 @@ export default function WelcomePage() {
       <div className="w-full bg-white rounded-2xl border border-indigo-50 shadow-sm p-6 flex flex-col gap-6">
         <div>
           <label className="block font-semibold text-slate-700 mb-1">
-            Words per study session
+            New words per day
           </label>
-          <p className="text-slate-400 text-sm mb-3">
-            How many new words you'll take on in a typical study session.
-          </p>
           <div className="flex items-center gap-4">
             <input
               type="range" min={1} max={30} value={studyBatchSize}
@@ -74,7 +71,6 @@ export default function WelcomePage() {
           <label className="block font-semibold text-slate-700 mb-1">
             Review words per day
           </label>
-          <p className="text-slate-400 text-sm mb-3">Words you've already learned, revisited to lock them in.</p>
           <div className="flex items-center gap-4">
             <input
               type="range" min={1} max={100} value={dailyReview}
@@ -100,7 +96,7 @@ export default function WelcomePage() {
 
         <div>
           <label className="block font-semibold text-slate-700 mb-1">
-            Reviews to fully master a word
+            Repetitions days
           </label>
           <p className="text-slate-400 text-sm mb-3">
             How many successful reviews a word needs before it's retired as mastered.
