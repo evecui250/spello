@@ -1,20 +1,21 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { getSettings, saveSettings, clearAllProgress } from '../../lib/storage';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { getSettings, saveSettings, clearAllProgress, Settings } from '../../lib/storage';
 import { estimateProgressForecast } from '../../lib/practice';
 import { scheduleSync } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 
 export default function SettingsPage() {
-  const [studyBatchSize, setStudyBatchSize] = useState(10);
-  const [dailyReview, setDailyReview] = useState(20);
-  const [masteryThreshold, setMasteryThreshold] = useState(5);
+  const [studyBatchSize, setStudyBatchSize] = useState(15);
+  const [dailyReview, setDailyReview] = useState(25);
+  const [masteryThreshold, setMasteryThreshold] = useState(3);
   const [language, setLanguage] = useState('de');
   const [level, setLevel] = useState('B2');
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
   const [saved, setSaved] = useState(false);
   const [cleared, setCleared] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const loadFromStorage = () => {
     const s = getSettings();
@@ -29,18 +30,25 @@ export default function SettingsPage() {
   useEffect(loadFromStorage, []);
 
   // Recomputed live as the sliders move, so the user can see the effect of
-  // a pace change before saving it.
+  // a pace change immediately.
   const forecast = useMemo(
     () => estimateProgressForecast(studyBatchSize, dailyReview, masteryThreshold),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [studyBatchSize, dailyReview, masteryThreshold, cleared],
   );
 
-  const handleSave = () => {
-    saveSettings({ studyBatchSize, dailyReview, masteryThreshold, language, level, autoPlayAudio });
+  // Every control saves immediately on change — no separate Save step.
+  // Callers pass the field(s) that just changed; everything else comes
+  // from current state, which is already up to date by the time this runs.
+  const persist = (patch: Partial<Settings>) => {
+    const next: Settings = {
+      studyBatchSize, dailyReview, masteryThreshold, language, level, autoPlayAudio, ...patch,
+    };
+    saveSettings(next);
     scheduleSync();
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaved(false), 1200);
   };
 
   const handleClearAll = () => {
@@ -53,7 +61,12 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-indigo-700">Settings</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-indigo-700">Settings</h1>
+        <span className={`text-sm font-medium text-green-600 transition-opacity ${saved ? 'opacity-100' : 'opacity-0'}`}>
+          ✓ Saved
+        </span>
+      </div>
 
       <div className="bg-white rounded-2xl border border-indigo-50 shadow-sm p-6">
         <AccountPanel onSync={loadFromStorage} />
@@ -65,7 +78,7 @@ export default function SettingsPage() {
             <label className="block font-semibold text-slate-700 mb-1">Language</label>
             <select
               value={language}
-              onChange={e => setLanguage(e.target.value)}
+              onChange={e => { setLanguage(e.target.value); persist({ language: e.target.value }); }}
               className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"
             >
               <option value="de">German</option>
@@ -75,7 +88,7 @@ export default function SettingsPage() {
             <label className="block font-semibold text-slate-700 mb-1">Level</label>
             <select
               value={level}
-              onChange={e => setLevel(e.target.value)}
+              onChange={e => { setLevel(e.target.value); persist({ level: e.target.value }); }}
               className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"
             >
               <option value="B2">B2</option>
@@ -94,7 +107,11 @@ export default function SettingsPage() {
           <div className="flex items-center gap-4">
             <input
               type="range" min={1} max={30} value={studyBatchSize}
-              onChange={e => setStudyBatchSize(Number(e.target.value))}
+              onChange={e => {
+                const v = Number(e.target.value);
+                setStudyBatchSize(v);
+                persist({ studyBatchSize: v });
+              }}
               className="flex-1 accent-indigo-600"
             />
             <span className="w-8 text-center font-bold text-indigo-700">{studyBatchSize}</span>
@@ -109,7 +126,11 @@ export default function SettingsPage() {
           <div className="flex items-center gap-4">
             <input
               type="range" min={1} max={50} value={dailyReview}
-              onChange={e => setDailyReview(Number(e.target.value))}
+              onChange={e => {
+                const v = Number(e.target.value);
+                setDailyReview(v);
+                persist({ dailyReview: v });
+              }}
               className="flex-1 accent-indigo-600"
             />
             <span className="w-8 text-center font-bold text-indigo-700">{dailyReview}</span>
@@ -126,29 +147,25 @@ export default function SettingsPage() {
           <div className="flex items-center gap-4">
             <input
               type="range" min={1} max={10} value={masteryThreshold}
-              onChange={e => setMasteryThreshold(Number(e.target.value))}
+              onChange={e => {
+                const v = Number(e.target.value);
+                setMasteryThreshold(v);
+                persist({ masteryThreshold: v });
+              }}
               className="flex-1 accent-indigo-600"
             />
             <span className="w-8 text-center font-bold text-indigo-700">{masteryThreshold}</span>
           </div>
         </div>
 
-        <div className="bg-indigo-50 rounded-xl p-4 text-sm text-indigo-700 flex flex-col gap-1">
-          <div className="font-semibold">At this pace</div>
-          {forecast.wordsRemaining === 0 ? (
-            <div>Every word has been introduced at least once already.</div>
-          ) : (
-            <div>
-              {forecast.wordsRemaining} new word{forecast.wordsRemaining === 1 ? '' : 's'} left to introduce —
-              about {forecast.daysToIntroduceAll} day{forecast.daysToIntroduceAll === 1 ? '' : 's'} to study every word at least once.
-            </div>
-          )}
-          <div>
-            About {forecast.daysToMasterAll} day{forecast.daysToMasterAll === 1 ? '' : 's'} to fully master every word ({masteryThreshold} coin{masteryThreshold === 1 ? '' : 's'} each).
-          </div>
-          <div className="text-indigo-400 text-xs mt-1">
-            Estimate assumes correct answers each session — actual pace depends on how many you get right.
-          </div>
+        <div className="bg-indigo-50 rounded-xl px-4 py-3 text-sm text-indigo-700 flex items-center justify-between gap-3">
+          <span className="font-semibold shrink-0">At this pace</span>
+          <span className="text-right">
+            {forecast.wordsRemaining === 0
+              ? 'All words introduced'
+              : `~${forecast.daysToIntroduceAll}d to learn all`}
+            {' · '}~{forecast.daysToMasterAll}d to master all
+          </span>
         </div>
 
         <div className="flex items-center justify-between">
@@ -161,21 +178,14 @@ export default function SettingsPage() {
           <input
             type="checkbox"
             checked={autoPlayAudio}
-            onChange={e => setAutoPlayAudio(e.target.checked)}
+            onChange={e => { setAutoPlayAudio(e.target.checked); persist({ autoPlayAudio: e.target.checked }); }}
             className="w-5 h-5 accent-indigo-600"
           />
         </div>
-
-        <button
-          onClick={handleSave}
-          className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
-        >
-          {saved ? '✓ Saved!' : 'Save settings'}
-        </button>
       </div>
 
       <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 text-sm text-amber-700">
-        Changes take effect at the start of your next practice session.
+        Changes apply starting with your next practice session — an in-progress one keeps its original settings.
       </div>
 
       <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-6 flex flex-col gap-3">

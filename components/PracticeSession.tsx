@@ -7,7 +7,8 @@ import {
 } from '../lib/practice';
 import {
   getWordProgress, saveWordProgress, getSettings, touchStreak, markStudyGoalDone,
-  takeExtraStudyLimit, isStudyGoalDoneToday, getTodayStudyBatch, saveTodayStudyBatch,
+  takeExtraStudyLimit, isStudyGoalDoneToday, isReviewGoalDoneToday, markReviewGoalDone,
+  getDailyStats, markCongratsShown, getTodayStudyBatch, saveTodayStudyBatch,
   MAX_ROUND, Round, Settings,
 } from '../lib/storage';
 import { Word } from '../lib/words';
@@ -15,6 +16,7 @@ import SpecialCharButtons from './SpecialCharButtons';
 import LetterInputRow from './LetterInputRow';
 import SpeakerButton from './SpeakerButton';
 import CongratsModal from './CongratsModal';
+import NextSectionPrompt from './NextSectionPrompt';
 import { speakGerman, spokenForm } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
 import Link from 'next/link';
@@ -48,8 +50,10 @@ export default function PracticeSession({ mode }: Props) {
 
   const [sessionDone, setSessionDone] = useState(false);
   const [showCongrats, setShowCongrats] = useState(false);
+  const [nudge, setNudge] = useState<'study' | 'review' | null>(null);
   const isExtraRef = useRef(false);
   const goalDoneAtStartRef = useRef(true);
+  const reviewGoalDoneAtStartRef = useRef(true);
 
   const [currentRound, setCurrentRound] = useState<Round>(1);
   const [currentStudiedTimes, setCurrentStudiedTimes] = useState(0);
@@ -118,6 +122,7 @@ export default function PracticeSession({ mode }: Props) {
         }
       }
     } else {
+      reviewGoalDoneAtStartRef.current = isReviewGoalDoneToday();
       const batch = buildReviewWords(s.dailyReview);
       setWords(batch);
       setDoneIds(new Set(batch.map(w => w.id)));
@@ -150,6 +155,24 @@ export default function PracticeSession({ mode }: Props) {
 
   const handleGiveUp = () => submitResult(false);
 
+  // Once a section (study or review) finishes for the first time today,
+  // either celebrate (if the other section is also done) or nudge the user
+  // toward it. Repeat completions the same day (extra study, review more)
+  // don't retrigger this.
+  const checkDailyCompletion = () => {
+    const stats = getDailyStats();
+    if (stats.studyDone && stats.reviewDone) {
+      if (!stats.congratsShown) {
+        markCongratsShown();
+        setShowCongrats(true);
+      }
+    } else if (stats.studyDone) {
+      setNudge('review');
+    } else if (stats.reviewDone) {
+      setNudge('study');
+    }
+  };
+
   const handleNext = () => {
     if (mode === 'study') {
       const rest = queue.slice(1);
@@ -158,10 +181,11 @@ export default function PracticeSession({ mode }: Props) {
       if (rest.length === 0) {
         setSessionDone(true);
         touchStreak();
-        markStudyGoalDone();
         scheduleSync();
-        if (!isExtraRef.current && !goalDoneAtStartRef.current) {
-          setShowCongrats(true);
+        if (!isExtraRef.current) {
+          const wasDone = goalDoneAtStartRef.current;
+          markStudyGoalDone(totalStudyWords);
+          if (!wasDone) checkDailyCompletion();
         }
       } else {
         loadCurrent(rest[0]);
@@ -173,6 +197,9 @@ export default function PracticeSession({ mode }: Props) {
         setSessionDone(true);
         touchStreak();
         scheduleSync();
+        const wasDone = reviewGoalDoneAtStartRef.current;
+        markReviewGoalDone(words.length);
+        if (!wasDone) checkDailyCompletion();
       } else {
         setWordIdx(nextIdx);
         loadCurrent(words[nextIdx]);
@@ -239,6 +266,7 @@ export default function PracticeSession({ mode }: Props) {
   }
 
   if (sessionDone) {
+    const dailyStats = showCongrats ? getDailyStats() : null;
     return (
       <div className="text-center py-16">
         <div className="text-5xl mb-4">✅</div>
@@ -261,12 +289,16 @@ export default function PracticeSession({ mode }: Props) {
           )}
           <Link href="/" className="text-indigo-600 underline">Back to Home</Link>
         </div>
-        {showCongrats && (
+        {showCongrats && dailyStats && (
           <CongratsModal
-            wordsToday={totalStudyWords}
+            studiedCount={dailyStats.studiedCount}
+            reviewedCount={dailyStats.reviewedCount}
             language={LANG_NAMES[settings?.language ?? 'de'] ?? 'German'}
             onClose={() => setShowCongrats(false)}
           />
+        )}
+        {nudge && (
+          <NextSectionPrompt section={nudge} onDismiss={() => setNudge(null)} />
         )}
       </div>
     );

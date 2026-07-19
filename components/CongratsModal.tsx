@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface Props {
-  wordsToday: number;
+  studiedCount: number;
+  reviewedCount: number;
   language: string;
   onClose: () => void;
 }
@@ -20,7 +21,7 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-export default function CongratsModal({ wordsToday, language, onClose }: Props) {
+export default function CongratsModal({ studiedCount, reviewedCount, language, onClose }: Props) {
   const [imgUrl, setImgUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,30 +54,49 @@ export default function CongratsModal({ wordsToday, language, onClose }: Props) 
 
       ctx.textAlign = 'center';
       const cx = size / 2;
+      let y = pad + 60;
 
-      if (logo) {
-        const logoSize = 130;
-        ctx.drawImage(logo, cx - logoSize / 2, pad + 70, logoSize, logoSize);
+      if (logo && logo.naturalWidth && logo.naturalHeight) {
+        // The logo already has the "Spello" wordmark baked in, so it's
+        // drawn large on its own — no separate text label needed.
+        const logoHeight = 320;
+        const logoWidth = logoHeight * (logo.naturalWidth / logo.naturalHeight);
+        ctx.drawImage(logo, cx - logoWidth / 2, y, logoWidth, logoHeight);
+        y += logoHeight + 40;
+      } else {
+        y += 40;
       }
 
-      ctx.fillStyle = '#4338ca';
-      ctx.font = '700 46px system-ui, -apple-system, sans-serif';
-      ctx.fillText('Spello', cx, pad + 280);
-
       ctx.fillStyle = '#1e1b4b';
-      ctx.font = '700 58px system-ui, -apple-system, sans-serif';
-      ctx.fillText('🎉 Daily goal complete!', cx, pad + 380);
+      ctx.font = '700 56px system-ui, -apple-system, sans-serif';
+      ctx.fillText('🎉 Daily goal complete!', cx, y + 50);
+      y += 130;
 
+      // Two stat columns: words studied and words reviewed.
+      const colOffset = 230;
       ctx.fillStyle = '#4f46e5';
-      ctx.font = '800 150px system-ui, -apple-system, sans-serif';
-      ctx.fillText(`${wordsToday}`, cx, pad + 570);
+      ctx.font = '800 120px system-ui, -apple-system, sans-serif';
+      ctx.fillText(`${studiedCount}`, cx - colOffset, y + 120);
+      ctx.fillText(`${reviewedCount}`, cx + colOffset, y + 120);
 
       ctx.fillStyle = '#334155';
-      ctx.font = '500 42px system-ui, -apple-system, sans-serif';
-      ctx.fillText(`${language} words learned today`, cx, pad + 640);
+      ctx.font = '500 34px system-ui, -apple-system, sans-serif';
+      ctx.fillText('learned', cx - colOffset, y + 170);
+      ctx.fillText('reviewed', cx + colOffset, y + 170);
+
+      ctx.strokeStyle = '#e0e7ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, y + 20);
+      ctx.lineTo(cx, y + 150);
+      ctx.stroke();
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = '500 36px system-ui, -apple-system, sans-serif';
+      ctx.fillText(`${language} words today`, cx, y + 250);
 
       ctx.fillStyle = '#94a3b8';
-      ctx.font = '400 32px system-ui, -apple-system, sans-serif';
+      ctx.font = '400 30px system-ui, -apple-system, sans-serif';
       const dateStr = new Date().toLocaleDateString(undefined, {
         year: 'numeric', month: 'long', day: 'numeric',
       });
@@ -93,7 +113,7 @@ export default function CongratsModal({ wordsToday, language, onClose }: Props) 
     logo.src = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/logo.png`;
 
     return () => { cancelled = true; };
-  }, [wordsToday, language]);
+  }, [studiedCount, reviewedCount, language]);
 
   useEffect(() => () => { if (imgUrl) URL.revokeObjectURL(imgUrl); }, [imgUrl]);
 
@@ -113,7 +133,7 @@ export default function CongratsModal({ wordsToday, language, onClose }: Props) 
       const file = new File([blob], 'spello.png', { type: 'image/png' });
       const nav = navigator as Navigator & { canShare?: (data: { files: File[] }) => boolean };
       if (nav.share && nav.canShare?.({ files: [file] })) {
-        await nav.share({ files: [file], title: 'Spello', text: `I learned ${wordsToday} ${language} words today!` });
+        await nav.share({ files: [file], title: 'Spello', text: `I learned ${studiedCount} ${language} words today!` });
         return;
       }
     } catch {

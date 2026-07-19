@@ -29,14 +29,14 @@ const KEYS = {
   progress: 'wb2_progress',
   streak: 'wb2_streak',
   settings: 'wb2_settings',
-  studyDone: 'wb2_study_done',
+  dailyStats: 'wb2_daily_stats',
   studyBatch: 'wb2_study_batch',
 };
 
 const EXTRA_STUDY_KEY = 'wb2_extra_study_limit';
 
 const DEFAULT_SETTINGS: Settings = {
-  studyBatchSize: 10, dailyReview: 20, masteryThreshold: 5, language: 'de', level: 'B2',
+  studyBatchSize: 15, dailyReview: 25, masteryThreshold: 3, language: 'de', level: 'B2',
   autoPlayAudio: true,
 };
 
@@ -126,21 +126,73 @@ export function saveSettings(s: Settings): void {
   localStorage.setItem(KEYS.settings, JSON.stringify(s));
 }
 
-// --- Daily study goal ---
+// --- Daily study/review goals ---
+
+export interface DailyStats {
+  date: string;
+  studyDone: boolean;
+  reviewDone: boolean;
+  studiedCount: number;   // words brought to round 5 today via the primary study batch
+  reviewedCount: number;  // words reviewed today, across all review batches
+  congratsShown: boolean; // whether the "both sections done" card has been shown today
+}
+
+function defaultDailyStats(): DailyStats {
+  return {
+    date: today(), studyDone: false, reviewDone: false,
+    studiedCount: 0, reviewedCount: 0, congratsShown: false,
+  };
+}
+
+export function getDailyStats(): DailyStats {
+  if (typeof window === 'undefined') return defaultDailyStats();
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEYS.dailyStats) || 'null') as DailyStats | null;
+    if (raw && raw.date === today()) return raw;
+  } catch {
+    // fall through to default
+  }
+  return defaultDailyStats();
+}
+
+function saveDailyStats(stats: DailyStats): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(KEYS.dailyStats, JSON.stringify(stats));
+}
 
 // Whether the user has completed a full study session today (their daily goal).
 export function isStudyGoalDoneToday(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const raw = JSON.parse(localStorage.getItem(KEYS.studyDone) || '{"date":""}');
-    return raw.date === today();
-  } catch {
-    return false;
-  }
+  return getDailyStats().studyDone;
 }
 
-export function markStudyGoalDone(): void {
-  localStorage.setItem(KEYS.studyDone, JSON.stringify({ date: today() }));
+export function isReviewGoalDoneToday(): boolean {
+  return getDailyStats().reviewDone;
+}
+
+// Records that today's primary study batch finished. `count` is the full
+// batch size (stable across resumed sessions, so it's set rather than added).
+export function markStudyGoalDone(count: number): DailyStats {
+  const stats = getDailyStats();
+  stats.studyDone = true;
+  stats.studiedCount = count;
+  saveDailyStats(stats);
+  return stats;
+}
+
+// Records that a review batch finished. `count` is added, since a user can
+// review multiple batches ("Review more") across the day.
+export function markReviewGoalDone(count: number): DailyStats {
+  const stats = getDailyStats();
+  stats.reviewDone = true;
+  stats.reviewedCount += count;
+  saveDailyStats(stats);
+  return stats;
+}
+
+export function markCongratsShown(): void {
+  const stats = getDailyStats();
+  stats.congratsShown = true;
+  saveDailyStats(stats);
 }
 
 // --- Today's study batch ---
@@ -186,6 +238,6 @@ export function clearAllProgress(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(KEYS.progress);
   localStorage.removeItem(KEYS.streak);
-  localStorage.removeItem(KEYS.studyDone);
+  localStorage.removeItem(KEYS.dailyStats);
   localStorage.removeItem(KEYS.studyBatch);
 }
