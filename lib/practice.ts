@@ -11,6 +11,13 @@ function shuffled<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
 }
 
+const WORDS_BY_ID = new Map(WORDS.map(w => [w.id, w]));
+
+// Looks up words by id, preserving order and silently dropping unknown ids.
+export function wordsById(ids: string[]): Word[] {
+  return ids.map(id => WORDS_BY_ID.get(id)).filter((w): w is Word => !!w);
+}
+
 // Study pool: words that haven't reached round 5 yet — brand new words and
 // words still climbing the round 1-4 ladder, however many days that's taken.
 // Words already in progress (abandoned mid-ladder) are prioritized over
@@ -59,6 +66,50 @@ export function generateHint(word: string, round: Round): boolean[] {
   const rest = shuffled(Array.from({ length: n - 1 }, (_, i) => i + 1));
   rest.slice(0, revealCount - 1).forEach(i => revealed.add(i));
   return Array.from({ length: n }, (_, i) => !revealed.has(i));
+}
+
+export interface ProgressForecast {
+  wordsRemaining: number;
+  daysToIntroduceAll: number;
+  daysToMasterAll: number;
+}
+
+// Rough forecast for the Settings page: how many days at the given pace
+// until every word has been studied at least once, and until every word
+// is fully mastered. Assumes correct answers every time (an optimistic
+// best case), and that study happens before review each day.
+export function estimateProgressForecast(
+  studyBatchSize: number,
+  dailyReview: number,
+  masteryThreshold: number,
+): ProgressForecast {
+  const allProgress = getAllProgress();
+  let introduced = 0;
+  let reviewCoinsRemaining = 0;
+
+  for (const w of WORDS) {
+    const p = allProgress[w.id];
+    if (!p) continue;
+    introduced++;
+    if (!p.fullyMastered) {
+      reviewCoinsRemaining += Math.max(0, masteryThreshold - p.studiedTimes);
+    }
+  }
+
+  const wordsRemaining = WORDS.length - introduced;
+  const daysToIntroduceAll = studyBatchSize > 0 ? Math.ceil(wordsRemaining / studyBatchSize) : Infinity;
+
+  // A word earns its first coin for free the same day it's introduced
+  // (a study session doesn't end until every pulled word reaches round 5),
+  // so only the remaining coins after that need dedicated review days.
+  reviewCoinsRemaining += wordsRemaining * Math.max(0, masteryThreshold - 1);
+  const daysForReview = dailyReview > 0 ? Math.ceil(reviewCoinsRemaining / dailyReview) : Infinity;
+
+  return {
+    wordsRemaining,
+    daysToIntroduceAll,
+    daysToMasterAll: daysToIntroduceAll + daysForReview,
+  };
 }
 
 export function checkAnswer(word: string, answer: string): boolean {

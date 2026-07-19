@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getSettings, saveSettings, clearAllProgress } from '../../lib/storage';
+import { estimateProgressForecast } from '../../lib/practice';
 import { scheduleSync } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 
@@ -26,6 +27,14 @@ export default function SettingsPage() {
   };
 
   useEffect(loadFromStorage, []);
+
+  // Recomputed live as the sliders move, so the user can see the effect of
+  // a pace change before saving it.
+  const forecast = useMemo(
+    () => estimateProgressForecast(studyBatchSize, dailyReview, masteryThreshold),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [studyBatchSize, dailyReview, masteryThreshold, cleared],
+  );
 
   const handleSave = () => {
     saveSettings({ studyBatchSize, dailyReview, masteryThreshold, language, level, autoPlayAudio });
@@ -121,6 +130,24 @@ export default function SettingsPage() {
               className="flex-1 accent-indigo-600"
             />
             <span className="w-8 text-center font-bold text-indigo-700">{masteryThreshold}</span>
+          </div>
+        </div>
+
+        <div className="bg-indigo-50 rounded-xl p-4 text-sm text-indigo-700 flex flex-col gap-1">
+          <div className="font-semibold">At this pace</div>
+          {forecast.wordsRemaining === 0 ? (
+            <div>Every word has been introduced at least once already.</div>
+          ) : (
+            <div>
+              {forecast.wordsRemaining} new word{forecast.wordsRemaining === 1 ? '' : 's'} left to introduce —
+              about {forecast.daysToIntroduceAll} day{forecast.daysToIntroduceAll === 1 ? '' : 's'} to study every word at least once.
+            </div>
+          )}
+          <div>
+            About {forecast.daysToMasterAll} day{forecast.daysToMasterAll === 1 ? '' : 's'} to fully master every word ({masteryThreshold} coin{masteryThreshold === 1 ? '' : 's'} each).
+          </div>
+          <div className="text-indigo-400 text-xs mt-1">
+            Estimate assumes correct answers each session — actual pace depends on how many you get right.
           </div>
         </div>
 

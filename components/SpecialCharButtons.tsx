@@ -5,7 +5,7 @@ interface Props {
   onInsert?: (val: string) => void;
 }
 
-const CHARS = ['ä', 'ö', 'ü', 'ß', 'Ä', 'Ö', 'Ü'];
+const CHARS = ['ä', 'ö', 'ü', 'ß'];
 
 export default function SpecialCharButtons({ inputRef, onInsert }: Props) {
   const insert = (ch: string) => {

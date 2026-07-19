@@ -59,12 +59,26 @@ export async function pullAndMerge(userId: string): Promise<void> {
 }
 
 // Pushes the current local state up as this user's remote snapshot.
+// Alongside the full `progress` blob (needed to actually restore state on
+// another device), this also writes flat summary columns — streak_count,
+// learning_count, mastered_count, language, level — so the row is readable
+// at a glance in the Supabase table editor without expanding the JSON.
 async function pushToRemote(userId: string): Promise<void> {
+  const progress = getAllProgress();
+  const streak = getStreak();
+  const settings = getSettings();
+  const values = Object.values(progress);
+
   await supabase.from('user_progress').upsert({
     user_id: userId,
-    progress: getAllProgress(),
-    streak: getStreak(),
-    settings: getSettings(),
+    progress,
+    streak,
+    settings,
+    streak_count: streak.count,
+    learning_count: values.filter(p => !p.fullyMastered && p.studiedTimes >= 1).length,
+    mastered_count: values.filter(p => p.fullyMastered).length,
+    language: settings.language,
+    level: settings.level,
     updated_at: new Date().toISOString(),
   });
 }

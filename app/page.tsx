@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   getStreak, getAllProgress, getSettings, isStudyGoalDoneToday, setExtraStudyLimit,
+  getTodayStudyBatch, getWordProgress, MAX_ROUND,
 } from '../lib/storage';
-import { buildStudyWords, buildReviewWords } from '../lib/practice';
+import { buildStudyWords, buildReviewWords, wordsById } from '../lib/practice';
 import { WORDS } from '../lib/words';
 import Logo from '../components/Logo';
 
@@ -26,7 +27,13 @@ export default function HomePage() {
     setMasteredCount(Object.values(progress).filter(p => p.fullyMastered).length);
     setLearningCount(Object.values(progress).filter(p => !p.fullyMastered && p.studiedTimes >= 1).length);
     const settings = getSettings();
-    setStudyCount(buildStudyWords(settings.studyBatchSize).length);
+    // If today's study batch was already drawn (and possibly partly
+    // finished), show how many of it are left rather than a fresh count.
+    const todayBatch = getTodayStudyBatch();
+    const remainingToday = todayBatch
+      ? wordsById(todayBatch).filter(w => getWordProgress(w.id).round < MAX_ROUND).length
+      : buildStudyWords(settings.studyBatchSize).length;
+    setStudyCount(remainingToday);
     setReviewCount(buildReviewWords(settings.dailyReview).length);
     setStudyGoalDone(isStudyGoalDoneToday());
   }, []);

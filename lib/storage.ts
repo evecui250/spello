@@ -30,6 +30,7 @@ const KEYS = {
   streak: 'wb2_streak',
   settings: 'wb2_settings',
   studyDone: 'wb2_study_done',
+  studyBatch: 'wb2_study_batch',
 };
 
 const EXTRA_STUDY_KEY = 'wb2_extra_study_limit';
@@ -142,6 +143,27 @@ export function markStudyGoalDone(): void {
   localStorage.setItem(KEYS.studyDone, JSON.stringify({ date: today() }));
 }
 
+// --- Today's study batch ---
+// The fixed set of word ids pulled for today's primary study goal, so
+// navigating away and back resumes the same batch instead of drawing a new
+// random one. Naturally invalidated once the date rolls over.
+
+export function getTodayStudyBatch(): string[] | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEYS.studyBatch) || 'null');
+    if (raw && raw.date === today() && Array.isArray(raw.wordIds)) return raw.wordIds;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveTodayStudyBatch(wordIds: string[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(KEYS.studyBatch, JSON.stringify({ date: today(), wordIds }));
+}
+
 // A one-shot "study N extra words" request from the Home page, consumed by
 // the next study session. Session-scoped so a stale value can't linger.
 export function setExtraStudyLimit(n: number): void {
@@ -165,4 +187,5 @@ export function clearAllProgress(): void {
   localStorage.removeItem(KEYS.progress);
   localStorage.removeItem(KEYS.streak);
   localStorage.removeItem(KEYS.studyDone);
+  localStorage.removeItem(KEYS.studyBatch);
 }

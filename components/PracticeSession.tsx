@@ -3,19 +3,23 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   buildStudyWords, buildReviewWords, generateHint, checkAnswer, applyResult,
-  applyReviewResult, REVIEW_BASE_ROUND,
+  applyReviewResult, REVIEW_BASE_ROUND, wordsById,
 } from '../lib/practice';
 import {
   getWordProgress, saveWordProgress, getSettings, touchStreak, markStudyGoalDone,
-  takeExtraStudyLimit, MAX_ROUND, Round, Settings,
+  takeExtraStudyLimit, isStudyGoalDoneToday, getTodayStudyBatch, saveTodayStudyBatch,
+  MAX_ROUND, Round, Settings,
 } from '../lib/storage';
 import { Word } from '../lib/words';
 import SpecialCharButtons from './SpecialCharButtons';
 import LetterInputRow from './LetterInputRow';
 import SpeakerButton from './SpeakerButton';
-import { speakGerman } from '../lib/speech';
+import CongratsModal from './CongratsModal';
+import { speakGerman, spokenForm } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
 import Link from 'next/link';
+
+const LANG_NAMES: Record<string, string> = { de: 'German' };
 
 const ROUND_LABELS: Record<Round, string> = {
   1: 'Round 1 — copy the word',
@@ -43,6 +47,9 @@ export default function PracticeSession({ mode }: Props) {
   const [hasMoreReview, setHasMoreReview] = useState(false);
 
   const [sessionDone, setSessionDone] = useState(false);
+  const [showCongrats, setShowCongrats] = useState(false);
+  const isExtraRef = useRef(false);
+  const goalDoneAtStartRef = useRef(true);
 
   const [currentRound, setCurrentRound] = useState<Round>(1);
   const [currentStudiedTimes, setCurrentStudiedTimes] = useState(0);
@@ -72,7 +79,7 @@ export default function PracticeSession({ mode }: Props) {
     setJustCompleted(false);
     setAttemptKey(k => k + 1);
     if (round === 1 && getSettings().autoPlayAudio) {
-      speakGerman(w.de);
+      speakGerman(spokenForm(w));
     }
   };
 
@@ -82,10 +89,34 @@ export default function PracticeSession({ mode }: Props) {
     setSettings(s);
     if (mode === 'study') {
       const extra = takeExtraStudyLimit();
-      const batch = buildStudyWords(extra ?? s.studyBatchSize);
-      setQueue(batch);
-      setTotalStudyWords(batch.length);
-      if (batch.length) loadCurrent(batch[0]);
+      if (extra != null) {
+        // A supplementary session on top of the daily goal — always a fresh
+        // pull, not part of today's persisted primary batch.
+        isExtraRef.current = true;
+        const batch = buildStudyWords(extra);
+        setQueue(batch);
+        setTotalStudyWords(batch.length);
+        if (batch.length) loadCurrent(batch[0]);
+      } else {
+        // The primary daily batch — fixed for the day so navigating away
+        // and back resumes the same words instead of drawing new ones.
+        isExtraRef.current = false;
+        goalDoneAtStartRef.current = isStudyGoalDoneToday();
+        let batchIds = getTodayStudyBatch();
+        if (!batchIds) {
+          batchIds = buildStudyWords(s.studyBatchSize).map(w => w.id);
+          saveTodayStudyBatch(batchIds);
+        }
+        const remaining = wordsById(batchIds).filter(w => getWordProgress(w.id).round < MAX_ROUND);
+        setQueue(remaining);
+        setTotalStudyWords(batchIds.length);
+        if (remaining.length) {
+          loadCurrent(remaining[0]);
+        } else if (batchIds.length > 0) {
+          // Today's batch was already fully completed in an earlier visit.
+          setSessionDone(true);
+        }
+      }
     } else {
       const batch = buildReviewWords(s.dailyReview);
       setWords(batch);
@@ -107,6 +138,9 @@ export default function PracticeSession({ mode }: Props) {
     scheduleSync();
     setFeedback(correct);
     setJustCompleted(progress.round === MAX_ROUND && correct);
+    if (!correct && settings.autoPlayAudio) {
+      speakGerman(spokenForm(word));
+    }
   };
 
   const handleSubmit = () => {
@@ -126,6 +160,9 @@ export default function PracticeSession({ mode }: Props) {
         touchStreak();
         markStudyGoalDone();
         scheduleSync();
+        if (!isExtraRef.current && !goalDoneAtStartRef.current) {
+          setShowCongrats(true);
+        }
       } else {
         loadCurrent(rest[0]);
       }
@@ -224,6 +261,13 @@ export default function PracticeSession({ mode }: Props) {
           )}
           <Link href="/" className="text-indigo-600 underline">Back to Home</Link>
         </div>
+        {showCongrats && (
+          <CongratsModal
+            wordsToday={totalStudyWords}
+            language={LANG_NAMES[settings?.language ?? 'de'] ?? 'German'}
+            onClose={() => setShowCongrats(false)}
+          />
+        )}
       </div>
     );
   }
@@ -236,23 +280,7 @@ export default function PracticeSession({ mode }: Props) {
 
   return (
     <div className="flex flex-col gap-5">
-      {/* This word's level, 1-5 */}
-      <div>
-        <div className="flex justify-between text-sm text-slate-400 mb-1">
-          <span className="font-medium text-indigo-600">{ROUND_LABELS[currentRound]}</span>
-          <span>Level {currentRound} / 5</span>
-        </div>
-        <div className="flex gap-1">
-          {([1, 2, 3, 4, 5] as Round[]).map(n => (
-            <div
-              key={n}
-              className={`h-2 flex-1 rounded-full ${n <= currentRound ? 'bg-indigo-500' : 'bg-indigo-100'}`}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Words completed today */}
+      {/* Words completed today — a general, cross-word coin tally */}
       <div className="flex flex-col gap-1">
         <div className="text-xs text-slate-400 text-center">
           {mode === 'study'
@@ -268,6 +296,22 @@ export default function PracticeSession({ mode }: Props) {
 
       {/* Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-indigo-50 p-6 flex flex-col gap-5">
+
+        {/* This word's level, 1-5 — specific to the current word */}
+        <div>
+          <div className="flex justify-between text-sm text-slate-400 mb-1">
+            <span className="font-medium text-indigo-600">{ROUND_LABELS[currentRound]}</span>
+            <span>Level {currentRound} / 5</span>
+          </div>
+          <div className="flex gap-1">
+            {([1, 2, 3, 4, 5] as Round[]).map(n => (
+              <div
+                key={n}
+                className={`h-2 flex-1 rounded-full ${n <= currentRound ? 'bg-indigo-500' : 'bg-indigo-100'}`}
+              />
+            ))}
+          </div>
+        </div>
 
         {/* English translation — always visible */}
         <div className="text-center">
@@ -288,7 +332,7 @@ export default function PracticeSession({ mode }: Props) {
           <div className="text-center -mt-1">
             <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
             <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
-              {word.de} <SpeakerButton text={word.de} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
+              {word.de} <SpeakerButton text={spokenForm(word)} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
             </div>
           </div>
         )}
@@ -337,7 +381,7 @@ export default function PracticeSession({ mode }: Props) {
                     {word.article ? `${word.article} ` : ''}{word.de}
                   </span>
                   {' '}
-                  <SpeakerButton text={word.de} className="align-middle text-red-600 hover:text-red-800 transition-colors" />
+                  <SpeakerButton text={spokenForm(word)} className="align-middle text-red-600 hover:text-red-800 transition-colors" />
                 </>
               )}
             </div>
