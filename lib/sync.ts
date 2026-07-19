@@ -44,7 +44,11 @@ export async function pullAndMerge(userId: string): Promise<void> {
     .eq('user_id', userId)
     .maybeSingle<RemoteRow>();
 
-  if (error || !data) return;
+  if (error) {
+    console.error('Spello sync pull failed:', error.message);
+    return;
+  }
+  if (!data) return;
 
   saveAllProgress(mergeProgress(getAllProgress(), data.progress ?? {}));
 
@@ -67,27 +71,42 @@ export async function pullAndMerge(userId: string): Promise<void> {
 
 // Pushes the current local state up as this user's remote snapshot.
 // Alongside the full `progress` blob (needed to actually restore state on
-// another device), this also writes flat summary columns — streak_count,
-// learning_count, mastered_count, language, level — so the row is readable
-// at a glance in the Supabase table editor without expanding the JSON.
+// another device), this also tries to write flat summary columns —
+// streak_count, learning_count, mastered_count, language, level — so the
+// row is readable at a glance in the Supabase table editor without
+// expanding the JSON. Those columns are optional (added via a follow-up
+// ALTER TABLE); if they don't exist yet, Postgres rejects the whole upsert,
+// so this falls back to the core payload rather than silently failing to
+// sync at all.
 async function pushToRemote(userId: string): Promise<void> {
   const progress = getAllProgress();
   const streak = getStreak();
   const settings = getSettings();
   const values = Object.values(progress);
 
-  await supabase.from('user_progress').upsert({
+  const corePayload = {
     user_id: userId,
     progress,
     streak,
     settings,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase.from('user_progress').upsert({
+    ...corePayload,
     streak_count: streak.count,
     learning_count: values.filter(p => !p.fullyMastered && p.studiedTimes >= 1).length,
     mastered_count: values.filter(p => p.fullyMastered).length,
     language: settings.language,
     level: settings.level,
-    updated_at: new Date().toISOString(),
   });
+
+  if (error) {
+    const retry = await supabase.from('user_progress').upsert(corePayload);
+    if (retry.error) {
+      console.error('Spello sync failed:', retry.error.message);
+    }
+  }
 }
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
