@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { getSettings, saveSettings, clearAllProgress } from '../../lib/storage';
+import { scheduleSync } from '../../lib/sync';
+import AccountPanel from '../../components/AccountPanel';
 
 export default function SettingsPage() {
   const [studyBatchSize, setStudyBatchSize] = useState(10);
@@ -13,7 +15,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [cleared, setCleared] = useState(false);
 
-  useEffect(() => {
+  const loadFromStorage = () => {
     const s = getSettings();
     setStudyBatchSize(s.studyBatchSize);
     setDailyReview(s.dailyReview);
@@ -21,10 +23,13 @@ export default function SettingsPage() {
     setLanguage(s.language);
     setLevel(s.level);
     setAutoPlayAudio(s.autoPlayAudio);
-  }, []);
+  };
+
+  useEffect(loadFromStorage, []);
 
   const handleSave = () => {
     saveSettings({ studyBatchSize, dailyReview, masteryThreshold, language, level, autoPlayAudio });
+    scheduleSync();
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -32,6 +37,7 @@ export default function SettingsPage() {
   const handleClearAll = () => {
     if (!window.confirm("This will erase all learning progress and your streak — every word starts over. This can't be undone. Continue?")) return;
     clearAllProgress();
+    scheduleSync();
     setCleared(true);
     setTimeout(() => setCleared(false), 2000);
   };
@@ -39,6 +45,10 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold text-indigo-700">Settings</h1>
+
+      <div className="bg-white rounded-2xl border border-indigo-50 shadow-sm p-6">
+        <AccountPanel onSync={loadFromStorage} />
+      </div>
 
       <div className="bg-white rounded-2xl border border-indigo-50 shadow-sm p-6 flex flex-col gap-6">
         <div className="flex gap-4">

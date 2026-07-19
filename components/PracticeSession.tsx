@@ -14,6 +14,7 @@ import SpecialCharButtons from './SpecialCharButtons';
 import LetterInputRow from './LetterInputRow';
 import SpeakerButton from './SpeakerButton';
 import { speakGerman } from '../lib/speech';
+import { scheduleSync } from '../lib/sync';
 import Link from 'next/link';
 
 const ROUND_LABELS: Record<Round, string> = {
@@ -103,6 +104,7 @@ export default function PracticeSession({ mode }: Props) {
       ? applyReviewResult(progress, correct, settings.masteryThreshold)
       : applyResult(progress, correct, settings.masteryThreshold);
     saveWordProgress(updated);
+    scheduleSync();
     setFeedback(correct);
     setJustCompleted(progress.round === MAX_ROUND && correct);
   };
@@ -123,6 +125,7 @@ export default function PracticeSession({ mode }: Props) {
         setSessionDone(true);
         touchStreak();
         markStudyGoalDone();
+        scheduleSync();
       } else {
         loadCurrent(rest[0]);
       }
@@ -132,6 +135,7 @@ export default function PracticeSession({ mode }: Props) {
         setHasMoreReview(buildReviewWords(1, doneIds).length > 0);
         setSessionDone(true);
         touchStreak();
+        scheduleSync();
       } else {
         setWordIdx(nextIdx);
         loadCurrent(words[nextIdx]);

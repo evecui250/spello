@@ -102,7 +102,11 @@ export function touchStreak(): void {
   if (s.lastDate === t) return;
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const newCount = s.lastDate === yesterday ? s.count + 1 : 1;
-  localStorage.setItem(KEYS.streak, JSON.stringify({ lastDate: t, count: newCount }));
+  saveStreak({ lastDate: t, count: newCount });
+}
+
+export function saveStreak(s: Streak): void {
+  localStorage.setItem(KEYS.streak, JSON.stringify(s));
 }
 
 // --- Settings ---
