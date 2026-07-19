@@ -36,15 +36,27 @@ export function buildStudyWords(limit = getSettings().studyBatchSize): Word[] {
 }
 
 // Review pool: words that have earned at least one coin (reached round 5 and
-// been tested there successfully) and aren't fully mastered yet — including
-// words that graduated earlier the same day. Prioritizes the ones with fewer
-// studiedTimes (coins) — they need more reinforcement.
-// `excludeIds` lets a session pull additional batches via "Review more".
-export function buildReviewWords(limit = getSettings().dailyReview, excludeIds: Set<string> = new Set()): Word[] {
+// been tested there successfully) and aren't fully mastered yet. Prioritizes
+// the ones with fewer studiedTimes (coins) — they need more reinforcement.
+// By default, words last touched today (just graduated from study, or
+// already reviewed today) are excluded — reviewing something minutes after
+// learning it isn't real spaced repetition, and it keeps day-one empty
+// rather than immediately full of words just studied. Pass `includeToday`
+// to lift that (the "Review Extra" flow). `excludeIds` lets a session pull
+// additional batches via "Review more".
+export function buildReviewWords(
+  limit = getSettings().dailyReview,
+  excludeIds: Set<string> = new Set(),
+  includeToday = false,
+): Word[] {
   const allProgress = getAllProgress();
+  const t = today();
   const pool = WORDS.filter(w => {
     const p = allProgress[w.id];
-    return p && !p.fullyMastered && p.round === MAX_ROUND && p.studiedTimes >= 1 && !excludeIds.has(w.id);
+    if (!p || p.fullyMastered || p.round !== MAX_ROUND || p.studiedTimes < 1) return false;
+    if (excludeIds.has(w.id)) return false;
+    if (!includeToday && p.lastPracticed === t) return false;
+    return true;
   });
   pool.sort((a, b) => allProgress[a.id].studiedTimes - allProgress[b.id].studiedTimes);
   return pool.slice(0, limit);
@@ -74,7 +86,7 @@ export function generateHint(word: string, round: Round): boolean[] {
 // steady state that's how many review slots per day are needed to review
 // every eligible word once, so the backlog doesn't grow indefinitely.
 export function recommendedDailyReview(studyBatchSize: number, masteryThreshold: number): number {
-  return Math.max(1, Math.min(50, Math.round(studyBatchSize * (masteryThreshold - 1))));
+  return Math.max(1, Math.min(100, Math.round(studyBatchSize * (masteryThreshold - 1))));
 }
 
 export interface ProgressForecast {

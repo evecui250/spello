@@ -35,6 +35,7 @@ const KEYS = {
 };
 
 const EXTRA_STUDY_KEY = 'wb2_extra_study_limit';
+const EXTRA_REVIEW_KEY = 'wb2_extra_review_limit';
 
 const DEFAULT_SETTINGS: Settings = {
   studyBatchSize: 15, dailyReview: 25, masteryThreshold: 3, language: 'de', level: 'B2',
@@ -237,6 +238,23 @@ export function takeExtraStudyLimit(): number | null {
   const raw = sessionStorage.getItem(EXTRA_STUDY_KEY);
   if (raw === null) return null;
   sessionStorage.removeItem(EXTRA_STUDY_KEY);
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// Same one-shot handoff, for "review N extra words" — includes words
+// touched today (just-graduated or already-reviewed), unlike the normal
+// due-for-review pool.
+export function setExtraReviewLimit(n: number): void {
+  if (typeof window === 'undefined') return;
+  sessionStorage.setItem(EXTRA_REVIEW_KEY, String(n));
+}
+
+export function takeExtraReviewLimit(): number | null {
+  if (typeof window === 'undefined') return null;
+  const raw = sessionStorage.getItem(EXTRA_REVIEW_KEY);
+  if (raw === null) return null;
+  sessionStorage.removeItem(EXTRA_REVIEW_KEY);
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : null;
 }

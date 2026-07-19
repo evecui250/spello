@@ -12,7 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <title>Spello</title>
         <meta name="description" content="Spello — a German vocabulary trainer for B2 learners" />
       </head>
-      <body className="bg-slate-50 min-h-screen text-slate-800">
+      <body className="bg-gradient-to-b from-slate-50 to-indigo-50/50 min-h-screen text-slate-800">
         <NavBar />
         <main className="max-w-2xl mx-auto px-4 py-6">{children}</main>
       </body>

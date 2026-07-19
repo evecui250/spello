@@ -133,7 +133,7 @@ export default function SettingsPage() {
           <p className="text-slate-400 text-sm mb-3">Words that have earned at least one coin.</p>
           <div className="flex items-center gap-4">
             <input
-              type="range" min={1} max={50} value={dailyReview}
+              type="range" min={1} max={100} value={dailyReview}
               onChange={e => {
                 const v = Number(e.target.value);
                 setDailyReview(v);
@@ -167,7 +167,7 @@ export default function SettingsPage() {
           </p>
           <div className="flex items-center gap-4">
             <input
-              type="range" min={1} max={10} value={masteryThreshold}
+              type="range" min={1} max={7} value={masteryThreshold}
               onChange={e => {
                 const v = Number(e.target.value);
                 setMasteryThreshold(v);
@@ -184,8 +184,8 @@ export default function SettingsPage() {
           <span className="text-right">
             {forecast.wordsRemaining === 0
               ? 'All words introduced'
-              : `~${forecast.daysToIntroduceAll}d to learn all`}
-            {' · '}~{forecast.daysToMasterAll}d to master all
+              : `~${forecast.daysToIntroduceAll} days to learn all`}
+            {' · '}~{forecast.daysToMasterAll} days to master all
           </span>
         </div>
 

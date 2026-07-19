@@ -7,8 +7,8 @@ import {
 } from '../lib/practice';
 import {
   getWordProgress, saveWordProgress, getSettings, touchStreak, markStudyGoalDone,
-  takeExtraStudyLimit, isStudyGoalDoneToday, isReviewGoalDoneToday, markReviewGoalDone,
-  getDailyStats, markCongratsShown, getTodayStudyBatch, saveTodayStudyBatch,
+  takeExtraStudyLimit, takeExtraReviewLimit, isStudyGoalDoneToday, isReviewGoalDoneToday,
+  markReviewGoalDone, getDailyStats, markCongratsShown, getTodayStudyBatch, saveTodayStudyBatch,
   MAX_ROUND, Round, Settings,
 } from '../lib/storage';
 import { Word } from '../lib/words';
@@ -54,6 +54,7 @@ export default function PracticeSession({ mode }: Props) {
   const isExtraRef = useRef(false);
   const goalDoneAtStartRef = useRef(true);
   const reviewGoalDoneAtStartRef = useRef(true);
+  const isExtraReviewRef = useRef(false);
 
   const [currentRound, setCurrentRound] = useState<Round>(1);
   const [currentStudiedTimes, setCurrentStudiedTimes] = useState(0);
@@ -122,8 +123,10 @@ export default function PracticeSession({ mode }: Props) {
         }
       }
     } else {
+      const extra = takeExtraReviewLimit();
+      isExtraReviewRef.current = extra != null;
       reviewGoalDoneAtStartRef.current = isReviewGoalDoneToday();
-      const batch = buildReviewWords(s.dailyReview);
+      const batch = buildReviewWords(extra ?? s.dailyReview, new Set(), isExtraReviewRef.current);
       setWords(batch);
       setDoneIds(new Set(batch.map(w => w.id)));
       if (batch.length) loadCurrent(batch[0]);
@@ -193,13 +196,15 @@ export default function PracticeSession({ mode }: Props) {
     } else {
       const nextIdx = wordIdx + 1;
       if (nextIdx >= words.length) {
-        setHasMoreReview(buildReviewWords(1, doneIds).length > 0);
+        setHasMoreReview(buildReviewWords(1, doneIds, isExtraReviewRef.current).length > 0);
         setSessionDone(true);
         touchStreak();
         scheduleSync();
-        const wasDone = reviewGoalDoneAtStartRef.current;
-        markReviewGoalDone(words.length);
-        if (!wasDone) checkDailyCompletion();
+        if (!isExtraReviewRef.current) {
+          const wasDone = reviewGoalDoneAtStartRef.current;
+          markReviewGoalDone(words.length);
+          if (!wasDone) checkDailyCompletion();
+        }
       } else {
         setWordIdx(nextIdx);
         loadCurrent(words[nextIdx]);
@@ -210,7 +215,7 @@ export default function PracticeSession({ mode }: Props) {
 
   const handleReviewMore = () => {
     if (!settings) return;
-    const next = buildReviewWords(settings.dailyReview, doneIds);
+    const next = buildReviewWords(settings.dailyReview, doneIds, isExtraReviewRef.current);
     setDoneIds(prev => new Set([...prev, ...next.map(w => w.id)]));
     setWords(next);
     setWordIdx(0);
