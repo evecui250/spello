@@ -1,35 +1,46 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getAllProgress, getStreak } from '../../lib/storage';
+import { getAllProgress, getSettings, getStreak } from '../../lib/storage';
 import { WORDS } from '../../lib/words';
 
+const COIN_COLORS = ['bg-slate-300', 'bg-yellow-300', 'bg-yellow-400', 'bg-amber-400', 'bg-amber-500'];
+
 export default function StatsPage() {
-  const [counts, setCounts] = useState({ new: 0, l0: 0, l1: 0, l2: 0, mastered: 0 });
+  const [coinCounts, setCoinCounts] = useState<number[]>([]);
+  const [masteredCount, setMasteredCount] = useState(0);
+  const [totalCoins, setTotalCoins] = useState(0);
+  const [threshold, setThreshold] = useState(5);
   const [streak, setStreak] = useState(0);
 
   useEffect(() => {
     const progress = getAllProgress();
-    let n = 0, l0 = 0, l1 = 0, l2 = 0, m = 0;
+    const settings = getSettings();
+    const buckets = Array.from({ length: settings.masteryThreshold }, () => 0);
+    let mastered = 0;
+    let coinSum = 0;
     for (const w of WORDS) {
       const p = progress[w.id];
-      if (!p || p.level === -1) n++;
-      else if (p.mastered) m++;
-      else if (p.level === 0) l0++;
-      else if (p.level === 1) l1++;
-      else if (p.level === 2) l2++;
+      const coins = p?.studiedTimes ?? 0;
+      coinSum += coins;
+      if (p?.fullyMastered) mastered++;
+      else buckets[Math.min(coins, settings.masteryThreshold - 1)]++;
     }
-    setCounts({ new: n, l0, l1, l2, mastered: m });
+    setCoinCounts(buckets);
+    setMasteredCount(mastered);
+    setTotalCoins(coinSum);
+    setThreshold(settings.masteryThreshold);
     setStreak(getStreak().count);
   }, []);
 
   const total = WORDS.length;
   const bars = [
-    { label: 'New', count: counts.new, color: 'bg-slate-300' },
-    { label: 'Level 0', count: counts.l0, color: 'bg-yellow-400' },
-    { label: 'Level 1', count: counts.l1, color: 'bg-blue-400' },
-    { label: 'Level 2', count: counts.l2, color: 'bg-indigo-500' },
-    { label: 'Mastered', count: counts.mastered, color: 'bg-green-500' },
+    ...coinCounts.map((count, coins) => ({
+      label: coins === 0 ? 'No coins yet' : `🪙 × ${coins}`,
+      count,
+      color: COIN_COLORS[coins] ?? 'bg-amber-500',
+    })),
+    { label: `Mastered (🪙 × ${threshold})`, count: masteredCount, color: 'bg-green-500' },
   ];
 
   return (
@@ -43,12 +54,19 @@ export default function StatsPage() {
         </div>
         <div className="flex items-center justify-between">
           <span className="font-semibold text-slate-700">Words Mastered</span>
-          <span className="text-2xl font-bold text-green-600">{counts.mastered} / {total}</span>
+          <span className="text-2xl font-bold text-green-600">{masteredCount} / {total}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="font-semibold text-slate-700">Total coins earned</span>
+          <span className="text-2xl font-bold text-amber-500">🪙 {totalCoins}</span>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-indigo-50 shadow-sm p-5">
-        <h2 className="font-semibold text-slate-700 mb-4">Progress breakdown</h2>
+        <h2 className="font-semibold text-slate-700 mb-1">Coin breakdown</h2>
+        <p className="text-slate-400 text-sm mb-4">
+          Each coin is a day a word was successfully studied all the way to level 5.
+        </p>
         <div className="flex flex-col gap-3">
           {bars.map(b => (
             <div key={b.label}>

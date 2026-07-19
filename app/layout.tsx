@@ -9,8 +9,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Wortschatz B2</title>
-        <meta name="description" content="German vocabulary trainer for B2 learners" />
+        <title>Spello</title>
+        <meta name="description" content="Spello — a German vocabulary trainer for B2 learners" />
       </head>
       <body className="bg-slate-50 min-h-screen text-slate-800">
         <NavBar />

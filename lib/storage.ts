@@ -1,10 +1,13 @@
 'use client';
 
+export type Round = 1 | 2 | 3 | 4 | 5;
+export const MAX_ROUND: Round = 5;
+
 export interface WordProgress {
   id: string;
-  level: number;       // -1 = beginning (never seen), 0, 1, 2
-  mastered: boolean;
-  level2Count: number; // correct answers at level 2; needs 2 to master
+  round: Round;        // current difficulty level, 1 (copy word) .. 5 (no hints)
+  studiedTimes: number; // number of times round 5 has been passed; reaching masteryThreshold = fully mastered
+  fullyMastered: boolean;
   lastPracticed?: string;
 }
 
@@ -14,24 +17,29 @@ export interface Streak {
 }
 
 export interface Settings {
-  dailyNew: number;
+  studyBatchSize: number;
   dailyReview: number;
-}
-
-export interface SessionProgress {
-  date: string;
-  total: number;
-  done: number;
+  masteryThreshold: number;
+  language: string;
+  level: string;
+  autoPlayAudio: boolean;
 }
 
 const KEYS = {
   progress: 'wb2_progress',
   streak: 'wb2_streak',
   settings: 'wb2_settings',
-  session: (date: string) => `wb2_session_${date}`,
+  studyDone: 'wb2_study_done',
 };
 
-function today(): string {
+const EXTRA_STUDY_KEY = 'wb2_extra_study_limit';
+
+const DEFAULT_SETTINGS: Settings = {
+  studyBatchSize: 10, dailyReview: 20, masteryThreshold: 5, language: 'de', level: 'B2',
+  autoPlayAudio: true,
+};
+
+export function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
@@ -40,10 +48,26 @@ function today(): string {
 export function getAllProgress(): Record<string, WordProgress> {
   if (typeof window === 'undefined') return {};
   try {
-    return JSON.parse(localStorage.getItem(KEYS.progress) || '{}');
+    const raw = JSON.parse(localStorage.getItem(KEYS.progress) || '{}');
+    const normalized: Record<string, WordProgress> = {};
+    for (const id of Object.keys(raw)) {
+      normalized[id] = normalizeProgress(id, raw[id]);
+    }
+    return normalized;
   } catch {
     return {};
   }
+}
+
+// Fills in defaults for any progress record saved under the old schema.
+function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): WordProgress {
+  return {
+    id,
+    round: (p?.round as Round) ?? 1,
+    studiedTimes: p?.studiedTimes ?? 0,
+    fullyMastered: p?.fullyMastered ?? false,
+    lastPracticed: p?.lastPracticed,
+  };
 }
 
 export function saveAllProgress(data: Record<string, WordProgress>): void {
@@ -52,7 +76,7 @@ export function saveAllProgress(data: Record<string, WordProgress>): void {
 
 export function getWordProgress(id: string): WordProgress {
   const all = getAllProgress();
-  return all[id] ?? { id, level: -1, mastered: false, level2Count: 0 };
+  return all[id] ?? normalizeProgress(id, undefined);
 }
 
 export function saveWordProgress(p: WordProgress): void {
@@ -84,11 +108,12 @@ export function touchStreak(): void {
 // --- Settings ---
 
 export function getSettings(): Settings {
-  if (typeof window === 'undefined') return { dailyNew: 10, dailyReview: 20 };
+  if (typeof window === 'undefined') return DEFAULT_SETTINGS;
   try {
-    return JSON.parse(localStorage.getItem(KEYS.settings) || '{"dailyNew":10,"dailyReview":20}');
+    const raw = JSON.parse(localStorage.getItem(KEYS.settings) || 'null');
+    return { ...DEFAULT_SETTINGS, ...raw };
   } catch {
-    return { dailyNew: 10, dailyReview: 20 };
+    return DEFAULT_SETTINGS;
   }
 }
 
@@ -96,18 +121,44 @@ export function saveSettings(s: Settings): void {
   localStorage.setItem(KEYS.settings, JSON.stringify(s));
 }
 
-// --- Session ---
+// --- Daily study goal ---
 
-export function getSession(): SessionProgress {
-  if (typeof window === 'undefined') return { date: today(), total: 0, done: 0 };
-  const t = today();
+// Whether the user has completed a full study session today (their daily goal).
+export function isStudyGoalDoneToday(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
-    const raw = localStorage.getItem(KEYS.session(t));
-    if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
-  return { date: t, total: 0, done: 0 };
+    const raw = JSON.parse(localStorage.getItem(KEYS.studyDone) || '{"date":""}');
+    return raw.date === today();
+  } catch {
+    return false;
+  }
 }
 
-export function saveSession(s: SessionProgress): void {
-  localStorage.setItem(KEYS.session(s.date), JSON.stringify(s));
+export function markStudyGoalDone(): void {
+  localStorage.setItem(KEYS.studyDone, JSON.stringify({ date: today() }));
+}
+
+// A one-shot "study N extra words" request from the Home page, consumed by
+// the next study session. Session-scoped so a stale value can't linger.
+export function setExtraStudyLimit(n: number): void {
+  if (typeof window === 'undefined') return;
+  sessionStorage.setItem(EXTRA_STUDY_KEY, String(n));
+}
+
+export function takeExtraStudyLimit(): number | null {
+  if (typeof window === 'undefined') return null;
+  const raw = sessionStorage.getItem(EXTRA_STUDY_KEY);
+  if (raw === null) return null;
+  sessionStorage.removeItem(EXTRA_STUDY_KEY);
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// --- Reset ---
+
+export function clearAllProgress(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(KEYS.progress);
+  localStorage.removeItem(KEYS.streak);
+  localStorage.removeItem(KEYS.studyDone);
 }

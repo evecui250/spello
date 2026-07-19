@@ -17,9 +17,10 @@ export default function SpecialCharButtons({ inputRef, onInsert }: Props) {
     // Use native setter so React's onChange fires
     const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
     nativeSetter?.call(el, newVal);
+    // Dispatch the native input event and let the field's own onChange
+    // (which may auto-advance focus to the next cell) handle what follows —
+    // forcing focus back here would undo that advance.
     el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.focus();
-    el.setSelectionRange(start + ch.length, start + ch.length);
     onInsert?.(newVal);
   };
 

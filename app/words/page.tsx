@@ -3,13 +3,15 @@
 import { useEffect, useState } from 'react';
 import { WORDS, CATEGORIES, Word } from '../../lib/words';
 import { getAllProgress, WordProgress } from '../../lib/storage';
+import SpeakerButton from '../../components/SpeakerButton';
 
-const LEVEL_LABELS: Record<number | string, string> = {
-  '-1': 'New',
-  0: 'Level 0',
-  1: 'Level 1',
-  2: 'Level 2',
-};
+const COIN_COLORS = [
+  'bg-slate-100 text-slate-500',
+  'bg-yellow-100 text-yellow-700',
+  'bg-amber-100 text-amber-700',
+  'bg-orange-100 text-orange-700',
+  'bg-amber-200 text-amber-800',
+];
 
 export default function WordsPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress>>({});
@@ -23,11 +25,9 @@ export default function WordsPage() {
 
   const filtered = WORDS.filter(w => {
     const p = progress[w.id];
-    const level = p ? (p.mastered ? 'mastered' : p.level) : -1;
-    if (filterLevel !== 'all') {
-      if (filterLevel === 'mastered' && !p?.mastered) return false;
-      if (filterLevel !== 'mastered' && (p?.mastered || String(level) !== filterLevel)) return false;
-    }
+    if (filterLevel === 'new' && p) return false;
+    if (filterLevel === 'mastered' && !p?.fullyMastered) return false;
+    if (filterLevel === 'learning' && (!p || p.fullyMastered)) return false;
     if (filterCategory !== 'all' && w.category !== filterCategory) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -36,20 +36,18 @@ export default function WordsPage() {
     return true;
   });
 
-  const levelColor = (w: Word) => {
+  const badgeColor = (w: Word) => {
     const p = progress[w.id];
-    if (!p || p.level === -1) return 'bg-slate-100 text-slate-500';
-    if (p.mastered) return 'bg-green-100 text-green-700';
-    if (p.level === 2) return 'bg-indigo-100 text-indigo-700';
-    if (p.level === 1) return 'bg-blue-100 text-blue-700';
-    return 'bg-yellow-100 text-yellow-700';
+    if (!p) return 'bg-slate-100 text-slate-500';
+    if (p.fullyMastered) return 'bg-green-100 text-green-700';
+    return COIN_COLORS[Math.min(p.studiedTimes, COIN_COLORS.length - 1)];
   };
 
-  const levelText = (w: Word) => {
+  const badgeText = (w: Word) => {
     const p = progress[w.id];
-    if (!p || p.level === -1) return 'New';
-    if (p.mastered) return 'Mastered ✓';
-    return LEVEL_LABELS[p.level] ?? '';
+    if (!p) return 'New';
+    if (p.fullyMastered) return 'Mastered ✓';
+    return `🪙 ${p.studiedTimes}`;
   };
 
   return (
@@ -70,11 +68,9 @@ export default function WordsPage() {
           onChange={e => setFilterLevel(e.target.value)}
           className="border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
         >
-          <option value="all">All levels</option>
-          <option value="-1">New</option>
-          <option value="0">Level 0</option>
-          <option value="1">Level 1</option>
-          <option value="2">Level 2</option>
+          <option value="all">All words</option>
+          <option value="new">New</option>
+          <option value="learning">Learning</option>
           <option value="mastered">Mastered</option>
         </select>
 
@@ -97,11 +93,12 @@ export default function WordsPage() {
               <span className="font-semibold text-indigo-800">
                 {w.article ? `${w.article} ` : ''}{w.de}
               </span>
+              <SpeakerButton text={w.de} className="ml-1.5 text-indigo-400 hover:text-indigo-600 transition-colors align-middle" />
               {w.plural && <span className="text-slate-400 text-sm ml-2">· {w.plural}</span>}
               <div className="text-slate-500 text-sm">{w.en}</div>
             </div>
-            <span className={`text-xs font-medium px-2 py-1 rounded-full ${levelColor(w)}`}>
-              {levelText(w)}
+            <span className={`text-xs font-medium px-2 py-1 rounded-full ${badgeColor(w)}`}>
+              {badgeText(w)}
             </span>
           </div>
         ))}

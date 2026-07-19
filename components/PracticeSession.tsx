@@ -1,0 +1,355 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import {
+  buildStudyWords, buildReviewWords, generateHint, checkAnswer, applyResult,
+  applyReviewResult, REVIEW_BASE_ROUND,
+} from '../lib/practice';
+import {
+  getWordProgress, saveWordProgress, getSettings, touchStreak, markStudyGoalDone,
+  takeExtraStudyLimit, MAX_ROUND, Round, Settings,
+} from '../lib/storage';
+import { Word } from '../lib/words';
+import SpecialCharButtons from './SpecialCharButtons';
+import LetterInputRow from './LetterInputRow';
+import SpeakerButton from './SpeakerButton';
+import { speakGerman } from '../lib/speech';
+import Link from 'next/link';
+
+const ROUND_LABELS: Record<Round, string> = {
+  1: 'Round 1 — copy the word',
+  2: 'Round 2 — half the letters hinted',
+  3: 'Round 3 — first letter hint',
+  4: 'Round 4 — no hints',
+  5: 'Round 5 — no hints',
+};
+
+interface Props {
+  mode: 'study' | 'review';
+}
+
+export default function PracticeSession({ mode }: Props) {
+  const [settings, setSettings] = useState<Settings | null>(null);
+
+  // Study mode: a queue of words to cycle through until every one reaches round 5.
+  const [queue, setQueue] = useState<Word[]>([]);
+  const [totalStudyWords, setTotalStudyWords] = useState(0);
+
+  // Review mode: a fixed batch, walked through in order.
+  const [words, setWords] = useState<Word[]>([]);
+  const [wordIdx, setWordIdx] = useState(0);
+  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+  const [hasMoreReview, setHasMoreReview] = useState(false);
+
+  const [sessionDone, setSessionDone] = useState(false);
+
+  const [currentRound, setCurrentRound] = useState<Round>(1);
+  const [currentStudiedTimes, setCurrentStudiedTimes] = useState(0);
+  const [hint, setHint] = useState<boolean[]>([]);
+  const [values, setValues] = useState<string[]>([]);
+  const [feedback, setFeedback] = useState<boolean | null>(null);
+  const [justCompleted, setJustCompleted] = useState(false);
+  const [attemptKey, setAttemptKey] = useState(0);
+
+  const activeInputRef = useRef<HTMLInputElement | null>(null);
+  const handleNextRef = useRef<() => void>(() => {});
+
+  const word = mode === 'study' ? queue[0] ?? null : words[wordIdx] ?? null;
+
+  const loadCurrent = (w: Word) => {
+    const progress = getWordProgress(w.id);
+    // Reviews always start from the review baseline — the word isn't new,
+    // so round 1 would be too easy — regardless of its stored round.
+    const round = mode === 'review' ? REVIEW_BASE_ROUND : progress.round;
+    setCurrentRound(round);
+    setCurrentStudiedTimes(progress.studiedTimes);
+    const h = generateHint(w.de, round);
+    const chars = [...w.de];
+    setHint(h);
+    setValues(chars.map((c, i) => (h[i] ? '' : c)));
+    setFeedback(null);
+    setJustCompleted(false);
+    setAttemptKey(k => k + 1);
+    if (round === 1 && getSettings().autoPlayAudio) {
+      speakGerman(w.de);
+    }
+  };
+
+  // Load settings + first batch on mount.
+  useEffect(() => {
+    const s = getSettings();
+    setSettings(s);
+    if (mode === 'study') {
+      const extra = takeExtraStudyLimit();
+      const batch = buildStudyWords(extra ?? s.studyBatchSize);
+      setQueue(batch);
+      setTotalStudyWords(batch.length);
+      if (batch.length) loadCurrent(batch[0]);
+    } else {
+      const batch = buildReviewWords(s.dailyReview);
+      setWords(batch);
+      setDoneIds(new Set(batch.map(w => w.id)));
+      if (batch.length) loadCurrent(batch[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  const isComplete = hint.length > 0 && hint.every((h, i) => !h || !!values[i]);
+
+  const submitResult = (correct: boolean) => {
+    if (!word || !settings || feedback !== null) return;
+    const progress = getWordProgress(word.id);
+    const updated = mode === 'review'
+      ? applyReviewResult(progress, correct, settings.masteryThreshold)
+      : applyResult(progress, correct, settings.masteryThreshold);
+    saveWordProgress(updated);
+    setFeedback(correct);
+    setJustCompleted(progress.round === MAX_ROUND && correct);
+  };
+
+  const handleSubmit = () => {
+    if (!word || !isComplete) return;
+    submitResult(checkAnswer(word.de, values.join('')));
+  };
+
+  const handleGiveUp = () => submitResult(false);
+
+  const handleNext = () => {
+    if (mode === 'study') {
+      const rest = queue.slice(1);
+      if (!justCompleted) rest.push(queue[0]);
+      setQueue(rest);
+      if (rest.length === 0) {
+        setSessionDone(true);
+        touchStreak();
+        markStudyGoalDone();
+      } else {
+        loadCurrent(rest[0]);
+      }
+    } else {
+      const nextIdx = wordIdx + 1;
+      if (nextIdx >= words.length) {
+        setHasMoreReview(buildReviewWords(1, doneIds).length > 0);
+        setSessionDone(true);
+        touchStreak();
+      } else {
+        setWordIdx(nextIdx);
+        loadCurrent(words[nextIdx]);
+      }
+    }
+  };
+  handleNextRef.current = handleNext;
+
+  const handleReviewMore = () => {
+    if (!settings) return;
+    const next = buildReviewWords(settings.dailyReview, doneIds);
+    setDoneIds(prev => new Set([...prev, ...next.map(w => w.id)]));
+    setWords(next);
+    setWordIdx(0);
+    setSessionDone(false);
+    if (next.length) loadCurrent(next[0]);
+  };
+
+  // Enter key advances past the feedback screen too. Requires the Enter key
+  // to be released first, so the same keypress that submitted the answer
+  // (and any OS key-repeat while it's held) can't also skip past the feedback.
+  // A correct answer also auto-advances after a short pause, so the user
+  // doesn't have to press anything to keep moving.
+  useEffect(() => {
+    if (feedback === null) return;
+    let armed = false;
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') armed = true;
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && armed) handleNextRef.current();
+    };
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('keydown', onKeyDown);
+
+    const timer = feedback === true ? setTimeout(() => handleNextRef.current(), 1500) : undefined;
+
+    return () => {
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('keydown', onKeyDown);
+      if (timer) clearTimeout(timer);
+    };
+  }, [feedback]);
+
+  // --- Empty / done screens ---
+
+  const initiallyEmpty = mode === 'study' ? totalStudyWords === 0 : doneIds.size === 0;
+
+  if (settings && initiallyEmpty && !sessionDone) {
+    return (
+      <div className="text-center py-16">
+        <div className="text-5xl mb-4">🎉</div>
+        <h2 className="text-2xl font-bold text-indigo-700 mb-2">
+          {mode === 'study' ? 'Nothing to study!' : 'Nothing to review!'}
+        </h2>
+        <p className="text-slate-500 mb-6">
+          {mode === 'study'
+            ? "You've mastered or graduated every word for now."
+            : 'No words have graduated from study yet — come back after a study session.'}
+        </p>
+        <Link href="/" className="text-indigo-600 underline">Back to Home</Link>
+      </div>
+    );
+  }
+
+  if (sessionDone) {
+    return (
+      <div className="text-center py-16">
+        <div className="text-5xl mb-4">✅</div>
+        <h2 className="text-2xl font-bold text-indigo-700 mb-2">
+          {mode === 'study' ? 'Study session complete!' : 'Batch complete!'}
+        </h2>
+        <p className="text-slate-500 mb-6">
+          {mode === 'study'
+            ? `You brought ${totalStudyWords} word${totalStudyWords === 1 ? '' : 's'} to round 5 today.`
+            : `You reviewed ${words.length} word${words.length === 1 ? '' : 's'}.`}
+        </p>
+        <div className="flex flex-col items-center gap-3">
+          {mode === 'review' && hasMoreReview && (
+            <button
+              onClick={handleReviewMore}
+              className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-indigo-700"
+            >
+              Review more →
+            </button>
+          )}
+          <Link href="/" className="text-indigo-600 underline">Back to Home</Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!word) return null;
+
+  const chars = [...word.de];
+  const completedCount = mode === 'study' ? totalStudyWords - queue.length : wordIdx;
+  const completedTotal = mode === 'study' ? totalStudyWords : words.length;
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* This word's level, 1-5 */}
+      <div>
+        <div className="flex justify-between text-sm text-slate-400 mb-1">
+          <span className="font-medium text-indigo-600">{ROUND_LABELS[currentRound]}</span>
+          <span>Level {currentRound} / 5</span>
+        </div>
+        <div className="flex gap-1">
+          {([1, 2, 3, 4, 5] as Round[]).map(n => (
+            <div
+              key={n}
+              className={`h-2 flex-1 rounded-full ${n <= currentRound ? 'bg-indigo-500' : 'bg-indigo-100'}`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Words completed today */}
+      <div className="flex flex-col gap-1">
+        <div className="text-xs text-slate-400 text-center">
+          {mode === 'study'
+            ? `${completedCount} / ${completedTotal} words learned today`
+            : `${completedCount} / ${completedTotal} words reviewed`}
+        </div>
+        <div className="flex flex-wrap gap-1 justify-center">
+          {Array.from({ length: completedTotal }, (_, i) => (
+            <span key={i} className={`text-lg ${i < completedCount ? '' : 'opacity-20 grayscale'}`}>🪙</span>
+          ))}
+        </div>
+      </div>
+
+      {/* Card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-indigo-50 p-6 flex flex-col gap-5">
+
+        {/* English translation — always visible */}
+        <div className="text-center">
+          <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">English</div>
+          <div className="text-2xl font-semibold text-slate-700">{word.en}</div>
+        </div>
+
+        {/* Article chip for nouns */}
+        {word.type === 'noun' && word.article && (
+          <div className="flex justify-center">
+            <span className="bg-indigo-100 text-indigo-700 font-bold px-4 py-1 rounded-full text-lg">
+              {word.article}
+            </span>
+          </div>
+        )}
+
+        {currentRound === 1 && (
+          <div className="text-center -mt-1">
+            <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
+            <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
+              {word.de} <SpeakerButton text={word.de} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
+            </div>
+          </div>
+        )}
+        {currentRound === 5 && settings && (
+          <p className="text-center text-slate-400 text-sm -mt-2">
+            🪙 {currentStudiedTimes} / {settings.masteryThreshold} coins
+          </p>
+        )}
+
+        {/* Letter tiles — locked hints or editable blanks */}
+        <LetterInputRow
+          chars={chars}
+          hint={hint}
+          values={values}
+          onChange={setValues}
+          onSubmit={handleSubmit}
+          disabled={feedback !== null}
+          activeInputRef={activeInputRef}
+          resetFocusKey={`${word.id}-${attemptKey}`}
+        />
+
+        {feedback === null ? (
+          <div className="flex flex-col gap-3">
+            <SpecialCharButtons inputRef={activeInputRef} />
+            <button
+              onClick={handleSubmit}
+              disabled={!isComplete}
+              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
+            >
+              Check
+            </button>
+            <button
+              onClick={handleGiveUp}
+              className="w-full text-slate-400 py-1 text-sm font-medium hover:text-slate-600 transition-colors"
+            >
+              I don't remember
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div className={`text-center py-3 rounded-xl font-semibold text-lg ${feedback ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              {feedback ? '✓ Correct!' : (
+                <>
+                  ✗ The answer is:{' '}
+                  <span className="font-mono">
+                    {word.article ? `${word.article} ` : ''}{word.de}
+                  </span>
+                  {' '}
+                  <SpeakerButton text={word.de} className="align-middle text-red-600 hover:text-red-800 transition-colors" />
+                </>
+              )}
+            </div>
+            <button
+              onClick={handleNext}
+              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+            >
+              Next →
+            </button>
+          </div>
+        )}
+      </div>
+
+      {word.category && (
+        <div className="text-center text-slate-400 text-xs">{word.category}</div>
+      )}
+    </div>
+  );
+}
