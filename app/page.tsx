@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   getStreak, getAllProgress, getSettings, isStudyGoalDoneToday, setExtraStudyLimit,
-  setExtraReviewLimit, getTodayStudyBatch, getWordProgress, MAX_ROUND,
+  setExtraReviewLimit, getTodayStudyBatch, getWordProgress, MAX_ROUND, isOnboardingDone,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords, wordsById } from '../lib/practice';
 import { WORDS } from '../lib/words';
@@ -22,8 +22,13 @@ export default function HomePage() {
   const [studyGoalDone, setStudyGoalDone] = useState(false);
   const [extraStudyCount, setExtraStudyCount] = useState(10);
   const [extraReviewCount, setExtraReviewCount] = useState(10);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    if (!isOnboardingDone()) {
+      router.replace('/welcome');
+      return;
+    }
     setStreak(getStreak().count);
     const progress = getAllProgress();
     setMasteredCount(Object.values(progress).filter(p => p.fullyMastered).length);
@@ -38,6 +43,8 @@ export default function HomePage() {
     setStudyCount(remainingToday);
     setReviewCount(buildReviewWords(settings.dailyReview).length);
     setStudyGoalDone(isStudyGoalDoneToday());
+    setReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startExtraStudy = () => {
@@ -56,6 +63,8 @@ export default function HomePage() {
     { icon: StarIcon, value: masteredCount, label: 'mastered', color: 'text-emerald-600' },
     { icon: LayersIcon, value: WORDS.length, label: 'total words', color: 'text-indigo-600' },
   ];
+
+  if (!ready) return null;
 
   return (
     <div className="flex flex-col items-center gap-7 py-2">

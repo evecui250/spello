@@ -32,6 +32,7 @@ const KEYS = {
   settingsUpdatedAt: 'wb2_settings_updated_at',
   dailyStats: 'wb2_daily_stats',
   studyBatch: 'wb2_study_batch',
+  onboardingDone: 'wb2_onboarding_done',
 };
 
 const EXTRA_STUDY_KEY = 'wb2_extra_study_limit';
@@ -134,6 +135,26 @@ export function saveSettings(s: Settings): void {
 export function getSettingsUpdatedAt(): string {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem(KEYS.settingsUpdatedAt) || '';
+}
+
+// --- Onboarding ---
+// Whether a first-time visitor has been through the welcome/setup page yet.
+
+export function isOnboardingDone(): boolean {
+  if (typeof window === 'undefined') return true;
+  if (localStorage.getItem(KEYS.onboardingDone) === '1') return true;
+  // Grandfather in anyone who already has settings or progress saved from
+  // before this feature existed — don't send existing users to onboarding.
+  if (localStorage.getItem(KEYS.settings) !== null || localStorage.getItem(KEYS.progress) !== null) {
+    markOnboardingDone();
+    return true;
+  }
+  return false;
+}
+
+export function markOnboardingDone(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(KEYS.onboardingDone, '1');
 }
 
 // --- Daily study/review goals ---
