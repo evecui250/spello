@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getSettings, saveSettings, clearAllProgress, Settings } from '../../lib/storage';
-import { estimateProgressForecast } from '../../lib/practice';
+import { estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
 import { scheduleSync } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 
@@ -35,6 +35,14 @@ export default function SettingsPage() {
     () => estimateProgressForecast(studyBatchSize, dailyReview, masteryThreshold),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [studyBatchSize, dailyReview, masteryThreshold, cleared],
+  );
+
+  // A word needs (masteryThreshold - 1) more successful reviews after its
+  // introduction day to be mastered — this is roughly how many review slots
+  // per day are needed to keep up with a given study pace.
+  const recommendedReview = useMemo(
+    () => recommendedDailyReview(studyBatchSize, masteryThreshold),
+    [studyBatchSize, masteryThreshold],
   );
 
   // Every control saves immediately on change — no separate Save step.
@@ -135,6 +143,19 @@ export default function SettingsPage() {
             />
             <span className="w-8 text-center font-bold text-indigo-700">{dailyReview}</span>
           </div>
+          {dailyReview !== recommendedReview && (
+            <div className="flex items-center justify-between gap-2 mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-sm">
+              <span className="text-indigo-700">
+                💡 Recommended: <strong>{recommendedReview}</strong> — keeps up with {studyBatchSize}/session at {masteryThreshold} reviews to master
+              </span>
+              <button
+                onClick={() => { setDailyReview(recommendedReview); persist({ dailyReview: recommendedReview }); }}
+                className="shrink-0 bg-indigo-600 text-white px-3 py-1 rounded-lg font-semibold text-xs hover:bg-indigo-700 active:scale-95 transition-all"
+              >
+                Use {recommendedReview}
+              </button>
+            </div>
+          )}
         </div>
 
         <div>

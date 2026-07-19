@@ -29,6 +29,7 @@ const KEYS = {
   progress: 'wb2_progress',
   streak: 'wb2_streak',
   settings: 'wb2_settings',
+  settingsUpdatedAt: 'wb2_settings_updated_at',
   dailyStats: 'wb2_daily_stats',
   studyBatch: 'wb2_study_batch',
 };
@@ -124,6 +125,14 @@ export function getSettings(): Settings {
 
 export function saveSettings(s: Settings): void {
   localStorage.setItem(KEYS.settings, JSON.stringify(s));
+  localStorage.setItem(KEYS.settingsUpdatedAt, new Date().toISOString());
+}
+
+// When settings last changed on this device — lets a remote sync pull decide
+// whether its copy is actually newer before overwriting a local edit.
+export function getSettingsUpdatedAt(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem(KEYS.settingsUpdatedAt) || '';
 }
 
 // --- Daily study/review goals ---

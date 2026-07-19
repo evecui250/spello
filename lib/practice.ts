@@ -68,6 +68,15 @@ export function generateHint(word: string, round: Round): boolean[] {
   return Array.from({ length: n }, (_, i) => !revealed.has(i));
 }
 
+// Suggests a daily review count that can keep up with the review backlog
+// a given study pace generates. Each word needs (masteryThreshold - 1) more
+// successful reviews after its introduction day to be fully mastered — in
+// steady state that's how many review slots per day are needed to review
+// every eligible word once, so the backlog doesn't grow indefinitely.
+export function recommendedDailyReview(studyBatchSize: number, masteryThreshold: number): number {
+  return Math.max(1, Math.min(50, Math.round(studyBatchSize * (masteryThreshold - 1))));
+}
+
 export interface ProgressForecast {
   wordsRemaining: number;
   daysToIntroduceAll: number;

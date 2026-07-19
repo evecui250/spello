@@ -4,13 +4,14 @@ import { supabase } from './supabase';
 import {
   getAllProgress, saveAllProgress, WordProgress,
   getStreak, saveStreak, Streak,
-  getSettings, saveSettings,
+  getSettings, saveSettings, getSettingsUpdatedAt,
 } from './storage';
 
 interface RemoteRow {
   progress: Record<string, WordProgress>;
   streak: Streak;
   settings: ReturnType<typeof getSettings> | null;
+  updated_at: string | null;
 }
 
 // Prefers whichever side is "further along" for each word, so syncing never
@@ -39,7 +40,7 @@ function mergeProgress(
 export async function pullAndMerge(userId: string): Promise<void> {
   const { data, error } = await supabase
     .from('user_progress')
-    .select('progress, streak, settings')
+    .select('progress, streak, settings, updated_at')
     .eq('user_id', userId)
     .maybeSingle<RemoteRow>();
 
@@ -53,7 +54,13 @@ export async function pullAndMerge(userId: string): Promise<void> {
     saveStreak(remoteStreak);
   }
 
-  if (data.settings) {
+  // Only apply remote settings if they're actually newer than this device's
+  // last local edit — otherwise a pull (which runs on every page load while
+  // signed in) can clobber a change made moments ago that hasn't pushed yet.
+  const localSettingsUpdatedAt = getSettingsUpdatedAt();
+  const remoteIsNewer = !localSettingsUpdatedAt
+    || (!!data.updated_at && data.updated_at > localSettingsUpdatedAt);
+  if (data.settings && remoteIsNewer) {
     saveSettings(data.settings);
   }
 }
