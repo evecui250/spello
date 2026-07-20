@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
 interface Props {
   chars: string[];
@@ -13,11 +13,26 @@ interface Props {
   resetFocusKey: string;
 }
 
-export default function LetterInputRow({
-  chars, hint, values, onChange, onSubmit, disabled, activeInputRef, resetFocusKey,
-}: Props) {
+export interface LetterInputRowHandle {
+  // Focuses the first still-empty editable cell (or the first editable cell
+  // if all are full) — used to jump back into typing after picking der/die/das.
+  focusFirstEmpty: () => void;
+}
+
+const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterInputRow(
+  { chars, hint, values, onChange, onSubmit, disabled, activeInputRef, resetFocusKey },
+  ref,
+) {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const editableIndices = hint.map((h, i) => (h ? i : -1)).filter(i => i !== -1);
+
+  useImperativeHandle(ref, () => ({
+    focusFirstEmpty: () => {
+      const target = editableIndices.find(i => !values[i]) ?? editableIndices[0];
+      if (target === undefined) return;
+      setTimeout(() => inputRefs.current[target]?.focus(), 50);
+    },
+  }));
 
   useEffect(() => {
     if (disabled) return;
@@ -94,4 +109,6 @@ export default function LetterInputRow({
       )}
     </div>
   );
-}
+});
+
+export default LetterInputRow;

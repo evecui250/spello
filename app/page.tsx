@@ -127,13 +127,25 @@ export default function HomePage() {
             <ArrowRightIcon className="w-5 h-5 text-indigo-300 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0" />
           </Link>
         ) : (
-          <div className="flex items-center gap-4 bg-white border border-slate-100 rounded-2xl px-5 py-4 shadow-sm">
-            <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-300 flex items-center justify-center shrink-0">
+          <div className="flex items-center gap-4 bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4">
+            <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
               <BookIcon className="w-5 h-5" />
             </div>
-            <div className="flex-1 text-left">
-              <div className="font-semibold text-slate-400">Study Words</div>
-              <div className="text-sm text-slate-400">Nothing new right now</div>
+            <div className="flex-1">
+              <div className="font-semibold text-slate-500">Nothing due to learn</div>
+              <div className="flex items-center gap-2 mt-1.5">
+                <input
+                  type="number" min={1} max={100} value={extraStudyCount}
+                  onChange={e => setExtraStudyCount(Math.max(1, Number(e.target.value) || 1))}
+                  className="w-14 border border-slate-200 rounded-lg px-2 py-1 text-sm text-center bg-white focus:outline-none focus:border-indigo-400"
+                />
+                <button
+                  onClick={startExtraStudy}
+                  className="text-sm font-semibold text-indigo-700 hover:text-indigo-900 inline-flex items-center gap-1 transition-colors"
+                >
+                  Learn extra <ArrowRightIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         )}

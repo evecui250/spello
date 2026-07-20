@@ -4,6 +4,7 @@ import '../styles/globals.css';
 import NavBar from '../components/NavBar';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
   return (
     <html lang="de">
       <head>
@@ -11,6 +12,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Spello</title>
         <meta name="description" content="Spello — a German vocabulary trainer for B2 learners" />
+        <link rel="icon" href={`${base}/favicon-32.png`} sizes="32x32" />
+        <link rel="icon" href={`${base}/favicon-16.png`} sizes="16x16" />
+        <link rel="icon" href={`${base}/icon-512.png`} sizes="512x512" />
+        <link rel="apple-touch-icon" href={`${base}/apple-touch-icon.png`} />
       </head>
       <body className="bg-gradient-to-b from-slate-50 to-indigo-50/50 min-h-screen text-slate-800">
         <NavBar />

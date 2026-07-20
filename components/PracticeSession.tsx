@@ -13,7 +13,7 @@ import {
 } from '../lib/storage';
 import { Word } from '../lib/words';
 import SpecialCharButtons from './SpecialCharButtons';
-import LetterInputRow from './LetterInputRow';
+import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpeakerButton from './SpeakerButton';
 import CongratsModal from './CongratsModal';
 import NextSectionPrompt from './NextSectionPrompt';
@@ -74,6 +74,7 @@ export default function PracticeSession({ mode }: Props) {
   const nextCoinRef = useRef<HTMLSpanElement | null>(null);
 
   const activeInputRef = useRef<HTMLInputElement | null>(null);
+  const letterRowRef = useRef<LetterInputRowHandle | null>(null);
   const handleNextRef = useRef<() => void>(() => {});
 
   const word = mode === 'study' ? queue[0] ?? null : words[0] ?? null;
@@ -133,7 +134,15 @@ export default function PracticeSession({ mode }: Props) {
           loadCurrent(remaining[0]);
         } else if (batchIds.length > 0) {
           // Today's batch was already fully completed in an earlier visit.
+          // handleNext normally marks the goal done when a session finishes
+          // interactively — that never ran this time, so do it here too,
+          // otherwise the goal silently never gets marked and Home is stuck
+          // showing "nothing new" instead of the Study Extra flow.
           setSessionDone(true);
+          if (!goalDoneAtStartRef.current) {
+            markStudyGoalDone(batchIds.length);
+            checkDailyCompletion();
+          }
         }
       }
     } else {
@@ -175,7 +184,7 @@ export default function PracticeSession({ mode }: Props) {
       noOpReviewPractice ? true : mode === 'review' ? correct : (progress.round === MAX_ROUND && correct)
     );
     setCoinEarned(updated.studiedTimes > progress.studiedTimes);
-    if (!correct && settings.autoPlayAudio) {
+    if (settings.autoPlayAudio) {
       speakWord(word);
     }
   };
@@ -422,7 +431,11 @@ export default function PracticeSession({ mode }: Props) {
                   key={a}
                   type="button"
                   disabled={feedback !== null}
-                  onClick={() => { setArticleGuess(a); setArticleReminder(false); }}
+                  onClick={() => {
+                    setArticleGuess(a);
+                    setArticleReminder(false);
+                    letterRowRef.current?.focusFirstEmpty();
+                  }}
                   className={`px-4 py-1.5 rounded-full text-lg font-bold border-2 transition-colors disabled:opacity-60 ${
                     articleGuess === a
                       ? 'bg-indigo-600 border-indigo-600 text-white'
@@ -460,6 +473,7 @@ export default function PracticeSession({ mode }: Props) {
 
         {/* Letter tiles — locked hints or editable blanks */}
         <LetterInputRow
+          ref={letterRowRef}
           chars={chars}
           hint={hint}
           values={values}
@@ -526,8 +540,18 @@ function FlyingCoin({ from, to }: { from: DOMRect; to: DOMRect }) {
   const [arrived, setArrived] = useState(false);
 
   useEffect(() => {
-    const raf = requestAnimationFrame(() => setArrived(true));
-    return () => cancelAnimationFrame(raf);
+    // A single rAF can land in the same paint as the initial styles, so the
+    // transition never has a "before" frame to animate from — it just snaps
+    // straight to the end state. Waiting a second frame guarantees a real
+    // paint happens in between.
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setArrived(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
   }, []);
 
   const dx = to.left - from.left;
