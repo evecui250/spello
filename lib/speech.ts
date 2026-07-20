@@ -2,11 +2,25 @@
 
 import { Word } from './words';
 
-// iOS Safari loads its voice list asynchronously (it can be empty on the
-// very first call) and, unlike macOS Safari, doesn't reliably match
-// `utterance.lang` to a German voice on its own — it can silently fall back
-// to the device's default system voice instead. Explicitly picking a German
-// voice from the list (once it's loaded) avoids that.
+// Nouns are spoken with their article (e.g. "der Tisch") so the learner
+// hears the gender along with the word, not just the bare noun.
+export function spokenForm(word: Word): string {
+  return word.article ? `${word.article} ${word.de}` : word.de;
+}
+
+// Pre-generated recordings (one consistent Standard German voice for every
+// word, every device) live under /public/audio, named by word id.
+export function audioUrlForWord(word: Word): string {
+  return `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/audio/${word.id}.mp3`;
+}
+
+// --- Browser TTS fallback ---
+// Used only if a word's recording is missing or fails to load. iOS Safari
+// loads its voice list asynchronously (it can be empty on the very first
+// call) and, unlike macOS Safari, doesn't reliably match `utterance.lang` to
+// a German voice on its own — it can silently fall back to the device's
+// default system voice instead. Explicitly picking a German voice from the
+// list (once it's loaded) avoids that.
 let cachedGermanVoice: SpeechSynthesisVoice | null | undefined;
 
 function pickGermanVoice(): SpeechSynthesisVoice | null {
@@ -27,7 +41,7 @@ if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
   });
 }
 
-export function speakGerman(text: string): void {
+function speakWithBrowserVoice(text: string): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'de-DE';
@@ -38,8 +52,19 @@ export function speakGerman(text: string): void {
   window.speechSynthesis.speak(utterance);
 }
 
-// Nouns are spoken with their article (e.g. "der Tisch") so the learner
-// hears the gender along with the word, not just the bare noun.
-export function spokenForm(word: Word): string {
-  return word.article ? `${word.article} ${word.de}` : word.de;
+let currentAudio: HTMLAudioElement | null = null;
+
+// Plays this word's pre-generated recording — the same voice for every user
+// on every device — falling back to the browser's built-in text-to-speech
+// (which varies a lot by device/browser) only if the file is unavailable.
+export function speakWord(word: Word): void {
+  if (typeof window === 'undefined') return;
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  const audio = new Audio(audioUrlForWord(word));
+  currentAudio = audio;
+  audio.addEventListener('error', () => speakWithBrowserVoice(spokenForm(word)));
+  audio.play().catch(() => speakWithBrowserVoice(spokenForm(word)));
 }

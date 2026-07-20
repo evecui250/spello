@@ -1,27 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { speakGerman } from '../lib/speech';
+import { Word } from '../lib/words';
+import { speakWord } from '../lib/speech';
 
 interface Props {
-  text: string;
+  word: Word;
   className?: string;
 }
 
-export default function SpeakerButton({ text, className }: Props) {
-  const [supported, setSupported] = useState(false);
-
-  useEffect(() => {
-    setSupported('speechSynthesis' in window);
-  }, []);
-
-  if (!supported) return null;
-
+export default function SpeakerButton({ word, className }: Props) {
   return (
     <button
       type="button"
-      onClick={() => speakGerman(text)}
-      aria-label={`Play pronunciation of ${text}`}
+      onClick={() => speakWord(word)}
+      aria-label={`Play pronunciation of ${word.de}`}
       className={className ?? 'text-indigo-400 hover:text-indigo-600 transition-colors'}
     >
       🔊

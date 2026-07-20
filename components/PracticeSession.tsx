@@ -17,7 +17,7 @@ import LetterInputRow from './LetterInputRow';
 import SpeakerButton from './SpeakerButton';
 import CongratsModal from './CongratsModal';
 import NextSectionPrompt from './NextSectionPrompt';
-import { speakGerman, spokenForm } from '../lib/speech';
+import { speakWord } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
 import Link from 'next/link';
 
@@ -87,7 +87,7 @@ export default function PracticeSession({ mode }: Props) {
     setJustCompleted(false);
     setAttemptKey(k => k + 1);
     if (round === 1 && getSettings().autoPlayAudio) {
-      speakGerman(spokenForm(w));
+      speakWord(w);
     }
   };
 
@@ -155,7 +155,7 @@ export default function PracticeSession({ mode }: Props) {
     // regardless of prior attempts this session.
     setJustCompleted(mode === 'review' ? correct : (progress.round === MAX_ROUND && correct));
     if (!correct && settings.autoPlayAudio) {
-      speakGerman(spokenForm(word));
+      speakWord(word);
     }
   };
 
@@ -395,7 +395,7 @@ export default function PracticeSession({ mode }: Props) {
           <div className="text-center -mt-1">
             <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
             <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
-              {word.de} <SpeakerButton text={spokenForm(word)} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
+              {word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
             </div>
           </div>
         )}
@@ -439,7 +439,7 @@ export default function PracticeSession({ mode }: Props) {
                     {word.article ? `${word.article} ` : ''}{word.de}
                   </span>
                   {' '}
-                  <SpeakerButton text={spokenForm(word)} className="align-middle text-red-600 hover:text-red-800 transition-colors" />
+                  <SpeakerButton word={word} className="align-middle text-red-600 hover:text-red-800 transition-colors" />
                 </>
               )}
             </div>

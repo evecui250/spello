@@ -93,7 +93,7 @@ export default function WordsPage() {
               <span className="font-semibold text-indigo-800">
                 {w.article ? `${w.article} ` : ''}{w.de}
               </span>
-              <SpeakerButton text={w.de} className="ml-1.5 text-indigo-400 hover:text-indigo-600 transition-colors align-middle" />
+              <SpeakerButton word={w} className="ml-1.5 text-indigo-400 hover:text-indigo-600 transition-colors align-middle" />
               {w.plural && <span className="text-slate-400 text-sm ml-2">· {w.plural}</span>}
               <div className="text-slate-500 text-sm">{w.en}</div>
             </div>
