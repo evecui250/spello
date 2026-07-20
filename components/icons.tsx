@@ -59,6 +59,16 @@ export function BookIcon({ className }: IconProps) {
   );
 }
 
+export function StackedBooksIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <rect x="4" y="14.5" width="16" height="3.2" rx="0.8" />
+      <rect x="5.5" y="10.5" width="13" height="3.2" rx="0.8" />
+      <path d="M7 10.3V4.8c0-.5.5-.9 1-.7l2.8 1c.3.1.7.1 1 0l1.3-.5c.3-.1.7-.1 1 0l1.3.5c.3.1.7.1 1 0l2.6-1c.5-.2 1 .2 1 .7v5.5" />
+    </svg>
+  );
+}
+
 export function RefreshIcon({ className }: IconProps) {
   return (
     <svg {...base} className={className}>

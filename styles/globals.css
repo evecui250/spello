@@ -8,3 +8,38 @@
 .animate-coin-pop {
   animation: coin-pop 0.5s ease-out;
 }
+
+/* Home page forest scene */
+
+@keyframes bubble-float {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(var(--drift, 6px), -14px); }
+}
+.animate-bubble-float {
+  animation: bubble-float 5s ease-in-out infinite;
+}
+
+@keyframes firefly-twinkle {
+  0%, 100% { opacity: 0.15; transform: translate(0, 0) scale(0.8); }
+  50% { opacity: 0.9; transform: translate(4px, -10px) scale(1.15); }
+}
+.animate-firefly {
+  animation: firefly-twinkle 3.2s ease-in-out infinite;
+}
+
+@keyframes book-glow {
+  0%, 100% { box-shadow: 0 0 18px 2px rgba(250, 204, 21, 0.25); }
+  50% { box-shadow: 0 0 30px 8px rgba(250, 204, 21, 0.45); }
+}
+.animate-book-glow {
+  animation: book-glow 2.8s ease-in-out infinite;
+}
+
+@keyframes mist-drift {
+  0% { transform: translateX(-4%); }
+  50% { transform: translateX(3%); }
+  100% { transform: translateX(-4%); }
+}
+.animate-mist {
+  animation: mist-drift 14s ease-in-out infinite;
+}
