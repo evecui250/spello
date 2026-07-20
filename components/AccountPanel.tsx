@@ -14,6 +14,7 @@ export default function AccountPanel({ onSync }: Props) {
   const [email, setEmail] = useState<string | null>(null);
   const [inputEmail, setInputEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
@@ -33,7 +34,13 @@ export default function AccountPanel({ onSync }: Props) {
       email: inputEmail.trim(),
       options: { emailRedirectTo: `${window.location.origin}${window.location.pathname}` },
     });
-    setStatus(error ? 'error' : 'sent');
+    if (error) {
+      console.error('Spello sign-in link failed:', error.message);
+      setErrorMessage(error.message);
+      setStatus('error');
+    } else {
+      setStatus('sent');
+    }
   };
 
   const handleSignOut = async () => {
@@ -89,7 +96,9 @@ export default function AccountPanel({ onSync }: Props) {
         </div>
       )}
       {status === 'error' && (
-        <p className="text-red-600 text-sm mt-2">Something went wrong sending the link — try again.</p>
+        <p className="text-red-600 text-sm mt-2">
+          Couldn't send the link{errorMessage ? `: ${errorMessage}` : ''} — try again in a bit.
+        </p>
       )}
     </div>
   );

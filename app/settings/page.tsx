@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const [language, setLanguage] = useState('de');
   const [level, setLevel] = useState('B2');
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
+  const [requireArticle, setRequireArticle] = useState(false);
   const [saved, setSaved] = useState(false);
   const [cleared, setCleared] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -25,6 +26,7 @@ export default function SettingsPage() {
     setLanguage(s.language);
     setLevel(s.level);
     setAutoPlayAudio(s.autoPlayAudio);
+    setRequireArticle(s.requireArticle);
   };
 
   useEffect(loadFromStorage, []);
@@ -50,7 +52,7 @@ export default function SettingsPage() {
   // from current state, which is already up to date by the time this runs.
   const persist = (patch: Partial<Settings>) => {
     const next: Settings = {
-      studyBatchSize, dailyReview, masteryThreshold, language, level, autoPlayAudio, ...patch,
+      studyBatchSize, dailyReview, masteryThreshold, language, level, autoPlayAudio, requireArticle, ...patch,
     };
     saveSettings(next);
     scheduleSync();
@@ -196,6 +198,21 @@ export default function SettingsPage() {
             type="checkbox"
             checked={autoPlayAudio}
             onChange={e => { setAutoPlayAudio(e.target.checked); persist({ autoPlayAudio: e.target.checked }); }}
+            className="w-5 h-5 accent-indigo-600"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="block font-semibold text-slate-700">
+              Practice der/die/das
+            </label>
+            <p className="text-slate-400 text-sm">Also blanks the article for nouns, so you have to recall the gender too.</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={requireArticle}
+            onChange={e => { setRequireArticle(e.target.checked); persist({ requireArticle: e.target.checked }); }}
             className="w-5 h-5 accent-indigo-600"
           />
         </div>

@@ -33,7 +33,7 @@ export default function WelcomePage() {
   const handleStart = () => {
     finish({
       studyBatchSize, dailyReview, masteryThreshold,
-      language: 'de', level: 'B2', autoPlayAudio,
+      language: 'de', level: 'B2', autoPlayAudio, requireArticle: false,
     });
   };
 

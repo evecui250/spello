@@ -42,9 +42,11 @@ export default function PracticeSession({ mode }: Props) {
   const [queue, setQueue] = useState<Word[]>([]);
   const [totalStudyWords, setTotalStudyWords] = useState(0);
 
-  // Review mode: a fixed batch, walked through in order.
+  // Review mode: a queue too, so a wrong answer requeues the word instead of
+  // letting it pass — every word in the batch ends the session with one more
+  // coin, not just "attempted once."
   const [words, setWords] = useState<Word[]>([]);
-  const [wordIdx, setWordIdx] = useState(0);
+  const [totalReviewWords, setTotalReviewWords] = useState(0);
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
   const [hasMoreReview, setHasMoreReview] = useState(false);
 
@@ -57,9 +59,9 @@ export default function PracticeSession({ mode }: Props) {
   const isExtraReviewRef = useRef(false);
 
   const [currentRound, setCurrentRound] = useState<Round>(1);
-  const [currentStudiedTimes, setCurrentStudiedTimes] = useState(0);
   const [hint, setHint] = useState<boolean[]>([]);
   const [values, setValues] = useState<string[]>([]);
+  const [articleGuess, setArticleGuess] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<boolean | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
   const [attemptKey, setAttemptKey] = useState(0);
@@ -67,7 +69,8 @@ export default function PracticeSession({ mode }: Props) {
   const activeInputRef = useRef<HTMLInputElement | null>(null);
   const handleNextRef = useRef<() => void>(() => {});
 
-  const word = mode === 'study' ? queue[0] ?? null : words[wordIdx] ?? null;
+  const word = mode === 'study' ? queue[0] ?? null : words[0] ?? null;
+  const needsArticle = !!(settings?.requireArticle && word?.type === 'noun' && word?.article);
 
   const loadCurrent = (w: Word) => {
     const progress = getWordProgress(w.id);
@@ -75,11 +78,11 @@ export default function PracticeSession({ mode }: Props) {
     // so round 1 would be too easy — regardless of its stored round.
     const round = mode === 'review' ? REVIEW_BASE_ROUND : progress.round;
     setCurrentRound(round);
-    setCurrentStudiedTimes(progress.studiedTimes);
     const h = generateHint(w.de, round);
     const chars = [...w.de];
     setHint(h);
     setValues(chars.map((c, i) => (h[i] ? '' : c)));
+    setArticleGuess(null);
     setFeedback(null);
     setJustCompleted(false);
     setAttemptKey(k => k + 1);
@@ -128,13 +131,14 @@ export default function PracticeSession({ mode }: Props) {
       reviewGoalDoneAtStartRef.current = isReviewGoalDoneToday();
       const batch = buildReviewWords(extra ?? s.dailyReview, new Set(), isExtraReviewRef.current);
       setWords(batch);
+      setTotalReviewWords(batch.length);
       setDoneIds(new Set(batch.map(w => w.id)));
       if (batch.length) loadCurrent(batch[0]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  const isComplete = hint.length > 0 && hint.every((h, i) => !h || !!values[i]);
+  const isComplete = hint.length > 0 && hint.every((h, i) => !h || !!values[i]) && (!needsArticle || articleGuess !== null);
 
   const submitResult = (correct: boolean) => {
     if (!word || !settings || feedback !== null) return;
@@ -145,7 +149,11 @@ export default function PracticeSession({ mode }: Props) {
     saveWordProgress(updated);
     scheduleSync();
     setFeedback(correct);
-    setJustCompleted(progress.round === MAX_ROUND && correct);
+    // Study: only "done" the first time this ladder climb reaches round 5.
+    // Review: any correct answer clears it, however many requeues it took —
+    // applyReviewResult already handles the round/coin bookkeeping correctly
+    // regardless of prior attempts this session.
+    setJustCompleted(mode === 'review' ? correct : (progress.round === MAX_ROUND && correct));
     if (!correct && settings.autoPlayAudio) {
       speakGerman(spokenForm(word));
     }
@@ -153,7 +161,9 @@ export default function PracticeSession({ mode }: Props) {
 
   const handleSubmit = () => {
     if (!word || !isComplete) return;
-    submitResult(checkAnswer(word.de, values.join('')));
+    const wordRight = checkAnswer(word.de, values.join(''));
+    const articleRight = !needsArticle || articleGuess === word.article;
+    submitResult(wordRight && articleRight);
   };
 
   const handleGiveUp = () => submitResult(false);
@@ -194,20 +204,21 @@ export default function PracticeSession({ mode }: Props) {
         loadCurrent(rest[0]);
       }
     } else {
-      const nextIdx = wordIdx + 1;
-      if (nextIdx >= words.length) {
+      const rest = words.slice(1);
+      if (!justCompleted) rest.push(words[0]);
+      setWords(rest);
+      if (rest.length === 0) {
         setHasMoreReview(buildReviewWords(1, doneIds, isExtraReviewRef.current).length > 0);
         setSessionDone(true);
         touchStreak();
         scheduleSync();
         if (!isExtraReviewRef.current) {
           const wasDone = reviewGoalDoneAtStartRef.current;
-          markReviewGoalDone(words.length);
+          markReviewGoalDone(totalReviewWords);
           if (!wasDone) checkDailyCompletion();
         }
       } else {
-        setWordIdx(nextIdx);
-        loadCurrent(words[nextIdx]);
+        loadCurrent(rest[0]);
       }
     }
   };
@@ -218,7 +229,7 @@ export default function PracticeSession({ mode }: Props) {
     const next = buildReviewWords(settings.dailyReview, doneIds, isExtraReviewRef.current);
     setDoneIds(prev => new Set([...prev, ...next.map(w => w.id)]));
     setWords(next);
-    setWordIdx(0);
+    setTotalReviewWords(next.length);
     setSessionDone(false);
     if (next.length) loadCurrent(next[0]);
   };
@@ -251,7 +262,7 @@ export default function PracticeSession({ mode }: Props) {
 
   // --- Empty / done screens ---
 
-  const initiallyEmpty = mode === 'study' ? totalStudyWords === 0 : doneIds.size === 0;
+  const initiallyEmpty = mode === 'study' ? totalStudyWords === 0 : totalReviewWords === 0;
 
   if (settings && initiallyEmpty && !sessionDone) {
     return (
@@ -281,7 +292,7 @@ export default function PracticeSession({ mode }: Props) {
         <p className="text-slate-500 mb-6">
           {mode === 'study'
             ? `You brought ${totalStudyWords} word${totalStudyWords === 1 ? '' : 's'} to round 5 today.`
-            : `You reviewed ${words.length} word${words.length === 1 ? '' : 's'}.`}
+            : `You reviewed ${totalReviewWords} word${totalReviewWords === 1 ? '' : 's'}.`}
         </p>
         <div className="flex flex-col items-center gap-3">
           {mode === 'review' && hasMoreReview && (
@@ -312,8 +323,8 @@ export default function PracticeSession({ mode }: Props) {
   if (!word) return null;
 
   const chars = [...word.de];
-  const completedCount = mode === 'study' ? totalStudyWords - queue.length : wordIdx;
-  const completedTotal = mode === 'study' ? totalStudyWords : words.length;
+  const completedCount = mode === 'study' ? totalStudyWords - queue.length : totalReviewWords - words.length;
+  const completedTotal = mode === 'study' ? totalStudyWords : totalReviewWords;
 
   return (
     <div className="flex flex-col gap-5">
@@ -336,10 +347,7 @@ export default function PracticeSession({ mode }: Props) {
 
         {/* This word's level, 1-5 — specific to the current word */}
         <div>
-          <div className="flex justify-between text-sm text-slate-400 mb-1">
-            <span className="font-medium text-indigo-600">{ROUND_LABELS[currentRound]}</span>
-            <span>Level {currentRound} / 5</span>
-          </div>
+          <div className="text-sm font-medium text-indigo-600 mb-1">{ROUND_LABELS[currentRound]}</div>
           <div className="flex gap-1">
             {([1, 2, 3, 4, 5] as Round[]).map(n => (
               <div
@@ -356,12 +364,30 @@ export default function PracticeSession({ mode }: Props) {
           <div className="text-2xl font-semibold text-slate-700">{word.en}</div>
         </div>
 
-        {/* Article chip for nouns */}
+        {/* Article for nouns — a fixed chip, or a der/die/das guess when requireArticle is on */}
         {word.type === 'noun' && word.article && (
-          <div className="flex justify-center">
-            <span className="bg-indigo-100 text-indigo-700 font-bold px-4 py-1 rounded-full text-lg">
-              {word.article}
-            </span>
+          <div className="flex justify-center gap-2">
+            {needsArticle ? (
+              (['der', 'die', 'das'] as const).map(a => (
+                <button
+                  key={a}
+                  type="button"
+                  disabled={feedback !== null}
+                  onClick={() => setArticleGuess(a)}
+                  className={`px-4 py-1.5 rounded-full text-lg font-bold border-2 transition-colors disabled:opacity-60 ${
+                    articleGuess === a
+                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                      : 'bg-white border-indigo-200 text-indigo-600 hover:border-indigo-400'
+                  }`}
+                >
+                  {a}
+                </button>
+              ))
+            ) : (
+              <span className="bg-indigo-100 text-indigo-700 font-bold px-4 py-1 rounded-full text-lg">
+                {word.article}
+              </span>
+            )}
           </div>
         )}
 
@@ -372,11 +398,6 @@ export default function PracticeSession({ mode }: Props) {
               {word.de} <SpeakerButton text={spokenForm(word)} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
             </div>
           </div>
-        )}
-        {currentRound === 5 && settings && (
-          <p className="text-center text-slate-400 text-sm -mt-2">
-            🪙 {currentStudiedTimes} / {settings.masteryThreshold} coins
-          </p>
         )}
 
         {/* Letter tiles — locked hints or editable blanks */}

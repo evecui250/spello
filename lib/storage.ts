@@ -23,6 +23,7 @@ export interface Settings {
   language: string;
   level: string;
   autoPlayAudio: boolean;
+  requireArticle: boolean;
 }
 
 const KEYS = {
@@ -40,7 +41,7 @@ const EXTRA_REVIEW_KEY = 'wb2_extra_review_limit';
 
 const DEFAULT_SETTINGS: Settings = {
   studyBatchSize: 15, dailyReview: 25, masteryThreshold: 3, language: 'de', level: 'B2',
-  autoPlayAudio: true,
+  autoPlayAudio: true, requireArticle: false,
 };
 
 export function today(): string {
