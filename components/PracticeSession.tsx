@@ -62,15 +62,24 @@ export default function PracticeSession({ mode }: Props) {
   const [hint, setHint] = useState<boolean[]>([]);
   const [values, setValues] = useState<string[]>([]);
   const [articleGuess, setArticleGuess] = useState<string | null>(null);
+  const [articleReminder, setArticleReminder] = useState(false);
   const [feedback, setFeedback] = useState<boolean | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
+  const [coinEarned, setCoinEarned] = useState(false);
   const [attemptKey, setAttemptKey] = useState(0);
+
+  const [flyingCoin, setFlyingCoin] = useState<{ from: DOMRect; to: DOMRect } | null>(null);
+  const [pulseIdx, setPulseIdx] = useState<number | null>(null);
+  const cardCoinRef = useRef<HTMLSpanElement | null>(null);
+  const nextCoinRef = useRef<HTMLSpanElement | null>(null);
 
   const activeInputRef = useRef<HTMLInputElement | null>(null);
   const handleNextRef = useRef<() => void>(() => {});
 
   const word = mode === 'study' ? queue[0] ?? null : words[0] ?? null;
   const needsArticle = !!(settings?.requireArticle && word?.type === 'noun' && word?.article);
+  const completedCount = mode === 'study' ? totalStudyWords - queue.length : totalReviewWords - words.length;
+  const completedTotal = mode === 'study' ? totalStudyWords : totalReviewWords;
 
   const loadCurrent = (w: Word) => {
     const progress = getWordProgress(w.id);
@@ -83,8 +92,10 @@ export default function PracticeSession({ mode }: Props) {
     setHint(h);
     setValues(chars.map((c, i) => (h[i] ? '' : c)));
     setArticleGuess(null);
+    setArticleReminder(false);
     setFeedback(null);
     setJustCompleted(false);
+    setCoinEarned(false);
     setAttemptKey(k => k + 1);
     if (round === 1 && getSettings().autoPlayAudio) {
       speakWord(w);
@@ -138,7 +149,10 @@ export default function PracticeSession({ mode }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  const isComplete = hint.length > 0 && hint.every((h, i) => !h || !!values[i]) && (!needsArticle || articleGuess !== null);
+  // The letter tiles being full is enough to enable Check — a missing
+  // article guess (when required) surfaces its own reminder instead of just
+  // leaving the button inertly disabled with no explanation.
+  const wordComplete = hint.length > 0 && hint.every((h, i) => !h || !!values[i]);
 
   const submitResult = (correct: boolean) => {
     if (!word || !settings || feedback !== null) return;
@@ -146,6 +160,10 @@ export default function PracticeSession({ mode }: Props) {
     const updated = mode === 'review'
       ? applyReviewResult(progress, correct, settings.masteryThreshold)
       : applyResult(progress, correct, settings.masteryThreshold);
+    // applyReviewResult returns the same object, unchanged, when a word that
+    // already banked its coin today gets reviewed again (only reachable via
+    // "Review Extra") — that's bonus practice, not a real pass/fail.
+    const noOpReviewPractice = mode === 'review' && updated === progress;
     saveWordProgress(updated);
     scheduleSync();
     setFeedback(correct);
@@ -153,14 +171,21 @@ export default function PracticeSession({ mode }: Props) {
     // Review: any correct answer clears it, however many requeues it took —
     // applyReviewResult already handles the round/coin bookkeeping correctly
     // regardless of prior attempts this session.
-    setJustCompleted(mode === 'review' ? correct : (progress.round === MAX_ROUND && correct));
+    setJustCompleted(
+      noOpReviewPractice ? true : mode === 'review' ? correct : (progress.round === MAX_ROUND && correct)
+    );
+    setCoinEarned(updated.studiedTimes > progress.studiedTimes);
     if (!correct && settings.autoPlayAudio) {
       speakWord(word);
     }
   };
 
   const handleSubmit = () => {
-    if (!word || !isComplete) return;
+    if (!word || !wordComplete) return;
+    if (needsArticle && articleGuess === null) {
+      setArticleReminder(true);
+      return;
+    }
     const wordRight = checkAnswer(word.de, values.join(''));
     const articleRight = !needsArticle || articleGuess === word.article;
     submitResult(wordRight && articleRight);
@@ -260,6 +285,25 @@ export default function PracticeSession({ mode }: Props) {
     };
   }, [feedback]);
 
+  // On a correct round-5 answer that actually earns a coin, fly it from the
+  // card up to its slot in the top coin bar, so collecting one more coin is
+  // visible, not just a number changing.
+  useEffect(() => {
+    if (feedback === true && coinEarned && cardCoinRef.current && nextCoinRef.current) {
+      const from = cardCoinRef.current.getBoundingClientRect();
+      const to = nextCoinRef.current.getBoundingClientRect();
+      setFlyingCoin({ from, to });
+      setPulseIdx(completedCount);
+      const flightTimer = setTimeout(() => setFlyingCoin(null), 800);
+      const pulseTimer = setTimeout(() => setPulseIdx(null), 1300);
+      return () => {
+        clearTimeout(flightTimer);
+        clearTimeout(pulseTimer);
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedback, coinEarned]);
+
   // --- Empty / done screens ---
 
   const initiallyEmpty = mode === 'study' ? totalStudyWords === 0 : totalReviewWords === 0;
@@ -323,8 +367,6 @@ export default function PracticeSession({ mode }: Props) {
   if (!word) return null;
 
   const chars = [...word.de];
-  const completedCount = mode === 'study' ? totalStudyWords - queue.length : totalReviewWords - words.length;
-  const completedTotal = mode === 'study' ? totalStudyWords : totalReviewWords;
 
   return (
     <div className="flex flex-col gap-5">
@@ -337,10 +379,17 @@ export default function PracticeSession({ mode }: Props) {
         </div>
         <div className="flex flex-wrap gap-1 justify-center">
           {Array.from({ length: completedTotal }, (_, i) => (
-            <span key={i} className={`text-lg ${i < completedCount ? '' : 'opacity-20 grayscale'}`}>🪙</span>
+            <span
+              key={i}
+              ref={i === completedCount ? nextCoinRef : undefined}
+              className={`text-lg transition-transform ${i < completedCount ? '' : 'opacity-20 grayscale'} ${i === pulseIdx ? 'animate-coin-pop' : ''}`}
+            >
+              🪙
+            </span>
           ))}
         </div>
       </div>
+      {flyingCoin && <FlyingCoin from={flyingCoin.from} to={flyingCoin.to} />}
 
       {/* Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-indigo-50 p-6 flex flex-col gap-5">
@@ -373,7 +422,7 @@ export default function PracticeSession({ mode }: Props) {
                   key={a}
                   type="button"
                   disabled={feedback !== null}
-                  onClick={() => setArticleGuess(a)}
+                  onClick={() => { setArticleGuess(a); setArticleReminder(false); }}
                   className={`px-4 py-1.5 rounded-full text-lg font-bold border-2 transition-colors disabled:opacity-60 ${
                     articleGuess === a
                       ? 'bg-indigo-600 border-indigo-600 text-white'
@@ -390,13 +439,22 @@ export default function PracticeSession({ mode }: Props) {
             )}
           </div>
         )}
+        {needsArticle && articleReminder && (
+          <p className="text-center text-red-500 text-sm -mt-3">Choose der / die / das first.</p>
+        )}
 
         {currentRound === 1 && (
           <div className="text-center -mt-1">
             <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
             <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
-              {word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
+              {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
             </div>
+          </div>
+        )}
+
+        {currentRound === 5 && (
+          <div className="flex justify-center -mt-1">
+            <span ref={cardCoinRef} className="text-3xl">🪙</span>
           </div>
         )}
 
@@ -417,7 +475,7 @@ export default function PracticeSession({ mode }: Props) {
             <SpecialCharButtons inputRef={activeInputRef} />
             <button
               onClick={handleSubmit}
-              disabled={!isComplete}
+              disabled={!wordComplete}
               className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
             >
               Check
@@ -457,5 +515,35 @@ export default function PracticeSession({ mode }: Props) {
         <div className="text-center text-slate-400 text-xs">{word.category}</div>
       )}
     </div>
+  );
+}
+
+// A coin that visually travels from its start position to its end position
+// (both captured via getBoundingClientRect) and fades out on arrival —
+// two-phase inline styles plus a CSS transition, so no per-instance keyframes
+// or custom properties are needed.
+function FlyingCoin({ from, to }: { from: DOMRect; to: DOMRect }) {
+  const [arrived, setArrived] = useState(false);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setArrived(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const dx = to.left - from.left;
+  const dy = to.top - from.top;
+
+  return (
+    <span
+      className="fixed z-50 text-2xl pointer-events-none transition-all duration-700 ease-out"
+      style={{
+        left: from.left,
+        top: from.top,
+        transform: arrived ? `translate(${dx}px, ${dy}px) scale(0.5)` : 'translate(0, 0) scale(1)',
+        opacity: arrived ? 0 : 1,
+      }}
+    >
+      🪙
+    </span>
   );
 }

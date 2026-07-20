@@ -179,6 +179,17 @@ export function applyReviewResult(
 ): WordProgress {
   const lastPracticed = today();
 
+  // A word can only bank one coin per calendar day — mastery is meant to
+  // reflect `masteryThreshold` distinct days of successful recall. Normal
+  // review already only offers words that weren't touched today, but
+  // "Review Extra" deliberately includes same-day graduates for bonus
+  // practice; further correct answers today shouldn't double-count, and a
+  // wrong one here shouldn't undo a coin already earned today either — it's
+  // just practice.
+  if (progress.lastPracticed === lastPracticed && progress.round === MAX_ROUND) {
+    return progress;
+  }
+
   if (!correct) {
     const round = (REVIEW_BASE_ROUND - 1) as Round;
     return { ...progress, round, lastPracticed };
