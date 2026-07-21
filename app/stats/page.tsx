@@ -18,23 +18,19 @@ export default function StatsPage() {
     puppy: 0, short: 0, medium: 0, 'long-crowned': 0,
   });
   const [masteredCount, setMasteredCount] = useState(0);
-  const [totalCoins, setTotalCoins] = useState(0);
   const [streak, setStreak] = useState(0);
 
   useEffect(() => {
     const progress = getAllProgress();
     const counts: Record<MascotStageId, number> = { puppy: 0, short: 0, medium: 0, 'long-crowned': 0 };
     let mastered = 0;
-    let coinSum = 0;
     for (const w of WORDS) {
       const p = progress[w.id];
       counts[p?.mascotStage ?? 'puppy'] += 1;
-      coinSum += p?.studiedTimes ?? 0;
       if (p?.fullyMastered) mastered++;
     }
     setStageCounts(counts);
     setMasteredCount(mastered);
-    setTotalCoins(coinSum);
     setStreak(getStreak().count);
   }, []);
 
@@ -57,10 +53,6 @@ export default function StatsPage() {
         <div className="flex items-center justify-between">
           <span className="font-semibold text-slate-700">Words Mastered</span>
           <span className="text-2xl font-bold text-green-600">{masteredCount} / {total}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="font-semibold text-slate-700">Total coins earned</span>
-          <span className="text-2xl font-bold text-amber-500">🪙 {totalCoins}</span>
         </div>
       </div>
 

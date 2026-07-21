@@ -92,8 +92,11 @@ export function getMascotStage(growthScore: number): MascotStageInfo {
 }
 
 // ============================================================================
-// Wiring — applied whenever a word passes or fails a round-5 test, whether
-// that test happened while climbing back to round 5 in Study or in Review.
+// Wiring — applied on the round-5 pass that actually concludes a word's
+// climb, whether that happened in Study or after however many retries in
+// Review. Mistakes along the way are tracked separately (WordProgress.
+// pendingMistakes, bumped directly in practice.ts) — they shrink this
+// pass's growth increment but don't touch the schedule until this fires.
 // ============================================================================
 
 // A successful round-5 pass: banks a coin (legacy field, kept for existing
@@ -118,23 +121,6 @@ export function recordRound5Success(progress: WordProgress, todayStr: string = t
     // Home's mastered count, the congrats card) keeps working unchanged.
     studiedTimes: successfulReviews,
     fullyMastered: stage.isMastered,
-  };
-}
-
-// A failed round-5 test: S and growthScore don't move — the mascot doesn't
-// regress on a single missed review. A mistake is recorded (shrinking the
-// *next* successful pass's growth increment, and dragging M down for
-// scheduling), and the word comes back tomorrow rather than waiting out
-// its normal 2^M interval.
-export function recordRound5Failure(progress: WordProgress, todayStr: string = today()): WordProgress {
-  const pendingMistakes = progress.pendingMistakes + 1;
-  const daysElapsed = progress.lastReviewedAt ? daysBetween(progress.lastReviewedAt, todayStr) : 0;
-  const masteryScore = calculateMasteryScore(progress.successfulReviews, daysElapsed, pendingMistakes);
-  return {
-    ...progress,
-    pendingMistakes,
-    masteryScore,
-    nextReviewDue: addDays(todayStr, 1),
   };
 }
 

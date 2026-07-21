@@ -2,7 +2,7 @@
 
 import { WORDS, Word } from './words';
 import { getAllProgress, getSettings, today, MAX_ROUND, Round, WordProgress } from './storage';
-import { recordRound5Success, recordRound5Failure, simulateDaysToMastery } from './srs';
+import { recordRound5Success, simulateDaysToMastery } from './srs';
 
 // Reviews always start from this baseline difficulty — the word isn't new,
 // so testing it from round 1 would be too easy.
@@ -152,11 +152,29 @@ export function applyResult(progress: WordProgress, correct: boolean): WordProgr
   return { ...recordRound5Success(progress), round: MAX_ROUND, lastPracticed };
 }
 
-// Review scoring: every review attempt is judged from the REVIEW_BASE_ROUND
-// baseline, regardless of the word's stored round (which is always MAX_ROUND
-// going into a review).
-export function applyReviewResult(progress: WordProgress, correct: boolean): WordProgress {
-  const lastPracticed = today();
+export interface ReviewOutcome {
+  progress: WordProgress;
+  // The round to show next time this word comes up in this session — only
+  // meaningful when `isFinal` is false (isFinal means it's leaving the queue).
+  nextRound: Round;
+  // True once this word's review episode is over: either a full pass at
+  // round 5 (whether on the first try or after climbing back from a
+  // mistake), or a one-shot "Review Extra" practice attempt.
+  isFinal: boolean;
+  // True if this attempt actually happened on-schedule and can affect
+  // mastery — false for "Review Extra" bonus practice on a not-yet-due word.
+  scored: boolean;
+}
+
+// Review scoring: every review episode starts at REVIEW_BASE_ROUND. A wrong
+// answer drops it a rung (same as Study) and keeps it in the session's
+// queue for another try — it does NOT get rescheduled for tomorrow, since
+// the user is expected to keep retrying today, same as climbing rounds 1-4
+// in Study. Only the round-5 answer that actually concludes the episode
+// (first try, or after recovering from a mistake) touches the SRS schedule,
+// using whatever pendingMistakes built up along the way for the growth
+// increment.
+export function applyReviewResult(progress: WordProgress, correct: boolean, currentRound: Round): ReviewOutcome {
   const t = today();
 
   // Not actually due yet — only reachable via "Review Extra" pulling in a
@@ -164,13 +182,18 @@ export function applyReviewResult(progress: WordProgress, correct: boolean): Wor
   // the SRS schedule, score, or round, since reviewing early doesn't tell
   // us anything about long-term recall the way an on-schedule review does.
   if (progress.nextReviewDue && progress.nextReviewDue > t) {
-    return progress;
+    return { progress, nextRound: REVIEW_BASE_ROUND, isFinal: true, scored: false };
   }
 
-  if (!correct) {
-    const round = (REVIEW_BASE_ROUND - 1) as Round;
-    return { ...recordRound5Failure(progress, t), round, lastPracticed };
+  if (correct) {
+    if (currentRound >= REVIEW_BASE_ROUND) {
+      return { progress: recordRound5Success(progress, t), nextRound: MAX_ROUND, isFinal: true, scored: true };
+    }
+    const nextRound = (currentRound + 1) as Round;
+    return { progress: { ...progress, lastPracticed: t }, nextRound, isFinal: false, scored: true };
   }
 
-  return { ...recordRound5Success(progress, t), round: MAX_ROUND, lastPracticed };
+  const nextRound = Math.max(1, currentRound - 1) as Round;
+  const updated = { ...progress, pendingMistakes: progress.pendingMistakes + 1, lastPracticed: t };
+  return { progress: updated, nextRound, isFinal: false, scored: true };
 }

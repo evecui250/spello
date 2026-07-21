@@ -9,7 +9,7 @@ import {
   getWordProgress, saveWordProgress, getSettings, touchStreak, markStudyGoalDone,
   takeExtraStudyLimit, takeExtraReviewLimit, isStudyGoalDoneToday, isReviewGoalDoneToday,
   markReviewGoalDone, getDailyStats, markCongratsShown, getTodayStudyBatch, saveTodayStudyBatch,
-  MAX_ROUND, Round, Settings, MascotStageId,
+  MAX_ROUND, Round, Settings, MascotStageId, WordProgress,
 } from '../lib/storage';
 import { Word } from '../lib/words';
 import SpecialCharButtons from './SpecialCharButtons';
@@ -88,6 +88,12 @@ export default function PracticeSession({ mode }: Props) {
   const activeInputRef = useRef<HTMLInputElement | null>(null);
   const letterRowRef = useRef<LetterInputRowHandle | null>(null);
   const handleNextRef = useRef<() => void>(() => {});
+  // Review mode only: which rung a word should resume at when it comes back
+  // around in the queue after a mistake (round 4) or a recovery pass that
+  // isn't the final one yet (back up to round 5). Session-local — it's never
+  // persisted, since the stored round always stays at MAX_ROUND for review
+  // eligibility (see buildReviewWords).
+  const reviewRoundsRef = useRef<Record<string, Round>>({});
 
   const word = mode === 'study' ? queue[0] ?? null : words[0] ?? null;
   const needsArticle = !!(settings?.requireArticle && word?.type === 'noun' && word?.article);
@@ -97,9 +103,10 @@ export default function PracticeSession({ mode }: Props) {
 
   const loadCurrent = (w: Word) => {
     const progress = getWordProgress(w.id);
-    // Reviews always start from the review baseline — the word isn't new,
-    // so round 1 would be too easy — regardless of its stored round.
-    const round = mode === 'review' ? REVIEW_BASE_ROUND : progress.round;
+    // Reviews start from the review baseline — the word isn't new, so round
+    // 1 would be too easy — unless it's coming back around after a mistake
+    // this session, in which case it resumes at whatever rung it fell to.
+    const round = mode === 'review' ? (reviewRoundsRef.current[w.id] ?? REVIEW_BASE_ROUND) : progress.round;
     setCurrentRound(round);
     const h = generateHint(w.de, round);
     const chars = [...w.de];
@@ -177,26 +184,33 @@ export default function PracticeSession({ mode }: Props) {
   const submitResult = (correct: boolean) => {
     if (!word || !settings || feedback !== null) return;
     const progress = getWordProgress(word.id);
-    const updated = mode === 'review'
-      ? applyReviewResult(progress, correct)
-      : applyResult(progress, correct);
-    // applyReviewResult returns the same object, unchanged, when a word that
-    // isn't due yet gets reviewed anyway (only reachable via "Review Extra")
-    // — that's bonus practice, not a real pass/fail.
-    const noOpReviewPractice = mode === 'review' && updated === progress;
+    let updated: WordProgress;
+    let completed: boolean;
+    let earnedBadge: boolean;
+
+    if (mode === 'review') {
+      const outcome = applyReviewResult(progress, correct, currentRound);
+      updated = outcome.progress;
+      completed = outcome.isFinal;
+      earnedBadge = outcome.isFinal && outcome.scored && correct;
+      if (outcome.isFinal) {
+        delete reviewRoundsRef.current[word.id];
+      } else {
+        // Stays in the queue for another try — remember which rung to
+        // resume at (round 4 after a mistake, or back up to 5 to finish).
+        reviewRoundsRef.current[word.id] = outcome.nextRound;
+      }
+    } else {
+      updated = applyResult(progress, correct);
+      // Study: only "done" the first time this ladder climb reaches round 5.
+      completed = progress.round === MAX_ROUND && correct;
+      earnedBadge = updated.studiedTimes > progress.studiedTimes;
+    }
+
     saveWordProgress(updated);
     scheduleSync();
     setFeedback(correct);
-    // Study: only "done" the first time this ladder climb reaches round 5.
-    // Review: any correct answer clears it, however many requeues it took —
-    // applyReviewResult already handles the round/score bookkeeping correctly
-    // regardless of prior attempts this session.
-    setJustCompleted(
-      noOpReviewPractice ? true : mode === 'review' ? correct : (progress.round === MAX_ROUND && correct)
-    );
-    const earnedBadge = mode === 'study'
-      ? updated.studiedTimes > progress.studiedTimes
-      : correct && !noOpReviewPractice;
+    setJustCompleted(completed);
     setHistory(h => [...h, {
       id: word.id, article: word.article, de: word.de, en: word.en,
       correct, earnedBadge, mascotStage: updated.mascotStage,
