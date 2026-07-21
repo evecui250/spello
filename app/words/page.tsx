@@ -52,21 +52,21 @@ export default function WordsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-indigo-700">Word List</h1>
+      <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Word List</h1>
 
       <input
         type="search"
         placeholder="Search German or English…"
         value={search}
         onChange={e => setSearch(e.target.value)}
-        className="border-2 border-indigo-200 rounded-xl px-4 py-2 focus:outline-none focus:border-indigo-500"
+        className="bg-white/90 border-2 border-white/30 rounded-xl px-4 py-2 focus:outline-none focus:border-amber-300"
       />
 
       <div className="flex gap-2 flex-wrap">
         <select
           value={filterLevel}
           onChange={e => setFilterLevel(e.target.value)}
-          className="border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+          className="bg-white/90 border border-white/30 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-amber-300"
         >
           <option value="all">All words</option>
           <option value="new">New</option>
@@ -77,14 +77,14 @@ export default function WordsPage() {
         <select
           value={filterCategory}
           onChange={e => setFilterCategory(e.target.value)}
-          className="border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+          className="bg-white/90 border border-white/30 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-amber-300"
         >
           <option value="all">All categories</option>
           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
 
-      <p className="text-slate-400 text-sm">{filtered.length} words</p>
+      <p className="text-emerald-100/70 text-sm">{filtered.length} words</p>
 
       <div className="flex flex-col gap-2">
         {filtered.map(w => (

@@ -44,10 +44,10 @@ export default function WelcomePage() {
 
   return (
     <div className="flex flex-col items-center gap-7 py-2">
-      <div className="w-full rounded-3xl bg-gradient-to-br from-indigo-50 via-white to-purple-50 border border-indigo-100/70 px-8 py-10 flex flex-col items-center gap-3 text-center">
-        <Logo variant="full" size={140} />
-        <h1 className="text-xl font-bold text-indigo-700 mt-1">Welcome to Spello</h1>
-        <p className="text-slate-500 text-sm max-w-sm">
+      <div className="flex flex-col items-center gap-3 text-center px-4">
+        <Logo variant="icon" size={64} className="ring-2 ring-white/20" />
+        <h1 className="text-xl font-bold text-amber-50 mt-1" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Welcome to Spello</h1>
+        <p className="text-emerald-100/80 text-sm max-w-sm">
           You'll be learning German vocabulary at the B2 level. Set your pace below — you can always change it later in Settings.
         </p>
       </div>
@@ -141,7 +141,7 @@ export default function WelcomePage() {
         >
           Start Learning
         </button>
-        <button onClick={handleSkip} className="text-slate-400 text-sm hover:text-slate-600 transition-colors">
+        <button onClick={handleSkip} className="text-emerald-100/60 text-sm hover:text-emerald-50 transition-colors">
           Skip, use recommended defaults
         </button>
       </div>

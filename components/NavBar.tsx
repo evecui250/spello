@@ -14,11 +14,11 @@ const links = [
 export default function NavBar() {
   const pathname = usePathname();
   return (
-    <nav className="bg-white border-b border-indigo-100 sticky top-0 z-10">
+    <nav className="bg-black/15 backdrop-blur-md border-b border-white/10 sticky top-0 z-10">
       <div className="max-w-2xl mx-auto flex items-center gap-3 px-4 overflow-x-auto">
         <Link href="/" className="flex items-center gap-2 py-2 shrink-0">
           <Logo size={26} />
-          <span className="font-bold text-indigo-700">Spello</span>
+          <span className="font-bold text-amber-100">Spello</span>
         </Link>
         <div className="flex gap-1">
           {links.map(l => {
@@ -29,8 +29,8 @@ export default function NavBar() {
                 href={l.href}
                 className={`px-3 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
                   active
-                    ? 'border-indigo-500 text-indigo-700'
-                    : 'border-transparent text-slate-500 hover:text-indigo-600'
+                    ? 'border-amber-300 text-amber-100'
+                    : 'border-transparent text-emerald-100/60 hover:text-emerald-50'
                 }`}
               >
                 {l.label}

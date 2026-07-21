@@ -72,8 +72,8 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-indigo-700">Settings</h1>
-        <span className={`text-sm font-medium text-green-600 transition-opacity ${saved ? 'opacity-100' : 'opacity-0'}`}>
+        <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Settings</h1>
+        <span className={`text-sm font-medium text-emerald-300 transition-opacity ${saved ? 'opacity-100' : 'opacity-0'}`}>
           ✓ Saved
         </span>
       </div>

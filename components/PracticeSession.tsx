@@ -321,15 +321,15 @@ export default function PracticeSession({ mode }: Props) {
     return (
       <div className="text-center py-16">
         <div className="text-5xl mb-4">🎉</div>
-        <h2 className="text-2xl font-bold text-indigo-700 mb-2">
+        <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           {mode === 'study' ? 'Nothing to study!' : 'Nothing to review!'}
         </h2>
-        <p className="text-slate-500 mb-6">
+        <p className="text-emerald-100/70 mb-6">
           {mode === 'study'
             ? "You've mastered or graduated every word for now."
             : 'No words have graduated from study yet — come back after a study session.'}
         </p>
-        <Link href="/" className="text-indigo-600 underline">Back to Home</Link>
+        <Link href="/" className="text-amber-200 underline">Back to Home</Link>
       </div>
     );
   }
@@ -339,10 +339,10 @@ export default function PracticeSession({ mode }: Props) {
     return (
       <div className="text-center py-16">
         <div className="text-5xl mb-4">✅</div>
-        <h2 className="text-2xl font-bold text-indigo-700 mb-2">
+        <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           {mode === 'study' ? 'Study session complete!' : 'Batch complete!'}
         </h2>
-        <p className="text-slate-500 mb-6">
+        <p className="text-emerald-100/70 mb-6">
           {mode === 'study'
             ? `You brought ${totalStudyWords} word${totalStudyWords === 1 ? '' : 's'} to round 5 today.`
             : `You reviewed ${totalReviewWords} word${totalReviewWords === 1 ? '' : 's'}.`}
@@ -356,7 +356,7 @@ export default function PracticeSession({ mode }: Props) {
               Review more →
             </button>
           )}
-          <Link href="/" className="text-indigo-600 underline">Back to Home</Link>
+          <Link href="/" className="text-amber-200 underline">Back to Home</Link>
         </div>
         {showCongrats && dailyStats && (
           <CongratsModal
@@ -381,7 +381,7 @@ export default function PracticeSession({ mode }: Props) {
     <div className="flex flex-col gap-5">
       {/* Words completed today — a general, cross-word coin tally */}
       <div className="flex flex-col gap-1">
-        <div className="text-xs text-slate-400 text-center">
+        <div className="text-xs text-emerald-100/70 text-center">
           {mode === 'study'
             ? `${completedCount} / ${completedTotal} words learned today`
             : `${completedCount} / ${completedTotal} words reviewed`}
@@ -526,7 +526,7 @@ export default function PracticeSession({ mode }: Props) {
       </div>
 
       {word.category && (
-        <div className="text-center text-slate-400 text-xs">{word.category}</div>
+        <div className="text-center text-emerald-100/60 text-xs">{word.category}</div>
       )}
     </div>
   );

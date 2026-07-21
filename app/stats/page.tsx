@@ -45,7 +45,7 @@ export default function StatsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-indigo-700">Statistics</h1>
+      <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Statistics</h1>
 
       <div className="bg-white rounded-2xl border border-indigo-50 shadow-sm p-5 flex flex-col gap-4">
         <div className="flex items-center justify-between">

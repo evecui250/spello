@@ -2,6 +2,7 @@
 
 import '../styles/globals.css';
 import NavBar from '../components/NavBar';
+import ForestBackground from '../components/ForestBackground';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
@@ -17,7 +18,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="icon" href={`${base}/icon-512.png`} sizes="512x512" />
         <link rel="apple-touch-icon" href={`${base}/apple-touch-icon.png`} />
       </head>
-      <body className="bg-gradient-to-b from-slate-50 to-indigo-50/50 min-h-screen text-slate-800">
+      <body className="min-h-screen text-emerald-50">
+        <ForestBackground />
         <NavBar />
         <main className="max-w-2xl mx-auto px-4 py-6">{children}</main>
       </body>
