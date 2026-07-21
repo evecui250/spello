@@ -11,6 +11,13 @@ interface Props {
   disabled?: boolean;
   activeInputRef: React.MutableRefObject<HTMLInputElement | null>;
   resetFocusKey: string;
+  // When a row after this one needs the initial focus instead (e.g. the
+  // article blanks come first and hand off into the word blanks), set this
+  // to false so this row's own mount-focus effect stays out of the way.
+  autoFocus?: boolean;
+  // Called once every editable cell in the row has a value — lets a caller
+  // chain focus into the next row (article blanks -> word blanks).
+  onFilled?: () => void;
 }
 
 export interface LetterInputRowHandle {
@@ -20,7 +27,7 @@ export interface LetterInputRowHandle {
 }
 
 const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterInputRow(
-  { chars, hint, values, onChange, onSubmit, disabled, activeInputRef, resetFocusKey },
+  { chars, hint, values, onChange, onSubmit, disabled, activeInputRef, resetFocusKey, autoFocus = true, onFilled },
   ref,
 ) {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -35,13 +42,13 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
   }));
 
   useEffect(() => {
-    if (disabled) return;
+    if (disabled || !autoFocus) return;
     const first = editableIndices[0];
     if (first === undefined) return;
     const t = setTimeout(() => inputRefs.current[first]?.focus(), 80);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetFocusKey, disabled]);
+  }, [resetFocusKey, disabled, autoFocus]);
 
   const focusIndex = (i: number) => {
     inputRefs.current[i]?.focus();
@@ -58,7 +65,11 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
     onChange(next);
     if (ch) {
       const n = nextEditable(i);
-      if (n !== undefined) focusIndex(n);
+      if (n !== undefined) {
+        focusIndex(n);
+      } else if (onFilled && editableIndices.every(j => next[j])) {
+        onFilled();
+      }
     }
   };
 

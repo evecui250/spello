@@ -38,15 +38,23 @@ function StatBubble({ stat }: { stat: BubbleStat }) {
   );
 }
 
-// An ancient tome: leather cover, a spine, an inset frame, a title embossed
-// on the cover, and a wax seal bearing the count of words waiting inside.
+// A fine-grain noise texture (baked as a data-URI SVG filter) so the leather
+// reads as worn material rather than a flat CSS gradient.
+const GRAIN_BG =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
+
+// An ancient, weathered tome: mottled leather, a frayed corner, a cracked
+// wax seal, and a tattered ribbon bookmark — something you'd find half
+// buried under moss, not a clean modern icon.
 function Tome({
-  href, title, count, tone, sealTone, sealTextClass, muted, complete,
+  href, title, count, tone, mottle, tilt, sealTone, sealTextClass, muted, complete,
 }: {
   href: string;
   title: string;
   count: number;
   tone: string;
+  mottle: string;
+  tilt: string;
   sealTone: string;
   sealTextClass: string;
   muted: boolean;
@@ -54,33 +62,49 @@ function Tome({
 }) {
   const cover = (
     <>
-      <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-black/30 rounded-l-md" />
-      <div className={`absolute inset-2.5 border rounded-sm ${muted ? 'border-white/10' : 'border-white/20'}`} />
+      {/* grain + worn light/dark patches — reads as leather, not flat color */}
+      <div className="absolute inset-0 rounded-md opacity-25 mix-blend-overlay pointer-events-none" style={{ backgroundImage: GRAIN_BG }} />
+      <div className="absolute inset-0 rounded-md pointer-events-none" style={{ backgroundImage: mottle }} />
+      {/* frayed corner, exposing a lighter layer beneath the leather */}
+      <div className="absolute top-0 right-0 w-5 h-5 bg-black/25" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }} />
+      <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-black/35 rounded-l-md" />
+      <div className="absolute inset-2.5 border border-black/25 rounded-sm" />
+      <div className={`absolute inset-[13px] border rounded-sm ${muted ? 'border-white/5' : 'border-white/10'}`} />
       <div className="absolute inset-0 flex flex-col items-center justify-between py-4 px-2">
         <span
-          className={`font-serif uppercase tracking-[0.15em] text-sm ${muted ? 'text-white/40' : 'text-amber-50'}`}
-          style={{ textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}
+          className={`font-serif uppercase tracking-[0.15em] text-sm ${muted ? 'text-white/35' : 'text-amber-50/90'}`}
+          style={{ textShadow: '0 1px 2px rgba(0,0,0,0.7), 0 -1px 0 rgba(255,255,255,0.08)' }}
         >
           {title}
         </span>
         {!muted && (
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center ring-1 ring-black/30 shadow-inner ${sealTone}`}>
+          <div
+            className={`w-10 h-10 rounded-full flex items-center justify-center ring-1 ring-black/40 shadow-inner ${sealTone}`}
+            style={{ backgroundImage: 'radial-gradient(circle at 32% 28%, rgba(255,255,255,0.3), transparent 55%), radial-gradient(circle at 70% 75%, rgba(0,0,0,0.25), transparent 50%)' }}
+          >
             {complete
               ? <CheckCircleIcon className="w-5 h-5 text-emerald-50" />
               : <span className={`font-bold text-sm ${sealTextClass}`}>{count}</span>}
           </div>
         )}
+        {/* tattered ribbon bookmark, hanging out from between the pages */}
+        {!muted && (
+          <div
+            className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-2.5 h-5 bg-red-950/70"
+            style={{ clipPath: 'polygon(0 0, 100% 0, 100% 65%, 50% 100%, 0 65%)' }}
+          />
+        )}
       </div>
     </>
   );
 
-  const shapeClass = `relative w-28 h-36 rounded-md shadow-[0_10px_25px_rgba(0,0,0,0.45)] border ${tone}`;
+  const shapeClass = `relative w-28 h-36 rounded-md shadow-[0_10px_25px_rgba(0,0,0,0.5)] border ${tone} ${tilt}`;
 
   if (muted) {
     return <div className={`${shapeClass} opacity-70`}>{cover}</div>;
   }
   return (
-    <Link href={href} className={`${shapeClass} animate-book-glow transition-transform hover:scale-105`}>
+    <Link href={href} className={`${shapeClass} animate-book-glow transition-transform hover:scale-105 hover:rotate-0`}>
       {cover}
     </Link>
   );
@@ -175,8 +199,10 @@ export default function HomePage() {
             href="/practice/study"
             title="Learn"
             count={studyGoalDone ? 0 : studyCount}
-            tone="border-amber-500/40 bg-gradient-to-br from-amber-900 via-amber-800 to-amber-950"
-            sealTone="bg-[radial-gradient(circle_at_30%_30%,#f59e0b,#78350f)]"
+            tone="border-amber-900/50 bg-gradient-to-br from-amber-800 via-amber-950 to-stone-950"
+            mottle="radial-gradient(circle at 22% 18%, rgba(217,164,90,0.22), transparent 40%), radial-gradient(circle at 78% 72%, rgba(0,0,0,0.3), transparent 45%), radial-gradient(circle at 55% 15%, rgba(0,0,0,0.18), transparent 35%)"
+            tilt="-rotate-2"
+            sealTone="bg-[radial-gradient(circle_at_30%_30%,#c8791f,#5c2a0c)]"
             sealTextClass="text-amber-950"
             muted={!studyGoalDone && studyCount === 0}
             complete={studyGoalDone}
@@ -204,8 +230,10 @@ export default function HomePage() {
             href="/practice/review"
             title="Review"
             count={reviewCount}
-            tone="border-sky-400/30 bg-gradient-to-br from-slate-800 via-indigo-900 to-slate-950"
-            sealTone="bg-[radial-gradient(circle_at_30%_30%,#0ea5e9,#0c4a6e)]"
+            tone="border-slate-500/30 bg-gradient-to-br from-slate-700 via-indigo-950 to-slate-950"
+            mottle="radial-gradient(circle at 25% 20%, rgba(148,163,184,0.18), transparent 40%), radial-gradient(circle at 75% 75%, rgba(0,0,0,0.32), transparent 45%), radial-gradient(circle at 50% 12%, rgba(0,0,0,0.2), transparent 35%)"
+            tilt="rotate-2"
+            sealTone="bg-[radial-gradient(circle_at_30%_30%,#3b7fa8,#0c2c40)]"
             sealTextClass="text-sky-50"
             muted={reviewCount === 0}
             complete={false}

@@ -9,7 +9,7 @@ import {
   getWordProgress, saveWordProgress, getSettings, touchStreak, markStudyGoalDone,
   takeExtraStudyLimit, takeExtraReviewLimit, isStudyGoalDoneToday, isReviewGoalDoneToday,
   markReviewGoalDone, getDailyStats, markCongratsShown, getTodayStudyBatch, saveTodayStudyBatch,
-  MAX_ROUND, Round, Settings,
+  MAX_ROUND, Round, Settings, MascotStageId,
 } from '../lib/storage';
 import { Word } from '../lib/words';
 import SpecialCharButtons from './SpecialCharButtons';
@@ -17,6 +17,7 @@ import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpeakerButton from './SpeakerButton';
 import CongratsModal from './CongratsModal';
 import NextSectionPrompt from './NextSectionPrompt';
+import DachshundMascot from './Mascot';
 import { speakWord } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
 import Link from 'next/link';
@@ -31,8 +32,21 @@ const ROUND_LABELS: Record<Round, string> = {
   5: 'Round 5 — no hints',
 };
 
+const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
+
 interface Props {
   mode: 'study' | 'review';
+}
+
+// One answered word, kept so the Back button can redisplay it read-only.
+interface HistoryEntry {
+  id: string;
+  article?: string;
+  de: string;
+  en: string;
+  correct: boolean;
+  earnedBadge: boolean;
+  mascotStage: MascotStageId;
 }
 
 export default function PracticeSession({ mode }: Props) {
@@ -43,8 +57,8 @@ export default function PracticeSession({ mode }: Props) {
   const [totalStudyWords, setTotalStudyWords] = useState(0);
 
   // Review mode: a queue too, so a wrong answer requeues the word instead of
-  // letting it pass — every word in the batch ends the session with one more
-  // coin, not just "attempted once."
+  // letting it pass — every word in the batch ends the session fully reviewed,
+  // not just "attempted once."
   const [words, setWords] = useState<Word[]>([]);
   const [totalReviewWords, setTotalReviewWords] = useState(0);
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
@@ -61,17 +75,15 @@ export default function PracticeSession({ mode }: Props) {
   const [currentRound, setCurrentRound] = useState<Round>(1);
   const [hint, setHint] = useState<boolean[]>([]);
   const [values, setValues] = useState<string[]>([]);
-  const [articleGuess, setArticleGuess] = useState<string | null>(null);
-  const [articleReminder, setArticleReminder] = useState(false);
+  const [articleValues, setArticleValues] = useState<string[]>(['', '', '']);
   const [feedback, setFeedback] = useState<boolean | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
-  const [coinEarned, setCoinEarned] = useState(false);
   const [attemptKey, setAttemptKey] = useState(0);
 
-  const [flyingCoin, setFlyingCoin] = useState<{ from: DOMRect; to: DOMRect } | null>(null);
-  const [pulseIdx, setPulseIdx] = useState<number | null>(null);
-  const cardCoinRef = useRef<HTMLSpanElement | null>(null);
-  const nextCoinRef = useRef<HTMLSpanElement | null>(null);
+  // Every answered word this session, so the Back button can redisplay one —
+  // and the completion screen can tally dachshunds earned by stage.
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
 
   const activeInputRef = useRef<HTMLInputElement | null>(null);
   const letterRowRef = useRef<LetterInputRowHandle | null>(null);
@@ -81,6 +93,7 @@ export default function PracticeSession({ mode }: Props) {
   const needsArticle = !!(settings?.requireArticle && word?.type === 'noun' && word?.article);
   const completedCount = mode === 'study' ? totalStudyWords - queue.length : totalReviewWords - words.length;
   const completedTotal = mode === 'study' ? totalStudyWords : totalReviewWords;
+  const progressPct = completedTotal > 0 ? Math.min(100, Math.round((completedCount / completedTotal) * 100)) : 0;
 
   const loadCurrent = (w: Word) => {
     const progress = getWordProgress(w.id);
@@ -92,11 +105,9 @@ export default function PracticeSession({ mode }: Props) {
     const chars = [...w.de];
     setHint(h);
     setValues(chars.map((c, i) => (h[i] ? '' : c)));
-    setArticleGuess(null);
-    setArticleReminder(false);
+    setArticleValues(['', '', '']);
     setFeedback(null);
     setJustCompleted(false);
-    setCoinEarned(false);
     setAttemptKey(k => k + 1);
     if (round === 1 && getSettings().autoPlayAudio) {
       speakWord(w);
@@ -158,10 +169,10 @@ export default function PracticeSession({ mode }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  // The letter tiles being full is enough to enable Check — a missing
-  // article guess (when required) surfaces its own reminder instead of just
-  // leaving the button inertly disabled with no explanation.
-  const wordComplete = hint.length > 0 && hint.every((h, i) => !h || !!values[i]);
+  // The letter tiles being full is enough to enable Check — same for the
+  // article blanks when required, so there's no separate reminder step.
+  const articleComplete = !needsArticle || articleValues.every(v => !!v);
+  const wordComplete = hint.length > 0 && hint.every((h, i) => !h || !!values[i]) && articleComplete;
 
   const submitResult = (correct: boolean) => {
     if (!word || !settings || feedback !== null) return;
@@ -178,12 +189,18 @@ export default function PracticeSession({ mode }: Props) {
     setFeedback(correct);
     // Study: only "done" the first time this ladder climb reaches round 5.
     // Review: any correct answer clears it, however many requeues it took —
-    // applyReviewResult already handles the round/coin bookkeeping correctly
+    // applyReviewResult already handles the round/score bookkeeping correctly
     // regardless of prior attempts this session.
     setJustCompleted(
       noOpReviewPractice ? true : mode === 'review' ? correct : (progress.round === MAX_ROUND && correct)
     );
-    setCoinEarned(updated.studiedTimes > progress.studiedTimes);
+    const earnedBadge = mode === 'study'
+      ? updated.studiedTimes > progress.studiedTimes
+      : correct && !noOpReviewPractice;
+    setHistory(h => [...h, {
+      id: word.id, article: word.article, de: word.de, en: word.en,
+      correct, earnedBadge, mascotStage: updated.mascotStage,
+    }]);
     if (settings.autoPlayAudio) {
       speakWord(word);
     }
@@ -191,22 +208,13 @@ export default function PracticeSession({ mode }: Props) {
 
   const handleSubmit = () => {
     if (!word || !wordComplete) return;
-    if (needsArticle && articleGuess === null) {
-      setArticleReminder(true);
-      return;
-    }
     const wordRight = checkAnswer(word.de, values.join(''));
+    const articleGuess = articleValues.join('').toLowerCase();
     const articleRight = !needsArticle || articleGuess === word.article;
     submitResult(wordRight && articleRight);
   };
 
   const handleGiveUp = () => submitResult(false);
-
-  const chooseArticle = (a: string) => {
-    setArticleGuess(a);
-    setArticleReminder(false);
-    letterRowRef.current?.focusFirstEmpty();
-  };
 
   // Once a section (study or review) finishes for the first time today,
   // either celebrate (if the other section is also done) or nudge the user
@@ -274,29 +282,14 @@ export default function PracticeSession({ mode }: Props) {
     if (next.length) loadCurrent(next[0]);
   };
 
-  // 1/2/3 pick der/die/das without reaching for the mouse. preventDefault
-  // stops the digit from also landing in whichever letter cell is focused.
-  useEffect(() => {
-    if (!needsArticle || feedback !== null) return;
-    const ARTICLES = ['der', 'die', 'das'] as const;
-    const onKeyDown = (e: KeyboardEvent) => {
-      const idx = ['1', '2', '3'].indexOf(e.key);
-      if (idx === -1) return;
-      e.preventDefault();
-      chooseArticle(ARTICLES[idx]);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needsArticle, feedback, word?.id]);
-
   // Enter key advances past the feedback screen too. Requires the Enter key
   // to be released first, so the same keypress that submitted the answer
   // (and any OS key-repeat while it's held) can't also skip past the feedback.
   // A correct answer also auto-advances after a short pause, so the user
-  // doesn't have to press anything to keep moving.
+  // doesn't have to press anything to keep moving. None of this should fire
+  // while the user is browsing history via the Back button.
   useEffect(() => {
-    if (feedback === null) return;
+    if (feedback === null || historyIndex !== null) return;
     let armed = false;
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Enter') armed = true;
@@ -314,26 +307,7 @@ export default function PracticeSession({ mode }: Props) {
       window.removeEventListener('keydown', onKeyDown);
       if (timer) clearTimeout(timer);
     };
-  }, [feedback]);
-
-  // On a correct round-5 answer that actually earns a coin, fly it from the
-  // card up to its slot in the top coin bar, so collecting one more coin is
-  // visible, not just a number changing.
-  useEffect(() => {
-    if (feedback === true && coinEarned && cardCoinRef.current && nextCoinRef.current) {
-      const from = cardCoinRef.current.getBoundingClientRect();
-      const to = nextCoinRef.current.getBoundingClientRect();
-      setFlyingCoin({ from, to });
-      setPulseIdx(completedCount);
-      const flightTimer = setTimeout(() => setFlyingCoin(null), 800);
-      const pulseTimer = setTimeout(() => setPulseIdx(null), 1300);
-      return () => {
-        clearTimeout(flightTimer);
-        clearTimeout(pulseTimer);
-      };
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedback, coinEarned]);
+  }, [feedback, historyIndex]);
 
   // --- Empty / done screens ---
 
@@ -358,17 +332,47 @@ export default function PracticeSession({ mode }: Props) {
 
   if (sessionDone) {
     const dailyStats = showCongrats ? getDailyStats() : null;
+    const earned = history.filter(h => h.earnedBadge);
+    const stageCounts: Partial<Record<MascotStageId, number>> = {};
+    for (const e of earned) stageCounts[e.mascotStage] = (stageCounts[e.mascotStage] ?? 0) + 1;
+
     return (
       <div className="text-center py-16">
         <div className="text-5xl mb-4">✅</div>
         <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           {mode === 'study' ? 'Study session complete!' : 'Batch complete!'}
         </h2>
-        <p className="text-emerald-100/70 mb-6">
+        <p className="text-emerald-100/70 mb-4">
           {mode === 'study'
             ? `You brought ${totalStudyWords} word${totalStudyWords === 1 ? '' : 's'} to round 5 today.`
             : `You reviewed ${totalReviewWords} word${totalReviewWords === 1 ? '' : 's'}.`}
         </p>
+
+        {mode === 'study' && earned.length > 0 && (
+          <div className="mx-auto mb-6 max-w-xs bg-amber-50/95 border border-amber-100 rounded-2xl px-5 py-4 flex flex-col items-center gap-1.5">
+            <DachshundMascot stage="puppy" className="w-20 h-10 text-slate-500" />
+            <p className="text-slate-700 font-semibold">
+              {earned.length} dachshund puppy{earned.length === 1 ? '' : ' puppies'} earned today!
+            </p>
+          </div>
+        )}
+
+        {mode === 'review' && earned.length > 0 && (
+          <div className="mx-auto mb-6 max-w-xs bg-amber-50/95 border border-amber-100 rounded-2xl px-5 py-4 flex flex-col items-center gap-3">
+            <p className="text-slate-700 font-semibold">
+              {earned.length} dachshund{earned.length === 1 ? '' : 's'} earned today
+            </p>
+            <div className="flex flex-wrap justify-center gap-x-5 gap-y-2">
+              {STAGE_ORDER.filter(s => stageCounts[s]).map(s => (
+                <div key={s} className="flex items-center gap-1.5">
+                  <DachshundMascot stage={s} className="w-12 h-6 text-slate-500" />
+                  <span className="text-slate-600 font-medium text-sm">× {stageCounts[s]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col items-center gap-3">
           {mode === 'review' && hasMoreReview && (
             <button
@@ -397,30 +401,76 @@ export default function PracticeSession({ mode }: Props) {
 
   if (!word) return null;
 
+  // --- Browsing a past word via the Back button: a read-only recap, no
+  // inputs, with its own Back/Next pair that never touches the live queue. ---
+  if (historyIndex !== null) {
+    const h = history[historyIndex];
+    return (
+      <div className="flex flex-col gap-5">
+        <div className="text-xs text-emerald-100/70 text-center">
+          Previous word {historyIndex + 1} / {history.length}
+        </div>
+        <div className="bg-amber-50/95 rounded-2xl shadow-sm border border-amber-100 p-6 flex flex-col gap-5">
+          <div className="text-center">
+            <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">English</div>
+            <div className="text-2xl font-semibold text-slate-700">{h.en}</div>
+          </div>
+          <div className="text-center">
+            <span className="font-mono text-2xl font-bold text-indigo-800">
+              {h.article ? `${h.article} ` : ''}{h.de}
+            </span>
+          </div>
+          <div className={`text-center py-3 rounded-xl font-semibold text-lg ${h.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+            {h.correct ? '✓ Correct' : '✗ Incorrect'}
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setHistoryIndex(i => (i !== null && i > 0 ? i - 1 : i))}
+              disabled={historyIndex === 0}
+              className="flex-1 bg-white text-indigo-600 border-2 border-indigo-200 py-3 rounded-xl font-semibold disabled:opacity-40 hover:border-indigo-400 transition-colors"
+            >
+              ← Back
+            </button>
+            <button
+              onClick={() => setHistoryIndex(i => (i !== null && i < history.length - 1 ? i + 1 : null))}
+              className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const chars = [...word.de];
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Words completed today — a general, cross-word coin tally */}
+      {/* Session progress — a plain bar, no more per-word coin tally */}
       <div className="flex flex-col gap-1">
-        <div className="text-xs text-emerald-100/70 text-center">
-          {mode === 'study'
-            ? `${completedCount} / ${completedTotal} words learned today`
-            : `${completedCount} / ${completedTotal} words reviewed`}
-        </div>
-        <div className="flex flex-wrap gap-1 justify-center">
-          {Array.from({ length: completedTotal }, (_, i) => (
-            <span
-              key={i}
-              ref={i === completedCount ? nextCoinRef : undefined}
-              className={`text-lg transition-transform ${i < completedCount ? '' : 'opacity-20 grayscale'} ${i === pulseIdx ? 'animate-coin-pop' : ''}`}
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs text-emerald-100/70">
+            {mode === 'study'
+              ? `${completedCount} / ${completedTotal} words learned today`
+              : `${completedCount} / ${completedTotal} words reviewed`}
+          </div>
+          {history.length > 0 && (
+            <button
+              onClick={() => setHistoryIndex(history.length - 1)}
+              className="text-xs text-amber-200 hover:text-amber-100 underline shrink-0"
             >
-              🪙
-            </span>
-          ))}
+              ← Back
+            </button>
+          )}
+        </div>
+        <div className="h-2 w-full bg-white/15 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-amber-400 rounded-full transition-[width] duration-500 ease-out"
+            style={{ width: `${progressPct}%` }}
+          />
         </div>
       </div>
-      {flyingCoin && <FlyingCoin from={flyingCoin.from} to={flyingCoin.to} />}
 
       {/* Card */}
       <div className="bg-amber-50/95 rounded-2xl shadow-sm border border-amber-100 p-6 flex flex-col gap-5">
@@ -444,34 +494,33 @@ export default function PracticeSession({ mode }: Props) {
           <div className="text-2xl font-semibold text-slate-700">{word.en}</div>
         </div>
 
-        {/* Article for nouns — a fixed chip, or a der/die/das guess when requireArticle is on */}
+        {/* Article for nouns — a fixed chip, or typed blanks (der/die/das
+            are all 3 letters, so they slot in as their own tile row) when
+            requireArticle is on. */}
         {word.type === 'noun' && word.article && (
-          <div className="flex justify-center gap-2">
-            {needsArticle ? (
-              (['der', 'die', 'das'] as const).map(a => (
-                <button
-                  key={a}
-                  type="button"
-                  disabled={feedback !== null}
-                  onClick={() => chooseArticle(a)}
-                  className={`px-4 py-1.5 rounded-full text-lg font-bold border-2 transition-colors disabled:opacity-60 ${
-                    articleGuess === a
-                      ? 'bg-indigo-600 border-indigo-600 text-white'
-                      : 'bg-white border-indigo-200 text-indigo-600 hover:border-indigo-400'
-                  }`}
-                >
-                  {a}
-                </button>
-              ))
-            ) : (
+          needsArticle ? (
+            <div className="text-center -mb-2">
+              <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Article — der / die / das</div>
+              <LetterInputRow
+                chars={['_', '_', '_']}
+                hint={[true, true, true]}
+                values={articleValues}
+                onChange={setArticleValues}
+                onSubmit={handleSubmit}
+                disabled={feedback !== null}
+                activeInputRef={activeInputRef}
+                resetFocusKey={`article-${word.id}-${attemptKey}`}
+                autoFocus
+                onFilled={() => letterRowRef.current?.focusFirstEmpty()}
+              />
+            </div>
+          ) : (
+            <div className="flex justify-center gap-2">
               <span className="bg-indigo-100 text-indigo-700 font-bold px-4 py-1 rounded-full text-lg">
                 {word.article}
               </span>
-            )}
-          </div>
-        )}
-        {needsArticle && articleReminder && (
-          <p className="text-center text-red-500 text-sm -mt-3">Choose der / die / das first.</p>
+            </div>
+          )
         )}
 
         {currentRound === 1 && (
@@ -480,12 +529,6 @@ export default function PracticeSession({ mode }: Props) {
             <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
               {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
             </div>
-          </div>
-        )}
-
-        {currentRound === 5 && (
-          <div className="flex justify-center -mt-1">
-            <span ref={cardCoinRef} className="text-3xl">🪙</span>
           </div>
         )}
 
@@ -500,6 +543,7 @@ export default function PracticeSession({ mode }: Props) {
           disabled={feedback !== null}
           activeInputRef={activeInputRef}
           resetFocusKey={`${word.id}-${attemptKey}`}
+          autoFocus={!needsArticle}
         />
 
         {feedback === null ? (
@@ -547,45 +591,5 @@ export default function PracticeSession({ mode }: Props) {
         <div className="text-center text-emerald-100/60 text-xs">{word.category}</div>
       )}
     </div>
-  );
-}
-
-// A coin that visually travels from its start position to its end position
-// (both captured via getBoundingClientRect) and fades out on arrival —
-// two-phase inline styles plus a CSS transition, so no per-instance keyframes
-// or custom properties are needed.
-function FlyingCoin({ from, to }: { from: DOMRect; to: DOMRect }) {
-  const [arrived, setArrived] = useState(false);
-
-  useEffect(() => {
-    // A single rAF can land in the same paint as the initial styles, so the
-    // transition never has a "before" frame to animate from — it just snaps
-    // straight to the end state. Waiting a second frame guarantees a real
-    // paint happens in between.
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => setArrived(true));
-    });
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-    };
-  }, []);
-
-  const dx = to.left - from.left;
-  const dy = to.top - from.top;
-
-  return (
-    <span
-      className="fixed z-50 text-2xl pointer-events-none transition-all duration-700 ease-out"
-      style={{
-        left: from.left,
-        top: from.top,
-        transform: arrived ? `translate(${dx}px, ${dy}px) scale(0.5)` : 'translate(0, 0) scale(1)',
-        opacity: arrived ? 0 : 1,
-      }}
-    >
-      🪙
-    </span>
   );
 }
