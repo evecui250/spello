@@ -29,7 +29,7 @@ export default function NextSectionPrompt({ section, onDismiss }: Props) {
       onClick={onDismiss}
     >
       <div
-        className="bg-white rounded-2xl p-6 max-w-xs w-full flex flex-col items-center gap-4 text-center shadow-xl"
+        className="bg-amber-50 rounded-2xl p-6 max-w-xs w-full flex flex-col items-center gap-4 text-center shadow-xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="text-4xl">👉</div>

@@ -2,16 +2,22 @@
 
 import { useEffect, useState } from 'react';
 import { WORDS, CATEGORIES, Word } from '../../lib/words';
-import { getAllProgress, WordProgress } from '../../lib/storage';
+import { getAllProgress, WordProgress, MascotStageId } from '../../lib/storage';
 import SpeakerButton from '../../components/SpeakerButton';
+import DachshundMascot from '../../components/Mascot';
 
-const COIN_COLORS = [
-  'bg-slate-100 text-slate-500',
-  'bg-yellow-100 text-yellow-700',
-  'bg-amber-100 text-amber-700',
-  'bg-orange-100 text-orange-700',
-  'bg-amber-200 text-amber-800',
-];
+const STAGE_BADGE_BG: Record<MascotStageId, string> = {
+  puppy: 'bg-slate-100',
+  short: 'bg-amber-50',
+  medium: 'bg-amber-100',
+  'long-crowned': 'bg-green-100',
+};
+const STAGE_BADGE_COLOR: Record<MascotStageId, string> = {
+  puppy: 'text-slate-500',
+  short: 'text-amber-700',
+  medium: 'text-amber-800',
+  'long-crowned': 'text-emerald-700',
+};
 
 export default function WordsPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress>>({});
@@ -36,18 +42,9 @@ export default function WordsPage() {
     return true;
   });
 
-  const badgeColor = (w: Word) => {
+  const badgeBg = (w: Word) => {
     const p = progress[w.id];
-    if (!p) return 'bg-slate-100 text-slate-500';
-    if (p.fullyMastered) return 'bg-green-100 text-green-700';
-    return COIN_COLORS[Math.min(p.studiedTimes, COIN_COLORS.length - 1)];
-  };
-
-  const badgeText = (w: Word) => {
-    const p = progress[w.id];
-    if (!p) return 'New';
-    if (p.fullyMastered) return 'Mastered ✓';
-    return `🪙 ${p.studiedTimes}`;
+    return p ? STAGE_BADGE_BG[p.mascotStage] : 'bg-slate-100';
   };
 
   return (
@@ -59,14 +56,14 @@ export default function WordsPage() {
         placeholder="Search German or English…"
         value={search}
         onChange={e => setSearch(e.target.value)}
-        className="bg-white/90 border-2 border-white/30 rounded-xl px-4 py-2 focus:outline-none focus:border-amber-300"
+        className="bg-amber-50/90 border-2 border-white/30 rounded-xl px-4 py-2 focus:outline-none focus:border-amber-300"
       />
 
       <div className="flex gap-2 flex-wrap">
         <select
           value={filterLevel}
           onChange={e => setFilterLevel(e.target.value)}
-          className="bg-white/90 border border-white/30 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-amber-300"
+          className="bg-amber-50/90 border border-white/30 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-amber-300"
         >
           <option value="all">All words</option>
           <option value="new">New</option>
@@ -77,7 +74,7 @@ export default function WordsPage() {
         <select
           value={filterCategory}
           onChange={e => setFilterCategory(e.target.value)}
-          className="bg-white/90 border border-white/30 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-amber-300"
+          className="bg-amber-50/90 border border-white/30 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-amber-300"
         >
           <option value="all">All categories</option>
           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -88,7 +85,7 @@ export default function WordsPage() {
 
       <div className="flex flex-col gap-2">
         {filtered.map(w => (
-          <div key={w.id} className="bg-white rounded-xl border border-indigo-50 shadow-sm px-4 py-3 flex items-center justify-between">
+          <div key={w.id} className="bg-amber-50/95 rounded-xl border border-amber-100 shadow-sm px-4 py-3 flex items-center justify-between">
             <div>
               <span className="font-semibold text-indigo-800">
                 {w.article ? `${w.article} ` : ''}{w.de}
@@ -97,8 +94,15 @@ export default function WordsPage() {
               {w.plural && <span className="text-slate-400 text-sm ml-2">· {w.plural}</span>}
               <div className="text-slate-500 text-sm">{w.en}</div>
             </div>
-            <span className={`text-xs font-medium px-2 py-1 rounded-full ${badgeColor(w)}`}>
-              {badgeText(w)}
+            <span className={`flex items-center justify-center px-2.5 py-1.5 rounded-full shrink-0 ${badgeBg(w)}`}>
+              {progress[w.id] ? (
+                <DachshundMascot
+                  stage={progress[w.id].mascotStage}
+                  className={`w-9 h-5 ${STAGE_BADGE_COLOR[progress[w.id].mascotStage]}`}
+                />
+              ) : (
+                <span className="text-xs font-medium text-slate-500">New</span>
+              )}
             </span>
           </div>
         ))}

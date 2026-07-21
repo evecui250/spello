@@ -51,7 +51,7 @@ export default function WelcomePage() {
         </p>
       </div>
 
-      <div className="w-full bg-white rounded-2xl border border-indigo-50 shadow-sm p-6 flex flex-col gap-6">
+      <div className="w-full bg-amber-50/95 rounded-2xl border border-amber-100 shadow-sm p-6 flex flex-col gap-6">
         <div>
           <label className="block font-semibold text-slate-700 mb-1">
             New words per day
@@ -79,8 +79,8 @@ export default function WelcomePage() {
             <span className="w-8 text-center font-bold text-indigo-700">{dailyReview}</span>
           </div>
           {dailyReview !== recommendedReview && (
-            <div className="flex items-center justify-between gap-2 mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-sm">
-              <span className="text-indigo-700">
+            <div className="flex items-center justify-between gap-2 mt-2 bg-amber-100/60 rounded-lg px-3 py-2 text-sm">
+              <span className="text-amber-800">
                 Recommended: <strong>{recommendedReview}</strong> for this study pace
               </span>
               <button
@@ -93,7 +93,7 @@ export default function WelcomePage() {
           )}
         </div>
 
-        <div className="bg-indigo-50 rounded-xl px-4 py-3 text-sm text-indigo-700 flex items-center justify-between gap-3">
+        <div className="bg-amber-100/60 rounded-xl px-4 py-3 text-sm text-amber-800 flex items-center justify-between gap-3">
           <span className="font-semibold shrink-0">At this pace</span>
           <span className="text-right">
             ~{forecast.daysToIntroduceAll} days to learn all · ~{forecast.daysToMasterAll} days to master all

@@ -85,15 +85,14 @@ export function generateHint(word: string, round: Round): boolean[] {
   return Array.from({ length: n }, (_, i) => !revealed.has(i));
 }
 
-// Suggests a daily review count. Under the SRS schedule, review load per
-// word shrinks over time (intervals grow with mastery) rather than staying
-// fixed, so there's no exact steady-state formula the way there was with a
-// flat mastery threshold. As a simple heuristic, recommend enough capacity
-// to review every word introduced in roughly the last two weeks at least
-// once — early-stage words (short intervals) are where nearly all daily
-// review volume actually comes from.
+// Suggests a daily review count. Each word needs exactly 3 successful
+// reviews after introduction to retire (at ~day 3, ~day 35, and ~day 155,
+// per the SRS schedule in lib/srs.ts) — so once the pace has been running
+// long enough for all three cohorts to be active simultaneously, steady-state
+// daily review load converges to 3x the study pace (three cohorts' worth of
+// words landing on any given day).
 export function recommendedDailyReview(studyBatchSize: number): number {
-  return Math.max(1, Math.min(100, Math.round(studyBatchSize * 1.5)));
+  return Math.max(1, Math.min(100, Math.round(studyBatchSize * 3)));
 }
 
 export interface ProgressForecast {

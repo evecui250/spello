@@ -73,11 +73,11 @@ export default function SettingsPage() {
         </span>
       </div>
 
-      <div className="bg-white rounded-2xl border border-indigo-50 shadow-sm p-6">
+      <div className="bg-amber-50/95 rounded-2xl border border-amber-100 shadow-sm p-6">
         <AccountPanel onSync={loadFromStorage} />
       </div>
 
-      <div className="bg-white rounded-2xl border border-indigo-50 shadow-sm p-6 flex flex-col gap-6">
+      <div className="bg-amber-50/95 rounded-2xl border border-amber-100 shadow-sm p-6 flex flex-col gap-6">
         <div className="flex gap-4">
           <div className="flex-1">
             <label className="block font-semibold text-slate-700 mb-1">Language</label>
@@ -137,8 +137,8 @@ export default function SettingsPage() {
             <span className="w-8 text-center font-bold text-indigo-700">{dailyReview}</span>
           </div>
           {dailyReview !== recommendedReview && (
-            <div className="flex items-center justify-between gap-2 mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-sm">
-              <span className="text-indigo-700">
+            <div className="flex items-center justify-between gap-2 mt-2 bg-amber-100/60 rounded-lg px-3 py-2 text-sm">
+              <span className="text-amber-800">
                 💡 Recommended: <strong>{recommendedReview}</strong> for a {studyBatchSize}/day study pace
               </span>
               <button
@@ -151,7 +151,7 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <div className="bg-indigo-50 rounded-xl px-4 py-3 text-sm text-indigo-700 flex items-center justify-between gap-3">
+        <div className="bg-amber-100/60 rounded-xl px-4 py-3 text-sm text-amber-800 flex items-center justify-between gap-3">
           <span className="font-semibold shrink-0">At this pace</span>
           <span className="text-right">
             {forecast.wordsRemaining === 0
@@ -160,7 +160,7 @@ export default function SettingsPage() {
             {' · '}~{forecast.daysToMasterAll} days to master all
           </span>
         </div>
-        <p className="text-indigo-300 text-xs -mt-4">
+        <p className="text-amber-700/60 text-xs -mt-4">
           Mastery is now based on spaced-repetition strength, not a fixed review count — see your dachshund's stage on each word.
         </p>
 

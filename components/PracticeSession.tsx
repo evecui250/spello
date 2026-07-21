@@ -202,6 +202,12 @@ export default function PracticeSession({ mode }: Props) {
 
   const handleGiveUp = () => submitResult(false);
 
+  const chooseArticle = (a: string) => {
+    setArticleGuess(a);
+    setArticleReminder(false);
+    letterRowRef.current?.focusFirstEmpty();
+  };
+
   // Once a section (study or review) finishes for the first time today,
   // either celebrate (if the other section is also done) or nudge the user
   // toward it. Repeat completions the same day (extra study, review more)
@@ -267,6 +273,22 @@ export default function PracticeSession({ mode }: Props) {
     setSessionDone(false);
     if (next.length) loadCurrent(next[0]);
   };
+
+  // 1/2/3 pick der/die/das without reaching for the mouse. preventDefault
+  // stops the digit from also landing in whichever letter cell is focused.
+  useEffect(() => {
+    if (!needsArticle || feedback !== null) return;
+    const ARTICLES = ['der', 'die', 'das'] as const;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const idx = ['1', '2', '3'].indexOf(e.key);
+      if (idx === -1) return;
+      e.preventDefault();
+      chooseArticle(ARTICLES[idx]);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsArticle, feedback, word?.id]);
 
   // Enter key advances past the feedback screen too. Requires the Enter key
   // to be released first, so the same keypress that submitted the answer
@@ -401,7 +423,7 @@ export default function PracticeSession({ mode }: Props) {
       {flyingCoin && <FlyingCoin from={flyingCoin.from} to={flyingCoin.to} />}
 
       {/* Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-indigo-50 p-6 flex flex-col gap-5">
+      <div className="bg-amber-50/95 rounded-2xl shadow-sm border border-amber-100 p-6 flex flex-col gap-5">
 
         {/* This word's level, 1-5 — specific to the current word */}
         <div>
@@ -431,11 +453,7 @@ export default function PracticeSession({ mode }: Props) {
                   key={a}
                   type="button"
                   disabled={feedback !== null}
-                  onClick={() => {
-                    setArticleGuess(a);
-                    setArticleReminder(false);
-                    letterRowRef.current?.focusFirstEmpty();
-                  }}
+                  onClick={() => chooseArticle(a)}
                   className={`px-4 py-1.5 rounded-full text-lg font-bold border-2 transition-colors disabled:opacity-60 ${
                     articleGuess === a
                       ? 'bg-indigo-600 border-indigo-600 text-white'

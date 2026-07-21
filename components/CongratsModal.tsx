@@ -148,7 +148,7 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl p-5 max-w-sm w-full flex flex-col gap-4 shadow-xl"
+        className="bg-amber-50 rounded-2xl p-5 max-w-sm w-full flex flex-col gap-4 shadow-xl"
         onClick={e => e.stopPropagation()}
       >
         <div className="rounded-xl overflow-hidden border border-indigo-100 bg-indigo-50 aspect-square flex items-center justify-center">
