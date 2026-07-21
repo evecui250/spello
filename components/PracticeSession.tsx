@@ -167,11 +167,11 @@ export default function PracticeSession({ mode }: Props) {
     if (!word || !settings || feedback !== null) return;
     const progress = getWordProgress(word.id);
     const updated = mode === 'review'
-      ? applyReviewResult(progress, correct, settings.masteryThreshold)
-      : applyResult(progress, correct, settings.masteryThreshold);
+      ? applyReviewResult(progress, correct)
+      : applyResult(progress, correct);
     // applyReviewResult returns the same object, unchanged, when a word that
-    // already banked its coin today gets reviewed again (only reachable via
-    // "Review Extra") — that's bonus practice, not a real pass/fail.
+    // isn't due yet gets reviewed anyway (only reachable via "Review Extra")
+    // — that's bonus practice, not a real pass/fail.
     const noOpReviewPractice = mode === 'review' && updated === progress;
     saveWordProgress(updated);
     scheduleSync();

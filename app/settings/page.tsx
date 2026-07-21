@@ -9,7 +9,6 @@ import AccountPanel from '../../components/AccountPanel';
 export default function SettingsPage() {
   const [studyBatchSize, setStudyBatchSize] = useState(15);
   const [dailyReview, setDailyReview] = useState(25);
-  const [masteryThreshold, setMasteryThreshold] = useState(3);
   const [language, setLanguage] = useState('de');
   const [level, setLevel] = useState('B2');
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
@@ -22,7 +21,6 @@ export default function SettingsPage() {
     const s = getSettings();
     setStudyBatchSize(s.studyBatchSize);
     setDailyReview(s.dailyReview);
-    setMasteryThreshold(s.masteryThreshold);
     setLanguage(s.language);
     setLevel(s.level);
     setAutoPlayAudio(s.autoPlayAudio);
@@ -34,17 +32,14 @@ export default function SettingsPage() {
   // Recomputed live as the sliders move, so the user can see the effect of
   // a pace change immediately.
   const forecast = useMemo(
-    () => estimateProgressForecast(studyBatchSize, dailyReview, masteryThreshold),
+    () => estimateProgressForecast(studyBatchSize),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [studyBatchSize, dailyReview, masteryThreshold, cleared],
+    [studyBatchSize, cleared],
   );
 
-  // A word needs (masteryThreshold - 1) more successful reviews after its
-  // introduction day to be mastered — this is roughly how many review slots
-  // per day are needed to keep up with a given study pace.
   const recommendedReview = useMemo(
-    () => recommendedDailyReview(studyBatchSize, masteryThreshold),
-    [studyBatchSize, masteryThreshold],
+    () => recommendedDailyReview(studyBatchSize),
+    [studyBatchSize],
   );
 
   // Every control saves immediately on change — no separate Save step.
@@ -52,7 +47,7 @@ export default function SettingsPage() {
   // from current state, which is already up to date by the time this runs.
   const persist = (patch: Partial<Settings>) => {
     const next: Settings = {
-      studyBatchSize, dailyReview, masteryThreshold, language, level, autoPlayAudio, requireArticle, ...patch,
+      studyBatchSize, dailyReview, language, level, autoPlayAudio, requireArticle, ...patch,
     };
     saveSettings(next);
     scheduleSync();
@@ -144,7 +139,7 @@ export default function SettingsPage() {
           {dailyReview !== recommendedReview && (
             <div className="flex items-center justify-between gap-2 mt-2 bg-indigo-50 rounded-lg px-3 py-2 text-sm">
               <span className="text-indigo-700">
-                💡 Recommended: <strong>{recommendedReview}</strong> — keeps up with {studyBatchSize}/session at {masteryThreshold} reviews to master
+                💡 Recommended: <strong>{recommendedReview}</strong> for a {studyBatchSize}/day study pace
               </span>
               <button
                 onClick={() => { setDailyReview(recommendedReview); persist({ dailyReview: recommendedReview }); }}
@@ -156,27 +151,6 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <div>
-          <label className="block font-semibold text-slate-700 mb-1">
-            Repetitions days
-          </label>
-          <p className="text-slate-400 text-sm mb-3">
-            Coins (round 5 passes) a word needs to be fully mastered and retired.
-          </p>
-          <div className="flex items-center gap-4">
-            <input
-              type="range" min={1} max={7} value={masteryThreshold}
-              onChange={e => {
-                const v = Number(e.target.value);
-                setMasteryThreshold(v);
-                persist({ masteryThreshold: v });
-              }}
-              className="flex-1 accent-indigo-600"
-            />
-            <span className="w-8 text-center font-bold text-indigo-700">{masteryThreshold}</span>
-          </div>
-        </div>
-
         <div className="bg-indigo-50 rounded-xl px-4 py-3 text-sm text-indigo-700 flex items-center justify-between gap-3">
           <span className="font-semibold shrink-0">At this pace</span>
           <span className="text-right">
@@ -186,6 +160,9 @@ export default function SettingsPage() {
             {' · '}~{forecast.daysToMasterAll} days to master all
           </span>
         </div>
+        <p className="text-indigo-300 text-xs -mt-4">
+          Mastery is now based on spaced-repetition strength, not a fixed review count — see your dachshund's stage on each word.
+        </p>
 
         <div className="flex items-center justify-between">
           <div>

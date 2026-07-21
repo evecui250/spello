@@ -1,47 +1,54 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getAllProgress, getSettings, getStreak } from '../../lib/storage';
+import { getAllProgress, getStreak, MascotStageId } from '../../lib/storage';
 import { WORDS } from '../../lib/words';
 
-const COIN_COLORS = ['bg-slate-300', 'bg-yellow-300', 'bg-yellow-400', 'bg-amber-400', 'bg-amber-500'];
+const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
+const STAGE_LABELS: Record<MascotStageId, string> = {
+  puppy: 'Puppy Dachshund',
+  short: 'Short Dachshund',
+  medium: 'Medium Dachshund',
+  'long-crowned': 'Long Dachshund + Crown (Mastered)',
+};
+const STAGE_COLORS: Record<MascotStageId, string> = {
+  puppy: 'bg-slate-300',
+  short: 'bg-yellow-400',
+  medium: 'bg-amber-500',
+  'long-crowned': 'bg-green-500',
+};
 
 export default function StatsPage() {
-  const [coinCounts, setCoinCounts] = useState<number[]>([]);
+  const [stageCounts, setStageCounts] = useState<Record<MascotStageId, number>>({
+    puppy: 0, short: 0, medium: 0, 'long-crowned': 0,
+  });
   const [masteredCount, setMasteredCount] = useState(0);
   const [totalCoins, setTotalCoins] = useState(0);
-  const [threshold, setThreshold] = useState(5);
   const [streak, setStreak] = useState(0);
 
   useEffect(() => {
     const progress = getAllProgress();
-    const settings = getSettings();
-    const buckets = Array.from({ length: settings.masteryThreshold }, () => 0);
+    const counts: Record<MascotStageId, number> = { puppy: 0, short: 0, medium: 0, 'long-crowned': 0 };
     let mastered = 0;
     let coinSum = 0;
     for (const w of WORDS) {
       const p = progress[w.id];
-      const coins = p?.studiedTimes ?? 0;
-      coinSum += coins;
+      counts[p?.mascotStage ?? 'puppy'] += 1;
+      coinSum += p?.studiedTimes ?? 0;
       if (p?.fullyMastered) mastered++;
-      else buckets[Math.min(coins, settings.masteryThreshold - 1)]++;
     }
-    setCoinCounts(buckets);
+    setStageCounts(counts);
     setMasteredCount(mastered);
     setTotalCoins(coinSum);
-    setThreshold(settings.masteryThreshold);
     setStreak(getStreak().count);
   }, []);
 
   const total = WORDS.length;
-  const bars = [
-    ...coinCounts.map((count, coins) => ({
-      label: coins === 0 ? 'No coins yet' : `🪙 × ${coins}`,
-      count,
-      color: COIN_COLORS[coins] ?? 'bg-amber-500',
-    })),
-    { label: `Mastered (🪙 × ${threshold})`, count: masteredCount, color: 'bg-green-500' },
-  ];
+  const bars = STAGE_ORDER.map(id => ({
+    label: STAGE_LABELS[id],
+    count: stageCounts[id],
+    color: STAGE_COLORS[id],
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -63,9 +70,9 @@ export default function StatsPage() {
       </div>
 
       <div className="bg-white rounded-2xl border border-indigo-50 shadow-sm p-5">
-        <h2 className="font-semibold text-slate-700 mb-1">Coin breakdown</h2>
+        <h2 className="font-semibold text-slate-700 mb-1">Mascot stage breakdown</h2>
         <p className="text-slate-400 text-sm mb-4">
-          Each coin is a day a word was successfully studied all the way to level 5.
+          Each word's dachshund grows as its spaced-repetition mastery score rises.
         </p>
         <div className="flex flex-col gap-3">
           {bars.map(b => (

@@ -3,12 +3,31 @@
 export type Round = 1 | 2 | 3 | 4 | 5;
 export const MAX_ROUND: Round = 5;
 
+// The 4-stage dachshund mascot — a word's memory strength, derived from its
+// masteryScore. See lib/srs.ts for the scoring/stage logic.
+export type MascotStageId = 'puppy' | 'short' | 'medium' | 'long-crowned';
+
 export interface WordProgress {
   id: string;
   round: Round;        // current difficulty level, 1 (copy word) .. 5 (no hints)
-  studiedTimes: number; // number of times round 5 has been passed; reaching masteryThreshold = fully mastered
-  fullyMastered: boolean;
+  studiedTimes: number; // legacy coin count — kept in sync with successfulReviews for
+                         // existing displays (Stats, Words badges, the congrats card)
+  fullyMastered: boolean; // kept in sync with mascotStage === 'long-crowned'
   lastPracticed?: string;
+
+  // --- Spaced-repetition fields (see lib/srs.ts) ---
+  masteryScore: number;       // M — scheduling-only score; can dip after a mistake,
+                               // drives nextReviewDue's interval. Not used for the mascot.
+  growthScore: number;        // M' — monotonic; drives mascotStage + retirement. Only
+                               // ever increases: a mistake shrinks the *next* increment,
+                               // it doesn't undo progress already made.
+  successfulReviews: number;  // S — total successful no-hint (round 5) passes
+  pendingMistakes: number;    // failed attempts since the last successful review;
+                               // consumed (feeding both M and the next growthScore
+                               // increment), then reset, on the next success
+  lastReviewedAt?: string;    // date of the last successful round-5 pass
+  nextReviewDue?: string;     // date this word next becomes eligible for Review
+  mascotStage: MascotStageId; // derived from growthScore, stored for convenient display
 }
 
 export interface Streak {
@@ -19,7 +38,6 @@ export interface Streak {
 export interface Settings {
   studyBatchSize: number;
   dailyReview: number;
-  masteryThreshold: number;
   language: string;
   level: string;
   autoPlayAudio: boolean;
@@ -40,7 +58,7 @@ const EXTRA_STUDY_KEY = 'wb2_extra_study_limit';
 const EXTRA_REVIEW_KEY = 'wb2_extra_review_limit';
 
 const DEFAULT_SETTINGS: Settings = {
-  studyBatchSize: 15, dailyReview: 25, masteryThreshold: 3, language: 'de', level: 'B2',
+  studyBatchSize: 15, dailyReview: 25, language: 'de', level: 'B2',
   autoPlayAudio: true, requireArticle: false,
 };
 
@@ -64,14 +82,34 @@ export function getAllProgress(): Record<string, WordProgress> {
   }
 }
 
-// Fills in defaults for any progress record saved under the old schema.
+// Fills in defaults for any progress record saved under an older schema.
+// Records from before the SRS system get sensible one-time defaults here —
+// legacy coin count becomes the initial successfulReviews/masteryScore, and
+// nextReviewDue defaults to "due now" rather than being stuck waiting for a
+// date that was never set. Everything self-corrects the next time the word
+// is actually reviewed (see lib/srs.ts).
 function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): WordProgress {
+  const successfulReviews = p?.successfulReviews ?? p?.studiedTimes ?? 0;
+  const fullyMastered = p?.fullyMastered ?? false;
+  // Legacy records predate growthScore — treat their past coin count as if
+  // every pass had been clean (1.5 each), a reasonable one-time assumption
+  // that self-corrects as the word is reviewed again going forward.
+  const growthScore = p?.growthScore ?? successfulReviews * 1.5;
   return {
     id,
     round: (p?.round as Round) ?? 1,
-    studiedTimes: p?.studiedTimes ?? 0,
-    fullyMastered: p?.fullyMastered ?? false,
+    studiedTimes: p?.studiedTimes ?? successfulReviews,
+    fullyMastered,
     lastPracticed: p?.lastPracticed,
+    masteryScore: p?.masteryScore ?? successfulReviews * 1.5,
+    growthScore,
+    successfulReviews,
+    pendingMistakes: p?.pendingMistakes ?? 0,
+    lastReviewedAt: p?.lastReviewedAt ?? p?.lastPracticed,
+    nextReviewDue: p?.nextReviewDue ?? today(),
+    mascotStage: p?.mascotStage ?? (
+      fullyMastered ? 'long-crowned' : growthScore >= 4.5 ? 'medium' : growthScore >= 3.0 ? 'short' : 'puppy'
+    ),
   };
 }
 

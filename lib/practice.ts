@@ -2,6 +2,7 @@
 
 import { WORDS, Word } from './words';
 import { getAllProgress, getSettings, today, MAX_ROUND, Round, WordProgress } from './storage';
+import { recordRound5Success, recordRound5Failure, simulateDaysToMastery } from './srs';
 
 // Reviews always start from this baseline difficulty — the word isn't new,
 // so testing it from round 1 would be too easy.
@@ -36,14 +37,13 @@ export function buildStudyWords(limit = getSettings().studyBatchSize): Word[] {
 }
 
 // Review pool: words that have earned at least one coin (reached round 5 and
-// been tested there successfully) and aren't fully mastered yet. Prioritizes
-// the ones with fewer studiedTimes (coins) — they need more reinforcement.
-// By default, words last touched today (just graduated from study, or
-// already reviewed today) are excluded — reviewing something minutes after
-// learning it isn't real spaced repetition, and it keeps day-one empty
-// rather than immediately full of words just studied. Pass `includeToday`
-// to lift that (the "Review Extra" flow). `excludeIds` lets a session pull
-// additional batches via "Review more".
+// been tested there successfully) and aren't fully mastered yet. By default,
+// only words that are actually due (today >= nextReviewDue, per the SRS
+// schedule) are eligible — spacing grows with mastery, so a strong word
+// might not be due again for weeks or months. Pass `includeToday` to bypass
+// the schedule for early bonus practice (the "Review Extra" flow); those
+// attempts don't affect the schedule or score (see applyReviewResult).
+// `excludeIds` lets a session pull additional batches via "Review more".
 export function buildReviewWords(
   limit = getSettings().dailyReview,
   excludeIds: Set<string> = new Set(),
@@ -53,12 +53,17 @@ export function buildReviewWords(
   const t = today();
   const pool = WORDS.filter(w => {
     const p = allProgress[w.id];
-    if (!p || p.fullyMastered || p.round !== MAX_ROUND || p.studiedTimes < 1) return false;
+    if (!p || p.fullyMastered || p.round !== MAX_ROUND || p.successfulReviews < 1) return false;
     if (excludeIds.has(w.id)) return false;
-    if (!includeToday && p.lastPracticed === t) return false;
+    if (!includeToday && p.nextReviewDue && p.nextReviewDue > t) return false;
     return true;
   });
-  pool.sort((a, b) => allProgress[a.id].studiedTimes - allProgress[b.id].studiedTimes);
+  // Most overdue first, then weakest (lowest mastery score) first.
+  pool.sort((a, b) => {
+    const dueA = allProgress[a.id].nextReviewDue ?? t;
+    const dueB = allProgress[b.id].nextReviewDue ?? t;
+    return dueA.localeCompare(dueB) || allProgress[a.id].masteryScore - allProgress[b.id].masteryScore;
+  });
   return pool.slice(0, limit);
 }
 
@@ -80,13 +85,15 @@ export function generateHint(word: string, round: Round): boolean[] {
   return Array.from({ length: n }, (_, i) => !revealed.has(i));
 }
 
-// Suggests a daily review count that can keep up with the review backlog
-// a given study pace generates. Each word needs (masteryThreshold - 1) more
-// successful reviews after its introduction day to be fully mastered — in
-// steady state that's how many review slots per day are needed to review
-// every eligible word once, so the backlog doesn't grow indefinitely.
-export function recommendedDailyReview(studyBatchSize: number, masteryThreshold: number): number {
-  return Math.max(1, Math.min(100, Math.round(studyBatchSize * (masteryThreshold - 1))));
+// Suggests a daily review count. Under the SRS schedule, review load per
+// word shrinks over time (intervals grow with mastery) rather than staying
+// fixed, so there's no exact steady-state formula the way there was with a
+// flat mastery threshold. As a simple heuristic, recommend enough capacity
+// to review every word introduced in roughly the last two weeks at least
+// once — early-stage words (short intervals) are where nearly all daily
+// review volume actually comes from.
+export function recommendedDailyReview(studyBatchSize: number): number {
+  return Math.max(1, Math.min(100, Math.round(studyBatchSize * 1.5)));
 }
 
 export interface ProgressForecast {
@@ -96,41 +103,29 @@ export interface ProgressForecast {
 }
 
 // Rough forecast for the Settings page: how many days at the given pace
-// until every word has been studied at least once, and until every word
-// is fully mastered. Assumes correct answers every time (an optimistic
-// best case), and that study happens before review each day.
-export function estimateProgressForecast(
-  studyBatchSize: number,
-  dailyReview: number,
-  masteryThreshold: number,
-): ProgressForecast {
+// until every word has been studied at least once, and until every word is
+// mastered (mascot stage 4, M >= 10). daysToMasterAll assumes review
+// capacity isn't a bottleneck — i.e. dailyReview is generous enough to
+// review every due word — since with exponentially-spaced reviews the true
+// due-word volume on any given day depends on the whole history of when
+// each word was introduced, which isn't tractable to forecast exactly here.
+export function estimateProgressForecast(studyBatchSize: number): ProgressForecast {
   const allProgress = getAllProgress();
   let introduced = 0;
-  let reviewCoinsRemaining = 0;
-
   for (const w of WORDS) {
-    const p = allProgress[w.id];
-    if (!p) continue;
-    introduced++;
-    if (!p.fullyMastered) {
-      reviewCoinsRemaining += Math.max(0, masteryThreshold - p.studiedTimes);
-    }
+    if (allProgress[w.id]) introduced++;
   }
 
   const wordsRemaining = WORDS.length - introduced;
   const daysToIntroduceAll = studyBatchSize > 0 ? Math.ceil(wordsRemaining / studyBatchSize) : Infinity;
 
-  // A word earns its first coin for free the same day it's introduced
-  // (a study session doesn't end until every pulled word reaches round 5),
-  // so only the remaining coins after that need dedicated review days.
-  reviewCoinsRemaining += wordsRemaining * Math.max(0, masteryThreshold - 1);
-  const daysForReview = dailyReview > 0 ? Math.ceil(reviewCoinsRemaining / dailyReview) : Infinity;
+  // The natural pace the SRS formula itself produces, from first study pass
+  // to crossing the mastery score, assuming on-schedule reviews with no
+  // mistakes. The last word introduced still needs this full runway after
+  // it's introduced; earlier words mature in parallel alongside it.
+  const daysToMasterAll = daysToIntroduceAll + simulateDaysToMastery();
 
-  return {
-    wordsRemaining,
-    daysToIntroduceAll,
-    daysToMasterAll: daysToIntroduceAll + daysForReview,
-  };
+  return { wordsRemaining, daysToIntroduceAll, daysToMasterAll };
 }
 
 export function checkAnswer(word: string, answer: string): boolean {
@@ -139,13 +134,10 @@ export function checkAnswer(word: string, answer: string): boolean {
 
 // Wrong answer → demote one round (floor at 1, since there's no round 0).
 // Correct answer below round 5 → promote one round.
-// Correct answer at round 5 → increment studiedTimes (a "coin"); fully master
-// once it reaches the (user-adjustable) threshold.
-export function applyResult(
-  progress: WordProgress,
-  correct: boolean,
-  masteryThreshold: number,
-): WordProgress {
+// Correct answer at round 5 → this is a real successful no-hint pass, so it
+// feeds the SRS scoring (mastery score, mascot stage, next review date) —
+// same bookkeeping a Review success gets.
+export function applyResult(progress: WordProgress, correct: boolean): WordProgress {
   const lastPracticed = today();
 
   if (!correct) {
@@ -158,49 +150,28 @@ export function applyResult(
     return { ...progress, round, lastPracticed };
   }
 
-  const studiedTimes = progress.studiedTimes + 1;
-  return {
-    ...progress,
-    round: MAX_ROUND,
-    studiedTimes,
-    fullyMastered: studiedTimes >= masteryThreshold,
-    lastPracticed,
-  };
+  return { ...recordRound5Success(progress), round: MAX_ROUND, lastPracticed };
 }
 
 // Review scoring: every review attempt is judged from the REVIEW_BASE_ROUND
 // baseline, regardless of the word's stored round (which is always MAX_ROUND
-// going into a review). Correct → passes round 5 again, earning a coin.
-// Wrong → falls one step below the baseline, back into the study ladder.
-export function applyReviewResult(
-  progress: WordProgress,
-  correct: boolean,
-  masteryThreshold: number,
-): WordProgress {
+// going into a review).
+export function applyReviewResult(progress: WordProgress, correct: boolean): WordProgress {
   const lastPracticed = today();
+  const t = today();
 
-  // A word can only bank one coin per calendar day — mastery is meant to
-  // reflect `masteryThreshold` distinct days of successful recall. Normal
-  // review already only offers words that weren't touched today, but
-  // "Review Extra" deliberately includes same-day graduates for bonus
-  // practice; further correct answers today shouldn't double-count, and a
-  // wrong one here shouldn't undo a coin already earned today either — it's
-  // just practice.
-  if (progress.lastPracticed === lastPracticed && progress.round === MAX_ROUND) {
+  // Not actually due yet — only reachable via "Review Extra" pulling in a
+  // word early. That's bonus practice: gives feedback, but doesn't touch
+  // the SRS schedule, score, or round, since reviewing early doesn't tell
+  // us anything about long-term recall the way an on-schedule review does.
+  if (progress.nextReviewDue && progress.nextReviewDue > t) {
     return progress;
   }
 
   if (!correct) {
     const round = (REVIEW_BASE_ROUND - 1) as Round;
-    return { ...progress, round, lastPracticed };
+    return { ...recordRound5Failure(progress, t), round, lastPracticed };
   }
 
-  const studiedTimes = progress.studiedTimes + 1;
-  return {
-    ...progress,
-    round: MAX_ROUND,
-    studiedTimes,
-    fullyMastered: studiedTimes >= masteryThreshold,
-    lastPracticed,
-  };
+  return { ...recordRound5Success(progress, t), round: MAX_ROUND, lastPracticed };
 }

@@ -11,16 +11,15 @@ export default function WelcomePage() {
   const router = useRouter();
   const [studyBatchSize, setStudyBatchSize] = useState(15);
   const [dailyReview, setDailyReview] = useState(25);
-  const [masteryThreshold, setMasteryThreshold] = useState(3);
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
 
   const forecast = useMemo(
-    () => estimateProgressForecast(studyBatchSize, dailyReview, masteryThreshold),
-    [studyBatchSize, dailyReview, masteryThreshold],
+    () => estimateProgressForecast(studyBatchSize),
+    [studyBatchSize],
   );
   const recommendedReview = useMemo(
-    () => recommendedDailyReview(studyBatchSize, masteryThreshold),
-    [studyBatchSize, masteryThreshold],
+    () => recommendedDailyReview(studyBatchSize),
+    [studyBatchSize],
   );
 
   const finish = (settings: Settings) => {
@@ -32,7 +31,7 @@ export default function WelcomePage() {
 
   const handleStart = () => {
     finish({
-      studyBatchSize, dailyReview, masteryThreshold,
+      studyBatchSize, dailyReview,
       language: 'de', level: 'B2', autoPlayAudio, requireArticle: false,
     });
   };
@@ -92,23 +91,6 @@ export default function WelcomePage() {
               </button>
             </div>
           )}
-        </div>
-
-        <div>
-          <label className="block font-semibold text-slate-700 mb-1">
-            Repetitions days
-          </label>
-          <p className="text-slate-400 text-sm mb-3">
-            How many successful reviews a word needs before it's retired as mastered.
-          </p>
-          <div className="flex items-center gap-4">
-            <input
-              type="range" min={1} max={7} value={masteryThreshold}
-              onChange={e => setMasteryThreshold(Number(e.target.value))}
-              className="flex-1 accent-indigo-600"
-            />
-            <span className="w-8 text-center font-bold text-indigo-700">{masteryThreshold}</span>
-          </div>
         </div>
 
         <div className="bg-indigo-50 rounded-xl px-4 py-3 text-sm text-indigo-700 flex items-center justify-between gap-3">
