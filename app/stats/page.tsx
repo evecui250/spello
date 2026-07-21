@@ -49,7 +49,7 @@ export default function StatsPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Statistics</h1>
 
-      <div className="bg-amber-50/95 rounded-2xl border border-amber-100 shadow-sm p-5 flex flex-col gap-4">
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <span className="font-semibold text-slate-700">Daily Streak</span>
           <span className="text-2xl font-bold text-orange-500">{streak} 🔥</span>
@@ -64,7 +64,7 @@ export default function StatsPage() {
         </div>
       </div>
 
-      <div className="bg-amber-50/95 rounded-2xl border border-amber-100 shadow-sm p-5">
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
         <h2 className="font-semibold text-slate-700 mb-1">Mascot stage breakdown</h2>
         <p className="text-slate-400 text-sm mb-4">
           Each word's dachshund grows as its spaced-repetition mastery score rises.
@@ -72,7 +72,7 @@ export default function StatsPage() {
         <div className="flex flex-col gap-3">
           {bars.map(b => (
             <div key={b.id} className="flex items-center gap-3">
-              <DachshundMascot stage={b.id} className="w-12 h-6 shrink-0 text-slate-500" />
+              <DachshundMascot stage={b.id} className="w-9 h-9 shrink-0" />
               <div className="flex-1">
                 <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
                   <div
@@ -88,7 +88,7 @@ export default function StatsPage() {
       </div>
 
       {/* Stacked bar */}
-      <div className="bg-amber-50/95 rounded-2xl border border-amber-100 shadow-sm p-5">
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
         <h2 className="font-semibold text-slate-700 mb-3">Overall progress</h2>
         <div className="h-6 rounded-full overflow-hidden flex">
           {bars.map(b => (
@@ -102,7 +102,7 @@ export default function StatsPage() {
         </div>
         <div className="flex flex-wrap gap-4 mt-3">
           {bars.map(b => (
-            <DachshundMascot key={b.id} stage={b.id} className="w-10 h-5 text-slate-500" />
+            <DachshundMascot key={b.id} stage={b.id} className="w-8 h-8" />
           ))}
         </div>
       </div>

@@ -6,6 +6,9 @@ interface Props {
   // Which section the user should go do next.
   section: 'study' | 'review';
   onDismiss: () => void;
+  // Shown above the message so it's never missed — this modal pops up the
+  // instant a session finishes and covers the summary underneath it.
+  earnedText?: string;
 }
 
 const COPY = {
@@ -21,7 +24,7 @@ const COPY = {
   },
 } as const;
 
-export default function NextSectionPrompt({ section, onDismiss }: Props) {
+export default function NextSectionPrompt({ section, onDismiss, earnedText }: Props) {
   const copy = COPY[section];
   return (
     <div
@@ -33,6 +36,11 @@ export default function NextSectionPrompt({ section, onDismiss }: Props) {
         onClick={e => e.stopPropagation()}
       >
         <div className="text-4xl">👉</div>
+        {earnedText && (
+          <p className="-mt-2 text-sm font-semibold text-amber-700 bg-amber-100 rounded-full px-3 py-1">
+            {earnedText}
+          </p>
+        )}
         <p className="text-slate-700 font-medium">{copy.message}</p>
         <Link
           href={copy.ctaHref}

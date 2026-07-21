@@ -73,11 +73,11 @@ export default function SettingsPage() {
         </span>
       </div>
 
-      <div className="bg-amber-50/95 rounded-2xl border border-amber-100 shadow-sm p-6">
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6">
         <AccountPanel onSync={loadFromStorage} />
       </div>
 
-      <div className="bg-amber-50/95 rounded-2xl border border-amber-100 shadow-sm p-6 flex flex-col gap-6">
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-6">
         <div className="flex gap-4">
           <div className="flex-1">
             <label className="block font-semibold text-slate-700 mb-1">Language</label>
@@ -195,11 +195,11 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 text-sm text-amber-700">
+      <div className="bg-amber-50/70 backdrop-blur-sm border border-amber-100/50 rounded-2xl p-4 text-sm text-amber-700">
         Changes apply starting with your next practice session — an in-progress one keeps its original settings.
       </div>
 
-      <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-6 flex flex-col gap-3">
+      <div className="bg-red-50/70 backdrop-blur-sm rounded-2xl border border-red-200/50 shadow-sm p-6 flex flex-col gap-3">
         <div>
           <h2 className="font-semibold text-red-700">Danger zone</h2>
           <p className="text-slate-400 text-sm mt-1">

@@ -335,6 +335,14 @@ export default function PracticeSession({ mode }: Props) {
     const earned = history.filter(h => h.earnedBadge);
     const stageCounts: Partial<Record<MascotStageId, number>> = {};
     for (const e of earned) stageCounts[e.mascotStage] = (stageCounts[e.mascotStage] ?? 0) + 1;
+    // The modals below pop up immediately and cover this screen, so they
+    // need their own copy of the tally — otherwise a user who taps the
+    // modal's CTA right away never sees it.
+    const earnedText = earned.length > 0
+      ? mode === 'study'
+        ? `🐕 ${earned.length} dachshund puppy${earned.length === 1 ? '' : ' puppies'} earned today!`
+        : `🐕 ${earned.length} dachshund${earned.length === 1 ? '' : 's'} earned today!`
+      : undefined;
 
     return (
       <div className="text-center py-16">
@@ -349,8 +357,8 @@ export default function PracticeSession({ mode }: Props) {
         </p>
 
         {mode === 'study' && earned.length > 0 && (
-          <div className="mx-auto mb-6 max-w-xs bg-amber-50/95 border border-amber-100 rounded-2xl px-5 py-4 flex flex-col items-center gap-1.5">
-            <DachshundMascot stage="puppy" className="w-20 h-10 text-slate-500" />
+          <div className="mx-auto mb-6 max-w-xs bg-amber-50/75 backdrop-blur-sm border border-amber-100/50 rounded-2xl px-5 py-4 flex flex-col items-center gap-1.5">
+            <DachshundMascot stage="puppy" className="w-16 h-16" />
             <p className="text-slate-700 font-semibold">
               {earned.length} dachshund puppy{earned.length === 1 ? '' : ' puppies'} earned today!
             </p>
@@ -358,14 +366,14 @@ export default function PracticeSession({ mode }: Props) {
         )}
 
         {mode === 'review' && earned.length > 0 && (
-          <div className="mx-auto mb-6 max-w-xs bg-amber-50/95 border border-amber-100 rounded-2xl px-5 py-4 flex flex-col items-center gap-3">
+          <div className="mx-auto mb-6 max-w-xs bg-amber-50/75 backdrop-blur-sm border border-amber-100/50 rounded-2xl px-5 py-4 flex flex-col items-center gap-3">
             <p className="text-slate-700 font-semibold">
               {earned.length} dachshund{earned.length === 1 ? '' : 's'} earned today
             </p>
             <div className="flex flex-wrap justify-center gap-x-5 gap-y-2">
               {STAGE_ORDER.filter(s => stageCounts[s]).map(s => (
                 <div key={s} className="flex items-center gap-1.5">
-                  <DachshundMascot stage={s} className="w-12 h-6 text-slate-500" />
+                  <DachshundMascot stage={s} className="w-9 h-9" />
                   <span className="text-slate-600 font-medium text-sm">× {stageCounts[s]}</span>
                 </div>
               ))}
@@ -390,10 +398,11 @@ export default function PracticeSession({ mode }: Props) {
             reviewedCount={dailyStats.reviewedCount}
             language={LANG_NAMES[settings?.language ?? 'de'] ?? 'German'}
             onClose={() => setShowCongrats(false)}
+            earnedText={earnedText}
           />
         )}
         {nudge && (
-          <NextSectionPrompt section={nudge} onDismiss={() => setNudge(null)} />
+          <NextSectionPrompt section={nudge} onDismiss={() => setNudge(null)} earnedText={earnedText} />
         )}
       </div>
     );
@@ -410,7 +419,7 @@ export default function PracticeSession({ mode }: Props) {
         <div className="text-xs text-emerald-100/70 text-center">
           Previous word {historyIndex + 1} / {history.length}
         </div>
-        <div className="bg-amber-50/95 rounded-2xl shadow-sm border border-amber-100 p-6 flex flex-col gap-5">
+        <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
           <div className="text-center">
             <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">English</div>
             <div className="text-2xl font-semibold text-slate-700">{h.en}</div>
@@ -427,7 +436,7 @@ export default function PracticeSession({ mode }: Props) {
             <button
               onClick={() => setHistoryIndex(i => (i !== null && i > 0 ? i - 1 : i))}
               disabled={historyIndex === 0}
-              className="flex-1 bg-white text-indigo-600 border-2 border-indigo-200 py-3 rounded-xl font-semibold disabled:opacity-40 hover:border-indigo-400 transition-colors"
+              className="flex-1 bg-amber-50/60 text-indigo-600 border-2 border-indigo-200 py-3 rounded-xl font-semibold disabled:opacity-40 hover:border-indigo-400 transition-colors"
             >
               ← Back
             </button>
@@ -473,7 +482,7 @@ export default function PracticeSession({ mode }: Props) {
       </div>
 
       {/* Card */}
-      <div className="bg-amber-50/95 rounded-2xl shadow-sm border border-amber-100 p-6 flex flex-col gap-5">
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
 
         {/* This word's level, 1-5 — specific to the current word */}
         <div>
@@ -494,9 +503,19 @@ export default function PracticeSession({ mode }: Props) {
           <div className="text-2xl font-semibold text-slate-700">{word.en}</div>
         </div>
 
+        {currentRound === 1 && (
+          <div className="text-center -mt-1">
+            <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
+            <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
+              {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
+            </div>
+          </div>
+        )}
+
         {/* Article for nouns — a fixed chip, or typed blanks (der/die/das
             are all 3 letters, so they slot in as their own tile row) when
-            requireArticle is on. */}
+            requireArticle is on. Sits directly above the word blanks, right
+            where the article goes when reading the answer left to right. */}
         {word.type === 'noun' && word.article && (
           needsArticle ? (
             <div className="text-center -mb-2">
@@ -523,22 +542,19 @@ export default function PracticeSession({ mode }: Props) {
           )
         )}
 
-        {currentRound === 1 && (
-          <div className="text-center -mt-1">
-            <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
-            <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
-              {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
-            </div>
-          </div>
-        )}
-
-        {/* Letter tiles — locked hints or editable blanks */}
+        {/* Letter tiles — locked hints or editable blanks. German nouns are
+            always capitalized, so the first editable letter auto-uppercases
+            as the user types instead of making them reach for Shift. */}
         <LetterInputRow
           ref={letterRowRef}
           chars={chars}
           hint={hint}
           values={values}
-          onChange={setValues}
+          onChange={next => setValues(
+            word.type === 'noun' && next[0]
+              ? [next[0].toUpperCase(), ...next.slice(1)]
+              : next
+          )}
           onSubmit={handleSubmit}
           disabled={feedback !== null}
           activeInputRef={activeInputRef}

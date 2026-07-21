@@ -7,6 +7,9 @@ interface Props {
   reviewedCount: number;
   language: string;
   onClose: () => void;
+  // Shown as a caption below the shareable image — this modal covers the
+  // session summary underneath it, so the dachshund tally has to live here too.
+  earnedText?: string;
 }
 
 // Draws a rounded rectangle path (used instead of ctx.roundRect for wider
@@ -21,7 +24,7 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-export default function CongratsModal({ studiedCount, reviewedCount, language, onClose }: Props) {
+export default function CongratsModal({ studiedCount, reviewedCount, language, onClose, earnedText }: Props) {
   const [imgUrl, setImgUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -161,6 +164,11 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
             <span className="text-indigo-300 text-sm">Preparing image…</span>
           )}
         </div>
+        {earnedText && (
+          <p className="-mt-1 text-center text-sm font-semibold text-amber-700 bg-amber-100 rounded-full px-3 py-1.5">
+            {earnedText}
+          </p>
+        )}
         <div className="flex gap-2">
           <button
             onClick={handleShare}

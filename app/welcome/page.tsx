@@ -51,7 +51,7 @@ export default function WelcomePage() {
         </p>
       </div>
 
-      <div className="w-full bg-amber-50/95 rounded-2xl border border-amber-100 shadow-sm p-6 flex flex-col gap-6">
+      <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-6">
         <div>
           <label className="block font-semibold text-slate-700 mb-1">
             New words per day
