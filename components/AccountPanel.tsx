@@ -53,8 +53,8 @@ export default function AccountPanel({ onSync }: Props) {
     return (
       <div className="flex items-center justify-between">
         <div>
-          <div className="font-semibold text-slate-700">Signed in</div>
-          <p className="text-slate-400 text-sm">{email} — progress syncs automatically.</p>
+          <div className="font-semibold text-stone-800">Signed in</div>
+          <p className="text-stone-500 text-sm">{email} — progress syncs automatically.</p>
         </div>
         <button
           onClick={handleSignOut}
@@ -68,8 +68,8 @@ export default function AccountPanel({ onSync }: Props) {
 
   return (
     <div>
-      <label className="block font-semibold text-slate-700 mb-1">Sync your progress (optional)</label>
-      <p className="text-slate-400 text-sm mb-3">
+      <label className="block font-semibold text-stone-800 mb-1">Sync your progress (optional)</label>
+      <p className="text-stone-500 text-sm mb-3">
         Sign in with a magic link to keep your progress across devices. Not required to use the app.
       </p>
       {status === 'sent' ? (
@@ -84,7 +84,7 @@ export default function AccountPanel({ onSync }: Props) {
             value={inputEmail}
             onChange={e => setInputEmail(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSendLink()}
-            className="flex-1 border-2 border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"
+            className="flex-1 border-2 border-indigo-200 rounded-lg px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-500"
           />
           <button
             onClick={handleSendLink}

@@ -46,6 +46,7 @@ interface HistoryEntry {
   en: string;
   correct: boolean;
   earnedBadge: boolean;
+  beforeStage: MascotStageId;
   mascotStage: MascotStageId;
 }
 
@@ -213,7 +214,7 @@ export default function PracticeSession({ mode }: Props) {
     setJustCompleted(completed);
     setHistory(h => [...h, {
       id: word.id, article: word.article, de: word.de, en: word.en,
-      correct, earnedBadge, mascotStage: updated.mascotStage,
+      correct, earnedBadge, beforeStage: progress.mascotStage, mascotStage: updated.mascotStage,
     }]);
     if (settings.autoPlayAudio) {
       speakWord(word);
@@ -346,7 +347,13 @@ export default function PracticeSession({ mode }: Props) {
 
   if (sessionDone) {
     const dailyStats = showCongrats ? getDailyStats() : null;
-    const earned = history.filter(h => h.earnedBadge);
+    // Study: every completed word is a brand-new puppy (mascotStage only
+    // ever starts there). Review: most successful reviews don't move the
+    // needle enough to cross into a new stage — only count (and show) the
+    // ones that actually did.
+    const earned = mode === 'study'
+      ? history.filter(h => h.earnedBadge)
+      : history.filter(h => h.earnedBadge && h.beforeStage !== h.mascotStage);
     const stageCounts: Partial<Record<MascotStageId, number>> = {};
     for (const e of earned) stageCounts[e.mascotStage] = (stageCounts[e.mascotStage] ?? 0) + 1;
     // The modals below pop up immediately and cover this screen, so they
@@ -355,7 +362,7 @@ export default function PracticeSession({ mode }: Props) {
     const earnedText = earned.length > 0
       ? mode === 'study'
         ? `🐕 ${earned.length} dachshund puppy${earned.length === 1 ? '' : ' puppies'} earned today!`
-        : `🐕 ${earned.length} dachshund${earned.length === 1 ? '' : 's'} earned today!`
+        : `🐕 ${earned.length} dachshund${earned.length === 1 ? '' : 's'} upgraded today!`
       : undefined;
 
     return (
@@ -382,7 +389,7 @@ export default function PracticeSession({ mode }: Props) {
         {mode === 'review' && earned.length > 0 && (
           <div className="mx-auto mb-6 max-w-xs bg-amber-50/75 backdrop-blur-sm border border-amber-100/50 rounded-2xl px-5 py-4 flex flex-col items-center gap-3">
             <p className="text-slate-700 font-semibold">
-              {earned.length} dachshund{earned.length === 1 ? '' : 's'} earned today
+              {earned.length} dachshund{earned.length === 1 ? '' : 's'} upgraded today
             </p>
             <div className="flex flex-wrap justify-center gap-x-5 gap-y-2">
               {STAGE_ORDER.filter(s => stageCounts[s]).map(s => (

@@ -80,30 +80,30 @@ export default function SettingsPage() {
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-6">
         <div className="flex gap-4">
           <div className="flex-1">
-            <label className="block font-semibold text-slate-700 mb-1">Language</label>
+            <label className="block font-semibold text-stone-800 mb-1">Language</label>
             <select
               value={language}
               onChange={e => { setLanguage(e.target.value); persist({ language: e.target.value }); }}
-              className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"
+              className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
             >
               <option value="de">German</option>
             </select>
           </div>
           <div className="flex-1">
-            <label className="block font-semibold text-slate-700 mb-1">Level</label>
+            <label className="block font-semibold text-stone-800 mb-1">Level</label>
             <select
               value={level}
               onChange={e => { setLevel(e.target.value); persist({ level: e.target.value }); }}
-              className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"
+              className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
             >
               <option value="B2">B2</option>
             </select>
           </div>
         </div>
-        <p className="text-slate-400 text-sm -mt-4">More languages and levels are coming soon.</p>
+        <p className="text-stone-500 text-sm -mt-4">More languages and levels are coming soon.</p>
 
         <div>
-          <label className="block font-semibold text-slate-700 mb-1">
+          <label className="block font-semibold text-stone-800 mb-1">
             New words per day
           </label>
           <div className="flex items-center gap-4">
@@ -121,7 +121,7 @@ export default function SettingsPage() {
         </div>
 
         <div>
-          <label className="block font-semibold text-slate-700 mb-1">
+          <label className="block font-semibold text-stone-800 mb-1">
             Review words per day
           </label>
           <div className="flex items-center gap-4">
@@ -166,10 +166,10 @@ export default function SettingsPage() {
 
         <div className="flex items-center justify-between">
           <div>
-            <label className="block font-semibold text-slate-700">
+            <label className="block font-semibold text-stone-800">
               Auto-play pronunciation
             </label>
-            <p className="text-slate-400 text-sm">Speaks Round 1 words aloud automatically.</p>
+            <p className="text-stone-500 text-sm">Speaks Round 1 words aloud automatically.</p>
           </div>
           <input
             type="checkbox"
@@ -181,10 +181,10 @@ export default function SettingsPage() {
 
         <div className="flex items-center justify-between">
           <div>
-            <label className="block font-semibold text-slate-700">
+            <label className="block font-semibold text-stone-800">
               Practice der/die/das
             </label>
-            <p className="text-slate-400 text-sm">Also blanks the article for nouns, so you have to recall the gender too.</p>
+            <p className="text-stone-500 text-sm">Also blanks the article for nouns, so you have to recall the gender too.</p>
           </div>
           <input
             type="checkbox"
@@ -202,7 +202,7 @@ export default function SettingsPage() {
       <div className="bg-red-50/70 backdrop-blur-sm rounded-2xl border border-red-200/50 shadow-sm p-6 flex flex-col gap-3">
         <div>
           <h2 className="font-semibold text-red-700">Danger zone</h2>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-stone-500 text-sm mt-1">
             Erase all word progress, coins, and your streak to start over from scratch.
           </p>
         </div>

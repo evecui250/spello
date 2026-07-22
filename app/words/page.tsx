@@ -38,14 +38,14 @@ export default function WordsPage() {
         placeholder="Search German or English…"
         value={search}
         onChange={e => setSearch(e.target.value)}
-        className="bg-amber-50/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-4 py-2 focus:outline-none focus:border-amber-300"
+        className="bg-amber-50/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-4 py-2 text-stone-800 placeholder:text-stone-500 focus:outline-none focus:border-amber-300"
       />
 
       <div className="flex gap-2 flex-wrap">
         <select
           value={filterLevel}
           onChange={e => setFilterLevel(e.target.value)}
-          className="bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-amber-300"
+          className="bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-3 py-1.5 text-sm text-stone-800 focus:outline-none focus:border-amber-300"
         >
           <option value="all">All words</option>
           <option value="new">New</option>
@@ -56,7 +56,7 @@ export default function WordsPage() {
         <select
           value={filterCategory}
           onChange={e => setFilterCategory(e.target.value)}
-          className="bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-amber-300"
+          className="bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-3 py-1.5 text-sm text-stone-800 focus:outline-none focus:border-amber-300"
         >
           <option value="all">All categories</option>
           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -69,19 +69,19 @@ export default function WordsPage() {
         {filtered.map(w => (
           <div key={w.id} className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex items-center justify-between">
             <div>
-              <span className="font-semibold text-indigo-800">
+              <span className="font-semibold text-stone-800">
                 {w.article ? `${w.article} ` : ''}{w.de}
               </span>
-              <SpeakerButton word={w} className="ml-1.5 text-indigo-400 hover:text-indigo-600 transition-colors align-middle" />
-              {w.plural && <span className="text-slate-400 text-sm ml-2">· {w.plural}</span>}
-              <div className="text-slate-500 text-sm">{w.en}</div>
+              <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
+              {w.plural && <span className="text-stone-500 text-sm ml-2">· {w.plural}</span>}
+              <div className="text-stone-500 text-sm">{w.en}</div>
             </div>
             <span className="shrink-0">
               {progress[w.id] ? (
                 <DachshundMascot stage={progress[w.id].mascotStage} className="w-9 h-9" />
               ) : (
                 <span className="flex items-center justify-center px-2.5 py-1.5 rounded-full bg-slate-100">
-                  <span className="text-xs font-medium text-slate-500">New</span>
+                  <span className="text-xs font-medium text-stone-500">New</span>
                 </span>
               )}
             </span>

@@ -12,6 +12,7 @@ import { WORDS } from '../lib/words';
 import Logo from '../components/Logo';
 import {
   FlameIcon, SproutIcon, StarIcon, LayersIcon, ArrowRightIcon, CheckCircleIcon,
+  BookIcon, RefreshIcon,
 } from '../components/icons';
 
 interface BubbleStat {
@@ -38,47 +39,44 @@ function StatBubble({ stat }: { stat: BubbleStat }) {
   );
 }
 
-// An ancient, glowing grimoire — the user's own artwork, one full-bleed
-// photo per book, its rounded corners and mystical glow baked right in. A
-// small gem badge floats over it with the count or a checkmark.
-function Tome({
-  href, title, img, count, tilt, badgeTone, muted, complete,
+// A plain panel button — icon, label, and a count or a checkmark once
+// today's goal is met. No skeuomorphism, just a clear tappable bar.
+function SectionButton({
+  href, label, count, Icon, accent, muted, complete,
 }: {
   href: string;
-  title: string;
-  img: string;
+  label: string;
   count: number;
-  tilt: string;
-  badgeTone: string;
+  Icon: (props: { className?: string }) => React.JSX.Element;
+  accent: string;
   muted: boolean;
   complete: boolean;
 }) {
-  const cover = (
-    <div className={`relative w-32 sm:w-36 ${tilt}`}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={img}
-        alt={`${title} book`}
-        className={`w-full h-auto rounded-2xl shadow-[0_10px_25px_rgba(0,0,0,0.5)] ${muted ? 'grayscale opacity-60' : ''}`}
-      />
-      {!muted && (
-        <div
-          className={`absolute -top-2 -right-2 w-9 h-9 rounded-full flex items-center justify-center ring-1 ring-black/40 shadow-md ${badgeTone}`}
-        >
-          {complete
-            ? <CheckCircleIcon className="w-5 h-5 text-emerald-50" />
-            : <span className="font-bold text-sm text-amber-50" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{count}</span>}
+  const body = (
+    <div
+      className={`flex-1 flex items-center gap-3 rounded-2xl border px-4 py-4 transition-transform ${
+        muted
+          ? 'bg-amber-50/40 backdrop-blur-sm border-amber-100/30 opacity-70'
+          : 'bg-amber-50/75 backdrop-blur-sm border-amber-100/50 shadow-sm hover:scale-[1.03]'
+      }`}
+    >
+      <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${accent}`}>
+        <Icon className="w-5 h-5 text-white" />
+      </div>
+      <div className="flex-1 min-w-0 text-left">
+        <div className="font-semibold text-stone-800">{label}</div>
+        <div className="text-sm text-stone-500">
+          {complete ? 'All done today' : `${count} word${count === 1 ? '' : 's'}`}
         </div>
-      )}
+      </div>
+      {complete && <CheckCircleIcon className="w-5 h-5 text-emerald-600 shrink-0" />}
     </div>
   );
 
-  if (muted) {
-    return <div className="opacity-80">{cover}</div>;
-  }
+  if (muted) return body;
   return (
-    <Link href={href} className="inline-block transition-transform hover:scale-105 hover:rotate-0">
-      {cover}
+    <Link href={href} className="flex-1 flex">
+      {body}
     </Link>
   );
 }
@@ -147,6 +145,17 @@ export default function HomePage() {
 
   return (
     <div className="relative flex flex-col items-center gap-9 py-4">
+      {/* How many words have reached the mastered (crowned) stage */}
+      <div className="absolute top-0 right-0 flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-full pl-1.5 pr-3 py-1">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/mascot_long-crowned.png`}
+          alt="Mastered (crowned) dachshunds"
+          className="w-7 h-7 object-contain"
+        />
+        <span className="font-bold text-white text-sm">{masteredCount}</span>
+      </div>
+
       {FIREFLIES_HOME.map((f, i) => (
         <span
           key={i}
@@ -165,64 +174,66 @@ export default function HomePage() {
         {stats.map(s => <StatBubble key={s.label} stat={s} />)}
       </div>
 
-      <div className="flex justify-center items-start gap-8 sm:gap-14">
-        {/* Learn tome */}
-        <div className="flex flex-col items-center gap-2">
-          <Tome
+      <div className="w-full flex flex-col gap-3">
+        <div className="flex gap-3">
+          <SectionButton
             href="/practice/study"
-            title="Learn"
-            img={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/book_study.jpg`}
+            label="Study"
             count={studyGoalDone ? 0 : studyCount}
-            tilt="-rotate-2"
-            badgeTone="bg-[radial-gradient(circle_at_30%_30%,#c8791f,#5c2a0c)]"
+            Icon={BookIcon}
+            accent="bg-amber-600"
             muted={!studyGoalDone && studyCount === 0}
             complete={studyGoalDone}
           />
-          {(studyGoalDone || studyCount === 0) && (
-            <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-lg px-2 py-1">
-              <input
-                type="number" min={1} max={100} value={extraStudyCount}
-                onChange={e => setExtraStudyCount(Math.max(1, Number(e.target.value) || 1))}
-                className="w-9 bg-transparent text-white text-xs text-center focus:outline-none"
-              />
-              <button
-                onClick={startExtraStudy}
-                className="text-[11px] font-semibold text-amber-200 hover:text-amber-100 inline-flex items-center gap-0.5 transition-colors"
-              >
-                extra <ArrowRightIcon className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Review tome */}
-        <div className="flex flex-col items-center gap-2">
-          <Tome
+          <SectionButton
             href="/practice/review"
-            title="Review"
-            img={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/book_review.jpg`}
+            label="Review"
             count={reviewCount}
-            tilt="rotate-2"
-            badgeTone="bg-[radial-gradient(circle_at_30%_30%,#3b7fa8,#0c2c40)]"
+            Icon={RefreshIcon}
+            accent="bg-sky-700"
             muted={reviewCount === 0}
             complete={false}
           />
-          {reviewCount === 0 && (
-            <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-lg px-2 py-1">
-              <input
-                type="number" min={1} max={100} value={extraReviewCount}
-                onChange={e => setExtraReviewCount(Math.max(1, Number(e.target.value) || 1))}
-                className="w-9 bg-transparent text-white text-xs text-center focus:outline-none"
-              />
-              <button
-                onClick={startExtraReview}
-                className="text-[11px] font-semibold text-sky-200 hover:text-sky-100 inline-flex items-center gap-0.5 transition-colors"
-              >
-                extra <ArrowRightIcon className="w-3 h-3" />
-              </button>
-            </div>
-          )}
         </div>
+
+        {((studyGoalDone || studyCount === 0) || reviewCount === 0) && (
+          <div className="flex gap-3">
+            <div className="flex-1 flex justify-center">
+              {(studyGoalDone || studyCount === 0) && (
+                <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-lg px-2 py-1">
+                  <input
+                    type="number" min={1} max={100} value={extraStudyCount}
+                    onChange={e => setExtraStudyCount(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-9 bg-transparent text-white text-xs text-center focus:outline-none"
+                  />
+                  <button
+                    onClick={startExtraStudy}
+                    className="text-[11px] font-semibold text-amber-200 hover:text-amber-100 inline-flex items-center gap-0.5 transition-colors"
+                  >
+                    extra <ArrowRightIcon className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="flex-1 flex justify-center">
+              {reviewCount === 0 && (
+                <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-lg px-2 py-1">
+                  <input
+                    type="number" min={1} max={100} value={extraReviewCount}
+                    onChange={e => setExtraReviewCount(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-9 bg-transparent text-white text-xs text-center focus:outline-none"
+                  />
+                  <button
+                    onClick={startExtraReview}
+                    className="text-[11px] font-semibold text-sky-200 hover:text-sky-100 inline-flex items-center gap-0.5 transition-colors"
+                  >
+                    extra <ArrowRightIcon className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
