@@ -63,8 +63,8 @@ export default function StatsPage() {
           <div className="flex flex-col gap-3">
             {bars.map(b => (
               <div key={b.id} className="flex items-center gap-3">
-                <div className="flex flex-col items-center gap-0.5 shrink-0 w-10">
-                  <DachshundMascot stage={b.id} className="w-9 h-9" />
+                <div className="flex flex-col items-center gap-0.5 shrink-0 w-12">
+                  <DachshundMascot stage={b.id} className="w-11 h-11" />
                   <span className="text-[10px] font-medium text-stone-500">{STAGE_LABEL[b.id]}</span>
                 </div>
                 <div className="flex-1">

@@ -12,17 +12,28 @@ interface Props {
 
 export default function Logo({ size = 32, variant = 'icon', className }: Props) {
   if (variant === 'full') {
+    // logo.png (v3) is the background-removed artwork only — it no longer
+    // bakes in the "spello" wordmark, so it's added here as real text
+    // (in the same warm amber the rest of the UI uses on this dark green
+    // background) instead of being part of the image.
     return (
-      <Image
-        src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/logo.png`}
-        alt="Spello"
-        width={size}
-        height={Math.round(size * 1.5)}
-        unoptimized
-        priority
-        className={className}
-        style={{ width: size, height: 'auto' }}
-      />
+      <div className={`flex flex-col items-center ${className ?? ''}`}>
+        <Image
+          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/logo.png`}
+          alt=""
+          width={size}
+          height={Math.round(size * 1.14)}
+          unoptimized
+          priority
+          style={{ width: size, height: 'auto' }}
+        />
+        <span
+          className="font-extrabold text-amber-100 tracking-tight -mt-1"
+          style={{ fontSize: Math.round(size * 0.19), textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}
+        >
+          spello
+        </span>
+      </div>
     );
   }
 

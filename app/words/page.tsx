@@ -84,7 +84,7 @@ export default function WordsPage() {
             </div>
             <span className="shrink-0">
               {earned(progress[w.id]) ? (
-                <DachshundMascot stage={progress[w.id].mascotStage} className="w-9 h-9" />
+                <DachshundMascot stage={progress[w.id].mascotStage} className="w-11 h-11" />
               ) : (
                 <span className="flex items-center justify-center px-2.5 py-1.5 rounded-full bg-slate-100">
                   <span className="text-xs font-medium text-stone-500">New</span>

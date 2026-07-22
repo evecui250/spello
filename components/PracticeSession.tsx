@@ -370,13 +370,13 @@ export default function PracticeSession({ mode }: Props) {
     // itself rather than the word "dachshund".
     const earnedContent = earned.length === 0 ? undefined : mode === 'study' ? (
       <span className="inline-flex items-center gap-1.5">
-        <DachshundMascot stage="puppy" className="w-6 h-6" />
+        <DachshundMascot stage="puppy" className="w-7 h-7" />
         {earned.length} pupp{earned.length === 1 ? 'y' : 'ies'} earned today!
       </span>
     ) : (
       <span className="inline-flex items-center gap-1.5 flex-wrap justify-center">
         {STAGE_ORDER.filter(s => stageCounts[s]).map(s => (
-          <DachshundMascot key={s} stage={s} className="w-6 h-6" />
+          <DachshundMascot key={s} stage={s} className="w-7 h-7" />
         ))}
         {earned.length} upgraded today!
       </span>
@@ -396,7 +396,7 @@ export default function PracticeSession({ mode }: Props) {
 
         {mode === 'study' && earned.length > 0 && (
           <div className="mx-auto mb-6 max-w-xs bg-amber-50/75 backdrop-blur-sm border border-amber-100/50 rounded-2xl px-5 py-4 flex flex-col items-center gap-1.5">
-            <DachshundMascot stage="puppy" className="w-16 h-16" />
+            <DachshundMascot stage="puppy" className="w-20 h-20" />
             <p className="text-slate-700 font-semibold">
               {earned.length} pupp{earned.length === 1 ? 'y' : 'ies'} earned today!
             </p>
@@ -411,7 +411,7 @@ export default function PracticeSession({ mode }: Props) {
             <div className="flex flex-wrap justify-center gap-x-5 gap-y-2">
               {STAGE_ORDER.filter(s => stageCounts[s]).map(s => (
                 <div key={s} className="flex items-center gap-1.5">
-                  <DachshundMascot stage={s} className="w-9 h-9" />
+                  <DachshundMascot stage={s} className="w-11 h-11" />
                   <span className="text-slate-600 font-medium text-sm">× {stageCounts[s]}</span>
                 </div>
               ))}
