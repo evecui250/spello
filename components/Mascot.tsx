@@ -2,12 +2,13 @@
 
 import { MascotStageId } from '../lib/storage';
 
-// The user's own artwork (public/four_stages_dog.png), background removed
-// and cropped tight to each dog so the full pose always shows — no square
-// crop, no frame, just the dog itself sized by the caller's className.
+// Puppy and short (the user's own clean vector re-creations, transparent
+// background, no cutout artifacts) use SVG; medium and long-crowned are
+// still the background-removed raster crops until vector versions of those
+// two exist.
 const IMG: Record<MascotStageId, string> = {
-  puppy: 'mascot_puppy.png',
-  short: 'mascot_short.png',
+  puppy: 'mascot_puppy.svg',
+  short: 'mascot_short.svg',
   medium: 'mascot_medium.png',
   'long-crowned': 'mascot_long-crowned.png',
 };

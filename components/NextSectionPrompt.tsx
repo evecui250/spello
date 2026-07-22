@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 
 interface Props {
   // Which section the user should go do next.
@@ -8,7 +9,7 @@ interface Props {
   onDismiss: () => void;
   // Shown above the message so it's never missed — this modal pops up the
   // instant a session finishes and covers the summary underneath it.
-  earnedText?: string;
+  earnedContent?: ReactNode;
 }
 
 const COPY = {
@@ -24,7 +25,7 @@ const COPY = {
   },
 } as const;
 
-export default function NextSectionPrompt({ section, onDismiss, earnedText }: Props) {
+export default function NextSectionPrompt({ section, onDismiss, earnedContent }: Props) {
   const copy = COPY[section];
   return (
     <div
@@ -36,9 +37,9 @@ export default function NextSectionPrompt({ section, onDismiss, earnedText }: Pr
         onClick={e => e.stopPropagation()}
       >
         <div className="text-4xl">👉</div>
-        {earnedText && (
+        {earnedContent && (
           <p className="-mt-2 text-sm font-semibold text-amber-700 bg-amber-100 rounded-full px-3 py-1">
-            {earnedText}
+            {earnedContent}
           </p>
         )}
         <p className="text-slate-700 font-medium">{copy.message}</p>

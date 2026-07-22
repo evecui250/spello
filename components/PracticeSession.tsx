@@ -358,12 +358,21 @@ export default function PracticeSession({ mode }: Props) {
     for (const e of earned) stageCounts[e.mascotStage] = (stageCounts[e.mascotStage] ?? 0) + 1;
     // The modals below pop up immediately and cover this screen, so they
     // need their own copy of the tally — otherwise a user who taps the
-    // modal's CTA right away never sees it.
-    const earnedText = earned.length > 0
-      ? mode === 'study'
-        ? `🐕 ${earned.length} dachshund puppy${earned.length === 1 ? '' : ' puppies'} earned today!`
-        : `🐕 ${earned.length} dachshund${earned.length === 1 ? '' : 's'} upgraded today!`
-      : undefined;
+    // modal's CTA right away never sees it. Shown with the mascot image
+    // itself rather than the word "dachshund".
+    const earnedContent = earned.length === 0 ? undefined : mode === 'study' ? (
+      <span className="inline-flex items-center gap-1.5">
+        <DachshundMascot stage="puppy" className="w-6 h-6" />
+        {earned.length} pupp{earned.length === 1 ? 'y' : 'ies'} earned today!
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1.5 flex-wrap justify-center">
+        {STAGE_ORDER.filter(s => stageCounts[s]).map(s => (
+          <DachshundMascot key={s} stage={s} className="w-6 h-6" />
+        ))}
+        {earned.length} upgraded today!
+      </span>
+    );
 
     return (
       <div className="text-center py-16">
@@ -381,7 +390,7 @@ export default function PracticeSession({ mode }: Props) {
           <div className="mx-auto mb-6 max-w-xs bg-amber-50/75 backdrop-blur-sm border border-amber-100/50 rounded-2xl px-5 py-4 flex flex-col items-center gap-1.5">
             <DachshundMascot stage="puppy" className="w-16 h-16" />
             <p className="text-slate-700 font-semibold">
-              {earned.length} dachshund puppy{earned.length === 1 ? '' : ' puppies'} earned today!
+              {earned.length} pupp{earned.length === 1 ? 'y' : 'ies'} earned today!
             </p>
           </div>
         )}
@@ -389,7 +398,7 @@ export default function PracticeSession({ mode }: Props) {
         {mode === 'review' && earned.length > 0 && (
           <div className="mx-auto mb-6 max-w-xs bg-amber-50/75 backdrop-blur-sm border border-amber-100/50 rounded-2xl px-5 py-4 flex flex-col items-center gap-3">
             <p className="text-slate-700 font-semibold">
-              {earned.length} dachshund{earned.length === 1 ? '' : 's'} upgraded today
+              {earned.length} upgraded today
             </p>
             <div className="flex flex-wrap justify-center gap-x-5 gap-y-2">
               {STAGE_ORDER.filter(s => stageCounts[s]).map(s => (
@@ -419,11 +428,11 @@ export default function PracticeSession({ mode }: Props) {
             reviewedCount={dailyStats.reviewedCount}
             language={LANG_NAMES[settings?.language ?? 'de'] ?? 'German'}
             onClose={() => setShowCongrats(false)}
-            earnedText={earnedText}
+            earnedContent={earnedContent}
           />
         )}
         {nudge && (
-          <NextSectionPrompt section={nudge} onDismiss={() => setNudge(null)} earnedText={earnedText} />
+          <NextSectionPrompt section={nudge} onDismiss={() => setNudge(null)} earnedContent={earnedContent} />
         )}
       </div>
     );
