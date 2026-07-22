@@ -16,11 +16,17 @@ export default function WordsPage() {
     setProgress(getAllProgress());
   }, []);
 
+  // A word only "earns" its puppy the first time it clears round 5 —
+  // studiedTimes stays 0 while it's still mid-ladder (rounds 1-4), even
+  // though it already has a progress record. Until then it still reads as
+  // New, same as a word that hasn't been touched at all.
+  const earned = (p?: WordProgress) => !!p && p.studiedTimes > 0;
+
   const filtered = WORDS.filter(w => {
     const p = progress[w.id];
-    if (filterLevel === 'new' && p) return false;
+    if (filterLevel === 'new' && earned(p)) return false;
     if (filterLevel === 'mastered' && !p?.fullyMastered) return false;
-    if (filterLevel === 'learning' && (!p || p.fullyMastered)) return false;
+    if (filterLevel === 'learning' && (!earned(p) || p?.fullyMastered)) return false;
     if (filterCategory !== 'all' && w.category !== filterCategory) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -77,7 +83,7 @@ export default function WordsPage() {
               <div className="text-stone-500 text-sm">{w.en}</div>
             </div>
             <span className="shrink-0">
-              {progress[w.id] ? (
+              {earned(progress[w.id]) ? (
                 <DachshundMascot stage={progress[w.id].mascotStage} className="w-9 h-9" />
               ) : (
                 <span className="flex items-center justify-center px-2.5 py-1.5 rounded-full bg-slate-100">

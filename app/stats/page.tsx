@@ -28,9 +28,10 @@ export default function StatsPage() {
     let introduced = 0;
     for (const w of WORDS) {
       const p = progress[w.id];
-      // Only words that have actually been started belong in the mascot
-      // breakdown — everything else is just an untouched word, not a puppy.
-      if (!p) continue;
+      // A word only earns its puppy the first time it clears round 5 —
+      // still climbing the round 1-4 ladder doesn't count yet, even though
+      // it already has a progress record.
+      if (!p || p.studiedTimes === 0) continue;
       introduced++;
       counts[p.mascotStage] += 1;
       if (p.fullyMastered) mastered++;

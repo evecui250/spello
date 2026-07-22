@@ -116,6 +116,7 @@ export default function HomePage() {
   const [extraStudyCount, setExtraStudyCount] = useState(10);
   const [extraReviewCount, setExtraReviewCount] = useState(10);
   const [ready, setReady] = useState(false);
+  const [showMasteredInfo, setShowMasteredInfo] = useState(false);
 
   useEffect(() => {
     if (!isOnboardingDone()) {
@@ -131,10 +132,11 @@ export default function HomePage() {
       setStreak(getStreak().count);
       const progress = getAllProgress();
       setMasteredCount(Object.values(progress).filter(p => p.fullyMastered).length);
-      // "Learning" = has any progress at all and isn't fully mastered yet —
-      // matches the Words page's definition, which counts round 1-4 words
-      // (no coin earned yet) as learning too, not just round-5-with-a-coin ones.
-      setLearningCount(Object.values(progress).filter(p => !p.fullyMastered).length);
+      // "Learning" = has earned its first puppy (cleared round 5 at least
+      // once) and isn't fully mastered yet — matches the Words page's
+      // definition. A word still mid-ladder (rounds 1-4, no puppy earned
+      // yet) doesn't count here, same as it shows "New" there.
+      setLearningCount(Object.values(progress).filter(p => p.studiedTimes > 0 && !p.fullyMastered).length);
       const settings = getSettings();
       // If today's study batch was already drawn (and possibly partly
       // finished), show how many of it are left rather than a fresh count.
@@ -174,15 +176,27 @@ export default function HomePage() {
 
   return (
     <div className="relative flex flex-col items-center gap-9 py-4">
-      {/* How many words have reached the mastered (crowned) stage */}
-      <div className="absolute top-0 right-0 flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-full pl-1.5 pr-3 py-1">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/mascot_long-crowned.png`}
-          alt="Mastered (crowned) dachshunds"
-          className="w-7 h-7 object-contain"
-        />
-        <span className="font-bold text-white text-sm">{masteredCount}</span>
+      {/* How many words have reached the mastered (crowned) stage — tap to
+          see what the count means, tap again to dismiss. */}
+      <div className="absolute top-0 right-0">
+        <button
+          type="button"
+          onClick={() => setShowMasteredInfo(v => !v)}
+          className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-full pl-1.5 pr-3 py-1"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/mascot_long-crowned.svg`}
+            alt="Mastered (crowned) dachshunds"
+            className="w-7 h-7 object-contain"
+          />
+          <span className="font-bold text-white text-sm">{masteredCount}</span>
+        </button>
+        {showMasteredInfo && (
+          <div className="absolute top-full right-0 mt-2 z-10 w-48 bg-amber-50/95 backdrop-blur-sm border border-amber-100 rounded-xl px-3 py-2 text-sm text-stone-700 shadow-lg">
+            You've mastered {masteredCount} word{masteredCount === 1 ? '' : 's'} so far.
+          </div>
+        )}
       </div>
 
       {FIREFLIES_HOME.map((f, i) => (
@@ -195,7 +209,7 @@ export default function HomePage() {
       ))}
 
       <div className="flex flex-col items-center gap-1">
-        <Logo variant="icon" size={52} className="ring-2 ring-white/20" />
+        <Logo variant="full" size={140} />
         <p className="text-emerald-100/70 text-xs tracking-wide mt-1">Master spelling, one word at a time.</p>
       </div>
 

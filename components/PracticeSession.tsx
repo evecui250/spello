@@ -238,6 +238,9 @@ export default function PracticeSession({ mode }: Props) {
   const checkDailyCompletion = () => {
     const stats = getDailyStats();
     if (stats.studyDone && stats.reviewDone) {
+      // The streak only counts a day once BOTH goals are done — finishing
+      // just one of them isn't enough, whichever order they're done in.
+      touchStreak();
       if (!stats.congratsShown) {
         markCongratsShown();
         setShowCongrats(true);
@@ -256,7 +259,6 @@ export default function PracticeSession({ mode }: Props) {
       setQueue(rest);
       if (rest.length === 0) {
         setSessionDone(true);
-        touchStreak();
         scheduleSync();
         if (!isExtraRef.current) {
           const wasDone = goalDoneAtStartRef.current;
@@ -273,7 +275,6 @@ export default function PracticeSession({ mode }: Props) {
       if (rest.length === 0) {
         setHasMoreReview(buildReviewWords(1, doneIds, isExtraReviewRef.current).length > 0);
         setSessionDone(true);
-        touchStreak();
         scheduleSync();
         if (!isExtraReviewRef.current) {
           const wasDone = reviewGoalDoneAtStartRef.current;

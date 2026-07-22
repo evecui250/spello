@@ -2,15 +2,14 @@
 
 import { MascotStageId } from '../lib/storage';
 
-// Puppy and short (the user's own clean vector re-creations, transparent
-// background, no cutout artifacts) use SVG; medium and long-crowned are
-// still the background-removed raster crops until vector versions of those
-// two exist.
+// Puppy, short, and long-crowned (the user's own clean vector re-creations,
+// transparent background, no cutout artifacts) use SVG; medium is still the
+// background-removed raster crop until a vector version exists.
 const IMG: Record<MascotStageId, string> = {
   puppy: 'mascot_puppy.svg',
   short: 'mascot_short.svg',
   medium: 'mascot_medium.png',
-  'long-crowned': 'mascot_long-crowned.png',
+  'long-crowned': 'mascot_long-crowned.svg',
 };
 
 interface Props {

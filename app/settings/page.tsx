@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getSettings, saveSettings, clearAllProgress, Settings } from '../../lib/storage';
-import { estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
+import { estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
 import { scheduleSync } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 
@@ -50,6 +50,10 @@ export default function SettingsPage() {
       studyBatchSize, dailyReview, language, level, autoPlayAudio, requireArticle, ...patch,
     };
     saveSettings(next);
+    // Review's daily pool is always computed fresh from due words, so a
+    // dailyReview change is already instant. Study's batch is fixed for the
+    // day once drawn, so it needs an explicit resize to feel the change today.
+    if (patch.studyBatchSize !== undefined) resizeTodayStudyBatch(patch.studyBatchSize);
     scheduleSync();
     setSaved(true);
     clearTimeout(savedTimer.current);
@@ -116,7 +120,7 @@ export default function SettingsPage() {
               }}
               className="flex-1 accent-indigo-600"
             />
-            <span className="w-8 text-center font-bold text-indigo-700">{studyBatchSize}</span>
+            <span className="w-8 text-center font-bold text-stone-800">{studyBatchSize}</span>
           </div>
         </div>
 
@@ -134,11 +138,11 @@ export default function SettingsPage() {
               }}
               className="flex-1 accent-indigo-600"
             />
-            <span className="w-8 text-center font-bold text-indigo-700">{dailyReview}</span>
+            <span className="w-8 text-center font-bold text-stone-800">{dailyReview}</span>
           </div>
           {dailyReview !== recommendedReview && (
             <div className="flex items-center justify-between gap-2 mt-2 bg-amber-100/60 rounded-lg px-3 py-2 text-sm">
-              <span className="text-amber-800">
+              <span className="text-stone-800">
                 💡 Recommended: <strong>{recommendedReview}</strong> for a {studyBatchSize}/day study pace
               </span>
               <button
@@ -151,7 +155,7 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <div className="bg-amber-100/60 rounded-xl px-4 py-3 text-sm text-amber-800 flex items-center justify-between gap-3">
+        <div className="bg-amber-100/60 rounded-xl px-4 py-3 text-sm text-stone-800 flex items-center justify-between gap-3">
           <span className="font-semibold shrink-0">At this pace</span>
           <span className="text-right">
             {forecast.wordsRemaining === 0
@@ -160,7 +164,7 @@ export default function SettingsPage() {
             {' · '}~{forecast.daysToMasterAll} days to master all
           </span>
         </div>
-        <p className="text-amber-700/60 text-xs -mt-4">
+        <p className="text-stone-500 text-xs -mt-4">
           Mastery is now based on spaced-repetition strength, not a fixed review count — see your dachshund's stage on each word.
         </p>
 
@@ -195,8 +199,8 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="bg-amber-50/70 backdrop-blur-sm border border-amber-100/50 rounded-2xl p-4 text-sm text-amber-700">
-        Changes apply starting with your next practice session — an in-progress one keeps its original settings.
+      <div className="bg-amber-50/70 backdrop-blur-sm border border-amber-100/50 rounded-2xl p-4 text-sm text-stone-600">
+        Pace changes apply to today right away. A practice session already open keeps running with whatever it started with until you leave and come back.
       </div>
 
       <div className="bg-red-50/70 backdrop-blur-sm rounded-2xl border border-red-200/50 shadow-sm p-6 flex flex-col gap-3">

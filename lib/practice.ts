@@ -1,7 +1,10 @@
 'use client';
 
 import { WORDS, Word } from './words';
-import { getAllProgress, getSettings, today, MAX_ROUND, Round, WordProgress } from './storage';
+import {
+  getAllProgress, getSettings, today, MAX_ROUND, Round, WordProgress,
+  getTodayStudyBatch, saveTodayStudyBatch,
+} from './storage';
 import { recordRound5Success, simulateDaysToMastery } from './srs';
 
 // Reviews always start from this baseline difficulty — the word isn't new,
@@ -24,16 +27,45 @@ export function wordsById(ids: string[]): Word[] {
 // Words already in progress (abandoned mid-ladder) are prioritized over
 // brand-new ones, so an unfinished word gets picked up again before more
 // new words are introduced.
-export function buildStudyWords(limit = getSettings().studyBatchSize): Word[] {
+export function buildStudyWords(
+  limit = getSettings().studyBatchSize,
+  excludeIds: Set<string> = new Set(),
+): Word[] {
   const allProgress = getAllProgress();
   const inProgress: Word[] = [];
   const fresh: Word[] = [];
   for (const w of WORDS) {
+    if (excludeIds.has(w.id)) continue;
     const p = allProgress[w.id];
     if (!p) fresh.push(w);
     else if (!p.fullyMastered && p.round < MAX_ROUND) inProgress.push(w);
   }
   return [...shuffled(inProgress), ...shuffled(fresh)].slice(0, limit);
+}
+
+// Called when the user changes "New words per day" in Settings, so the
+// change is felt today instead of waiting for tomorrow's fresh batch.
+// Growing pulls in more words (never re-shuffling ones already assigned);
+// shrinking drops from the not-yet-finished tail first, but never below
+// however many are already done today — a smaller pace shouldn't undo
+// progress already made.
+export function resizeTodayStudyBatch(newSize: number): void {
+  const existing = getTodayStudyBatch();
+  if (!existing) return; // nothing drawn yet today — the next draw uses the new size naturally
+
+  const allProgress = getAllProgress();
+  const isDone = (id: string) => (allProgress[id]?.round ?? 1) >= MAX_ROUND;
+  const doneIds = existing.filter(isDone);
+  const pendingIds = existing.filter(id => !isDone(id));
+  const targetSize = Math.max(newSize, doneIds.length);
+
+  if (targetSize > existing.length) {
+    const extra = buildStudyWords(targetSize - existing.length, new Set(existing));
+    saveTodayStudyBatch([...existing, ...extra.map(w => w.id)]);
+  } else if (targetSize < existing.length) {
+    const keepPending = pendingIds.slice(0, targetSize - doneIds.length);
+    saveTodayStudyBatch([...doneIds, ...keepPending]);
+  }
 }
 
 // Review pool: words that have earned at least one coin (reached round 5 and
