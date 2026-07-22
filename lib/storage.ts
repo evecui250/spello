@@ -261,6 +261,15 @@ export function setStudyGoalDoneFlag(done: boolean): void {
   saveDailyStats(stats);
 }
 
+// Same idea for Review: lets Home mark the goal met when there's genuinely
+// nothing due today, rather than only ever setting it from within an actual
+// review session (see app/page.tsx).
+export function setReviewGoalDoneFlag(done: boolean): void {
+  const stats = getDailyStats();
+  stats.reviewDone = done;
+  saveDailyStats(stats);
+}
+
 // Records that a review batch finished. `count` is added, since a user can
 // review multiple batches ("Review more") across the day.
 export function markReviewGoalDone(count: number): DailyStats {

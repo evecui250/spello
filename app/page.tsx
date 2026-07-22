@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   getStreak, getAllProgress, getSettings, isStudyGoalDoneToday, isReviewGoalDoneToday, setExtraStudyLimit,
   setExtraReviewLimit, getTodayStudyBatch, getWordProgress, MAX_ROUND, isOnboardingDone,
+  setStudyGoalDoneFlag, setReviewGoalDoneFlag,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords, wordsById } from '../lib/practice';
 import { WORDS } from '../lib/words';
@@ -117,7 +118,6 @@ export default function HomePage() {
   const [extraStudyCount, setExtraStudyCount] = useState(10);
   const [extraReviewCount, setExtraReviewCount] = useState(10);
   const [ready, setReady] = useState(false);
-  const [showMasteredInfo, setShowMasteredInfo] = useState(false);
 
   useEffect(() => {
     if (!isOnboardingDone()) {
@@ -145,8 +145,15 @@ export default function HomePage() {
       const remainingToday = todayBatch
         ? wordsById(todayBatch).filter(w => getWordProgress(w.id).round < MAX_ROUND).length
         : buildStudyWords(settings.studyBatchSize).length;
+      const dueForReview = buildReviewWords(settings.dailyReview).length;
+      // Genuinely nothing left to do today (no new words to draw, or no
+      // review due yet) means the goal is met, not "stuck at 0" — otherwise
+      // the card sits dim forever instead of matching the other one's
+      // bright "all done" look once nothing's actionable.
+      if (remainingToday === 0 && !isStudyGoalDoneToday()) setStudyGoalDoneFlag(true);
+      if (dueForReview === 0 && !isReviewGoalDoneToday()) setReviewGoalDoneFlag(true);
       setStudyCount(remainingToday);
-      setReviewCount(buildReviewWords(settings.dailyReview).length);
+      setReviewCount(dueForReview);
       setStudyGoalDone(isStudyGoalDoneToday());
       setReviewGoalDone(isReviewGoalDoneToday());
       setReady(true);
@@ -178,29 +185,6 @@ export default function HomePage() {
 
   return (
     <div className="relative flex flex-col items-center gap-9 py-4">
-      {/* How many words have reached the mastered (crowned) stage — tap to
-          see what the count means, tap again to dismiss. */}
-      <div className="absolute top-0 right-0">
-        <button
-          type="button"
-          onClick={() => setShowMasteredInfo(v => !v)}
-          className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-full pl-1.5 pr-3 py-1"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/mascot_long-crowned.svg`}
-            alt="Mastered (crowned) dachshunds"
-            className="w-7 h-7 object-contain"
-          />
-          <span className="font-bold text-white text-sm">{masteredCount}</span>
-        </button>
-        {showMasteredInfo && (
-          <div className="absolute top-full right-0 mt-2 z-10 w-48 bg-amber-50/95 backdrop-blur-sm border border-amber-100 rounded-xl px-3 py-2 text-sm text-stone-700 shadow-lg">
-            You've mastered {masteredCount} word{masteredCount === 1 ? '' : 's'} so far.
-          </div>
-        )}
-      </div>
-
       {FIREFLIES_HOME.map((f, i) => (
         <span
           key={i}
