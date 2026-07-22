@@ -109,6 +109,29 @@ async function pushToRemote(userId: string): Promise<void> {
   }
 }
 
+// The event fired on window once a signed-in pull-and-merge finishes, so
+// any already-mounted page can pick up the freshly merged data instead of
+// only ever seeing whatever was in local storage at its own mount time.
+export const SYNCED_EVENT = 'spello:synced';
+
+// Subscribes to auth state and pulls+merges remote progress whenever a
+// session becomes available — on initial load AND right after sign-in.
+// Meant to be mounted once, globally (see components/SyncGate.tsx), so
+// every page benefits regardless of which one the user lands on first;
+// previously this only ran on Settings, since AccountPanel was the only
+// thing wired to it, leaving Home stuck showing stale/empty local data
+// until the user happened to visit Settings.
+export function watchAuthAndSync(): () => void {
+  const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+    if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+      pullAndMerge(session.user.id).then(() => {
+        window.dispatchEvent(new Event(SYNCED_EVENT));
+      });
+    }
+  });
+  return () => sub.subscription.unsubscribe();
+}
+
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Call after any local mutation. Debounced and a no-op when signed out, so

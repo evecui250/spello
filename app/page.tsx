@@ -9,6 +9,7 @@ import {
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords, wordsById } from '../lib/practice';
 import { WORDS } from '../lib/words';
+import { SYNCED_EVENT } from '../lib/sync';
 import Logo from '../components/Logo';
 import {
   FlameIcon, SproutIcon, StarIcon, LayersIcon, ArrowRightIcon, CheckCircleIcon,
@@ -39,45 +40,63 @@ function StatBubble({ stat }: { stat: BubbleStat }) {
   );
 }
 
-// A plain panel button — icon, label, and a count or a checkmark once
-// today's goal is met. No skeuomorphism, just a clear tappable bar.
+// A panel button — a glowing gradient medallion, label, and a count or a
+// checkmark once today's goal is met. When there's nothing left to do, an
+// "extra" stepper lives right in the same card instead of floating loose
+// below it — it's a sibling of the Link (not nested inside it), so its
+// input/button stay independently clickable.
 function SectionButton({
-  href, label, count, Icon, accent, muted, complete,
+  href, label, count, Icon, gradient, glow, muted, complete, extra,
 }: {
   href: string;
   label: string;
   count: number;
   Icon: (props: { className?: string }) => React.JSX.Element;
-  accent: string;
+  gradient: string;
+  glow: string;
   muted: boolean;
   complete: boolean;
+  extra?: { value: number; onChange: (n: number) => void; onStart: () => void; tone: string };
 }) {
-  const body = (
+  return (
     <div
-      className={`flex-1 flex items-center gap-3 rounded-2xl border px-4 py-4 transition-transform ${
+      className={`flex-1 rounded-2xl border overflow-hidden transition-transform ${
         muted
-          ? 'bg-amber-50/40 backdrop-blur-sm border-amber-100/30 opacity-70'
+          ? 'bg-amber-50/40 backdrop-blur-sm border-amber-100/30 opacity-80'
           : 'bg-amber-50/75 backdrop-blur-sm border-amber-100/50 shadow-sm hover:scale-[1.03]'
       }`}
     >
-      <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 ${accent}`}>
-        <Icon className="w-5 h-5 text-white" />
-      </div>
-      <div className="flex-1 min-w-0 text-left">
-        <div className="font-semibold text-stone-800">{label}</div>
-        <div className="text-sm text-stone-500">
-          {complete ? 'All done today' : `${count} word${count === 1 ? '' : 's'}`}
+      <Link href={href} className="flex items-center gap-3 px-4 py-4">
+        <div
+          className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 ring-1 ring-black/10"
+          style={{ backgroundImage: gradient, boxShadow: `0 0 14px 1px ${glow}` }}
+        >
+          <Icon className="w-5 h-5 text-white drop-shadow-sm" />
         </div>
-      </div>
-      {complete && <CheckCircleIcon className="w-5 h-5 text-emerald-600 shrink-0" />}
+        <div className="flex-1 min-w-0 text-left">
+          <div className="font-semibold text-stone-800">{label}</div>
+          <div className="text-sm text-stone-500">
+            {complete ? 'All done today' : `${count} word${count === 1 ? '' : 's'}`}
+          </div>
+        </div>
+        {complete && <CheckCircleIcon className="w-5 h-5 text-emerald-600 shrink-0" />}
+      </Link>
+      {extra && (
+        <div className="flex items-center gap-1.5 border-t border-amber-900/10 px-3 py-2">
+          <input
+            type="number" min={1} max={100} value={extra.value}
+            onChange={e => extra.onChange(Math.max(1, Number(e.target.value) || 1))}
+            className="w-9 bg-transparent text-stone-700 text-xs text-center focus:outline-none"
+          />
+          <button
+            onClick={extra.onStart}
+            className={`text-[11px] font-semibold inline-flex items-center gap-0.5 transition-colors ${extra.tone}`}
+          >
+            extra <ArrowRightIcon className="w-3 h-3" />
+          </button>
+        </div>
+      )}
     </div>
-  );
-
-  if (muted) return body;
-  return (
-    <Link href={href} className="flex-1 flex">
-      {body}
-    </Link>
   );
 }
 
@@ -103,24 +122,34 @@ export default function HomePage() {
       router.replace('/welcome');
       return;
     }
-    setStreak(getStreak().count);
-    const progress = getAllProgress();
-    setMasteredCount(Object.values(progress).filter(p => p.fullyMastered).length);
-    // "Learning" = has any progress at all and isn't fully mastered yet —
-    // matches the Words page's definition, which counts round 1-4 words
-    // (no coin earned yet) as learning too, not just round-5-with-a-coin ones.
-    setLearningCount(Object.values(progress).filter(p => !p.fullyMastered).length);
-    const settings = getSettings();
-    // If today's study batch was already drawn (and possibly partly
-    // finished), show how many of it are left rather than a fresh count.
-    const todayBatch = getTodayStudyBatch();
-    const remainingToday = todayBatch
-      ? wordsById(todayBatch).filter(w => getWordProgress(w.id).round < MAX_ROUND).length
-      : buildStudyWords(settings.studyBatchSize).length;
-    setStudyCount(remainingToday);
-    setReviewCount(buildReviewWords(settings.dailyReview).length);
-    setStudyGoalDone(isStudyGoalDoneToday());
-    setReady(true);
+    // Runs on mount (whatever's already in local storage), and again once
+    // a signed-in pull-and-merge finishes — otherwise a returning user who
+    // lands here before that async pull resolves sees a stale/empty local
+    // state (e.g. "nothing to review") until they happen to visit Settings,
+    // the only page that used to trigger the pull.
+    const load = () => {
+      setStreak(getStreak().count);
+      const progress = getAllProgress();
+      setMasteredCount(Object.values(progress).filter(p => p.fullyMastered).length);
+      // "Learning" = has any progress at all and isn't fully mastered yet —
+      // matches the Words page's definition, which counts round 1-4 words
+      // (no coin earned yet) as learning too, not just round-5-with-a-coin ones.
+      setLearningCount(Object.values(progress).filter(p => !p.fullyMastered).length);
+      const settings = getSettings();
+      // If today's study batch was already drawn (and possibly partly
+      // finished), show how many of it are left rather than a fresh count.
+      const todayBatch = getTodayStudyBatch();
+      const remainingToday = todayBatch
+        ? wordsById(todayBatch).filter(w => getWordProgress(w.id).round < MAX_ROUND).length
+        : buildStudyWords(settings.studyBatchSize).length;
+      setStudyCount(remainingToday);
+      setReviewCount(buildReviewWords(settings.dailyReview).length);
+      setStudyGoalDone(isStudyGoalDoneToday());
+      setReady(true);
+    };
+    load();
+    window.addEventListener(SYNCED_EVENT, load);
+    return () => window.removeEventListener(SYNCED_EVENT, load);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -174,66 +203,35 @@ export default function HomePage() {
         {stats.map(s => <StatBubble key={s.label} stat={s} />)}
       </div>
 
-      <div className="w-full flex flex-col gap-3">
-        <div className="flex gap-3">
-          <SectionButton
-            href="/practice/study"
-            label="Study"
-            count={studyGoalDone ? 0 : studyCount}
-            Icon={BookIcon}
-            accent="bg-amber-600"
-            muted={!studyGoalDone && studyCount === 0}
-            complete={studyGoalDone}
-          />
-          <SectionButton
-            href="/practice/review"
-            label="Review"
-            count={reviewCount}
-            Icon={RefreshIcon}
-            accent="bg-sky-700"
-            muted={reviewCount === 0}
-            complete={false}
-          />
-        </div>
-
-        {((studyGoalDone || studyCount === 0) || reviewCount === 0) && (
-          <div className="flex gap-3">
-            <div className="flex-1 flex justify-center">
-              {(studyGoalDone || studyCount === 0) && (
-                <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-lg px-2 py-1">
-                  <input
-                    type="number" min={1} max={100} value={extraStudyCount}
-                    onChange={e => setExtraStudyCount(Math.max(1, Number(e.target.value) || 1))}
-                    className="w-9 bg-transparent text-white text-xs text-center focus:outline-none"
-                  />
-                  <button
-                    onClick={startExtraStudy}
-                    className="text-[11px] font-semibold text-amber-200 hover:text-amber-100 inline-flex items-center gap-0.5 transition-colors"
-                  >
-                    extra <ArrowRightIcon className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="flex-1 flex justify-center">
-              {reviewCount === 0 && (
-                <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/15 rounded-lg px-2 py-1">
-                  <input
-                    type="number" min={1} max={100} value={extraReviewCount}
-                    onChange={e => setExtraReviewCount(Math.max(1, Number(e.target.value) || 1))}
-                    className="w-9 bg-transparent text-white text-xs text-center focus:outline-none"
-                  />
-                  <button
-                    onClick={startExtraReview}
-                    className="text-[11px] font-semibold text-sky-200 hover:text-sky-100 inline-flex items-center gap-0.5 transition-colors"
-                  >
-                    extra <ArrowRightIcon className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+      <div className="w-full flex gap-3">
+        <SectionButton
+          href="/practice/study"
+          label="Study"
+          count={studyGoalDone ? 0 : studyCount}
+          Icon={BookIcon}
+          gradient="radial-gradient(circle at 32% 28%, #f0b558, #a5590f)"
+          glow="rgba(245,158,11,0.35)"
+          muted={!studyGoalDone && studyCount === 0}
+          complete={studyGoalDone}
+          extra={(studyGoalDone || studyCount === 0) ? {
+            value: extraStudyCount, onChange: setExtraStudyCount, onStart: startExtraStudy,
+            tone: 'text-amber-700 hover:text-amber-900',
+          } : undefined}
+        />
+        <SectionButton
+          href="/practice/review"
+          label="Review"
+          count={reviewCount}
+          Icon={RefreshIcon}
+          gradient="radial-gradient(circle at 32% 28%, #4fd1c5, #0f6d63)"
+          glow="rgba(45,212,191,0.35)"
+          muted={reviewCount === 0}
+          complete={false}
+          extra={reviewCount === 0 ? {
+            value: extraReviewCount, onChange: setExtraReviewCount, onStart: startExtraReview,
+            tone: 'text-teal-700 hover:text-teal-900',
+          } : undefined}
+        />
       </div>
     </div>
   );

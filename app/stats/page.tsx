@@ -17,6 +17,7 @@ export default function StatsPage() {
   const [stageCounts, setStageCounts] = useState<Record<MascotStageId, number>>({
     puppy: 0, short: 0, medium: 0, 'long-crowned': 0,
   });
+  const [introducedCount, setIntroducedCount] = useState(0);
   const [masteredCount, setMasteredCount] = useState(0);
   const [streak, setStreak] = useState(0);
 
@@ -24,17 +25,22 @@ export default function StatsPage() {
     const progress = getAllProgress();
     const counts: Record<MascotStageId, number> = { puppy: 0, short: 0, medium: 0, 'long-crowned': 0 };
     let mastered = 0;
+    let introduced = 0;
     for (const w of WORDS) {
       const p = progress[w.id];
-      counts[p?.mascotStage ?? 'puppy'] += 1;
-      if (p?.fullyMastered) mastered++;
+      // Only words that have actually been started belong in the mascot
+      // breakdown — everything else is just an untouched word, not a puppy.
+      if (!p) continue;
+      introduced++;
+      counts[p.mascotStage] += 1;
+      if (p.fullyMastered) mastered++;
     }
     setStageCounts(counts);
+    setIntroducedCount(introduced);
     setMasteredCount(mastered);
     setStreak(getStreak().count);
   }, []);
 
-  const total = WORDS.length;
   const bars = STAGE_ORDER.map(id => ({
     id,
     count: stageCounts[id],
@@ -52,51 +58,35 @@ export default function StatsPage() {
         </div>
         <div className="flex items-center justify-between">
           <span className="font-semibold text-stone-800">Words Mastered</span>
-          <span className="text-2xl font-bold text-green-600">{masteredCount} / {total}</span>
+          <span className="text-2xl font-bold text-green-600">{masteredCount} / {WORDS.length}</span>
         </div>
       </div>
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
         <h2 className="font-semibold text-stone-800 mb-1">Mascot stage breakdown</h2>
         <p className="text-stone-500 text-sm mb-4">
-          Each word's dachshund grows as its spaced-repetition mastery score rises.
+          Each started word's dachshund grows as its spaced-repetition mastery score rises.
         </p>
-        <div className="flex flex-col gap-3">
-          {bars.map(b => (
-            <div key={b.id} className="flex items-center gap-3">
-              <DachshundMascot stage={b.id} className="w-9 h-9 shrink-0" />
-              <div className="flex-1">
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-3 rounded-full ${b.color} transition-all`}
-                    style={{ width: `${total > 0 ? (b.count / total) * 100 : 0}%` }}
-                  />
+        {introducedCount === 0 ? (
+          <p className="text-stone-500 text-sm">Study a few words to start growing your first dachshund.</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {bars.map(b => (
+              <div key={b.id} className="flex items-center gap-3">
+                <DachshundMascot stage={b.id} className="w-9 h-9 shrink-0" />
+                <div className="flex-1">
+                  <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-3 rounded-full ${b.color} transition-all`}
+                      style={{ width: `${(b.count / introducedCount) * 100}%` }}
+                    />
+                  </div>
                 </div>
+                <span className="text-stone-500 text-sm w-10 text-right shrink-0">{b.count}</span>
               </div>
-              <span className="text-stone-500 text-sm w-10 text-right shrink-0">{b.count}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Stacked bar */}
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
-        <h2 className="font-semibold text-stone-800 mb-3">Overall progress</h2>
-        <div className="h-6 rounded-full overflow-hidden flex">
-          {bars.map(b => (
-            <div
-              key={b.id}
-              className={b.color}
-              style={{ width: `${total > 0 ? (b.count / total) * 100 : 0}%` }}
-              title={`${b.id}: ${b.count}`}
-            />
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-4 mt-3">
-          {bars.map(b => (
-            <DachshundMascot key={b.id} stage={b.id} className="w-8 h-8" />
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

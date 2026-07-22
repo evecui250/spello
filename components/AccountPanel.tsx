@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { pullAndMerge } from '../lib/sync';
+import { SYNCED_EVENT } from '../lib/sync';
 
 interface Props {
   // Called after remote data has been pulled and merged in, so the caller
@@ -17,13 +17,17 @@ export default function AccountPanel({ onSync }: Props) {
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setEmail(session?.user.email ?? null);
-      if (session?.user && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        pullAndMerge(session.user.id).then(() => onSync?.());
-      }
     });
-    return () => sub.subscription.unsubscribe();
+    // The actual pull+merge runs once, globally (see SyncGate) — this just
+    // refreshes whatever this page is already showing once that lands.
+    const onSynced = () => onSync?.();
+    window.addEventListener(SYNCED_EVENT, onSynced);
+    return () => {
+      sub.subscription.unsubscribe();
+      window.removeEventListener(SYNCED_EVENT, onSynced);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
