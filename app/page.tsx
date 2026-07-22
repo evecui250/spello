@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  getStreak, getAllProgress, getSettings, isStudyGoalDoneToday, setExtraStudyLimit,
+  getStreak, getAllProgress, getSettings, isStudyGoalDoneToday, isReviewGoalDoneToday, setExtraStudyLimit,
   setExtraReviewLimit, getTodayStudyBatch, getWordProgress, MAX_ROUND, isOnboardingDone,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords, wordsById } from '../lib/practice';
@@ -113,6 +113,7 @@ export default function HomePage() {
   const [studyCount, setStudyCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
   const [studyGoalDone, setStudyGoalDone] = useState(false);
+  const [reviewGoalDone, setReviewGoalDone] = useState(false);
   const [extraStudyCount, setExtraStudyCount] = useState(10);
   const [extraReviewCount, setExtraReviewCount] = useState(10);
   const [ready, setReady] = useState(false);
@@ -147,6 +148,7 @@ export default function HomePage() {
       setStudyCount(remainingToday);
       setReviewCount(buildReviewWords(settings.dailyReview).length);
       setStudyGoalDone(isStudyGoalDoneToday());
+      setReviewGoalDone(isReviewGoalDoneToday());
       setReady(true);
     };
     load();
@@ -239,8 +241,8 @@ export default function HomePage() {
           Icon={RefreshIcon}
           gradient="radial-gradient(circle at 32% 28%, #4fd1c5, #0f6d63)"
           glow="rgba(45,212,191,0.35)"
-          muted={reviewCount === 0}
-          complete={false}
+          muted={!reviewGoalDone && reviewCount === 0}
+          complete={reviewGoalDone}
           extra={reviewCount === 0 ? {
             value: extraReviewCount, onChange: setExtraReviewCount, onStart: startExtraReview,
             tone: 'text-teal-700 hover:text-teal-900',

@@ -249,6 +249,18 @@ export function markStudyGoalDone(count: number): DailyStats {
   return stats;
 }
 
+// Directly sets the study-goal flag, without touching studiedCount. Used
+// when resizing today's batch (see resizeTodayStudyBatch): growing it past
+// an already-finished smaller batch means there's genuinely more to do
+// today, so the goal needs to go back to "not done" until the new words
+// are finished too — it shouldn't stay stuck showing "done" just because
+// the original, smaller batch was.
+export function setStudyGoalDoneFlag(done: boolean): void {
+  const stats = getDailyStats();
+  stats.studyDone = done;
+  saveDailyStats(stats);
+}
+
 // Records that a review batch finished. `count` is added, since a user can
 // review multiple batches ("Review more") across the day.
 export function markReviewGoalDone(count: number): DailyStats {

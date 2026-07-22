@@ -3,7 +3,7 @@
 import { WORDS, Word } from './words';
 import {
   getAllProgress, getSettings, today, MAX_ROUND, Round, WordProgress,
-  getTodayStudyBatch, saveTodayStudyBatch,
+  getTodayStudyBatch, saveTodayStudyBatch, setStudyGoalDoneFlag,
 } from './storage';
 import { recordRound5Success, simulateDaysToMastery } from './srs';
 
@@ -59,13 +59,22 @@ export function resizeTodayStudyBatch(newSize: number): void {
   const pendingIds = existing.filter(id => !isDone(id));
   const targetSize = Math.max(newSize, doneIds.length);
 
+  let finalBatch = existing;
   if (targetSize > existing.length) {
     const extra = buildStudyWords(targetSize - existing.length, new Set(existing));
-    saveTodayStudyBatch([...existing, ...extra.map(w => w.id)]);
+    finalBatch = [...existing, ...extra.map(w => w.id)];
+    saveTodayStudyBatch(finalBatch);
   } else if (targetSize < existing.length) {
     const keepPending = pendingIds.slice(0, targetSize - doneIds.length);
-    saveTodayStudyBatch([...doneIds, ...keepPending]);
+    finalBatch = [...doneIds, ...keepPending];
+    saveTodayStudyBatch(finalBatch);
   }
+
+  // Keep "today's goal" honest against the resized batch — growing it past
+  // an already-finished smaller one means there's genuinely more to do, so
+  // Home shouldn't keep showing "all done" for words that were just added.
+  const stillPending = finalBatch.some(id => !isDone(id));
+  setStudyGoalDoneFlag(!stillPending);
 }
 
 // Review pool: words that have earned at least one coin (reached round 5 and

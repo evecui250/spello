@@ -76,7 +76,7 @@ export interface MascotStageInfo {
 
 export const MASTERY_GROWTH_THRESHOLD = 6.0;
 
-const MASCOT_STAGES: MascotStageInfo[] = [
+export const MASCOT_STAGES: MascotStageInfo[] = [
   { id: 'puppy', name: 'Puppy Dachshund', visualKey: 'mascot-puppy', isMastered: false, minScore: 0 },
   { id: 'short', name: 'Short Dachshund', visualKey: 'mascot-short', isMastered: false, minScore: 3.0 },
   { id: 'medium', name: 'Medium Dachshund', visualKey: 'mascot-medium', isMastered: false, minScore: 4.5 },

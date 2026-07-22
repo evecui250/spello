@@ -160,8 +160,9 @@ export default function PracticeSession({ mode }: Props) {
           setSessionDone(true);
           if (!goalDoneAtStartRef.current) {
             markStudyGoalDone(batchIds.length);
-            checkDailyCompletion();
+            checkNudge();
           }
+          checkForCongrats();
         }
       }
     } else {
@@ -231,25 +232,29 @@ export default function PracticeSession({ mode }: Props) {
 
   const handleGiveUp = () => submitResult(false);
 
-  // Once a section (study or review) finishes for the first time today,
-  // either celebrate (if the other section is also done) or nudge the user
-  // toward it. Repeat completions the same day (extra study, review more)
-  // don't retrigger this.
-  const checkDailyCompletion = () => {
+  // Congrats + streak: re-checked after EVERY session that finishes,
+  // including "extra" ones — not just the first regular completion of the
+  // day. That's deliberate: it's the only way to reliably catch "both goals
+  // are now done" regardless of which order they finished in or whether the
+  // second one happened to be an extra/bonus session. Guarded internally
+  // (congratsShown) so it only ever actually fires once per day.
+  const checkForCongrats = () => {
     const stats = getDailyStats();
-    if (stats.studyDone && stats.reviewDone) {
-      // The streak only counts a day once BOTH goals are done — finishing
-      // just one of them isn't enough, whichever order they're done in.
+    if (stats.studyDone && stats.reviewDone && !stats.congratsShown) {
       touchStreak();
-      if (!stats.congratsShown) {
-        markCongratsShown();
-        setShowCongrats(true);
-      }
-    } else if (stats.studyDone) {
-      setNudge('review');
-    } else if (stats.reviewDone) {
-      setNudge('study');
+      markCongratsShown();
+      setShowCongrats(true);
     }
+  };
+
+  // Nudge toward the other section — only on the transition to "just
+  // finished this one for the first time today", so it doesn't pop up
+  // again on every subsequent extra session.
+  const checkNudge = () => {
+    const stats = getDailyStats();
+    if (stats.studyDone && stats.reviewDone) return; // checkForCongrats handles this case
+    if (stats.studyDone) setNudge('review');
+    else if (stats.reviewDone) setNudge('study');
   };
 
   const handleNext = () => {
@@ -263,8 +268,9 @@ export default function PracticeSession({ mode }: Props) {
         if (!isExtraRef.current) {
           const wasDone = goalDoneAtStartRef.current;
           markStudyGoalDone(totalStudyWords);
-          if (!wasDone) checkDailyCompletion();
+          if (!wasDone) checkNudge();
         }
+        checkForCongrats();
       } else {
         loadCurrent(rest[0]);
       }
@@ -279,8 +285,9 @@ export default function PracticeSession({ mode }: Props) {
         if (!isExtraReviewRef.current) {
           const wasDone = reviewGoalDoneAtStartRef.current;
           markReviewGoalDone(totalReviewWords);
-          if (!wasDone) checkDailyCompletion();
+          if (!wasDone) checkNudge();
         }
+        checkForCongrats();
       } else {
         loadCurrent(rest[0]);
       }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getSettings, saveSettings, clearAllProgress, Settings } from '../../lib/storage';
 import { estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
+import { WORDS } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 
@@ -15,6 +16,7 @@ export default function SettingsPage() {
   const [requireArticle, setRequireArticle] = useState(false);
   const [saved, setSaved] = useState(false);
   const [cleared, setCleared] = useState(false);
+  const [showPaceInfo, setShowPaceInfo] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const loadFromStorage = () => {
@@ -104,7 +106,10 @@ export default function SettingsPage() {
             </select>
           </div>
         </div>
-        <p className="text-stone-500 text-sm -mt-4">More languages and levels are coming soon.</p>
+        <div className="-mt-4 flex flex-col gap-0.5">
+          <p className="text-stone-500 text-sm">This vocabulary book has {WORDS.length} words.</p>
+          <p className="text-stone-500 text-sm">More languages and levels are coming soon.</p>
+        </div>
 
         <div>
           <label className="block font-semibold text-stone-800 mb-1">
@@ -155,18 +160,36 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <div className="bg-amber-100/60 rounded-xl px-4 py-3 text-sm text-stone-800 flex items-center justify-between gap-3">
-          <span className="font-semibold shrink-0">At this pace</span>
-          <span className="text-right">
-            {forecast.wordsRemaining === 0
-              ? 'All words introduced'
-              : `~${forecast.daysToIntroduceAll} days to learn all`}
-            {' · '}~{forecast.daysToMasterAll} days to master all
-          </span>
+        <div className="relative">
+          <div className="bg-amber-100/60 rounded-xl px-4 py-3 text-sm text-stone-800 flex items-center justify-between gap-3">
+            <span className="font-semibold shrink-0 inline-flex items-center gap-1.5">
+              At this pace
+              <button
+                type="button"
+                onClick={() => setShowPaceInfo(v => !v)}
+                aria-label="How mastery works"
+                className="w-4 h-4 rounded-full bg-stone-400/70 text-white text-[10px] font-bold leading-none flex items-center justify-center hover:bg-stone-500/70 transition-colors"
+              >
+                ?
+              </button>
+            </span>
+            <span className="text-right">
+              {forecast.wordsRemaining === 0
+                ? 'All words introduced'
+                : `~${forecast.daysToIntroduceAll} days to learn all`}
+              {' · '}~{forecast.daysToMasterAll} days to master all
+            </span>
+          </div>
+          {showPaceInfo && (
+            <div className="absolute top-full left-0 mt-2 z-10 w-full bg-amber-50/95 backdrop-blur-sm border border-amber-100 rounded-xl px-4 py-3 text-sm text-stone-700 shadow-lg">
+              Each word gets a mastery score instead of a fixed review count.
+              A correct review raises it and pushes the next review further
+              away (spaced repetition); a mistake slows the next gain but
+              never erases progress already made. After about 4 clean
+              reviews spread across a few months, a word is fully mastered.
+            </div>
+          )}
         </div>
-        <p className="text-stone-500 text-xs -mt-4">
-          Mastery is now based on spaced-repetition strength, not a fixed review count — see your dachshund's stage on each word.
-        </p>
 
         <div className="flex items-center justify-between">
           <div>
@@ -186,7 +209,7 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between">
           <div>
             <label className="block font-semibold text-stone-800">
-              Practice der/die/das
+              Practice articles
             </label>
             <p className="text-stone-500 text-sm">Also blanks the article for nouns, so you have to recall the gender too.</p>
           </div>
