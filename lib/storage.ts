@@ -28,6 +28,11 @@ export interface WordProgress {
   lastReviewedAt?: string;    // date of the last successful round-5 pass
   nextReviewDue?: string;     // date this word next becomes eligible for Review
   mascotStage: MascotStageId; // derived from growthScore, stored for convenient display
+
+  // --- Round 1.5 (DE -> EN translation-choice) bookkeeping ---
+  mcqPending?: boolean;       // owes a round-1.5 recheck (wrong on a previous try)
+  mcqNextRound?: Round;       // which round-clear triggers the next check (3, 4, or 5)
+  mcqSeenChoices?: string[];  // EN choices already shown, so a retry gets fresh ones
 }
 
 export interface Streak {
@@ -51,6 +56,7 @@ const KEYS = {
   settingsUpdatedAt: 'wb2_settings_updated_at',
   dailyStats: 'wb2_daily_stats',
   studyBatch: 'wb2_study_batch',
+  dailySession: 'wb2_daily_session',
   onboardingDone: 'wb2_onboarding_done',
 };
 
@@ -110,6 +116,9 @@ function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): Wo
     mascotStage: p?.mascotStage ?? (
       fullyMastered ? 'long-crowned' : growthScore >= 4.5 ? 'medium' : growthScore >= 3.0 ? 'short' : 'puppy'
     ),
+    mcqPending: p?.mcqPending ?? false,
+    mcqNextRound: p?.mcqNextRound,
+    mcqSeenChoices: p?.mcqSeenChoices ?? [],
   };
 }
 
@@ -286,10 +295,9 @@ export function markCongratsShown(): void {
   saveDailyStats(stats);
 }
 
-// --- Today's study batch ---
-// The fixed set of word ids pulled for today's primary study goal, so
-// navigating away and back resumes the same batch instead of drawing a new
-// random one. Naturally invalidated once the date rolls over.
+// --- Today's study batch (legacy — still used by the Study Extra flow's
+// underlying PracticeSession component; the main daily flow below has its
+// own studyWordIds instead) ---
 
 export function getTodayStudyBatch(): string[] | null {
   if (typeof window === 'undefined') return null;
@@ -305,6 +313,72 @@ export function getTodayStudyBatch(): string[] | null {
 export function saveTodayStudyBatch(wordIds: string[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(KEYS.studyBatch, JSON.stringify({ date: today(), wordIds }));
+}
+
+// --- Today's single merged daily session ---
+// One guided flow per day: study the day's new words (with the round-1.5
+// translation-choice checkpoint woven in), a matching-quiz recap, then the
+// same for review. `phase` + the queues below capture exactly where the user
+// left off, so navigating away and coming back (even the next day, in which
+// case a fresh session simply gets started) resumes cleanly. Naturally
+// invalidated once the date rolls over, same pattern as DailyStats.
+export type SessionPhase =
+  | 'study-rounds' | 'study-mcq' | 'study-matching'
+  | 'study-done'
+  | 'review-rounds' | 'review-matching'
+  | 'report'
+  | 'congrats'
+  | 'done';
+
+export interface DailySession {
+  date: string;
+  phase: SessionPhase;
+  studyWordIds: string[];
+  reviewWordIds: string[];
+  mcqQueueIds: string[];
+  matchingQueueIds: string[];
+  matchingWrongIds: string[];
+  earnedPuppies: number;
+  earnedUpgrades: Partial<Record<MascotStageId, number>>;
+}
+
+export function getDailySession(): DailySession | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEYS.dailySession) || 'null') as DailySession | null;
+    if (raw && raw.date === today()) return raw;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveDailySession(s: DailySession): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(KEYS.dailySession, JSON.stringify(s));
+}
+
+export function startDailySession(studyWordIds: string[], reviewWordIds: string[]): DailySession {
+  const s: DailySession = {
+    date: today(),
+    // 'report' is the universal fallback when there's nothing to study AND
+    // nothing to review — it renders nothing (0 upgrades) and immediately
+    // cascades into 'congrats', so the streak/congrats bookkeeping still
+    // goes through the one code path that owns it.
+    phase: studyWordIds.length > 0 ? 'study-rounds' : reviewWordIds.length > 0 ? 'review-rounds' : 'report',
+    studyWordIds,
+    reviewWordIds,
+    // Every study word owes a first-time round-1.5 check — this queue
+    // doubles as that work list AND as the "have we already run the
+    // batch-wide gate" flag (see allClearedRoundOne in lib/practice.ts).
+    mcqQueueIds: [...studyWordIds],
+    matchingQueueIds: [],
+    matchingWrongIds: [],
+    earnedPuppies: 0,
+    earnedUpgrades: {},
+  };
+  saveDailySession(s);
+  return s;
 }
 
 // A one-shot "study N extra words" request from the Home page, consumed by
@@ -348,4 +422,5 @@ export function clearAllProgress(): void {
   localStorage.removeItem(KEYS.streak);
   localStorage.removeItem(KEYS.dailyStats);
   localStorage.removeItem(KEYS.studyBatch);
+  localStorage.removeItem(KEYS.dailySession);
 }

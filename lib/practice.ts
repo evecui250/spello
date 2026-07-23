@@ -3,7 +3,7 @@
 import { WORDS, Word } from './words';
 import {
   getAllProgress, getSettings, today, MAX_ROUND, Round, WordProgress,
-  getTodayStudyBatch, saveTodayStudyBatch, setStudyGoalDoneFlag,
+  getDailySession, saveDailySession, SessionPhase,
 } from './storage';
 import { recordRound5Success, simulateDaysToMastery } from './srs';
 
@@ -44,37 +44,37 @@ export function buildStudyWords(
 }
 
 // Called when the user changes "New words per day" in Settings, so the
-// change is felt today instead of waiting for tomorrow's fresh batch.
+// change is felt today instead of waiting for tomorrow's fresh batch. Resizes
+// today's DailySession study batch (the main merged flow) — a no-op if
+// today's session hasn't started yet (next Start uses the new size
+// naturally) or if the study portion of it is already behind the user
+// (phase has moved on to review or later — that part of today is settled).
 // Growing pulls in more words (never re-shuffling ones already assigned);
 // shrinking drops from the not-yet-finished tail first, but never below
 // however many are already done today — a smaller pace shouldn't undo
 // progress already made.
+const RESIZABLE_STUDY_PHASES: SessionPhase[] = ['study-rounds', 'study-mcq', 'study-matching'];
+
 export function resizeTodayStudyBatch(newSize: number): void {
-  const existing = getTodayStudyBatch();
-  if (!existing) return; // nothing drawn yet today — the next draw uses the new size naturally
+  const session = getDailySession();
+  if (!session || !RESIZABLE_STUDY_PHASES.includes(session.phase)) return;
 
   const allProgress = getAllProgress();
   const isDone = (id: string) => (allProgress[id]?.round ?? 1) >= MAX_ROUND;
+  const existing = session.studyWordIds;
   const doneIds = existing.filter(isDone);
   const pendingIds = existing.filter(id => !isDone(id));
   const targetSize = Math.max(newSize, doneIds.length);
 
-  let finalBatch = existing;
   if (targetSize > existing.length) {
     const extra = buildStudyWords(targetSize - existing.length, new Set(existing));
-    finalBatch = [...existing, ...extra.map(w => w.id)];
-    saveTodayStudyBatch(finalBatch);
+    session.studyWordIds = [...existing, ...extra.map(w => w.id)];
+    saveDailySession(session);
   } else if (targetSize < existing.length) {
     const keepPending = pendingIds.slice(0, targetSize - doneIds.length);
-    finalBatch = [...doneIds, ...keepPending];
-    saveTodayStudyBatch(finalBatch);
+    session.studyWordIds = [...doneIds, ...keepPending];
+    saveDailySession(session);
   }
-
-  // Keep "today's goal" honest against the resized batch — growing it past
-  // an already-finished smaller one means there's genuinely more to do, so
-  // Home shouldn't keep showing "all done" for words that were just added.
-  const stillPending = finalBatch.some(id => !isDone(id));
-  setStudyGoalDoneFlag(!stillPending);
 }
 
 // Review pool: words that have earned at least one coin (reached round 5 and
@@ -237,4 +237,76 @@ export function applyReviewResult(progress: WordProgress, correct: boolean, curr
   const nextRound = Math.max(1, currentRound - 1) as Round;
   const updated = { ...progress, pendingMistakes: progress.pendingMistakes + 1, lastPracticed: t };
   return { progress: updated, nextRound, isFinal: false, scored: true };
+}
+
+// ============================================================================
+// Round 1.5 — DE -> EN translation choice, and the end-of-section matching
+// quiz. Both are reinforcement layered on top of the round ladder above:
+// neither ever touches masteryScore/growthScore/nextReviewDue.
+// ============================================================================
+
+// True once every word in a batch has cleared round 1 — the gate for
+// entering the batch-wide round-1.5 checkpoint (study-mcq phase).
+export function allClearedRoundOne(ids: string[], progress: Record<string, WordProgress>): boolean {
+  return ids.every(id => (progress[id]?.round ?? 1) >= 2);
+}
+
+// Picks 3 wrong English choices for `word`, preferring words from the same
+// `category` (only ~200 noun entries have one); falling back to the same
+// `type` (part of speech) when there's no category or too few members; and
+// finally to any other word if even that pool is too small. `seen` (a
+// word's mcqSeenChoices) is excluded so a retry after a wrong answer gets
+// genuinely different distractors, degrading gracefully to repeats only if
+// the pool is truly exhausted.
+export function buildMcqChoices(word: Word, seen: string[] = []): { correct: string; choices: string[] } {
+  const excluded = new Set([word.en.toLowerCase(), ...seen.map(s => s.toLowerCase())]);
+  const pickedEn = new Set<string>();
+  const wrongChoices: string[] = [];
+
+  const addFrom = (pool: Word[]) => {
+    for (const w of shuffled(pool)) {
+      if (wrongChoices.length >= 3) break;
+      const key = w.en.toLowerCase();
+      if (excluded.has(key) || pickedEn.has(key)) continue;
+      pickedEn.add(key);
+      wrongChoices.push(w.en);
+    }
+  };
+
+  if (word.category) {
+    addFrom(WORDS.filter(w => w.id !== word.id && w.category === word.category));
+  }
+  if (wrongChoices.length < 3) {
+    addFrom(WORDS.filter(w => w.id !== word.id && w.type === word.type));
+  }
+  if (wrongChoices.length < 3) {
+    addFrom(WORDS.filter(w => w.id !== word.id));
+  }
+
+  return { correct: word.en, choices: shuffled([word.en, ...wrongChoices]) };
+}
+
+// Chunks word ids into matching-quiz pages of at most 5.
+export function buildMatchingPages(wordIds: string[]): string[][] {
+  const pages: string[][] = [];
+  for (let i = 0; i < wordIds.length; i += 5) {
+    pages.push(wordIds.slice(i, i + 5));
+  }
+  return pages;
+}
+
+// After a full matching-quiz pass, builds the redo page(s) for whatever was
+// answered wrong: the wrong ids themselves (chunked to 5 if there are more
+// than 5), with the final chunk padded up to 5 using other, already-correct
+// words from today's batch — e.g. 2 wrong -> one page of those 2 + 3 padding.
+export function buildRedoPages(wrongIds: string[], allTodayIds: string[]): string[][] {
+  const pages = buildMatchingPages(wrongIds);
+  if (pages.length === 0) return pages;
+  const last = pages[pages.length - 1];
+  if (last.length < 5) {
+    const wrongSet = new Set(wrongIds);
+    const padPool = shuffled(allTodayIds.filter(id => !wrongSet.has(id)));
+    pages[pages.length - 1] = [...last, ...padPool.slice(0, 5 - last.length)];
+  }
+  return pages;
 }
