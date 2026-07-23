@@ -248,12 +248,14 @@ export function isReviewGoalDoneToday(): boolean {
   return getDailyStats().reviewDone;
 }
 
-// Records that today's primary study batch finished. `count` is the full
-// batch size (stable across resumed sessions, so it's set rather than added).
+// Records that today's study batch finished. `count` is added, since a user
+// can run multiple rounds today (the main batch, then any number of "study
+// more" extra rounds) — studiedCount accumulates across all of them so the
+// congrats card can show the day's real total.
 export function markStudyGoalDone(count: number): DailyStats {
   const stats = getDailyStats();
   stats.studyDone = true;
-  stats.studiedCount = count;
+  stats.studiedCount += count;
   saveDailyStats(stats);
   return stats;
 }
@@ -292,6 +294,19 @@ export function markReviewGoalDone(count: number): DailyStats {
 export function markCongratsShown(): void {
   const stats = getDailyStats();
   stats.congratsShown = true;
+  saveDailyStats(stats);
+}
+
+// Called right before starting an extra round through the merged flow
+// (today's main goal is already done) — un-latches studyDone/reviewDone and
+// congratsShown so that finishing this round earns its own congrats card
+// again, while studiedCount/reviewedCount (untouched here) keep accumulating
+// toward the day's real total.
+export function resetDailyGoalsForExtraRound(): void {
+  const stats = getDailyStats();
+  stats.studyDone = false;
+  stats.reviewDone = false;
+  stats.congratsShown = false;
   saveDailyStats(stats);
 }
 

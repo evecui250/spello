@@ -3,16 +3,22 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  getStreak, getAllProgress, getSettings, setExtraStudyLimit, setExtraReviewLimit,
-  isOnboardingDone, getDailySession, startDailySession, DailySession,
+  getStreak, getAllProgress, getSettings,
+  isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
 import { WORDS } from '../lib/words';
 import { SYNCED_EVENT } from '../lib/sync';
 import Logo from '../components/Logo';
 import {
-  FlameIcon, SproutIcon, StarIcon, LayersIcon, ArrowRightIcon, CheckCircleIcon,
+  FlameIcon, SproutIcon, StarIcon, LayersIcon, CheckCircleIcon,
 } from '../components/icons';
+
+// Once today's main goal is done, "Study more" pulls a smaller bonus round
+// instead of the user's full daily pace — repeatable as many times as there
+// are still words available.
+const EXTRA_STUDY_SIZE = 5;
+const EXTRA_REVIEW_SIZE = 10;
 
 interface BubbleStat {
   icon: (props: { className?: string }) => React.JSX.Element;
@@ -51,8 +57,6 @@ export default function HomePage() {
   const [session, setSession] = useState<DailySession | null>(null);
   const [previewStudyCount, setPreviewStudyCount] = useState(0);
   const [previewReviewCount, setPreviewReviewCount] = useState(0);
-  const [extraStudyCount, setExtraStudyCount] = useState(10);
-  const [extraReviewCount, setExtraReviewCount] = useState(10);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -81,6 +85,10 @@ export default function HomePage() {
         // Nothing started today yet — preview what Start would pull in.
         setPreviewStudyCount(buildStudyWords(settings.studyBatchSize).length);
         setPreviewReviewCount(buildReviewWords(settings.dailyReview).length);
+      } else if (ds.phase === 'done') {
+        // Today's goal is met — preview the smaller bonus round instead.
+        setPreviewStudyCount(buildStudyWords(EXTRA_STUDY_SIZE).length);
+        setPreviewReviewCount(buildReviewWords(EXTRA_REVIEW_SIZE).length);
       }
       setReady(true);
     };
@@ -98,14 +106,16 @@ export default function HomePage() {
     router.push('/practice');
   };
 
-  const startExtraStudy = () => {
-    setExtraStudyLimit(extraStudyCount);
-    router.push('/practice/study');
-  };
-
-  const startExtraReview = () => {
-    setExtraReviewLimit(extraReviewCount);
-    router.push('/practice/review');
+  // Today's main goal is already done — pull a smaller bonus round instead
+  // of the full daily pace, and un-latch the goal flags so finishing it
+  // earns its own congrats card (with the day's running total, not just
+  // this round's).
+  const startExtraRound = () => {
+    const studyIds = buildStudyWords(EXTRA_STUDY_SIZE).map(w => w.id);
+    const reviewIds = buildReviewWords(EXTRA_REVIEW_SIZE).map(w => w.id);
+    resetDailyGoalsForExtraRound();
+    startDailySession(studyIds, reviewIds);
+    router.push('/practice');
   };
 
   const stats: BubbleStat[] = [
@@ -117,8 +127,20 @@ export default function HomePage() {
 
   if (!ready) return null;
 
-  const isDone = session?.phase === 'done';
-  const inProgress = !!session && !isDone;
+  const isDoneForNow = session?.phase === 'done';
+  const inProgress = !!session && !isDoneForNow;
+  // Only when there's truly nothing left anywhere (whole vocab exhausted,
+  // nothing due) does the button retire into a plain non-interactive pill —
+  // otherwise "done for today" still offers a bonus round via the same button.
+  const nothingLeftAtAll = isDoneForNow && previewStudyCount === 0 && previewReviewCount === 0;
+
+  const label = isDoneForNow ? 'Study more' : inProgress ? 'Continue' : 'Start';
+  const subtitle = isDoneForNow
+    ? `Today's goal is done · ${previewStudyCount} new · ${previewReviewCount} to review`
+    : inProgress
+    ? "Pick up where you left off"
+    : `${previewStudyCount} new · ${previewReviewCount} to review`;
+  const handleClick = isDoneForNow ? startExtraRound : inProgress ? () => router.push('/practice') : startSession;
 
   return (
     <div className="relative flex flex-col items-center gap-9 py-4">
@@ -133,7 +155,7 @@ export default function HomePage() {
 
       <div className="flex flex-col items-center gap-1">
         <Logo variant="full" size={140} />
-        <p className="text-emerald-100/70 text-xs tracking-wide mt-1">Master spelling, one word at a time.</p>
+        <p className="text-emerald-100/70 text-sm tracking-wide mt-1">Master spelling, one word at a time.</p>
       </div>
 
       <div className="flex flex-wrap justify-center gap-3">
@@ -141,50 +163,25 @@ export default function HomePage() {
       </div>
 
       <div className="w-full flex flex-col items-center gap-3">
-        {isDone ? (
-          <div className="w-full rounded-2xl border bg-amber-50/40 backdrop-blur-sm border-amber-100/30 opacity-80 flex items-center justify-center gap-2 px-6 py-5">
+        {nothingLeftAtAll ? (
+          <div className="w-full max-w-[260px] rounded-full border bg-amber-50/40 backdrop-blur-sm border-amber-100/30 opacity-80 flex items-center justify-center gap-2 px-6 py-4">
             <CheckCircleIcon className="w-6 h-6 text-emerald-600" />
             <span className="font-semibold text-stone-800">All done today</span>
           </div>
         ) : (
           <button
-            onClick={inProgress ? () => router.push('/practice') : startSession}
-            className="group relative w-full rounded-full px-6 py-5 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_16px_rgba(196,148,72,0.28)] hover:shadow-[0_8px_24px_rgba(196,148,72,0.4)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
-            style={{ backgroundImage: 'linear-gradient(135deg, #e3c584 0%, #c99a53 50%, #a87c3c 100%)' }}
+            onClick={handleClick}
+            className="group relative w-full max-w-[260px] rounded-full px-5 py-4 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_16px_rgba(90,58,26,0.35)] hover:shadow-[0_8px_24px_rgba(90,58,26,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
+            style={{ backgroundImage: 'linear-gradient(135deg, #a9835e 0%, #8a6440 50%, #6b4a2c 100%)' }}
           >
-            <span className="text-xl font-extrabold text-emerald-950 tracking-wide">
-              {inProgress ? 'Continue' : 'Start'}
+            <span className="text-lg font-extrabold text-amber-50 tracking-wide">
+              {label}
             </span>
-            <span className="text-sm font-medium text-emerald-900/70">
-              {inProgress ? "Pick up where you left off" : `${previewStudyCount} new · ${previewReviewCount} to review`}
+            <span className="text-xs font-medium text-amber-100/75 text-center">
+              {subtitle}
             </span>
-            <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/35 to-transparent" />
+            <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />
           </button>
-        )}
-
-        {isDone && (
-          <div className="w-full flex gap-3">
-            <div className="flex-1 rounded-xl border border-amber-100/40 bg-amber-50/40 backdrop-blur-sm px-3 py-2.5 flex items-center justify-center gap-1.5">
-              <input
-                type="number" min={1} max={100} value={extraStudyCount}
-                onChange={e => setExtraStudyCount(Math.max(1, Number(e.target.value) || 1))}
-                className="w-9 bg-transparent text-stone-700 text-xs text-center focus:outline-none"
-              />
-              <button onClick={startExtraStudy} className="text-[11px] font-semibold text-amber-700 hover:text-amber-900 inline-flex items-center gap-0.5">
-                study extra <ArrowRightIcon className="w-3 h-3" />
-              </button>
-            </div>
-            <div className="flex-1 rounded-xl border border-amber-100/40 bg-amber-50/40 backdrop-blur-sm px-3 py-2.5 flex items-center justify-center gap-1.5">
-              <input
-                type="number" min={1} max={100} value={extraReviewCount}
-                onChange={e => setExtraReviewCount(Math.max(1, Number(e.target.value) || 1))}
-                className="w-9 bg-transparent text-stone-700 text-xs text-center focus:outline-none"
-              />
-              <button onClick={startExtraReview} className="text-[11px] font-semibold text-teal-700 hover:text-teal-900 inline-flex items-center gap-0.5">
-                review extra <ArrowRightIcon className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
         )}
       </div>
     </div>

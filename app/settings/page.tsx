@@ -196,7 +196,6 @@ export default function SettingsPage() {
             <label className="block font-semibold text-stone-800">
               Auto-play pronunciation
             </label>
-            <p className="text-stone-500 text-sm">Speaks Round 1 words aloud automatically.</p>
           </div>
           <input
             type="checkbox"
@@ -211,7 +210,6 @@ export default function SettingsPage() {
             <label className="block font-semibold text-stone-800">
               Practice articles
             </label>
-            <p className="text-stone-500 text-sm">Also blanks the article for nouns, so you have to recall the gender too.</p>
           </div>
           <input
             type="checkbox"
@@ -220,10 +218,6 @@ export default function SettingsPage() {
             className="w-5 h-5 accent-indigo-600"
           />
         </div>
-      </div>
-
-      <div className="bg-amber-50/70 backdrop-blur-sm border border-amber-100/50 rounded-2xl p-4 text-sm text-stone-600">
-        Pace changes apply to today right away. A practice session already open keeps running with whatever it started with until you leave and come back.
       </div>
 
       <div className="bg-red-50/70 backdrop-blur-sm rounded-2xl border border-red-200/50 shadow-sm p-6 flex flex-col gap-3">

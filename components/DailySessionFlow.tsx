@@ -498,10 +498,11 @@ export default function DailySessionFlow() {
         )}
       </span>
     );
+    const dailyStats = getDailyStats();
     return (
       <CongratsModal
-        studiedCount={session.studyWordIds.length}
-        reviewedCount={session.reviewWordIds.length}
+        studiedCount={dailyStats.studiedCount}
+        reviewedCount={dailyStats.reviewedCount}
         language="German"
         onClose={handleCloseCongrats}
         earnedContent={earnedContent}
