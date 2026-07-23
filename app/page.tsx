@@ -11,7 +11,7 @@ import { WORDS } from '../lib/words';
 import { SYNCED_EVENT } from '../lib/sync';
 import Logo from '../components/Logo';
 import {
-  FlameIcon, SproutIcon, StarIcon, LayersIcon, ArrowRightIcon, CheckCircleIcon, BookIcon,
+  FlameIcon, SproutIcon, StarIcon, LayersIcon, ArrowRightIcon, CheckCircleIcon,
 } from '../components/icons';
 
 interface BubbleStat {
@@ -149,16 +149,16 @@ export default function HomePage() {
         ) : (
           <button
             onClick={inProgress ? () => router.push('/practice') : startSession}
-            className="w-full rounded-2xl px-6 py-6 flex flex-col items-center gap-1 shadow-lg hover:scale-[1.02] active:scale-[0.99] transition-transform"
-            style={{ backgroundImage: 'radial-gradient(circle at 30% 20%, #f0b558, #a5590f)', boxShadow: '0 0 20px 2px rgba(245,158,11,0.35)' }}
+            className="group relative w-full rounded-full px-6 py-5 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_18px_rgba(245,190,80,0.35)] hover:shadow-[0_8px_28px_rgba(245,190,80,0.5)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
+            style={{ backgroundImage: 'linear-gradient(135deg, #ffe28a 0%, #f7c15a 45%, #e6a23c 100%)' }}
           >
-            <span className="inline-flex items-center gap-2 text-xl font-bold text-white">
-              <BookIcon className="w-5 h-5" />
+            <span className="text-xl font-extrabold text-emerald-950 tracking-wide">
               {inProgress ? 'Continue' : 'Start'}
             </span>
-            <span className="text-sm text-white/85">
+            <span className="text-sm font-medium text-emerald-900/70">
               {inProgress ? "Pick up where you left off" : `${previewStudyCount} new · ${previewReviewCount} to review`}
             </span>
+            <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/35 to-transparent" />
           </button>
         )}
 

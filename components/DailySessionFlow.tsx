@@ -368,9 +368,16 @@ export default function DailySessionFlow() {
     if (session) persistSession({ ...session, phase: 'done' });
   }
 
-  // Enter advances past feedback; a correct answer also auto-advances.
+  // Enter advances past feedback; a correct answer also auto-advances. Only
+  // live during the actual round-ladder screens — otherwise a stale
+  // `feedback` left over from the round just before an MCQ/matching phase
+  // started would fire handleNext (built for the round queue) into a screen
+  // it knows nothing about. Re-evaluated on phase/interrupt changes too, so
+  // a phase change on its own (without `feedback` changing) still clears
+  // any pending auto-advance timer from the round that just ended.
+  const isRoundScreen = !interruptMcq && (session?.phase === 'study-rounds' || session?.phase === 'review-rounds');
   useEffect(() => {
-    if (feedback === null) return;
+    if (feedback === null || !isRoundScreen) return;
     let armed = false;
     const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Enter') armed = true; };
     const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Enter' && armed) handleNextRef.current(); };
@@ -382,7 +389,7 @@ export default function DailySessionFlow() {
       window.removeEventListener('keydown', onKeyDown);
       if (timer) clearTimeout(timer);
     };
-  }, [feedback]);
+  }, [feedback, isRoundScreen]);
 
   const articleComplete = !needsArticle || articleValues.every(v => !!v);
   const wordComplete = hint.length > 0 && hint.every((h, i) => !h || !!values[i]) && articleComplete;

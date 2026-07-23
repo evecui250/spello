@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Word } from '../lib/words';
 import SpeakerButton from './SpeakerButton';
 
@@ -22,6 +22,17 @@ export default function TranslationChoiceCard({ word, choices, onAnswer }: Props
   };
 
   const correct = selected !== null && selected === word.en;
+
+  // Enter advances once a choice is picked. No arm/disarm double-press guard
+  // here (unlike the round-ladder's Enter handling) — a choice is only ever
+  // picked by clicking, never by pressing Enter, so there's no same-keypress
+  // ambiguity to guard against; a single Enter press should just work.
+  useEffect(() => {
+    if (selected === null) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Enter') onAnswer(correct); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selected, correct, onAnswer]);
 
   return (
     <div className="flex flex-col gap-5">
