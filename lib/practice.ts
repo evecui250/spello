@@ -69,10 +69,15 @@ export function resizeTodayStudyBatch(newSize: number): void {
   if (targetSize > existing.length) {
     const extra = buildStudyWords(targetSize - existing.length, new Set(existing));
     session.studyWordIds = [...existing, ...extra.map(w => w.id)];
+    // Brand new to today's batch, so they owe a round-1.5 check too —
+    // without this they'd silently never get one.
+    session.mcqQueueIds = [...session.mcqQueueIds, ...extra.map(w => w.id)];
     saveDailySession(session);
   } else if (targetSize < existing.length) {
     const keepPending = pendingIds.slice(0, targetSize - doneIds.length);
     session.studyWordIds = [...doneIds, ...keepPending];
+    const kept = new Set(session.studyWordIds);
+    session.mcqQueueIds = session.mcqQueueIds.filter(id => kept.has(id));
     saveDailySession(session);
   }
 }

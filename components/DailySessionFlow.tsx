@@ -70,6 +70,7 @@ export default function DailySessionFlow() {
 
   const activeInputRef = useRef<HTMLInputElement | null>(null);
   const letterRowRef = useRef<LetterInputRowHandle | null>(null);
+  const articleRowRef = useRef<LetterInputRowHandle | null>(null);
   const handleNextRef = useRef<() => void>(() => {});
 
   const roundMode: RoundMode = session?.phase === 'review-rounds' ? 'review' : 'study';
@@ -569,6 +570,7 @@ export default function DailySessionFlow() {
             <div className="text-center -mb-2">
               <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Article — der / die / das</div>
               <LetterInputRow
+                ref={articleRowRef}
                 chars={['_', '_', '_']}
                 hint={[true, true, true]}
                 values={articleValues}
@@ -599,6 +601,10 @@ export default function DailySessionFlow() {
           activeInputRef={activeInputRef}
           resetFocusKey={`${word.id}-${attemptKey}`}
           autoFocus={!needsArticle}
+          onBackspaceAtStart={needsArticle ? () => {
+            setArticleValues(v => v.map((c, i) => (i === v.length - 1 ? '' : c)));
+            articleRowRef.current?.focusLast();
+          } : undefined}
         />
 
         {feedback === null ? (

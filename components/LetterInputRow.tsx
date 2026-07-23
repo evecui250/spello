@@ -18,16 +18,25 @@ interface Props {
   // Called once every editable cell in the row has a value — lets a caller
   // chain focus into the next row (article blanks -> word blanks).
   onFilled?: () => void;
+  // Called when Backspace is pressed on the row's first editable cell while
+  // it's already empty — lets a caller chain focus back into a previous row
+  // (word blanks -> article blanks), so deleting can cross the visual gap
+  // between two separate LetterInputRow instances the same way it crosses
+  // revealed/locked letters within a single one.
+  onBackspaceAtStart?: () => void;
 }
 
 export interface LetterInputRowHandle {
   // Focuses the first still-empty editable cell (or the first editable cell
   // if all are full) — used to jump back into typing after picking der/die/das.
   focusFirstEmpty: () => void;
+  // Focuses the last editable cell — used when Backspace crosses back into
+  // this row from the next one.
+  focusLast: () => void;
 }
 
 const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterInputRow(
-  { chars, hint, values, onChange, onSubmit, disabled, activeInputRef, resetFocusKey, autoFocus = true, onFilled },
+  { chars, hint, values, onChange, onSubmit, disabled, activeInputRef, resetFocusKey, autoFocus = true, onFilled, onBackspaceAtStart },
   ref,
 ) {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -38,6 +47,11 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
       const target = editableIndices.find(i => !values[i]) ?? editableIndices[0];
       if (target === undefined) return;
       setTimeout(() => inputRefs.current[target]?.focus(), 50);
+    },
+    focusLast: () => {
+      const target = editableIndices[editableIndices.length - 1];
+      if (target === undefined) return;
+      setTimeout(() => focusIndex(target), 50);
     },
   }));
 
@@ -85,6 +99,8 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
         next[p] = '';
         onChange(next);
         focusIndex(p);
+      } else if (i === editableIndices[0] && onBackspaceAtStart) {
+        onBackspaceAtStart();
       }
     }
   };

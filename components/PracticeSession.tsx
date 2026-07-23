@@ -88,6 +88,7 @@ export default function PracticeSession({ mode }: Props) {
 
   const activeInputRef = useRef<HTMLInputElement | null>(null);
   const letterRowRef = useRef<LetterInputRowHandle | null>(null);
+  const articleRowRef = useRef<LetterInputRowHandle | null>(null);
   const handleNextRef = useRef<() => void>(() => {});
   // Review mode only: which rung a word should resume at when it comes back
   // around in the queue after a mistake (round 4) or a recovery pass that
@@ -559,6 +560,7 @@ export default function PracticeSession({ mode }: Props) {
             <div className="text-center -mb-2">
               <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Article — der / die / das</div>
               <LetterInputRow
+                ref={articleRowRef}
                 chars={['_', '_', '_']}
                 hint={[true, true, true]}
                 values={articleValues}
@@ -598,6 +600,10 @@ export default function PracticeSession({ mode }: Props) {
           activeInputRef={activeInputRef}
           resetFocusKey={`${word.id}-${attemptKey}`}
           autoFocus={!needsArticle}
+          onBackspaceAtStart={needsArticle ? () => {
+            setArticleValues(v => v.map((c, i) => (i === v.length - 1 ? '' : c)));
+            articleRowRef.current?.focusLast();
+          } : undefined}
         />
 
         {feedback === null ? (

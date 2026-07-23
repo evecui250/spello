@@ -34,6 +34,15 @@ export default function TranslationChoiceCard({ word, choices, onAnswer }: Props
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selected, correct, onAnswer]);
 
+  // A correct pick auto-advances after a short pause, same as the round-ladder
+  // screen — a wrong one still needs a manual Next so there's time to read
+  // which one was actually right.
+  useEffect(() => {
+    if (!correct) return;
+    const timer = setTimeout(() => onAnswer(true), 1200);
+    return () => clearTimeout(timer);
+  }, [correct, onAnswer]);
+
   return (
     <div className="flex flex-col gap-5">
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
@@ -66,7 +75,7 @@ export default function TranslationChoiceCard({ word, choices, onAnswer }: Props
             );
           })}
         </div>
-        {selected !== null && (
+        {selected !== null && !correct && (
           <button
             onClick={() => onAnswer(correct)}
             className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"

@@ -149,8 +149,8 @@ export default function HomePage() {
         ) : (
           <button
             onClick={inProgress ? () => router.push('/practice') : startSession}
-            className="group relative w-full rounded-full px-6 py-5 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_18px_rgba(245,190,80,0.35)] hover:shadow-[0_8px_28px_rgba(245,190,80,0.5)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
-            style={{ backgroundImage: 'linear-gradient(135deg, #ffe28a 0%, #f7c15a 45%, #e6a23c 100%)' }}
+            className="group relative w-full rounded-full px-6 py-5 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_16px_rgba(196,148,72,0.28)] hover:shadow-[0_8px_24px_rgba(196,148,72,0.4)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
+            style={{ backgroundImage: 'linear-gradient(135deg, #e3c584 0%, #c99a53 50%, #a87c3c 100%)' }}
           >
             <span className="text-xl font-extrabold text-emerald-950 tracking-wide">
               {inProgress ? 'Continue' : 'Start'}

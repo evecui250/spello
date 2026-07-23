@@ -78,10 +78,10 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
                   key={text}
                   onClick={() => pickEnglish(text)}
                   disabled={used || !selectedGermanId}
-                  className={`px-3 py-2.5 rounded-xl text-sm text-left transition-colors ${
+                  className={`px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-colors ${
                     used
-                      ? 'border-2 border-slate-100 text-slate-300'
-                      : 'border-2 border-indigo-100 text-slate-700 hover:border-indigo-300 disabled:opacity-50'
+                      ? 'border-2 border-slate-200 bg-slate-50 text-slate-500 line-through decoration-slate-300'
+                      : 'border-2 border-indigo-100 text-slate-700 hover:border-indigo-300'
                   }`}
                 >
                   {text}
