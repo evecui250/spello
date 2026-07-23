@@ -211,23 +211,34 @@ export interface DailyStats {
   date: string;
   studyDone: boolean;
   reviewDone: boolean;
-  studiedCount: number;   // words brought to round 5 today via the primary study batch
+  studiedCount: number;   // words brought to round 5 today, across all rounds (main + any extras)
   reviewedCount: number;  // words reviewed today, across all review batches
   congratsShown: boolean; // whether the "both sections done" card has been shown today
+  // Cumulative across every round today (main + extras) — kept separate from
+  // DailySession's own earnedPuppies/earnedUpgrades, which reset each round
+  // and drive the interim "Study complete!" screen instead. These two are
+  // for the congrats card, which sits next to the cumulative studiedCount/
+  // reviewedCount above and needs to match that same "whole day" framing.
+  puppiesEarned: number;
+  upgradesEarned: Partial<Record<MascotStageId, number>>;
 }
 
 function defaultDailyStats(): DailyStats {
   return {
     date: today(), studyDone: false, reviewDone: false,
     studiedCount: 0, reviewedCount: 0, congratsShown: false,
+    puppiesEarned: 0, upgradesEarned: {},
   };
 }
 
 export function getDailyStats(): DailyStats {
   if (typeof window === 'undefined') return defaultDailyStats();
   try {
-    const raw = JSON.parse(localStorage.getItem(KEYS.dailyStats) || 'null') as DailyStats | null;
-    if (raw && raw.date === today()) return raw;
+    const raw = JSON.parse(localStorage.getItem(KEYS.dailyStats) || 'null') as Partial<DailyStats> | null;
+    // Merged against the default so a record saved today under an older
+    // schema (missing newer fields) doesn't produce NaN/undefined instead
+    // of a sensible starting value.
+    if (raw && raw.date === today()) return { ...defaultDailyStats(), ...raw };
   } catch {
     // fall through to default
   }
@@ -294,6 +305,21 @@ export function markReviewGoalDone(count: number): DailyStats {
 export function markCongratsShown(): void {
   const stats = getDailyStats();
   stats.congratsShown = true;
+  saveDailyStats(stats);
+}
+
+// Cumulative-for-the-day puppy/upgrade tally, for the congrats card — see
+// the DailyStats.puppiesEarned/upgradesEarned comment for why these are
+// separate from DailySession's own per-round versions.
+export function addEarnedPuppy(): void {
+  const stats = getDailyStats();
+  stats.puppiesEarned += 1;
+  saveDailyStats(stats);
+}
+
+export function addEarnedUpgrade(stage: MascotStageId): void {
+  const stats = getDailyStats();
+  stats.upgradesEarned[stage] = (stats.upgradesEarned[stage] ?? 0) + 1;
   saveDailyStats(stats);
 }
 
