@@ -73,7 +73,7 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
 
       ctx.fillStyle = '#1e1b4b';
       ctx.font = '700 56px system-ui, -apple-system, sans-serif';
-      ctx.fillText('🎉 Daily goal complete!', cx, y + 50);
+      ctx.fillText('Daily goal complete!', cx, y + 50);
       y += 130;
 
       // Two stat columns: words studied and words reviewed.
@@ -94,10 +94,6 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
       ctx.moveTo(cx, y + 20);
       ctx.lineTo(cx, y + 150);
       ctx.stroke();
-
-      ctx.fillStyle = '#64748b';
-      ctx.font = '500 36px system-ui, -apple-system, sans-serif';
-      ctx.fillText(`${language} words today`, cx, y + 250);
 
       ctx.fillStyle = '#94a3b8';
       ctx.font = '400 30px system-ui, -apple-system, sans-serif';

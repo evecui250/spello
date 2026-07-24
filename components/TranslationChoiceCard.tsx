@@ -35,15 +35,19 @@ export default function TranslationChoiceCard({ word, choices, onAnswer }: Props
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selected, correct, onAnswer]);
 
-  // A correct pick plays the word's pronunciation once, then auto-advances
-  // after a short pause — a wrong one still needs a manual Next so there's
-  // time to read which one was actually right.
+  // Every pick plays the word's pronunciation once. A correct pick also
+  // auto-advances after a short pause; a wrong one still needs a manual
+  // Next so there's time to read which one was actually right.
+  useEffect(() => {
+    if (selected === null) return;
+    speakWord(word);
+  }, [selected, word]);
+
   useEffect(() => {
     if (!correct) return;
-    speakWord(word);
     const timer = setTimeout(() => onAnswer(true), 1200);
     return () => clearTimeout(timer);
-  }, [correct, onAnswer, word]);
+  }, [correct, onAnswer]);
 
   return (
     <div className="flex flex-col gap-5">

@@ -315,7 +315,16 @@ export default function DailySessionFlow() {
   function finishMatchingPhase(ds: DailySession) {
     if (ds.phase === 'study-matching') {
       markStudyGoalDone(ds.studyWordIds.length);
-      persistSession({ ...ds, phase: 'study-done' });
+      if (ds.reviewWordIds.length === 0) {
+        // Nothing to review today — skip the "Continue to review" interim
+        // screen entirely and go straight toward the congrats card (via
+        // 'report', which itself auto-skips to 'congrats' if there's
+        // nothing to show there either).
+        markReviewGoalDone(0);
+        persistSession({ ...ds, phase: 'report' });
+      } else {
+        persistSession({ ...ds, phase: 'study-done' });
+      }
     } else {
       markReviewGoalDone(ds.reviewWordIds.length);
       persistSession({ ...ds, phase: 'report' });

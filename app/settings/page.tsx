@@ -131,7 +131,7 @@ export default function SettingsPage() {
 
         <div>
           <label className="block font-semibold text-stone-800 mb-1">
-            Review words per day
+            Max review words per day
           </label>
           <div className="flex items-center gap-4">
             <input
