@@ -96,6 +96,12 @@ export function getAllProgress(): Record<string, WordProgress> {
   }
 }
 
+function addOneDay(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 // Fills in defaults for any progress record saved under an older schema.
 // Records from before the SRS system get sensible one-time defaults here —
 // legacy coin count becomes the initial successfulReviews/masteryScore, and
@@ -109,6 +115,17 @@ function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): Wo
   // every pass had been clean (1.5 each), a reasonable one-time assumption
   // that self-corrects as the word is reviewed again going forward.
   const growthScore = p?.growthScore ?? successfulReviews * 1.5;
+  let nextReviewDue = p?.nextReviewDue ?? today();
+  // One-time migration: words that reached their first-ever review before the
+  // "first review is 1 day later" fix shipped were scheduled ~3 days out
+  // (the old mastery-based formula). Pull those back to lastPracticed+1 so
+  // already-learned words get the same fast first review as new ones —
+  // otherwise this is stuck on the stale value forever, since the fix only
+  // changes how *new* completions compute the date, not ones already saved.
+  if (successfulReviews === 1 && p?.lastPracticed) {
+    const target = addOneDay(p.lastPracticed);
+    if (nextReviewDue > target) nextReviewDue = target;
+  }
   return {
     id,
     round: (p?.round as Round) ?? 1,
@@ -120,7 +137,7 @@ function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): Wo
     successfulReviews,
     pendingMistakes: p?.pendingMistakes ?? 0,
     lastReviewedAt: p?.lastReviewedAt ?? p?.lastPracticed,
-    nextReviewDue: p?.nextReviewDue ?? today(),
+    nextReviewDue,
     mascotStage: p?.mascotStage ?? (
       fullyMastered ? 'long-crowned' : growthScore >= 4.5 ? 'medium' : growthScore >= 3.0 ? 'short' : 'puppy'
     ),
