@@ -13,20 +13,21 @@ interface Props {
   date?: string;
 }
 
-// public/congrats.png is the shareable card's background art (1254x1254) —
+// public/congrats.png is the shareable card's background art (1254x1254,
+// "v2" as of 2026-07 — a different illustration than the original) —
 // hand-designed with placeholder "N"/"M" glyphs marking where the actual
 // new-words/reviewed counts get overlaid at render time. These are that
-// artwork's exact pixel coordinates (see the design session that measured
-// them): each glyph's bounding box, used both to blank out the placeholder
-// and to center the real number in the same spot.
+// glyph's exact pixel bounds (measured directly off the PNG, zoomed in
+// pixel-by-pixel — a same-color tolerance match alone isn't reliable here,
+// since both the icon above and the "new words"/"words" label below sit
+// close enough in color and position to bleed into a looser match). The
+// cover rectangle's padding must land in the gap on each side: below the
+// icon circle (bottom edge ≈460) and above the label text (top edge ≈558)
+// — eating into either one leaves a stray fragment of it behind.
 const IMG_SIZE = 1254;
-// y0 starts right below the icon circle (which sits at y≈388-510) — it must
-// NOT reach up into the circle, or blanking out the placeholder glyph also
-// erases part of the circle and leaves a stray sliver of it behind (the
-// artifact this exact measurement was fixing).
-const NEW_WORDS_BOX = { x0: 302, x1: 435, y0: 528, y1: 682 };
-const REVIEWED_BOX = { x0: 804, x1: 960, y0: 528, y1: 682 };
-const CARD_BG = '#fefbf2';
+const NEW_WORDS_BOX = { x0: 410, x1: 467, y0: 487, y1: 533 };
+const REVIEWED_BOX = { x0: 780, x1: 838, y0: 487, y1: 533 };
+const CARD_BG = '#fbf7ee';
 
 function drawCount(ctx: CanvasRenderingContext2D, box: typeof NEW_WORDS_BOX, value: number, color: string) {
   const cx = (box.x0 + box.x1) / 2;
@@ -69,8 +70,8 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
       if (cancelled) return;
 
       ctx.drawImage(bg, 0, 0, IMG_SIZE, IMG_SIZE);
-      drawCount(ctx, NEW_WORDS_BOX, studiedCount, '#7c3aed');
-      drawCount(ctx, REVIEWED_BOX, reviewedCount, '#0d9488');
+      drawCount(ctx, NEW_WORDS_BOX, studiedCount, '#603096');
+      drawCount(ctx, REVIEWED_BOX, reviewedCount, '#066354');
 
       // Small date stamp in the open cream space top-right, so a saved/
       // shared image is still self-explanatory (and a reopened past day
