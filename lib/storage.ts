@@ -406,6 +406,9 @@ export interface DailySession {
   matchingQueueIds: string[]; // which page comes next in the matching quiz
   earnedPuppies: number;
   earnedUpgrades: Partial<Record<MascotStageId, number>>;
+  isExtra: boolean; // true for a "Study more"/"Review more" bonus round, so
+                     // Home keeps showing "Study more" (not "Start") if the
+                     // user quits mid-round and comes back.
 }
 
 export function getDailySession(): DailySession | null {
@@ -424,7 +427,7 @@ export function saveDailySession(s: DailySession): void {
   localStorage.setItem(KEYS.dailySession, JSON.stringify(s));
 }
 
-export function startDailySession(studyWordIds: string[], reviewWordIds: string[]): DailySession {
+export function startDailySession(studyWordIds: string[], reviewWordIds: string[], isExtra = false): DailySession {
   const s: DailySession = {
     date: today(),
     // 'report' is the universal fallback when there's nothing to study AND
@@ -442,6 +445,7 @@ export function startDailySession(studyWordIds: string[], reviewWordIds: string[
     matchingQueueIds: [],
     earnedPuppies: 0,
     earnedUpgrades: {},
+    isExtra,
   };
   saveDailySession(s);
   return s;

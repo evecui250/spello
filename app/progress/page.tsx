@@ -30,7 +30,7 @@ interface DayBucket {
   date: string;
   learned: WordChip[];
   reviewed: WordChip[];
-  due: WordChip[]; // due exactly on this day, plus (today only) anything still overdue from before
+  due: WordChip[]; // today only — everything currently due or overdue, per today's live snapshot
 }
 
 function chip(w: Word): WordChip {
@@ -60,15 +60,20 @@ function buildBucket(progress: Record<string, WordProgress>, date: string, isTod
     const p = progress[w.id];
     if (!p) continue;
 
-    if (p.lastReviewedAt === date) {
-      (p.successfulReviews <= 1 ? learned : reviewed).push(chip(w));
+    // Only a word that actually completed round 5 on this day counts as
+    // learned/reviewed — one still mid-ladder (never cleared round 5)
+    // shouldn't show up here even if it was touched today.
+    if (p.successfulReviews >= 1 && p.lastReviewedAt === date) {
+      (p.successfulReviews === 1 ? learned : reviewed).push(chip(w));
     }
 
-    const reviewEligible = p.round === 5 && p.successfulReviews >= 1 && !p.fullyMastered;
-    if (reviewEligible && p.nextReviewDue === date) due.push(chip(w));
-    // Today also folds in the backlog still overdue from earlier days —
-    // it belongs with "due to review", not a separate warning section.
-    if (isToday && reviewEligible && p.nextReviewDue && p.nextReviewDue < t) due.push(chip(w));
+    // "Due to review" is a live snapshot of nextReviewDue, which keeps
+    // shifting as the word is reviewed — it only makes sense read against
+    // today, not projected onto a past day that's already settled.
+    if (isToday) {
+      const reviewEligible = p.round === 5 && p.successfulReviews >= 1 && !p.fullyMastered;
+      if (reviewEligible && p.nextReviewDue && p.nextReviewDue <= t) due.push(chip(w));
+    }
   }
 
   return { date, learned, reviewed, due };
@@ -147,9 +152,9 @@ export default function ProgressPage() {
       <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Progress</h1>
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
-        <h2 className="font-semibold text-stone-800 mb-1">Mascot stage breakdown</h2>
+        <h2 className="font-semibold text-stone-800 mb-1">Words breakdown</h2>
         <p className="text-stone-500 text-sm mb-4">
-          Each started word&apos;s dachshund grows as its spaced-repetition mastery score rises.
+          How your started words are progressing.
         </p>
         {introducedCount === 0 ? (
           <p className="text-stone-500 text-sm">Study a few words to start growing your first dachshund.</p>
@@ -207,6 +212,15 @@ export default function ProgressPage() {
             →
           </button>
         </div>
+
+        {date !== t && (
+          <button
+            onClick={() => setDate(t)}
+            className="self-center text-sm font-semibold text-amber-200 hover:text-amber-100 underline"
+          >
+            Back to today
+          </button>
+        )}
 
         <DayCard bucket={bucket} isToday={date === t} />
       </div>

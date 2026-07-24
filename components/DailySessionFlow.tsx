@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   getDailySession, saveDailySession, DailySession, SessionPhase,
   getWordProgress, saveWordProgress, getAllProgress, getSettings, today,
@@ -47,6 +48,7 @@ function isRoundsDone(id: string, mode: RoundMode): boolean {
 }
 
 export default function DailySessionFlow() {
+  const router = useRouter();
   const [session, setSession] = useState<DailySession | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [ready, setReady] = useState(false);
@@ -351,6 +353,7 @@ export default function DailySessionFlow() {
   function handleCloseCongrats() {
     setShowCongrats(false);
     if (session) persistSession({ ...session, phase: 'done' });
+    router.push('/');
   }
 
   // Enter advances past feedback; a correct answer also auto-advances. Only
@@ -494,15 +497,10 @@ export default function DailySessionFlow() {
   }
 
   if (session.phase === 'done') {
-    return (
-      <div className="text-center py-16">
-        <div className="text-5xl mb-4">🎉</div>
-        <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
-          All done for today!
-        </h2>
-        <Link href="/" className="text-amber-200 underline">Back to Home</Link>
-      </div>
-    );
+    // Closing the congrats card already navigates to Home directly (see
+    // handleCloseCongrats) — this only renders in the brief instant before
+    // that push resolves, or if the phase is reached some other way.
+    return null;
   }
 
   // --- study-rounds / review-rounds: the shared spelling-round card ---

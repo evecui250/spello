@@ -120,7 +120,7 @@ export default function HomePage() {
     const studyIds = buildStudyWords(EXTRA_STUDY_SIZE).map(w => w.id);
     const reviewIds = buildReviewWords(EXTRA_REVIEW_SIZE).map(w => w.id);
     resetDailyGoalsForExtraRound();
-    startDailySession(studyIds, reviewIds);
+    startDailySession(studyIds, reviewIds, true);
     router.push('/practice');
   };
 
@@ -142,7 +142,9 @@ export default function HomePage() {
 
   // Mid-session still says "Start" (not "Continue") — just with the counts
   // updated to whatever's actually left, same as the not-yet-started state.
-  const label = isDoneForNow ? 'Goal completed' : 'Start';
+  // A bonus round in progress keeps saying "Study more" instead, so quitting
+  // and coming back doesn't make it look like the main daily goal reset.
+  const label = isDoneForNow ? 'Goal completed' : inProgress && session?.isExtra ? 'Study more' : 'Start';
   const subtitle = isDoneForNow
     ? 'study more →'
     : `${previewStudyCount} new · ${previewReviewCount} to review`;
