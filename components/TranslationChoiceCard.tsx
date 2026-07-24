@@ -17,6 +17,19 @@ interface Props {
 export default function TranslationChoiceCard({ word, choices, onAnswer }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
 
+  // Guards against a stuck retry loop: when the same word is the only one
+  // left in the round-1.5 retry queue, it comes back up as the very next
+  // question with the same `word.id` — and since the parent's setMcqCurrent
+  // calls (null, then the next question) both happen inside one handler,
+  // React 18 batches them into a single commit and never actually unmounts
+  // this component, so `selected` would otherwise carry over from the wrong
+  // answer just given. `choices` is always a freshly-shuffled array from
+  // buildMcqChoices — even for a repeated word — so it's a reliable signal
+  // that a genuinely new question has started and the pick should reset.
+  useEffect(() => {
+    setSelected(null);
+  }, [choices]);
+
   const handlePick = (choice: string) => {
     if (selected !== null) return;
     setSelected(choice);
