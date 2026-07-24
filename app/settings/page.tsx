@@ -11,7 +11,7 @@ export default function SettingsPage() {
   const [studyBatchSize, setStudyBatchSize] = useState(15);
   const [dailyReview, setDailyReview] = useState(25);
   const [language, setLanguage] = useState('de');
-  const [level, setLevel] = useState<Level>('B2');
+  const [level, setLevel] = useState<Level>('A1');
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
   const [requireArticle, setRequireArticle] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -122,12 +122,12 @@ export default function SettingsPage() {
               <option value="A1">A1</option>
               <option value="A2">A2</option>
               <option value="B1">B1</option>
-              <option value="B2">B2</option>
+              <option value="B2_old">B2 (old)</option>
             </select>
           </div>
         </div>
         <div className="-mt-4 flex flex-col gap-0.5">
-          <p className="text-stone-500 text-sm">This vocabulary book has {wordsForLevel(level).length} words up to {level}.</p>
+          <p className="text-stone-500 text-sm">This vocabulary book has {wordsForLevel(level).length} words for {level}.</p>
           <p className="text-stone-500 text-sm">Switching level is its own separate profile — progress, streak, and pace stay independent. More languages and levels (C1, C2…) are coming soon.</p>
         </div>
 

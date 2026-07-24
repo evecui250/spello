@@ -39,7 +39,7 @@ export default function WelcomePage() {
   const [step, setStep] = useState<Step>('language');
 
   const [language, setLanguage] = useState('de');
-  const [level, setLevel] = useState<Level>('B2');
+  const [level, setLevel] = useState<Level>('A1');
   const [studyBatchSize, setStudyBatchSize] = useState(15);
   const [dailyReview, setDailyReview] = useState(25);
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
@@ -99,7 +99,7 @@ export default function WelcomePage() {
                   <option value="A1">A1</option>
                   <option value="A2">A2</option>
                   <option value="B1">B1</option>
-                  <option value="B2">B2</option>
+                  <option value="B2_old">B2 (old)</option>
                 </select>
               </div>
             </div>

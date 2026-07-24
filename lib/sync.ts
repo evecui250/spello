@@ -25,12 +25,29 @@ interface RemoteRow {
 }
 
 // Old rows (from before the per-level split) stored a single flat blob that
-// was always implicitly B2. Detect the new shape by checking that every
-// top-level key is a known CEFR level; anything else (a word id, or streak's
-// "lastDate" field, etc.) means it's the legacy flat shape.
+// was always implicitly the original B2 import. Detect the new shape by
+// checking that every top-level key is a known CEFR level; anything else (a
+// word id, or streak's "lastDate" field, etc.) means it's the legacy flat
+// shape. 'B2' (its own pre-rename key, back when 'B2_old' was still called
+// 'B2') is accepted here too, purely for recognition — renameB2Key fixes it
+// up to 'B2_old' once a row is confirmed nested.
+const KNOWN_LEVEL_KEYS = [...LEVEL_ORDER, 'B2'] as string[];
 function isNestedByLevel(obj: unknown): obj is Record<string, unknown> {
   if (!obj || typeof obj !== 'object') return false;
-  return Object.keys(obj).every(k => (LEVEL_ORDER as string[]).includes(k));
+  return Object.keys(obj).every(k => KNOWN_LEVEL_KEYS.includes(k));
+}
+
+// Remaps a nested-by-level object's old 'B2' key (from before the source PDF
+// was found to be wrong and it was renamed to 'B2_old') to 'B2_old', so a
+// remote row synced before this rename still lands in the right profile.
+function renameB2Key<T>(obj: Partial<Record<string, T>>): Partial<Record<Level, T>> {
+  const out: Partial<Record<Level, T>> = { ...(obj as Partial<Record<Level, T>>) };
+  const legacy = (obj as Record<string, T>)['B2'];
+  if (legacy !== undefined && out.B2_old === undefined) {
+    out.B2_old = legacy;
+  }
+  delete (out as Record<string, T>)['B2'];
+  return out;
 }
 
 // Prefers whichever side is "further along" for each word, so syncing never
@@ -72,16 +89,17 @@ export async function pullAndMerge(userId: string): Promise<void> {
 
   const nested = isNestedByLevel(data.progress) && isNestedByLevel(data.streak);
   // Legacy rows (pre-per-level split) stored one flat blob that was always
-  // implicitly B2 — read it as B2-only rather than dropping it.
+  // implicitly the original B2 import — read it as B2_old rather than
+  // dropping it.
   const remoteProgressByLevel: ProgressByLevel = nested
-    ? (data.progress as ProgressByLevel)
-    : { B2: (data.progress as Record<string, WordProgress>) ?? {} };
+    ? renameB2Key(data.progress as ProgressByLevel)
+    : { B2_old: (data.progress as Record<string, WordProgress>) ?? {} };
   const remoteStreakByLevel: StreakByLevel = nested
-    ? (data.streak as StreakByLevel)
-    : { B2: data.streak as Streak };
+    ? renameB2Key(data.streak as StreakByLevel)
+    : { B2_old: data.streak as Streak };
   const remoteSettingsByLevel: SettingsByLevel = nested
-    ? (data.settings as SettingsByLevel) ?? {}
-    : { B2: data.settings as Settings };
+    ? renameB2Key((data.settings as SettingsByLevel) ?? {})
+    : { B2_old: data.settings as Settings };
 
   for (const level of LEVEL_ORDER) {
     const remoteProgress = remoteProgressByLevel[level];
