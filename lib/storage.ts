@@ -63,8 +63,21 @@ const DEFAULT_SETTINGS: Settings = {
   autoPlayAudio: true, requireArticle: false,
 };
 
+// The user's LOCAL calendar date — deliberately not toISOString() (which is
+// always UTC). Using UTC here meant the app's "today" silently disagreed
+// with the user's actual calendar day for part of every day (more of the
+// day, the further their timezone sits from UTC), which desynced due-date
+// comparisons and could make review-eligible words not show as due, or a
+// batch of same-session words land on different scheduled days.
+function localDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateString(new Date());
 }
 
 // --- Progress ---
@@ -144,7 +157,9 @@ export function touchStreak(): void {
   const t = today();
   const s = getStreak();
   if (s.lastDate === t) return;
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const yesterday = localDateString(d);
   const newCount = s.lastDate === yesterday ? s.count + 1 : 1;
   saveStreak({ lastDate: t, count: newCount });
 }

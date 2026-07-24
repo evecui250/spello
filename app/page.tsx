@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  getStreak, getAllProgress, getSettings,
+  getStreak, getAllProgress, getSettings, today, MAX_ROUND,
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
@@ -89,6 +89,12 @@ export default function HomePage() {
         // Today's goal is met — preview the smaller bonus round instead.
         setPreviewStudyCount(buildStudyWords(EXTRA_STUDY_SIZE).length);
         setPreviewReviewCount(buildReviewWords(EXTRA_REVIEW_SIZE).length);
+      } else {
+        // Mid-session — show what's actually still left in today's batch,
+        // not the original starting size.
+        const t = today();
+        setPreviewStudyCount(ds.studyWordIds.filter(id => (progress[id]?.round ?? 1) < MAX_ROUND).length);
+        setPreviewReviewCount(ds.reviewWordIds.filter(id => !(progress[id]?.nextReviewDue && progress[id].nextReviewDue > t)).length);
       }
       setReady(true);
     };
@@ -134,11 +140,11 @@ export default function HomePage() {
   // otherwise "done for today" still offers a bonus round via the same button.
   const nothingLeftAtAll = isDoneForNow && previewStudyCount === 0 && previewReviewCount === 0;
 
-  const label = isDoneForNow ? 'Study more' : inProgress ? 'Continue' : 'Start';
+  // Mid-session still says "Start" (not "Continue") — just with the counts
+  // updated to whatever's actually left, same as the not-yet-started state.
+  const label = isDoneForNow ? 'Goal completed' : 'Start';
   const subtitle = isDoneForNow
-    ? `Today's goal is done · ${previewStudyCount} new · ${previewReviewCount} to review`
-    : inProgress
-    ? "Pick up where you left off"
+    ? 'study more →'
     : `${previewStudyCount} new · ${previewReviewCount} to review`;
   const handleClick = isDoneForNow ? startExtraRound : inProgress ? () => router.push('/practice') : startSession;
 

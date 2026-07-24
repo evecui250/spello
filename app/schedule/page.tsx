@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { WORDS, Word } from '../../lib/words';
-import { getAllProgress, WordProgress, today } from '../../lib/storage';
+import { getAllProgress, getSettings, WordProgress, today } from '../../lib/storage';
 import { addDays } from '../../lib/srs';
 
 interface WordChip {
@@ -17,15 +17,33 @@ interface DayBucket {
   reviewed: WordChip[];
   due: WordChip[];       // scheduled for exactly this day, per today's snapshot
   overdue: WordChip[];   // today only — still-due backlog from earlier days
+  plannedNew: number;    // future days only — projected new-word count at the current pace
 }
 
 function chip(w: Word): WordChip {
   return { id: w.id, de: w.de, article: w.article };
 }
 
-function buildBuckets(progress: Record<string, WordProgress>, centerDate: string): DayBucket[] {
+// Rough "if you study every day at today's pace" projection: depletes the
+// not-yet-introduced pool day by day from tomorrow through the last day in
+// the visible window. It's a projection, not a promise — actual daily study
+// picks in-progress words first, and pace/backlog can change day to day.
+function projectNewWordCounts(progress: Record<string, WordProgress>, studyBatchSize: number, lastDate: string): Record<string, number> {
+  const t = today();
+  let remaining = WORDS.filter(w => !progress[w.id]).length;
+  const byDate: Record<string, number> = {};
+  for (let d = addDays(t, 1); d <= lastDate; d = addDays(d, 1)) {
+    const count = Math.min(studyBatchSize, remaining);
+    byDate[d] = count;
+    remaining -= count;
+  }
+  return byDate;
+}
+
+function buildBuckets(progress: Record<string, WordProgress>, centerDate: string, studyBatchSize: number): DayBucket[] {
   const t = today();
   const dates = Array.from({ length: 7 }, (_, i) => addDays(centerDate, i - 3));
+  const plannedByDate = projectNewWordCounts(progress, studyBatchSize, dates[dates.length - 1]);
 
   return dates.map(date => {
     const learned: WordChip[] = [];
@@ -50,7 +68,7 @@ function buildBuckets(progress: Record<string, WordProgress>, centerDate: string
       }
     }
 
-    return { date, learned, reviewed, due, overdue };
+    return { date, learned, reviewed, due, overdue, plannedNew: plannedByDate[date] ?? 0 };
   });
 }
 
@@ -80,7 +98,7 @@ function DayCard({ bucket, isToday }: { bucket: DayBucket; isToday: boolean }) {
   const t = today();
   const isFuture = bucket.date > t;
   const nothing = bucket.learned.length === 0 && bucket.reviewed.length === 0
-    && bucket.due.length === 0 && bucket.overdue.length === 0;
+    && bucket.due.length === 0 && bucket.overdue.length === 0 && bucket.plannedNew === 0;
 
   return (
     <div className={`bg-amber-50/75 backdrop-blur-sm rounded-2xl border shadow-sm p-4 flex flex-col gap-2 ${isToday ? 'border-amber-400' : 'border-amber-100/50'}`}>
@@ -93,6 +111,11 @@ function DayCard({ bucket, isToday }: { bucket: DayBucket; isToday: boolean }) {
           <WordRow label="Reviewed" words={bucket.reviewed} color="text-indigo-700" />
           <WordRow label={isFuture ? 'Scheduled to review' : 'Due to review'} words={bucket.due} color="text-amber-700" />
           {isToday && <WordRow label="Still overdue from before" words={bucket.overdue} color="text-red-700" />}
+          {isFuture && bucket.plannedNew > 0 && (
+            <div className="text-xs font-semibold text-sky-700">
+              ~{bucket.plannedNew} new word{bucket.plannedNew === 1 ? '' : 's'} planned (at today's pace)
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -110,7 +133,7 @@ export default function SchedulePage() {
   if (!progress) return null;
 
   const t = today();
-  const buckets = buildBuckets(progress, centerDate);
+  const buckets = buildBuckets(progress, centerDate, getSettings().studyBatchSize);
 
   return (
     <div className="flex flex-col gap-4">

@@ -99,6 +99,16 @@ export function getMascotStage(growthScore: number): MascotStageInfo {
 // pass's growth increment but don't touch the schedule until this fires.
 // ============================================================================
 
+// The very first successful pass gets a short 1-day interval instead of the
+// formula's ~3 days (2^1.5) — closer to real forgetting-curve practice (the
+// steepest drop-off is in the first 24-48h), and it guarantees a word
+// learned today shows up for review again tomorrow rather than sitting out
+// for a few days. Every later pass still uses the normal exponential
+// formula unchanged.
+function reviewIntervalFor(successfulReviews: number, masteryScore: number): number {
+  return successfulReviews === 1 ? 1 : getNextReviewInterval(masteryScore);
+}
+
 // A successful round-5 pass: banks a coin (legacy field, kept for existing
 // UI), advances S and growthScore, and reschedules the next review using
 // the freshly recalculated M.
@@ -116,7 +126,7 @@ export function recordRound5Success(progress: WordProgress, todayStr: string = t
     growthScore,
     mascotStage: stage.id,
     lastReviewedAt: todayStr,
-    nextReviewDue: addDays(todayStr, getNextReviewInterval(masteryScore)),
+    nextReviewDue: addDays(todayStr, reviewIntervalFor(successfulReviews, masteryScore)),
     // Kept in sync so the existing coin/mastered UI (Stats, Words badges,
     // Home's mastered count, the congrats card) keeps working unchanged.
     studiedTimes: successfulReviews,
@@ -137,7 +147,7 @@ export function simulateDaysToMastery(): number {
   let totalDays = 0;
   let guard = 0;
   while (growthScore < MASTERY_GROWTH_THRESHOLD && guard < 100) {
-    const interval = getNextReviewInterval(masteryScore);
+    const interval = reviewIntervalFor(successfulReviews, masteryScore);
     totalDays += interval;
     successfulReviews += 1;
     masteryScore = calculateMasteryScore(successfulReviews, interval, 0);

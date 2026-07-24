@@ -178,7 +178,7 @@ export function checkAnswer(word: string, answer: string): boolean {
   return word.toLowerCase() === answer.trim().toLowerCase();
 }
 
-// Wrong answer → demote one round (floor at 1, since there's no round 0).
+// Wrong answer → stay at the same round and just try it again (no demotion).
 // Correct answer below round 5 → promote one round.
 // Correct answer at round 5 → this is a real successful no-hint pass, so it
 // feeds the SRS scoring (mastery score, mascot stage, next review date) —
@@ -187,8 +187,7 @@ export function applyResult(progress: WordProgress, correct: boolean): WordProgr
   const lastPracticed = today();
 
   if (!correct) {
-    const round = Math.max(1, progress.round - 1) as Round;
-    return { ...progress, round, lastPracticed };
+    return { ...progress, lastPracticed };
   }
 
   if (progress.round < MAX_ROUND) {
@@ -214,13 +213,12 @@ export interface ReviewOutcome {
 }
 
 // Review scoring: every review episode starts at REVIEW_BASE_ROUND. A wrong
-// answer drops it a rung (same as Study) and keeps it in the session's
-// queue for another try — it does NOT get rescheduled for tomorrow, since
-// the user is expected to keep retrying today, same as climbing rounds 1-4
-// in Study. Only the round-5 answer that actually concludes the episode
-// (first try, or after recovering from a mistake) touches the SRS schedule,
-// using whatever pendingMistakes built up along the way for the growth
-// increment.
+// answer stays at the same round (same as Study — no demotion) and keeps it
+// in the session's queue for another try — it does NOT get rescheduled for
+// tomorrow, since the user is expected to keep retrying today. Only the
+// round-5 answer that actually concludes the episode (first try, or after
+// however many retries) touches the SRS schedule, using whatever
+// pendingMistakes built up along the way for the growth increment.
 export function applyReviewResult(progress: WordProgress, correct: boolean, currentRound: Round): ReviewOutcome {
   const t = today();
 
@@ -240,9 +238,8 @@ export function applyReviewResult(progress: WordProgress, correct: boolean, curr
     return { progress: { ...progress, lastPracticed: t }, nextRound, isFinal: false, scored: true };
   }
 
-  const nextRound = Math.max(1, currentRound - 1) as Round;
   const updated = { ...progress, pendingMistakes: progress.pendingMistakes + 1, lastPracticed: t };
-  return { progress: updated, nextRound, isFinal: false, scored: true };
+  return { progress: updated, nextRound: currentRound, isFinal: false, scored: true };
 }
 
 // ============================================================================
