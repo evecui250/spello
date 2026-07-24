@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveSettings, markOnboardingDone, Settings, MascotStageId } from '../../lib/storage';
 import { estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
+import { Level } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
 import Logo from '../../components/Logo';
 import DachshundMascot from '../../components/Mascot';
@@ -13,10 +14,10 @@ const STEPS = ['language', 'pace', 'account', 'mascots'] as const;
 type Step = typeof STEPS[number];
 
 const MASCOT_INTRO: { id: MascotStageId; name: string; reviews: string }[] = [
-  { id: 'puppy', name: 'Puppy', reviews: 'after your 1st successful review' },
-  { id: 'short', name: 'Short Dachshund', reviews: 'after your 2nd' },
-  { id: 'medium', name: 'Medium Dachshund', reviews: 'after your 3rd' },
-  { id: 'long-crowned', name: 'Long Dachshund with Crown', reviews: 'after your 4th — fully mastered' },
+  { id: 'puppy', name: 'Puppy', reviews: 'after first learning' },
+  { id: 'short', name: 'Short Dachshund', reviews: 'after your 1st review' },
+  { id: 'medium', name: 'Medium Dachshund', reviews: 'after your 2nd review' },
+  { id: 'long-crowned', name: 'Long Dachshund with Crown', reviews: 'after your 3rd review — fully mastered' },
 ];
 
 function StepDots({ step }: { step: Step }) {
@@ -38,7 +39,7 @@ export default function WelcomePage() {
   const [step, setStep] = useState<Step>('language');
 
   const [language, setLanguage] = useState('de');
-  const [level, setLevel] = useState('B2');
+  const [level, setLevel] = useState<Level>('B2');
   const [studyBatchSize, setStudyBatchSize] = useState(15);
   const [dailyReview, setDailyReview] = useState(25);
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
@@ -92,9 +93,10 @@ export default function WelcomePage() {
                 <label className="block font-semibold text-stone-800 mb-1">Level</label>
                 <select
                   value={level}
-                  onChange={e => setLevel(e.target.value)}
+                  onChange={e => setLevel(e.target.value as Level)}
                   className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
                 >
+                  <option value="A1">A1</option>
                   <option value="B2">B2</option>
                 </select>
               </div>

@@ -7,7 +7,7 @@ import {
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
-import { WORDS } from '../lib/words';
+import { wordsForLevel } from '../lib/words';
 import { SYNCED_EVENT } from '../lib/sync';
 import Logo from '../components/Logo';
 import {
@@ -57,6 +57,7 @@ export default function HomePage() {
   const [session, setSession] = useState<DailySession | null>(null);
   const [previewStudyCount, setPreviewStudyCount] = useState(0);
   const [previewReviewCount, setPreviewReviewCount] = useState(0);
+  const [totalWords, setTotalWords] = useState(0);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -79,6 +80,7 @@ export default function HomePage() {
       // yet) doesn't count here, same as it shows "New" there.
       setLearningCount(Object.values(progress).filter(p => p.studiedTimes > 0 && !p.fullyMastered).length);
       const settings = getSettings();
+      setTotalWords(wordsForLevel(settings.level).length);
       const ds = getDailySession();
       setSession(ds);
       if (!ds) {
@@ -128,7 +130,7 @@ export default function HomePage() {
     { icon: FlameIcon, value: streak, label: 'day streak', ring: 'border-amber-200/40', iconColor: 'text-amber-300', drift: -8, delay: 0 },
     { icon: SproutIcon, value: learningCount, label: 'learning', ring: 'border-sky-200/40', iconColor: 'text-sky-300', drift: 8, delay: 0.7 },
     { icon: StarIcon, value: masteredCount, label: 'mastered', ring: 'border-emerald-200/40', iconColor: 'text-emerald-300', drift: -6, delay: 1.4 },
-    { icon: LayersIcon, value: WORDS.length, label: 'total words', ring: 'border-violet-200/40', iconColor: 'text-violet-300', drift: 7, delay: 2.1 },
+    { icon: LayersIcon, value: totalWords, label: 'total words', ring: 'border-violet-200/40', iconColor: 'text-violet-300', drift: 7, delay: 2.1 },
   ];
 
   if (!ready) return null;

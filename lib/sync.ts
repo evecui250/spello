@@ -2,16 +2,35 @@
 
 import { supabase } from './supabase';
 import {
-  getAllProgress, saveAllProgress, WordProgress,
-  getStreak, saveStreak, Streak,
-  getSettings, saveSettings, getSettingsUpdatedAt,
+  getActiveLevel,
+  getAllProgressForLevel, saveAllProgressForLevel, WordProgress,
+  getStreakForLevel, saveStreakForLevel, Streak,
+  getSettingsForLevel, saveSettingsForLevel, getMostRecentSettingsUpdatedAt, Settings,
 } from './storage';
+import { Level, LEVEL_ORDER } from './words';
+
+// Each level is its own profile locally (see storage.ts) — the remote row
+// mirrors that by nesting every level's progress/streak/settings under its
+// own key, so switching levels on one device and syncing never overwrites
+// another level's cloud backup with the wrong profile's data.
+type ProgressByLevel = Partial<Record<Level, Record<string, WordProgress>>>;
+type StreakByLevel = Partial<Record<Level, Streak>>;
+type SettingsByLevel = Partial<Record<Level, Settings>>;
 
 interface RemoteRow {
-  progress: Record<string, WordProgress>;
-  streak: Streak;
-  settings: ReturnType<typeof getSettings> | null;
+  progress: ProgressByLevel | Record<string, WordProgress> | null;
+  streak: StreakByLevel | Streak | null;
+  settings: SettingsByLevel | Settings | null;
   updated_at: string | null;
+}
+
+// Old rows (from before the per-level split) stored a single flat blob that
+// was always implicitly B2. Detect the new shape by checking that every
+// top-level key is a known CEFR level; anything else (a word id, or streak's
+// "lastDate" field, etc.) means it's the legacy flat shape.
+function isNestedByLevel(obj: unknown): obj is Record<string, unknown> {
+  if (!obj || typeof obj !== 'object') return false;
+  return Object.keys(obj).every(k => (LEVEL_ORDER as string[]).includes(k));
 }
 
 // Prefers whichever side is "further along" for each word, so syncing never
@@ -35,7 +54,8 @@ function mergeProgress(
   return merged;
 }
 
-// Pulls the signed-in user's remote data and merges it into local storage.
+// Pulls the signed-in user's remote data and merges it into local storage —
+// level by level, so a backup of one profile never bleeds into another.
 // Called right after sign-in so progress from other devices shows up here.
 export async function pullAndMerge(userId: string): Promise<void> {
   const { data, error } = await supabase
@@ -50,39 +70,68 @@ export async function pullAndMerge(userId: string): Promise<void> {
   }
   if (!data) return;
 
-  saveAllProgress(mergeProgress(getAllProgress(), data.progress ?? {}));
+  const nested = isNestedByLevel(data.progress) && isNestedByLevel(data.streak);
+  // Legacy rows (pre-per-level split) stored one flat blob that was always
+  // implicitly B2 — read it as B2-only rather than dropping it.
+  const remoteProgressByLevel: ProgressByLevel = nested
+    ? (data.progress as ProgressByLevel)
+    : { B2: (data.progress as Record<string, WordProgress>) ?? {} };
+  const remoteStreakByLevel: StreakByLevel = nested
+    ? (data.streak as StreakByLevel)
+    : { B2: data.streak as Streak };
+  const remoteSettingsByLevel: SettingsByLevel = nested
+    ? (data.settings as SettingsByLevel) ?? {}
+    : { B2: data.settings as Settings };
 
-  const localStreak = getStreak();
-  const remoteStreak = data.streak;
-  if (remoteStreak && remoteStreak.lastDate > localStreak.lastDate) {
-    saveStreak(remoteStreak);
+  for (const level of LEVEL_ORDER) {
+    const remoteProgress = remoteProgressByLevel[level];
+    if (remoteProgress) {
+      saveAllProgressForLevel(level, mergeProgress(getAllProgressForLevel(level), remoteProgress));
+    }
+    const remoteStreak = remoteStreakByLevel[level];
+    if (remoteStreak && remoteStreak.lastDate > getStreakForLevel(level).lastDate) {
+      saveStreakForLevel(level, remoteStreak);
+    }
   }
 
-  // Only apply remote settings if they're actually newer than this device's
-  // last local edit — otherwise a pull (which runs on every page load while
-  // signed in) can clobber a change made moments ago that hasn't pushed yet.
-  const localSettingsUpdatedAt = getSettingsUpdatedAt();
+  // Settings are pushed/pulled as one all-levels bundle, so the staleness
+  // check is against the most recently edited level on this device, not any
+  // one level in particular — otherwise a pull (which runs on every page
+  // load while signed in) could clobber a change made moments ago on
+  // whichever level wasn't currently active.
+  const localSettingsUpdatedAt = getMostRecentSettingsUpdatedAt();
   const remoteIsNewer = !localSettingsUpdatedAt
     || (!!data.updated_at && data.updated_at > localSettingsUpdatedAt);
-  if (data.settings && remoteIsNewer) {
-    saveSettings(data.settings);
+  if (remoteIsNewer) {
+    for (const level of LEVEL_ORDER) {
+      const remoteSettings = remoteSettingsByLevel[level];
+      if (remoteSettings) saveSettingsForLevel(level, remoteSettings);
+    }
   }
 }
 
-// Pushes the current local state up as this user's remote snapshot.
-// Alongside the full `progress` blob (needed to actually restore state on
-// another device), this also tries to write flat summary columns —
-// streak_count, learning_count, mastered_count, language, level — so the
-// row is readable at a glance in the Supabase table editor without
-// expanding the JSON. Those columns are optional (added via a follow-up
-// ALTER TABLE); if they don't exist yet, Postgres rejects the whole upsert,
-// so this falls back to the core payload rather than silently failing to
-// sync at all.
+// Pushes every level's local state up as this user's remote snapshot, nested
+// by level (see ProgressByLevel/StreakByLevel/SettingsByLevel above) so each
+// profile keeps its own separate cloud backup. Alongside the full `progress`
+// blob (needed to actually restore state on another device), this also
+// tries to write flat summary columns — streak_count, learning_count,
+// mastered_count, language, level — describing the *currently active*
+// level/profile, so the row is readable at a glance in the Supabase table
+// editor without expanding the JSON. Those columns are optional (added via a
+// follow-up ALTER TABLE); if they don't exist yet, Postgres rejects the
+// whole upsert, so this falls back to the core payload rather than silently
+// failing to sync at all.
 async function pushToRemote(userId: string): Promise<void> {
-  const progress = getAllProgress();
-  const streak = getStreak();
-  const settings = getSettings();
-  const values = Object.values(progress);
+  const progress: ProgressByLevel = {};
+  const streak: StreakByLevel = {};
+  const settings: SettingsByLevel = {};
+  for (const level of LEVEL_ORDER) {
+    const p = getAllProgressForLevel(level);
+    if (Object.keys(p).length > 0) progress[level] = p;
+    const s = getStreakForLevel(level);
+    if (s.lastDate) streak[level] = s;
+    settings[level] = getSettingsForLevel(level);
+  }
 
   const corePayload = {
     user_id: userId,
@@ -92,13 +141,18 @@ async function pushToRemote(userId: string): Promise<void> {
     updated_at: new Date().toISOString(),
   };
 
+  const activeLevel = getActiveLevel();
+  const activeStreak = streak[activeLevel] ?? { lastDate: '', count: 0 };
+  const activeSettings = settings[activeLevel];
+  const allValues = Object.values(progress).flatMap(p => Object.values(p));
+
   const { error } = await supabase.from('user_progress').upsert({
     ...corePayload,
-    streak_count: streak.count,
-    learning_count: values.filter(p => !p.fullyMastered && p.studiedTimes >= 1).length,
-    mastered_count: values.filter(p => p.fullyMastered).length,
-    language: settings.language,
-    level: settings.level,
+    streak_count: activeStreak.count,
+    learning_count: allValues.filter(p => !p.fullyMastered && p.studiedTimes >= 1).length,
+    mastered_count: allValues.filter(p => p.fullyMastered).length,
+    language: activeSettings?.language,
+    level: activeLevel,
   });
 
   if (error) {

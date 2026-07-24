@@ -1,6 +1,6 @@
 'use client';
 
-import { WORDS, Word } from './words';
+import { WORDS, Word, wordsForLevel } from './words';
 import {
   getAllProgress, getSettings, today, MAX_ROUND, Round, WordProgress,
   getDailySession, saveDailySession, SessionPhase,
@@ -34,7 +34,7 @@ export function buildStudyWords(
   const allProgress = getAllProgress();
   const inProgress: Word[] = [];
   const fresh: Word[] = [];
-  for (const w of WORDS) {
+  for (const w of wordsForLevel(getSettings().level)) {
     if (excludeIds.has(w.id)) continue;
     const p = allProgress[w.id];
     if (!p) fresh.push(w);
@@ -98,7 +98,7 @@ export function buildReviewWords(
 ): Word[] {
   const allProgress = getAllProgress();
   const t = today();
-  const pool = WORDS.filter(w => {
+  const pool = wordsForLevel(getSettings().level).filter(w => {
     const p = allProgress[w.id];
     if (!p || p.fullyMastered || p.round !== MAX_ROUND || p.successfulReviews < 1) return false;
     if (excludeIds.has(w.id)) return false;
@@ -157,12 +157,13 @@ export interface ProgressForecast {
 // each word was introduced, which isn't tractable to forecast exactly here.
 export function estimateProgressForecast(studyBatchSize: number): ProgressForecast {
   const allProgress = getAllProgress();
+  const levelWords = wordsForLevel(getSettings().level);
   let introduced = 0;
-  for (const w of WORDS) {
+  for (const w of levelWords) {
     if (allProgress[w.id]) introduced++;
   }
 
-  const wordsRemaining = WORDS.length - introduced;
+  const wordsRemaining = levelWords.length - introduced;
   const daysToIntroduceAll = studyBatchSize > 0 ? Math.ceil(wordsRemaining / studyBatchSize) : Infinity;
 
   // The natural pace the SRS formula itself produces, from first study pass

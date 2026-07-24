@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { WORDS, CATEGORIES } from '../../lib/words';
-import { getAllProgress, WordProgress, today } from '../../lib/storage';
+import { useEffect, useMemo, useState } from 'react';
+import { wordsForLevel } from '../../lib/words';
+import { getAllProgress, getSettings, WordProgress, today } from '../../lib/storage';
 import { daysBetween } from '../../lib/srs';
 import SpeakerButton from '../../components/SpeakerButton';
 import DachshundMascot from '../../components/Mascot';
@@ -20,6 +20,14 @@ export default function WordsPage() {
   const [search, setSearch] = useState('');
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
+  // The vocabulary book itself — follows Settings' CEFR level (a separate
+  // concept from filterLevel above, which is the New/Learning/Mastered
+  // progress filter). Browsing an A1 profile shouldn't surface B2-only words.
+  const words = useMemo(() => wordsForLevel(getSettings().level), []);
+  const categories = useMemo(
+    () => [...new Set(words.map(w => w.category).filter(Boolean))] as string[],
+    [words],
+  );
 
   useEffect(() => {
     setProgress(getAllProgress());
@@ -31,7 +39,7 @@ export default function WordsPage() {
   // New, same as a word that hasn't been touched at all.
   const earned = (p?: WordProgress) => !!p && p.studiedTimes > 0;
 
-  const filtered = WORDS.filter(w => {
+  const filtered = words.filter(w => {
     const p = progress[w.id];
     if (filterLevel === 'new' && earned(p)) return false;
     if (filterLevel === 'mastered' && !p?.fullyMastered) return false;
@@ -74,7 +82,7 @@ export default function WordsPage() {
           className="bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-3 py-1.5 text-sm text-stone-800 focus:outline-none focus:border-amber-300"
         >
           <option value="all">All categories</option>
-          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          {categories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
 

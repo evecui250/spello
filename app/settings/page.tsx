@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getSettings, saveSettings, clearAllProgress, Settings } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, clearAllProgress, Settings } from '../../lib/storage';
 import { estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
-import { WORDS } from '../../lib/words';
+import { Level, wordsForLevel } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 
@@ -11,7 +11,7 @@ export default function SettingsPage() {
   const [studyBatchSize, setStudyBatchSize] = useState(15);
   const [dailyReview, setDailyReview] = useState(25);
   const [language, setLanguage] = useState('de');
-  const [level, setLevel] = useState('B2');
+  const [level, setLevel] = useState<Level>('B2');
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
   const [requireArticle, setRequireArticle] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -19,8 +19,7 @@ export default function SettingsPage() {
   const [showPaceInfo, setShowPaceInfo] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const loadFromStorage = () => {
-    const s = getSettings();
+  const applySettings = (s: Settings) => {
     setStudyBatchSize(s.studyBatchSize);
     setDailyReview(s.dailyReview);
     setLanguage(s.language);
@@ -29,7 +28,25 @@ export default function SettingsPage() {
     setRequireArticle(s.requireArticle);
   };
 
+  const loadFromStorage = () => applySettings(getSettings());
+
   useEffect(loadFromStorage, []);
+
+  // Switching level is switching profiles entirely — separate progress,
+  // streak, daily stats/session, and pace settings, with no bleed-through
+  // in either direction. Unlike every other control here, this does NOT
+  // merge the just-changed field into current React state (that would carry
+  // this level's studyBatchSize/dailyReview/etc. into the new level's fresh
+  // profile) — it loads whatever that level's own profile already has (or
+  // its untouched defaults, first time).
+  const handleLevelChange = (newLevel: Level) => {
+    const s = switchToLevel(newLevel);
+    applySettings(s);
+    scheduleSync();
+    setSaved(true);
+    clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaved(false), 1200);
+  };
 
   // Recomputed live as the sliders move, so the user can see the effect of
   // a pace change immediately.
@@ -63,7 +80,7 @@ export default function SettingsPage() {
   };
 
   const handleClearAll = () => {
-    if (!window.confirm("This will erase all learning progress and your streak — every word starts over. This can't be undone. Continue?")) return;
+    if (!window.confirm(`This will erase all learning progress and your streak for the ${level} level — every word starts over. Other levels aren't affected. This can't be undone. Continue?`)) return;
     clearAllProgress();
     scheduleSync();
     setCleared(true);
@@ -99,16 +116,17 @@ export default function SettingsPage() {
             <label className="block font-semibold text-stone-800 mb-1">Level</label>
             <select
               value={level}
-              onChange={e => { setLevel(e.target.value); persist({ level: e.target.value }); }}
+              onChange={e => handleLevelChange(e.target.value as Level)}
               className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
             >
+              <option value="A1">A1</option>
               <option value="B2">B2</option>
             </select>
           </div>
         </div>
         <div className="-mt-4 flex flex-col gap-0.5">
-          <p className="text-stone-500 text-sm">This vocabulary book has {WORDS.length} words.</p>
-          <p className="text-stone-500 text-sm">More languages and levels are coming soon.</p>
+          <p className="text-stone-500 text-sm">This vocabulary book has {wordsForLevel(level).length} words up to {level}.</p>
+          <p className="text-stone-500 text-sm">Switching level is its own separate profile — progress, streak, and pace stay independent. More languages and levels (A2, B1…) are coming soon.</p>
         </div>
 
         <div>
@@ -224,14 +242,14 @@ export default function SettingsPage() {
         <div>
           <h2 className="font-semibold text-red-700">Danger zone</h2>
           <p className="text-stone-500 text-sm mt-1">
-            Erase all word progress, coins, and your streak to start over from scratch.
+            Erase all word progress, coins, and your streak for the {level} level to start over from scratch. Other levels are untouched.
           </p>
         </div>
         <button
           onClick={handleClearAll}
           className="w-full bg-red-50 text-red-700 border-2 border-red-100 py-3 rounded-xl font-semibold hover:bg-red-100 active:scale-95 transition-all"
         >
-          {cleared ? '✓ Cleared!' : 'Clear all progress'}
+          {cleared ? '✓ Cleared!' : `Clear all progress (${level})`}
         </button>
       </div>
     </div>

@@ -1,119 +1,96 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
 
 interface Props {
   studiedCount: number;
   reviewedCount: number;
   language: string;
   onClose: () => void;
-  // Shown as a caption below the shareable image — this modal covers the
-  // session summary underneath it, so the mascot tally has to live here too.
-  earnedContent?: ReactNode;
+  // Which day this card is for — defaults to today. Reopening a past day's
+  // card (see Progress's daily history) passes that day's date instead, so
+  // the stamp in the corner matches the counts being shown.
+  date?: string;
 }
 
-// Draws a rounded rectangle path (used instead of ctx.roundRect for wider
-// browser support, since this runs inside an offscreen canvas).
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
+// public/congrats.png is the shareable card's background art (1254x1254) —
+// hand-designed with placeholder "N"/"M" glyphs marking where the actual
+// new-words/reviewed counts get overlaid at render time. These are that
+// artwork's exact pixel coordinates (see the design session that measured
+// them): each glyph's bounding box, used both to blank out the placeholder
+// and to center the real number in the same spot.
+const IMG_SIZE = 1254;
+const NEW_WORDS_BOX = { x0: 302, x1: 435, y0: 420, y1: 682 };
+const REVIEWED_BOX = { x0: 804, x1: 960, y0: 416, y1: 682 };
+const CARD_BG = '#fefbf2';
+
+function drawCount(ctx: CanvasRenderingContext2D, box: typeof NEW_WORDS_BOX, value: number, color: string) {
+  const cx = (box.x0 + box.x1) / 2;
+  const cy = (box.y0 + box.y1) / 2;
+  const boxWidth = box.x1 - box.x0;
+  const boxHeight = box.y1 - box.y0;
+
+  // Blank out the placeholder glyph first — a real count can be a different
+  // width (e.g. "12" vs the single placeholder letter), so the old glyph
+  // can't be allowed to show through around the edges of the new one.
+  ctx.fillStyle = CARD_BG;
+  ctx.fillRect(box.x0 - 40, box.y0 - 10, boxWidth + 80, boxHeight + 20);
+
+  // Shrink the font for multi-digit counts so they still fit the same box
+  // the single placeholder glyph was drawn in.
+  const digits = String(value).length;
+  const fontSize = digits <= 2 ? boxHeight * 0.86 : boxHeight * 0.86 * (2.4 / (digits + 0.4));
+  ctx.fillStyle = color;
+  ctx.font = `800 ${fontSize}px system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // Nudge down slightly — cap-height fonts optically sit a bit high of true
+  // vertical center.
+  ctx.fillText(String(value), cx, cy + fontSize * 0.06);
 }
 
-export default function CongratsModal({ studiedCount, reviewedCount, language, onClose, earnedContent }: Props) {
+export default function CongratsModal({ studiedCount, reviewedCount, language, onClose, date }: Props) {
   const [imgUrl, setImgUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    const size = 1080;
     const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
+    canvas.width = IMG_SIZE;
+    canvas.height = IMG_SIZE;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     let cancelled = false;
 
-    const draw = (logo: HTMLImageElement | null) => {
+    const draw = (bg: HTMLImageElement) => {
       if (cancelled) return;
 
-      const bg = ctx.createLinearGradient(0, 0, size, size);
-      bg.addColorStop(0, '#6366f1');
-      bg.addColorStop(1, '#a855f7');
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, size, size);
+      ctx.drawImage(bg, 0, 0, IMG_SIZE, IMG_SIZE);
+      drawCount(ctx, NEW_WORDS_BOX, studiedCount, '#7c3aed');
+      drawCount(ctx, REVIEWED_BOX, reviewedCount, '#0d9488');
 
-      ctx.fillStyle = 'rgba(255,255,255,0.10)';
-      ctx.beginPath(); ctx.arc(size * 0.86, size * 0.14, 190, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(size * 0.08, size * 0.92, 150, 0, Math.PI * 2); ctx.fill();
-
-      const pad = 64;
-      ctx.fillStyle = 'rgba(255,255,255,0.97)';
-      roundRect(ctx, pad, pad, size - pad * 2, size - pad * 2, 48);
-      ctx.fill();
-
-      ctx.textAlign = 'center';
-      const cx = size / 2;
-      let y = pad + 60;
-
-      if (logo && logo.naturalWidth && logo.naturalHeight) {
-        // The logo already has the "Spello" wordmark baked in, so it's
-        // drawn large on its own — no separate text label needed.
-        const logoHeight = 320;
-        const logoWidth = logoHeight * (logo.naturalWidth / logo.naturalHeight);
-        ctx.drawImage(logo, cx - logoWidth / 2, y, logoWidth, logoHeight);
-        y += logoHeight + 40;
-      } else {
-        y += 40;
-      }
-
-      ctx.fillStyle = '#1e1b4b';
-      ctx.font = '700 56px system-ui, -apple-system, sans-serif';
-      ctx.fillText('Daily goal complete!', cx, y + 50);
-      y += 130;
-
-      // Two stat columns: words studied and words reviewed.
-      const colOffset = 230;
-      ctx.fillStyle = '#4f46e5';
-      ctx.font = '800 120px system-ui, -apple-system, sans-serif';
-      ctx.fillText(`${studiedCount}`, cx - colOffset, y + 120);
-      ctx.fillText(`${reviewedCount}`, cx + colOffset, y + 120);
-
-      ctx.fillStyle = '#334155';
-      ctx.font = '500 34px system-ui, -apple-system, sans-serif';
-      ctx.fillText('learned', cx - colOffset, y + 170);
-      ctx.fillText('reviewed', cx + colOffset, y + 170);
-
-      ctx.strokeStyle = '#e0e7ff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(cx, y + 20);
-      ctx.lineTo(cx, y + 150);
-      ctx.stroke();
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '400 30px system-ui, -apple-system, sans-serif';
-      const dateStr = new Date().toLocaleDateString(undefined, {
-        year: 'numeric', month: 'long', day: 'numeric',
+      // Small date stamp in the open cream space top-right, so a saved/
+      // shared image is still self-explanatory (and a reopened past day
+      // doesn't look like it's claiming to be today).
+      const dateStr = new Date(`${date ?? new Date().toISOString().slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, {
+        year: 'numeric', month: 'short', day: 'numeric',
       });
-      ctx.fillText(dateStr, cx, size - pad - 50);
+      ctx.fillStyle = 'rgba(120, 90, 40, 0.55)';
+      ctx.font = '600 26px system-ui, -apple-system, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(dateStr, IMG_SIZE - 70, 90);
 
       canvas.toBlob(blob => {
         if (blob && !cancelled) setImgUrl(URL.createObjectURL(blob));
       });
     };
 
-    const logo = new window.Image();
-    logo.onload = () => draw(logo);
-    logo.onerror = () => draw(null);
-    logo.src = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/logo.png`;
+    const bg = new window.Image();
+    bg.onload = () => draw(bg);
+    bg.src = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/congrats.png`;
 
     return () => { cancelled = true; };
-  }, [studiedCount, reviewedCount, language]);
+  }, [studiedCount, reviewedCount, language, date]);
 
   useEffect(() => () => { if (imgUrl) URL.revokeObjectURL(imgUrl); }, [imgUrl]);
 
@@ -121,7 +98,7 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
     if (!imgUrl) return;
     const a = document.createElement('a');
     a.href = imgUrl;
-    a.download = `spello-${new Date().toISOString().slice(0, 10)}.png`;
+    a.download = `spello-${date ?? new Date().toISOString().slice(0, 10)}.png`;
     a.click();
   };
 
@@ -161,11 +138,6 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
             <span className="text-indigo-300 text-sm">Preparing image…</span>
           )}
         </div>
-        {earnedContent && (
-          <p className="-mt-1 flex justify-center text-sm font-semibold text-amber-700 bg-amber-100 rounded-full px-3 py-1.5">
-            {earnedContent}
-          </p>
-        )}
         <div className="flex gap-2">
           <button
             onClick={handleShare}

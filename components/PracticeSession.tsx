@@ -437,7 +437,6 @@ export default function PracticeSession({ mode }: Props) {
             reviewedCount={dailyStats.reviewedCount}
             language={LANG_NAMES[settings?.language ?? 'de'] ?? 'German'}
             onClose={() => setShowCongrats(false)}
-            earnedContent={earnedContent}
           />
         )}
         {nudge && (

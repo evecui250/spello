@@ -5,6 +5,7 @@ import { WORDS, Word } from '../../lib/words';
 import { getAllProgress, MascotStageId, WordProgress, today } from '../../lib/storage';
 import { addDays } from '../../lib/srs';
 import DachshundMascot from '../../components/Mascot';
+import CongratsModal from '../../components/CongratsModal';
 
 const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
 const STAGE_COLORS: Record<MascotStageId, string> = {
@@ -101,8 +102,12 @@ function WordRow({ label, words, color }: { label: string; words: WordChip[]; co
   );
 }
 
-function DayCard({ bucket, isToday }: { bucket: DayBucket; isToday: boolean }) {
+function DayCard({ bucket, isToday, onViewCongrats }: { bucket: DayBucket; isToday: boolean; onViewCongrats: () => void }) {
   const nothing = bucket.learned.length === 0 && bucket.reviewed.length === 0 && bucket.due.length === 0;
+  // "Goal met" for this day, reconstructed from what actually happened —
+  // matches the same learned/reviewed counts the live congrats card shows,
+  // so a reopened card for a past day is consistent with what was seen then.
+  const goalMet = bucket.learned.length > 0 || bucket.reviewed.length > 0;
 
   return (
     <div className={`bg-amber-50/75 backdrop-blur-sm rounded-2xl border shadow-sm p-4 flex flex-col gap-2 ${isToday ? 'border-amber-400' : 'border-amber-100/50'}`}>
@@ -116,6 +121,14 @@ function DayCard({ bucket, isToday }: { bucket: DayBucket; isToday: boolean }) {
           <WordRow label="Due to review" words={bucket.due} color="text-amber-700" />
         </div>
       )}
+      {goalMet && (
+        <button
+          onClick={onViewCongrats}
+          className="mt-1 self-start text-sm font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-full px-3 py-1.5 transition-colors"
+        >
+          🎉 View congrats card
+        </button>
+      )}
     </div>
   );
 }
@@ -123,6 +136,7 @@ function DayCard({ bucket, isToday }: { bucket: DayBucket; isToday: boolean }) {
 export default function ProgressPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress> | null>(null);
   const [date, setDate] = useState(() => today());
+  const [showCongrats, setShowCongrats] = useState(false);
 
   useEffect(() => {
     setProgress(getAllProgress());
@@ -222,8 +236,18 @@ export default function ProgressPage() {
           </button>
         )}
 
-        <DayCard bucket={bucket} isToday={date === t} />
+        <DayCard bucket={bucket} isToday={date === t} onViewCongrats={() => setShowCongrats(true)} />
       </div>
+
+      {showCongrats && (
+        <CongratsModal
+          studiedCount={bucket.learned.length}
+          reviewedCount={bucket.reviewed.length}
+          language="German"
+          date={bucket.date}
+          onClose={() => setShowCongrats(false)}
+        />
+      )}
     </div>
   );
 }

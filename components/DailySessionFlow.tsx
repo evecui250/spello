@@ -464,34 +464,12 @@ export default function DailySessionFlow() {
   if (session.phase === 'congrats') {
     if (!showCongrats) return null;
     const dailyStats = getDailyStats();
-    // Cumulative for the whole day (matches studiedCount/reviewedCount right
-    // above in the card) — NOT session.earnedPuppies/earnedUpgrades, which
-    // are per-round and would go stale after a second "Study more" round.
-    const totalUpgrades = Object.values(dailyStats.upgradesEarned).reduce((a, b) => a + (b ?? 0), 0);
-    const earnedContent = dailyStats.puppiesEarned === 0 && totalUpgrades === 0 ? undefined : (
-      <span className="inline-flex items-center gap-2 flex-wrap justify-center">
-        {dailyStats.puppiesEarned > 0 && (
-          <span className="inline-flex items-center gap-1">
-            <DachshundMascot stage="puppy" className="w-6 h-6" /> {dailyStats.puppiesEarned} new
-          </span>
-        )}
-        {totalUpgrades > 0 && (
-          <span className="inline-flex items-center gap-1">
-            {STAGE_ORDER.filter(s => dailyStats.upgradesEarned[s]).map(s => (
-              <DachshundMascot key={s} stage={s} className="w-6 h-6" />
-            ))}
-            {totalUpgrades} upgraded
-          </span>
-        )}
-      </span>
-    );
     return (
       <CongratsModal
         studiedCount={dailyStats.studiedCount}
         reviewedCount={dailyStats.reviewedCount}
         language="German"
         onClose={handleCloseCongrats}
-        earnedContent={earnedContent}
       />
     );
   }

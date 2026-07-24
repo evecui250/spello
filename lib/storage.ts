@@ -1,5 +1,7 @@
 'use client';
 
+import { Level, LEVEL_ORDER } from './words';
+
 export type Round = 1 | 2 | 3 | 4 | 5;
 export const MAX_ROUND: Round = 5;
 
@@ -39,11 +41,15 @@ export interface Settings {
   studyBatchSize: number;
   dailyReview: number;
   language: string;
-  level: string;
+  level: Level;
   autoPlayAudio: boolean;
   requireArticle: boolean;
 }
 
+// Every one of these is per-level storage: switching level in Settings is a
+// full profile switch — separate progress, streak, daily stats/session, and
+// pace settings, with zero interference between levels. Only onboarding and
+// the "which level is active" pointer itself are level-independent.
 const KEYS = {
   progress: 'wb2_progress',
   streak: 'wb2_streak',
@@ -58,10 +64,72 @@ const KEYS = {
 const EXTRA_STUDY_KEY = 'wb2_extra_study_limit';
 const EXTRA_REVIEW_KEY = 'wb2_extra_review_limit';
 
+const ACTIVE_LEVEL_KEY = 'wb2_active_level';
+const MIGRATION_FLAG = 'wb2_migrated_per_level_v1';
+
 const DEFAULT_SETTINGS: Settings = {
   studyBatchSize: 15, dailyReview: 25, language: 'de', level: 'B2',
   autoPlayAudio: true, requireArticle: false,
 };
+
+// One-time move of pre-level-split data (flat keys, always implicitly B2)
+// into the 'B2' namespace, so existing progress/streak/settings survive the
+// switch to per-level storage instead of silently vanishing. Idempotent —
+// guarded by MIGRATION_FLAG so it only ever runs once per browser.
+function migrateLegacyKeysToB2(): void {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem(MIGRATION_FLAG)) return;
+  const legacyToNamespaced: [string, string][] = [
+    ['wb2_progress', namespacedKey(KEYS.progress, 'B2')],
+    ['wb2_streak', namespacedKey(KEYS.streak, 'B2')],
+    ['wb2_settings', namespacedKey(KEYS.settings, 'B2')],
+    ['wb2_settings_updated_at', namespacedKey(KEYS.settingsUpdatedAt, 'B2')],
+    ['wb2_daily_stats', namespacedKey(KEYS.dailyStats, 'B2')],
+    ['wb2_study_batch', namespacedKey(KEYS.studyBatch, 'B2')],
+    ['wb2_daily_session', namespacedKey(KEYS.dailySession, 'B2')],
+  ];
+  for (const [oldKey, newKey] of legacyToNamespaced) {
+    const val = localStorage.getItem(oldKey);
+    if (val !== null && localStorage.getItem(newKey) === null) {
+      localStorage.setItem(newKey, val);
+    }
+  }
+  if (!localStorage.getItem(ACTIVE_LEVEL_KEY)) {
+    localStorage.setItem(ACTIVE_LEVEL_KEY, 'B2');
+  }
+  localStorage.setItem(MIGRATION_FLAG, '1');
+}
+
+// Raw key name, not a namespaced one — avoids infinite recursion through
+// namespacedKey's own migration call.
+function namespacedKey(base: string, level: Level): string {
+  return `${base}__${level}`;
+}
+
+export function getActiveLevel(): Level {
+  if (typeof window === 'undefined') return 'B2';
+  migrateLegacyKeysToB2();
+  return (localStorage.getItem(ACTIVE_LEVEL_KEY) as Level) || 'B2';
+}
+
+// Always runs migration first, regardless of whether `level` is passed
+// explicitly — callers like isOnboardingDone() read a specific level's key
+// before anything has called getActiveLevel() yet.
+function levelKey(base: string, level?: Level): string {
+  migrateLegacyKeysToB2();
+  return namespacedKey(base, level ?? getActiveLevel());
+}
+
+// Switches the active profile and returns that level's own settings (or
+// fresh defaults, if this level has never been used before) — the entry
+// point for "log into a different level" from the Settings level selector.
+export function switchToLevel(level: Level): Settings {
+  if (typeof window !== 'undefined') {
+    migrateLegacyKeysToB2();
+    localStorage.setItem(ACTIVE_LEVEL_KEY, level);
+  }
+  return getSettings();
+}
 
 // The user's LOCAL calendar date — deliberately not toISOString() (which is
 // always UTC). Using UTC here meant the app's "today" silently disagreed
@@ -85,7 +153,7 @@ export function today(): string {
 export function getAllProgress(): Record<string, WordProgress> {
   if (typeof window === 'undefined') return {};
   try {
-    const raw = JSON.parse(localStorage.getItem(KEYS.progress) || '{}');
+    const raw = JSON.parse(localStorage.getItem(levelKey(KEYS.progress)) || '{}');
     const normalized: Record<string, WordProgress> = {};
     for (const id of Object.keys(raw)) {
       normalized[id] = normalizeProgress(id, raw[id]);
@@ -145,7 +213,28 @@ function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): Wo
 }
 
 export function saveAllProgress(data: Record<string, WordProgress>): void {
-  localStorage.setItem(KEYS.progress, JSON.stringify(data));
+  localStorage.setItem(levelKey(KEYS.progress), JSON.stringify(data));
+}
+
+// Level-parameterized variants, for sync.ts — it needs to read/write every
+// level's data in one pass (to keep each level's cloud backup separate too),
+// not just whatever's currently active.
+export function getAllProgressForLevel(level: Level): Record<string, WordProgress> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = JSON.parse(localStorage.getItem(levelKey(KEYS.progress, level)) || '{}');
+    const normalized: Record<string, WordProgress> = {};
+    for (const id of Object.keys(raw)) {
+      normalized[id] = normalizeProgress(id, raw[id]);
+    }
+    return normalized;
+  } catch {
+    return {};
+  }
+}
+
+export function saveAllProgressForLevel(level: Level, data: Record<string, WordProgress>): void {
+  localStorage.setItem(levelKey(KEYS.progress, level), JSON.stringify(data));
 }
 
 export function getWordProgress(id: string): WordProgress {
@@ -164,7 +253,7 @@ export function saveWordProgress(p: WordProgress): void {
 export function getStreak(): Streak {
   if (typeof window === 'undefined') return { lastDate: '', count: 0 };
   try {
-    return JSON.parse(localStorage.getItem(KEYS.streak) || '{"lastDate":"","count":0}');
+    return JSON.parse(localStorage.getItem(levelKey(KEYS.streak)) || '{"lastDate":"","count":0}');
   } catch {
     return { lastDate: '', count: 0 };
   }
@@ -182,42 +271,93 @@ export function touchStreak(): void {
 }
 
 export function saveStreak(s: Streak): void {
-  localStorage.setItem(KEYS.streak, JSON.stringify(s));
+  localStorage.setItem(levelKey(KEYS.streak), JSON.stringify(s));
+}
+
+export function getStreakForLevel(level: Level): Streak {
+  if (typeof window === 'undefined') return { lastDate: '', count: 0 };
+  try {
+    return JSON.parse(localStorage.getItem(levelKey(KEYS.streak, level)) || '{"lastDate":"","count":0}');
+  } catch {
+    return { lastDate: '', count: 0 };
+  }
+}
+
+export function saveStreakForLevel(level: Level, s: Streak): void {
+  localStorage.setItem(levelKey(KEYS.streak, level), JSON.stringify(s));
 }
 
 // --- Settings ---
 
 export function getSettings(): Settings {
+  return getSettingsForLevel(getActiveLevel());
+}
+
+export function getSettingsForLevel(level: Level): Settings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS;
   try {
-    const raw = JSON.parse(localStorage.getItem(KEYS.settings) || 'null');
-    return { ...DEFAULT_SETTINGS, ...raw };
+    const raw = JSON.parse(localStorage.getItem(levelKey(KEYS.settings, level)) || 'null');
+    // `level` always wins over whatever's in storage — it's the namespace
+    // this record was read from, so it can never legitimately disagree.
+    return { ...DEFAULT_SETTINGS, ...raw, level };
   } catch {
-    return DEFAULT_SETTINGS;
+    return { ...DEFAULT_SETTINGS, level };
   }
 }
 
+// Persists this level's settings AND makes that level the active profile —
+// the two are the same action for a local edit, since "save settings for
+// level X" only makes sense if X is what's currently being edited.
 export function saveSettings(s: Settings): void {
-  localStorage.setItem(KEYS.settings, JSON.stringify(s));
-  localStorage.setItem(KEYS.settingsUpdatedAt, new Date().toISOString());
+  if (typeof window !== 'undefined') localStorage.setItem(ACTIVE_LEVEL_KEY, s.level);
+  saveSettingsForLevel(s.level, s);
+}
+
+// Same, but WITHOUT touching the active-level pointer — for sync.ts, which
+// writes every level's settings on a pull and must never let that silently
+// switch which profile the user is currently on.
+export function saveSettingsForLevel(level: Level, s: Settings): void {
+  localStorage.setItem(levelKey(KEYS.settings, level), JSON.stringify(s));
+  localStorage.setItem(levelKey(KEYS.settingsUpdatedAt, level), new Date().toISOString());
 }
 
 // When settings last changed on this device — lets a remote sync pull decide
 // whether its copy is actually newer before overwriting a local edit.
 export function getSettingsUpdatedAt(): string {
   if (typeof window === 'undefined') return '';
-  return localStorage.getItem(KEYS.settingsUpdatedAt) || '';
+  return localStorage.getItem(levelKey(KEYS.settingsUpdatedAt)) || '';
+}
+
+export function getSettingsUpdatedAtForLevel(level: Level): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem(levelKey(KEYS.settingsUpdatedAt, level)) || '';
+}
+
+// The whole remote row is pushed/pulled as one bundle (every level at once),
+// so "is the remote settings blob newer than mine" has to compare against
+// whichever level was edited most recently, not just the active one.
+export function getMostRecentSettingsUpdatedAt(): string {
+  let latest = '';
+  for (const level of LEVEL_ORDER) {
+    const t = getSettingsUpdatedAtForLevel(level);
+    if (t > latest) latest = t;
+  }
+  return latest;
 }
 
 // --- Onboarding ---
 // Whether a first-time visitor has been through the welcome/setup page yet.
+// Level-independent — onboarding is a whole-app, one-time intro, not
+// something a level switch should ever re-trigger.
 
 export function isOnboardingDone(): boolean {
   if (typeof window === 'undefined') return true;
   if (localStorage.getItem(KEYS.onboardingDone) === '1') return true;
   // Grandfather in anyone who already has settings or progress saved from
-  // before this feature existed — don't send existing users to onboarding.
-  if (localStorage.getItem(KEYS.settings) !== null || localStorage.getItem(KEYS.progress) !== null) {
+  // before this feature (or the per-level split) existed — don't send
+  // existing users to onboarding just because migration renamed their keys.
+  if (localStorage.getItem(levelKey(KEYS.settings, 'B2')) !== null
+    || localStorage.getItem(levelKey(KEYS.progress, 'B2')) !== null) {
     markOnboardingDone();
     return true;
   }
@@ -258,7 +398,7 @@ function defaultDailyStats(): DailyStats {
 export function getDailyStats(): DailyStats {
   if (typeof window === 'undefined') return defaultDailyStats();
   try {
-    const raw = JSON.parse(localStorage.getItem(KEYS.dailyStats) || 'null') as Partial<DailyStats> | null;
+    const raw = JSON.parse(localStorage.getItem(levelKey(KEYS.dailyStats)) || 'null') as Partial<DailyStats> | null;
     // Merged against the default so a record saved today under an older
     // schema (missing newer fields) doesn't produce NaN/undefined instead
     // of a sensible starting value.
@@ -271,7 +411,7 @@ export function getDailyStats(): DailyStats {
 
 function saveDailyStats(stats: DailyStats): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(KEYS.dailyStats, JSON.stringify(stats));
+  localStorage.setItem(levelKey(KEYS.dailyStats), JSON.stringify(stats));
 }
 
 // Whether the user has completed a full study session today (their daily goal).
@@ -367,7 +507,7 @@ export function resetDailyGoalsForExtraRound(): void {
 export function getTodayStudyBatch(): string[] | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = JSON.parse(localStorage.getItem(KEYS.studyBatch) || 'null');
+    const raw = JSON.parse(localStorage.getItem(levelKey(KEYS.studyBatch)) || 'null');
     if (raw && raw.date === today() && Array.isArray(raw.wordIds)) return raw.wordIds;
     return null;
   } catch {
@@ -377,7 +517,7 @@ export function getTodayStudyBatch(): string[] | null {
 
 export function saveTodayStudyBatch(wordIds: string[]): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(KEYS.studyBatch, JSON.stringify({ date: today(), wordIds }));
+  localStorage.setItem(levelKey(KEYS.studyBatch), JSON.stringify({ date: today(), wordIds }));
 }
 
 // --- Today's single merged daily session ---
@@ -414,7 +554,7 @@ export interface DailySession {
 export function getDailySession(): DailySession | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = JSON.parse(localStorage.getItem(KEYS.dailySession) || 'null') as DailySession | null;
+    const raw = JSON.parse(localStorage.getItem(levelKey(KEYS.dailySession)) || 'null') as DailySession | null;
     if (raw && raw.date === today()) return raw;
     return null;
   } catch {
@@ -424,7 +564,7 @@ export function getDailySession(): DailySession | null {
 
 export function saveDailySession(s: DailySession): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(KEYS.dailySession, JSON.stringify(s));
+  localStorage.setItem(levelKey(KEYS.dailySession), JSON.stringify(s));
 }
 
 export function startDailySession(studyWordIds: string[], reviewWordIds: string[], isExtra = false): DailySession {
@@ -455,14 +595,14 @@ export function startDailySession(studyWordIds: string[], reviewWordIds: string[
 // the next study session. Session-scoped so a stale value can't linger.
 export function setExtraStudyLimit(n: number): void {
   if (typeof window === 'undefined') return;
-  sessionStorage.setItem(EXTRA_STUDY_KEY, String(n));
+  sessionStorage.setItem(levelKey(EXTRA_STUDY_KEY), String(n));
 }
 
 export function takeExtraStudyLimit(): number | null {
   if (typeof window === 'undefined') return null;
-  const raw = sessionStorage.getItem(EXTRA_STUDY_KEY);
+  const raw = sessionStorage.getItem(levelKey(EXTRA_STUDY_KEY));
   if (raw === null) return null;
-  sessionStorage.removeItem(EXTRA_STUDY_KEY);
+  sessionStorage.removeItem(levelKey(EXTRA_STUDY_KEY));
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -472,14 +612,14 @@ export function takeExtraStudyLimit(): number | null {
 // due-for-review pool.
 export function setExtraReviewLimit(n: number): void {
   if (typeof window === 'undefined') return;
-  sessionStorage.setItem(EXTRA_REVIEW_KEY, String(n));
+  sessionStorage.setItem(levelKey(EXTRA_REVIEW_KEY), String(n));
 }
 
 export function takeExtraReviewLimit(): number | null {
   if (typeof window === 'undefined') return null;
-  const raw = sessionStorage.getItem(EXTRA_REVIEW_KEY);
+  const raw = sessionStorage.getItem(levelKey(EXTRA_REVIEW_KEY));
   if (raw === null) return null;
-  sessionStorage.removeItem(EXTRA_REVIEW_KEY);
+  sessionStorage.removeItem(levelKey(EXTRA_REVIEW_KEY));
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -488,9 +628,9 @@ export function takeExtraReviewLimit(): number | null {
 
 export function clearAllProgress(): void {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(KEYS.progress);
-  localStorage.removeItem(KEYS.streak);
-  localStorage.removeItem(KEYS.dailyStats);
-  localStorage.removeItem(KEYS.studyBatch);
-  localStorage.removeItem(KEYS.dailySession);
+  localStorage.removeItem(levelKey(KEYS.progress));
+  localStorage.removeItem(levelKey(KEYS.streak));
+  localStorage.removeItem(levelKey(KEYS.dailyStats));
+  localStorage.removeItem(levelKey(KEYS.studyBatch));
+  localStorage.removeItem(levelKey(KEYS.dailySession));
 }
