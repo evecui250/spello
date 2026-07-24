@@ -120,13 +120,14 @@ export default function SettingsPage() {
               className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
             >
               <option value="A1">A1</option>
+              <option value="A2">A2</option>
               <option value="B2">B2</option>
             </select>
           </div>
         </div>
         <div className="-mt-4 flex flex-col gap-0.5">
           <p className="text-stone-500 text-sm">This vocabulary book has {wordsForLevel(level).length} words up to {level}.</p>
-          <p className="text-stone-500 text-sm">Switching level is its own separate profile — progress, streak, and pace stay independent. More languages and levels (A2, B1…) are coming soon.</p>
+          <p className="text-stone-500 text-sm">Switching level is its own separate profile — progress, streak, and pace stay independent. More languages and levels (B1…) are coming soon.</p>
         </div>
 
         <div>

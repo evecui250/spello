@@ -97,6 +97,7 @@ export default function WelcomePage() {
                   className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="A1">A1</option>
+                  <option value="A2">A2</option>
                   <option value="B2">B2</option>
                 </select>
               </div>
