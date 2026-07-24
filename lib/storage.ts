@@ -28,11 +28,6 @@ export interface WordProgress {
   lastReviewedAt?: string;    // date of the last successful round-5 pass
   nextReviewDue?: string;     // date this word next becomes eligible for Review
   mascotStage: MascotStageId; // derived from growthScore, stored for convenient display
-
-  // --- Round 1.5 (DE -> EN translation-choice) bookkeeping ---
-  mcqPending?: boolean;       // owes a round-1.5 recheck (wrong on a previous try)
-  mcqNextRound?: Round;       // which round-clear triggers the next check (3, 4, or 5)
-  mcqSeenChoices?: string[];  // EN choices already shown, so a retry gets fresh ones
 }
 
 export interface Streak {
@@ -116,9 +111,6 @@ function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): Wo
     mascotStage: p?.mascotStage ?? (
       fullyMastered ? 'long-crowned' : growthScore >= 4.5 ? 'medium' : growthScore >= 3.0 ? 'short' : 'puppy'
     ),
-    mcqPending: p?.mcqPending ?? false,
-    mcqNextRound: p?.mcqNextRound,
-    mcqSeenChoices: p?.mcqSeenChoices ?? [],
   };
 }
 
@@ -376,9 +368,10 @@ export interface DailySession {
   phase: SessionPhase;
   studyWordIds: string[];
   reviewWordIds: string[];
-  mcqQueueIds: string[];
-  matchingQueueIds: string[];
-  matchingWrongIds: string[];
+  mcqQueueIds: string[];    // not-yet-tested ids in the current round-1.5 pass
+  mcqWrongIds: string[];    // wrong this pass — seeds the next pass, redone
+                             // immediately (not deferred to a later round)
+  matchingQueueIds: string[]; // which page comes next in the matching quiz
   earnedPuppies: number;
   earnedUpgrades: Partial<Record<MascotStageId, number>>;
 }
@@ -413,8 +406,8 @@ export function startDailySession(studyWordIds: string[], reviewWordIds: string[
     // doubles as that work list AND as the "have we already run the
     // batch-wide gate" flag (see allClearedRoundOne in lib/practice.ts).
     mcqQueueIds: [...studyWordIds],
+    mcqWrongIds: [],
     matchingQueueIds: [],
-    matchingWrongIds: [],
     earnedPuppies: 0,
     earnedUpgrades: {},
   };

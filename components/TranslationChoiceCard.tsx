@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Word } from '../lib/words';
 import SpeakerButton from './SpeakerButton';
+import { speakWord } from '../lib/speech';
 
 interface Props {
   word: Word;
@@ -34,14 +35,15 @@ export default function TranslationChoiceCard({ word, choices, onAnswer }: Props
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selected, correct, onAnswer]);
 
-  // A correct pick auto-advances after a short pause, same as the round-ladder
-  // screen — a wrong one still needs a manual Next so there's time to read
-  // which one was actually right.
+  // A correct pick plays the word's pronunciation once, then auto-advances
+  // after a short pause — a wrong one still needs a manual Next so there's
+  // time to read which one was actually right.
   useEffect(() => {
     if (!correct) return;
+    speakWord(word);
     const timer = setTimeout(() => onAnswer(true), 1200);
     return () => clearTimeout(timer);
-  }, [correct, onAnswer]);
+  }, [correct, onAnswer, word]);
 
   return (
     <div className="flex flex-col gap-5">

@@ -1,44 +1,62 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Word } from '../lib/words';
 
 interface Props {
   words: Word[];
-  onComplete: (wrongIds: string[]) => void;
+  onComplete: () => void;
 }
 
 function shuffled<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
 }
 
-// One page of the end-of-section matching quiz (≤5 words): click a German
-// word, then click its English meaning to pair them. Every pair is locked
-// in immediately (right or wrong, shown in place) — wrong ones are reported
-// back to the caller, which feeds them into a redo page later.
+// One page of the end-of-section matching quiz (exactly 5 words): click a
+// German word and an English meaning, in either order, to try pairing them.
+// A correct pair locks in green; a wrong one flashes red and both sides
+// become pickable again — keep retrying until every pair on this page is
+// correct, then "Continue" advances to the next page.
 export default function MatchingQuizPage({ words, onComplete }: Props) {
   const [shuffledEn] = useState(() => shuffled(words.map(w => w.en)));
-  const [selectedGermanId, setSelectedGermanId] = useState<string | null>(null);
-  const [assignments, setAssignments] = useState<Record<string, string>>({});
+  const [correctIds, setCorrectIds] = useState<Set<string>>(new Set());
+  const [selectedGerman, setSelectedGerman] = useState<string | null>(null);
+  const [selectedEnglish, setSelectedEnglish] = useState<string | null>(null);
+  const [wrongFlash, setWrongFlash] = useState<{ german: string; english: string } | null>(null);
 
-  const usedEnglish = new Set(Object.values(assignments));
+  const allCorrect = correctIds.size === words.length;
+
+  // Once both sides of a pair are selected (in either order), evaluate it.
+  useEffect(() => {
+    if (!selectedGerman || !selectedEnglish) return;
+    const word = words.find(w => w.id === selectedGerman);
+    if (!word) return;
+    if (word.en === selectedEnglish) {
+      setCorrectIds(prev => new Set(prev).add(selectedGerman));
+      setSelectedGerman(null);
+      setSelectedEnglish(null);
+      return;
+    }
+    setWrongFlash({ german: selectedGerman, english: selectedEnglish });
+    const timer = setTimeout(() => {
+      setWrongFlash(null);
+      setSelectedGerman(null);
+      setSelectedEnglish(null);
+    }, 600);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGerman, selectedEnglish]);
 
   const pickGerman = (id: string) => {
-    if (assignments[id]) return;
-    setSelectedGermanId(id);
+    if (correctIds.has(id) || wrongFlash) return;
+    setSelectedGerman(id);
   };
 
   const pickEnglish = (text: string) => {
-    if (usedEnglish.has(text) || !selectedGermanId) return;
-    setAssignments(a => ({ ...a, [selectedGermanId]: text }));
-    setSelectedGermanId(null);
-  };
-
-  const allPaired = words.every(w => assignments[w.id]);
-
-  const handleContinue = () => {
-    const wrongIds = words.filter(w => assignments[w.id] !== w.en).map(w => w.id);
-    onComplete(wrongIds);
+    if (wrongFlash) return;
+    const alreadyCorrect = words.some(w => correctIds.has(w.id) && w.en === text);
+    if (alreadyCorrect) return;
+    setSelectedEnglish(text);
   };
 
   return (
@@ -48,21 +66,18 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-2">
             {words.map(w => {
-              const paired = assignments[w.id];
-              const isSelected = selectedGermanId === w.id;
+              const isCorrect = correctIds.has(w.id);
+              const isSelected = selectedGerman === w.id;
+              const isWrong = wrongFlash?.german === w.id;
               let cls = 'border-2 border-indigo-100 text-slate-700 hover:border-indigo-300';
-              if (paired) {
-                cls = paired === w.en
-                  ? 'border-2 border-green-400 bg-green-100 text-green-700'
-                  : 'border-2 border-red-400 bg-red-100 text-red-700';
-              } else if (isSelected) {
-                cls = 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700';
-              }
+              if (isCorrect) cls = 'border-2 border-green-400 bg-green-100 text-green-700';
+              else if (isWrong) cls = 'border-2 border-red-400 bg-red-100 text-red-700';
+              else if (isSelected) cls = 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700';
               return (
                 <button
                   key={w.id}
                   onClick={() => pickGerman(w.id)}
-                  disabled={!!paired}
+                  disabled={isCorrect || !!wrongFlash}
                   className={`px-3 py-2.5 rounded-xl font-mono font-semibold text-sm text-left transition-colors ${cls}`}
                 >
                   {w.article ? `${w.article} ` : ''}{w.de}
@@ -72,17 +87,19 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
           </div>
           <div className="flex flex-col gap-2">
             {shuffledEn.map(text => {
-              const used = usedEnglish.has(text);
+              const isCorrect = words.some(w => correctIds.has(w.id) && w.en === text);
+              const isSelected = selectedEnglish === text;
+              const isWrong = wrongFlash?.english === text;
+              let cls = 'border-2 border-indigo-100 text-slate-700 hover:border-indigo-300';
+              if (isCorrect) cls = 'border-2 border-green-400 bg-green-100 text-green-700';
+              else if (isWrong) cls = 'border-2 border-red-400 bg-red-100 text-red-700';
+              else if (isSelected) cls = 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700';
               return (
                 <button
                   key={text}
                   onClick={() => pickEnglish(text)}
-                  disabled={used || !selectedGermanId}
-                  className={`px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-colors ${
-                    used
-                      ? 'border-2 border-slate-200 bg-slate-50 text-slate-500 line-through decoration-slate-300'
-                      : 'border-2 border-indigo-100 text-slate-700 hover:border-indigo-300'
-                  }`}
+                  disabled={isCorrect || !!wrongFlash}
+                  className={`px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-colors ${cls}`}
                 >
                   {text}
                 </button>
@@ -90,9 +107,9 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
             })}
           </div>
         </div>
-        {allPaired && (
+        {allCorrect && (
           <button
-            onClick={handleContinue}
+            onClick={onComplete}
             className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
           >
             Continue →

@@ -11,7 +11,7 @@ import {
 } from '../lib/storage';
 import {
   wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, REVIEW_BASE_ROUND,
-  allClearedRoundOne, buildMcqChoices, buildMatchingPages, buildRedoPages,
+  allClearedRoundOne, buildMcqChoices, buildMatchingPages,
 } from '../lib/practice';
 import { Word } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
@@ -23,6 +23,10 @@ import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
 import { speakWord } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
+
+function shuffled<T>(arr: T[]): T[] {
+  return [...arr].sort(() => Math.random() - 0.5);
+}
 
 const ROUND_LABELS: Record<Round, string> = {
   1: 'Round 1 — copy the word',
@@ -59,13 +63,14 @@ export default function DailySessionFlow() {
   const [justCompleted, setJustCompleted] = useState(false);
   const [attemptKey, setAttemptKey] = useState(0);
 
-  const [interruptMcq, setInterruptMcq] = useState<{ word: Word; choices: string[] } | null>(null);
   // Bumped on every matching-quiz page completion so MatchingQuizPage always
-  // remounts fresh, even when a redo pass reuses the exact same word ids
-  // (which would otherwise collide on a content-based key and keep stale
-  // "already paired" state from the previous page).
+  // remounts fresh for the next page.
   const [matchingPageKey, setMatchingPageKey] = useState(0);
   const [mcqCurrent, setMcqCurrent] = useState<{ word: Word; choices: string[] } | null>(null);
+  // Choices already shown per word this round-1.5 pass, in-memory only (a
+  // retry within the redo loop should get fresh distractors; losing this on
+  // a reload is a harmless cosmetic detail, not a correctness issue).
+  const mcqSeenRef = useRef<Record<string, string[]>>({});
   const [showCongrats, setShowCongrats] = useState(false);
 
   const activeInputRef = useRef<HTMLInputElement | null>(null);
@@ -104,7 +109,6 @@ export default function DailySessionFlow() {
     setQueue(words);
     setTotalWords(ids.length);
     reviewRoundsRef.current = {};
-    setInterruptMcq(null);
     if (words.length > 0) {
       loadCurrent(words[0], mode);
     } else if (mode === 'study') {
@@ -114,11 +118,21 @@ export default function DailySessionFlow() {
     }
   }
 
+  // Round 1.5: every word in mcqQueueIds gets asked once; wrong ones queue
+  // up in mcqWrongIds and get redone (with fresh choices) as soon as this
+  // pass finishes — repeating until a full pass is clean, then back to the
+  // round ladder for round 2 onward.
   function enterMcqPhase(ds: DailySession) {
     if (ds.mcqQueueIds.length === 0) {
-      const next: DailySession = { ...ds, phase: 'study-rounds' };
+      if (ds.mcqWrongIds.length === 0) {
+        const next: DailySession = { ...ds, phase: 'study-rounds' };
+        persistSession(next);
+        enterRoundsPhase(next, 'study');
+        return;
+      }
+      const next: DailySession = { ...ds, mcqQueueIds: shuffled(ds.mcqWrongIds), mcqWrongIds: [] };
       persistSession(next);
-      enterRoundsPhase(next, 'study');
+      enterMcqPhase(next);
       return;
     }
     const w = wordsById([ds.mcqQueueIds[0]])[0];
@@ -128,8 +142,8 @@ export default function DailySessionFlow() {
       enterMcqPhase(next);
       return;
     }
-    const progress = getWordProgress(w.id);
-    const { choices } = buildMcqChoices(w, progress.mcqSeenChoices);
+    const { choices } = buildMcqChoices(w, mcqSeenRef.current[w.id] ?? []);
+    mcqSeenRef.current[w.id] = [...(mcqSeenRef.current[w.id] ?? []), ...choices];
     setMcqCurrent({ word: w, choices });
   }
 
@@ -227,43 +241,20 @@ export default function DailySessionFlow() {
   const handleGiveUp = () => submitResult(false);
 
   function finishStudyRounds(ds: DailySession) {
-    persistSession({ ...ds, phase: 'study-matching', matchingQueueIds: [...ds.studyWordIds], matchingWrongIds: [] });
+    // Pages are fully padded to 5 (or fewer, only if the whole batch is
+    // under 5) up front, so the queue is just consumed 5 at a time — see
+    // currentMatchingPage/handleMatchingPageComplete.
+    persistSession({ ...ds, phase: 'study-matching', matchingQueueIds: buildMatchingPages(ds.studyWordIds).flat() });
   }
   function finishReviewRounds(ds: DailySession) {
-    persistSession({ ...ds, phase: 'review-matching', matchingQueueIds: [...ds.reviewWordIds], matchingWrongIds: [] });
-  }
-
-  function resumeAfterInterrupt() {
-    if (!session) return;
-    enterRoundsPhase(session, 'study');
-  }
-
-  function handleInterruptMcqAnswer(correct: boolean) {
-    if (!session || !interruptMcq) return;
-    const progress = getWordProgress(interruptMcq.word.id);
-    let updated: WordProgress;
-    if (correct) {
-      updated = { ...progress, mcqPending: false, mcqNextRound: undefined };
-    } else {
-      const nextCheck = (progress.mcqNextRound ?? 2) + 1;
-      updated = nextCheck > 5
-        ? { ...progress, mcqPending: false, mcqNextRound: undefined }
-        : { ...progress, mcqPending: true, mcqNextRound: nextCheck as Round };
-    }
-    saveWordProgress(updated);
-    setInterruptMcq(null);
-    resumeAfterInterrupt();
+    persistSession({ ...ds, phase: 'review-matching', matchingQueueIds: buildMatchingPages(ds.reviewWordIds).flat() });
   }
 
   function handleMcqBatchAnswer(correct: boolean) {
     if (!session || !mcqCurrent) return;
-    const progress = getWordProgress(mcqCurrent.word.id);
-    const seen = [...(progress.mcqSeenChoices ?? []), ...mcqCurrent.choices];
-    const updated: WordProgress = correct
-      ? { ...progress, mcqPending: false, mcqNextRound: undefined, mcqSeenChoices: seen }
-      : { ...progress, mcqPending: true, mcqNextRound: 3, mcqSeenChoices: seen };
-    saveWordProgress(updated);
-    const next: DailySession = { ...session, mcqQueueIds: session.mcqQueueIds.slice(1) };
+    const rest = session.mcqQueueIds.slice(1);
+    const wrong = correct ? session.mcqWrongIds : [...session.mcqWrongIds, mcqCurrent.word.id];
+    const next: DailySession = { ...session, mcqQueueIds: rest, mcqWrongIds: wrong };
     setMcqCurrent(null);
     persistSession(next);
     enterMcqPhase(next);
@@ -301,42 +292,24 @@ export default function DailySessionFlow() {
       advanceReviewQueue();
       return;
     }
-    const freshProgress = getWordProgress(word.id);
-    if (freshProgress.mcqPending && freshProgress.mcqNextRound === freshProgress.round) {
-      const { choices } = buildMcqChoices(word, freshProgress.mcqSeenChoices);
-      saveWordProgress({ ...freshProgress, mcqSeenChoices: [...(freshProgress.mcqSeenChoices ?? []), ...choices] });
-      setInterruptMcq({ word, choices });
-      return;
-    }
     advanceStudyQueue();
   };
   handleNextRef.current = handleNext;
 
   function currentMatchingPage(ds: DailySession): Word[] {
-    const pages = buildMatchingPages(ds.matchingQueueIds);
-    return pages.length > 0 ? wordsById(pages[0]) : [];
+    return wordsById(ds.matchingQueueIds.slice(0, 5));
   }
 
-  function handleMatchingPageComplete(wrongIds: string[]) {
+  function handleMatchingPageComplete() {
     if (!session) return;
     setMatchingPageKey(k => k + 1);
-    const pages = buildMatchingPages(session.matchingQueueIds);
-    const thisPage = pages[0] ?? [];
-    const remainingQueue = session.matchingQueueIds.slice(thisPage.length);
-    const wrongSoFar = [...session.matchingWrongIds, ...wrongIds];
+    const remainingQueue = session.matchingQueueIds.slice(5);
 
     if (remainingQueue.length > 0) {
-      persistSession({ ...session, matchingQueueIds: remainingQueue, matchingWrongIds: wrongSoFar });
+      persistSession({ ...session, matchingQueueIds: remainingQueue });
       return;
     }
-
-    if (wrongSoFar.length === 0) {
-      finishMatchingPhase(session);
-      return;
-    }
-    const allIds = session.phase === 'study-matching' ? session.studyWordIds : session.reviewWordIds;
-    const redoPages = buildRedoPages(wrongSoFar, allIds);
-    persistSession({ ...session, matchingQueueIds: redoPages.flat(), matchingWrongIds: [] });
+    finishMatchingPhase(session);
   }
 
   function finishMatchingPhase(ds: DailySession) {
@@ -375,10 +348,10 @@ export default function DailySessionFlow() {
   // live during the actual round-ladder screens — otherwise a stale
   // `feedback` left over from the round just before an MCQ/matching phase
   // started would fire handleNext (built for the round queue) into a screen
-  // it knows nothing about. Re-evaluated on phase/interrupt changes too, so
-  // a phase change on its own (without `feedback` changing) still clears
-  // any pending auto-advance timer from the round that just ended.
-  const isRoundScreen = !interruptMcq && (session?.phase === 'study-rounds' || session?.phase === 'review-rounds');
+  // it knows nothing about. Re-evaluated on phase changes too, so a phase
+  // change on its own (without `feedback` changing) still clears any
+  // pending auto-advance timer from the round that just ended.
+  const isRoundScreen = session?.phase === 'study-rounds' || session?.phase === 'review-rounds';
   useEffect(() => {
     if (feedback === null || !isRoundScreen) return;
     let armed = false;
@@ -410,13 +383,9 @@ export default function DailySessionFlow() {
     );
   }
 
-  if (interruptMcq) {
-    return <TranslationChoiceCard key={`interrupt-${interruptMcq.word.id}`} word={interruptMcq.word} choices={interruptMcq.choices} onAnswer={handleInterruptMcqAnswer} />;
-  }
-
   if (session.phase === 'study-mcq') {
     if (!mcqCurrent) return null;
-    return <TranslationChoiceCard key={`batch-${mcqCurrent.word.id}`} word={mcqCurrent.word} choices={mcqCurrent.choices} onAnswer={handleMcqBatchAnswer} />;
+    return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} choices={mcqCurrent.choices} onAnswer={handleMcqBatchAnswer} />;
   }
 
   if (session.phase === 'study-matching' || session.phase === 'review-matching') {

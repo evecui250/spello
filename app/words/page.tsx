@@ -2,9 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { WORDS, CATEGORIES } from '../../lib/words';
-import { getAllProgress, WordProgress } from '../../lib/storage';
+import { getAllProgress, WordProgress, today } from '../../lib/storage';
+import { daysBetween } from '../../lib/srs';
 import SpeakerButton from '../../components/SpeakerButton';
 import DachshundMascot from '../../components/Mascot';
+
+// "in 3 days" / "due now" for a word that's still in the review rotation
+// (mastered words are retired from review, so they don't get this label).
+function reviewLabel(nextReviewDue?: string): string | null {
+  if (!nextReviewDue) return null;
+  const days = daysBetween(today(), nextReviewDue);
+  return days <= 0 ? 'due now' : `in ${days} day${days === 1 ? '' : 's'}`;
+}
 
 export default function WordsPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress>>({});
@@ -82,9 +91,16 @@ export default function WordsPage() {
               {w.plural && <span className="text-stone-500 text-sm ml-2">· {w.plural}</span>}
               <div className="text-stone-500 text-sm">{w.en}</div>
             </div>
-            <span className="shrink-0">
+            <span className="shrink-0 flex flex-col items-center gap-0.5">
               {earned(progress[w.id]) ? (
-                <DachshundMascot stage={progress[w.id].mascotStage} className="w-11 h-11" />
+                <>
+                  <DachshundMascot stage={progress[w.id].mascotStage} className="w-11 h-11" />
+                  {!progress[w.id].fullyMastered && (
+                    <span className="text-[10px] text-stone-500 whitespace-nowrap">
+                      {reviewLabel(progress[w.id].nextReviewDue)}
+                    </span>
+                  )}
+                </>
               ) : (
                 <span className="flex items-center justify-center px-2.5 py-1.5 rounded-full bg-slate-100">
                   <span className="text-xs font-medium text-stone-500">New</span>

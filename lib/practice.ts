@@ -78,6 +78,7 @@ export function resizeTodayStudyBatch(newSize: number): void {
     session.studyWordIds = [...doneIds, ...keepPending];
     const kept = new Set(session.studyWordIds);
     session.mcqQueueIds = session.mcqQueueIds.filter(id => kept.has(id));
+    session.mcqWrongIds = session.mcqWrongIds.filter(id => kept.has(id));
     saveDailySession(session);
   }
 }
@@ -259,10 +260,10 @@ export function allClearedRoundOne(ids: string[], progress: Record<string, WordP
 // Picks 3 wrong English choices for `word`, preferring words from the same
 // `category` (only ~200 noun entries have one); falling back to the same
 // `type` (part of speech) when there's no category or too few members; and
-// finally to any other word if even that pool is too small. `seen` (a
-// word's mcqSeenChoices) is excluded so a retry after a wrong answer gets
-// genuinely different distractors, degrading gracefully to repeats only if
-// the pool is truly exhausted.
+// finally to any other word if even that pool is too small. `seen` (choices
+// already shown to this word this session — tracked in-memory by the caller)
+// is excluded so a retry after a wrong answer gets genuinely different
+// distractors, degrading gracefully to repeats only if the pool is exhausted.
 export function buildMcqChoices(word: Word, seen: string[] = []): { correct: string; choices: string[] } {
   const excluded = new Set([word.en.toLowerCase(), ...seen.map(s => s.toLowerCase())]);
   const pickedEn = new Set<string>();
@@ -291,27 +292,24 @@ export function buildMcqChoices(word: Word, seen: string[] = []): { correct: str
   return { correct: word.en, choices: shuffled([word.en, ...wrongChoices]) };
 }
 
-// Chunks word ids into matching-quiz pages of at most 5.
+// Chunks word ids into matching-quiz pages of exactly 5 each. A page is only
+// ever shorter than 5 when there aren't 5 distinct words in the whole batch
+// to draw from — otherwise the last page is padded back up to 5 using words
+// from earlier pages (already tested, since each page must be fully correct
+// — see MatchingQuizPage — before moving on, repeats there are harmless).
+// E.g. 8 words -> page 1 = words 1-5, page 2 = words 6-8 + 2 more from 1-5.
 export function buildMatchingPages(wordIds: string[]): string[][] {
   const pages: string[][] = [];
   for (let i = 0; i < wordIds.length; i += 5) {
     pages.push(wordIds.slice(i, i + 5));
   }
-  return pages;
-}
-
-// After a full matching-quiz pass, builds the redo page(s) for whatever was
-// answered wrong: the wrong ids themselves (chunked to 5 if there are more
-// than 5), with the final chunk padded up to 5 using other, already-correct
-// words from today's batch — e.g. 2 wrong -> one page of those 2 + 3 padding.
-export function buildRedoPages(wrongIds: string[], allTodayIds: string[]): string[][] {
-  const pages = buildMatchingPages(wrongIds);
-  if (pages.length === 0) return pages;
-  const last = pages[pages.length - 1];
-  if (last.length < 5) {
-    const wrongSet = new Set(wrongIds);
-    const padPool = shuffled(allTodayIds.filter(id => !wrongSet.has(id)));
-    pages[pages.length - 1] = [...last, ...padPool.slice(0, 5 - last.length)];
+  if (pages.length > 1 && wordIds.length >= 5) {
+    const last = pages[pages.length - 1];
+    if (last.length < 5) {
+      const lastSet = new Set(last);
+      const padPool = shuffled(wordIds.filter(id => !lastSet.has(id)));
+      pages[pages.length - 1] = [...last, ...padPool.slice(0, 5 - last.length)];
+    }
   }
   return pages;
 }
