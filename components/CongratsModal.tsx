@@ -20,8 +20,12 @@ interface Props {
 // them): each glyph's bounding box, used both to blank out the placeholder
 // and to center the real number in the same spot.
 const IMG_SIZE = 1254;
-const NEW_WORDS_BOX = { x0: 302, x1: 435, y0: 420, y1: 682 };
-const REVIEWED_BOX = { x0: 804, x1: 960, y0: 416, y1: 682 };
+// y0 starts right below the icon circle (which sits at y≈388-510) — it must
+// NOT reach up into the circle, or blanking out the placeholder glyph also
+// erases part of the circle and leaves a stray sliver of it behind (the
+// artifact this exact measurement was fixing).
+const NEW_WORDS_BOX = { x0: 302, x1: 435, y0: 528, y1: 682 };
+const REVIEWED_BOX = { x0: 804, x1: 960, y0: 528, y1: 682 };
 const CARD_BG = '#fefbf2';
 
 function drawCount(ctx: CanvasRenderingContext2D, box: typeof NEW_WORDS_BOX, value: number, color: string) {
