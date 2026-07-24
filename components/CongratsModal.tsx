@@ -44,7 +44,7 @@ function drawCount(ctx: CanvasRenderingContext2D, box: typeof NEW_WORDS_BOX, val
   // Shrink the font for multi-digit counts so they still fit the same box
   // the single placeholder glyph was drawn in.
   const digits = String(value).length;
-  const fontSize = digits <= 2 ? boxHeight * 0.86 : boxHeight * 0.86 * (2.4 / (digits + 0.4));
+  const fontSize = digits <= 2 ? boxHeight * 1.5 : boxHeight * 1.5 * (2.4 / (digits + 0.4));
   ctx.fillStyle = color;
   ctx.font = `800 ${fontSize}px system-ui, -apple-system, sans-serif`;
   ctx.textAlign = 'center';
