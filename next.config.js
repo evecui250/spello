@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-const basePath = '/wortschatz-b2';
+const basePath = '/spello';
 
 const nextConfig = {
   output: 'export',
