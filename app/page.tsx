@@ -57,6 +57,8 @@ export default function HomePage() {
   const [session, setSession] = useState<DailySession | null>(null);
   const [previewStudyCount, setPreviewStudyCount] = useState(0);
   const [previewReviewCount, setPreviewReviewCount] = useState(0);
+  const [totalStudyCount, setTotalStudyCount] = useState(0);
+  const [totalReviewCount, setTotalReviewCount] = useState(0);
   const [totalWords, setTotalWords] = useState(0);
   const [ready, setReady] = useState(false);
 
@@ -85,18 +87,29 @@ export default function HomePage() {
       setSession(ds);
       if (!ds) {
         // Nothing started today yet — preview what Start would pull in.
-        setPreviewStudyCount(buildStudyWords(settings.studyBatchSize).length);
-        setPreviewReviewCount(buildReviewWords(settings.dailyReview).length);
+        // Remaining equals the total here, since nothing's done yet.
+        const studyCount = buildStudyWords(settings.studyBatchSize).length;
+        const reviewCount = buildReviewWords(settings.dailyReview).length;
+        setPreviewStudyCount(studyCount);
+        setPreviewReviewCount(reviewCount);
+        setTotalStudyCount(studyCount);
+        setTotalReviewCount(reviewCount);
       } else if (ds.phase === 'done') {
         // Today's goal is met — preview the smaller bonus round instead.
-        setPreviewStudyCount(buildStudyWords(EXTRA_STUDY_SIZE).length);
-        setPreviewReviewCount(buildReviewWords(EXTRA_REVIEW_SIZE).length);
+        const studyCount = buildStudyWords(EXTRA_STUDY_SIZE).length;
+        const reviewCount = buildReviewWords(EXTRA_REVIEW_SIZE).length;
+        setPreviewStudyCount(studyCount);
+        setPreviewReviewCount(reviewCount);
+        setTotalStudyCount(studyCount);
+        setTotalReviewCount(reviewCount);
       } else {
-        // Mid-session — show what's actually still left in today's batch,
-        // not the original starting size.
+        // Mid-session — show what's actually still left against today's
+        // original batch size, so "5/15 new" reflects 10 already done.
         const t = today();
         setPreviewStudyCount(ds.studyWordIds.filter(id => (progress[id]?.round ?? 1) < MAX_ROUND).length);
         setPreviewReviewCount(ds.reviewWordIds.filter(id => !(progress[id]?.nextReviewDue && progress[id].nextReviewDue > t)).length);
+        setTotalStudyCount(ds.studyWordIds.length);
+        setTotalReviewCount(ds.reviewWordIds.length);
       }
       setReady(true);
     };
@@ -149,7 +162,7 @@ export default function HomePage() {
   const label = isDoneForNow ? 'Goal completed' : inProgress && session?.isExtra ? 'Study more' : 'Start';
   const subtitle = isDoneForNow
     ? 'study more →'
-    : `${previewStudyCount} new · ${previewReviewCount} to review`;
+    : `${previewStudyCount}/${totalStudyCount} new · ${previewReviewCount}/${totalReviewCount} to review`;
   const handleClick = isDoneForNow ? startExtraRound : inProgress ? () => router.push('/practice') : startSession;
 
   return (

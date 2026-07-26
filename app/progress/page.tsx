@@ -11,11 +11,14 @@ import CongratsModal from '../../components/CongratsModal';
 import GoalDaysBadge from '../../components/GoalDaysBadge';
 
 const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
+// A muted, earthy progression (soft bronze -> sage -> moss -> deep plum) —
+// reads as premium against the cream panel instead of the primary-color
+// bg-sky/yellow/amber/green Tailwind swatches, which felt garish here.
 const STAGE_COLORS: Record<MascotStageId, string> = {
-  puppy: 'bg-sky-500',
-  short: 'bg-yellow-400',
-  medium: 'bg-amber-500',
-  'long-crowned': 'bg-green-500',
+  puppy: '#c9a86a',
+  short: '#a3b18a',
+  medium: '#588157',
+  'long-crowned': '#5b3a5e',
 };
 const STAGE_LABEL: Record<MascotStageId, string> = {
   puppy: 'Learning',
@@ -172,14 +175,8 @@ export default function ProgressPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex justify-center gap-6">
-        <div className="flex flex-col items-center gap-1">
-          <GoalDaysBadge variant="goal" count={totalGoalDays} size={112} label="goal days" />
-          <span className="text-xs text-emerald-100/70">Goal Days</span>
-        </div>
-        <div className="flex flex-col items-center gap-1">
-          <GoalDaysBadge variant="streak" count={streakCount} size={112} label="day streak" />
-          <span className="text-xs text-emerald-100/70">Streak</span>
-        </div>
+        <GoalDaysBadge variant="goal" count={totalGoalDays} size={112} label="goal days" />
+        <GoalDaysBadge variant="streak" count={streakCount} size={112} label="day streak" />
       </div>
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
@@ -196,8 +193,11 @@ export default function ProgressPage() {
             <div key={b.id} className="flex flex-col items-center justify-end h-full flex-1 gap-1">
               <span className="text-sm font-semibold text-stone-700">{b.count}</span>
               <div
-                className={`w-full max-w-10 rounded-t-md ${b.color} transition-all`}
-                style={{ height: `${b.count > 0 ? Math.max((b.count / maxStageCount) * 100, 6) : 2}%` }}
+                className="w-full max-w-10 rounded-t-md transition-all"
+                style={{
+                  height: `${b.count > 0 ? Math.max((b.count / maxStageCount) * 100, 6) : 2}%`,
+                  backgroundColor: b.color,
+                }}
               />
             </div>
           ))}
