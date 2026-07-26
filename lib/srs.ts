@@ -7,7 +7,7 @@ import { MascotStageId, WordProgress, today } from './storage';
 //
 //   M = (S * 1.5) + log2(daysElapsed + 1) - (2 * mistakes),  floored at 0
 //
-//   S           = total successful no-hint (round 5) passes
+//   S           = total successful no-hint (round 4) passes
 //   daysElapsed  = calendar days since the word was last successfully reviewed
 //   mistakes     = failed attempts since that last success
 //
@@ -45,7 +45,7 @@ export function daysBetween(fromStr: string, toStr: string): number {
 // ============================================================================
 // Growth Score (M') — drives the mascot and retirement
 //
-// Monotonic: it only ever increases. A successful round-5 pass adds an
+// Monotonic: it only ever increases. A successful round-4 pass adds an
 // increment that's full value if the pass was clean (no mistake since the
 // last success), and smaller the more mistakes preceded it — so a forgotten
 // word climbs slower, but a mistake never erases progress already earned.
@@ -92,7 +92,7 @@ export function getMascotStage(growthScore: number): MascotStageInfo {
 }
 
 // ============================================================================
-// Wiring — applied on the round-5 pass that actually concludes a word's
+// Wiring — applied on the round-4 pass that actually concludes a word's
 // climb, whether that happened in Study or after however many retries in
 // Review. Mistakes along the way are tracked separately (WordProgress.
 // pendingMistakes, bumped directly in practice.ts) — they shrink this
@@ -109,10 +109,10 @@ function reviewIntervalFor(successfulReviews: number, masteryScore: number): num
   return successfulReviews === 1 ? 1 : getNextReviewInterval(masteryScore);
 }
 
-// A successful round-5 pass: banks a coin (legacy field, kept for existing
+// A successful round-4 pass: banks a coin (legacy field, kept for existing
 // UI), advances S and growthScore, and reschedules the next review using
 // the freshly recalculated M.
-export function recordRound5Success(progress: WordProgress, todayStr: string = today()): WordProgress {
+export function recordRound4Success(progress: WordProgress, todayStr: string = today()): WordProgress {
   const successfulReviews = progress.successfulReviews + 1;
   const daysElapsed = progress.lastReviewedAt ? daysBetween(progress.lastReviewedAt, todayStr) : 0;
   const masteryScore = calculateMasteryScore(successfulReviews, daysElapsed, progress.pendingMistakes);

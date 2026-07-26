@@ -50,7 +50,7 @@ export default function WordsPage() {
     setProgress(getAllProgress());
   }, []);
 
-  // A word only "earns" its puppy the first time it clears round 5 —
+  // A word only "earns" its puppy the first time it clears round 4 —
   // studiedTimes stays 0 while it's still mid-ladder (rounds 1-4), even
   // though it already has a progress record. Until then it still reads as
   // New, same as a word that hasn't been touched at all.

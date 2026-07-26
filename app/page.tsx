@@ -74,7 +74,7 @@ export default function HomePage() {
       setStreak(getStreak().count);
       const progress = getAllProgress();
       setMasteredCount(Object.values(progress).filter(p => p.fullyMastered).length);
-      // "Learning" = has earned its first puppy (cleared round 5 at least
+      // "Learning" = has earned its first puppy (cleared round 4 at least
       // once) and isn't fully mastered yet — matches the Words page's
       // definition. A word still mid-ladder (rounds 1-4, no puppy earned
       // yet) doesn't count here, same as it shows "New" there.

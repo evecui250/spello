@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { WORDS, Word } from '../../lib/words';
 import {
-  getAllProgress, getSettings, getStreak, getTotalGoalDays, MascotStageId, WordProgress, today,
+  getAllProgress, getSettings, getStreak, getTotalGoalDays, MascotStageId, MAX_ROUND, WordProgress, today,
 } from '../../lib/storage';
 import { addDays } from '../../lib/srs';
 import DachshundMascot from '../../components/Mascot';
@@ -64,8 +64,8 @@ function buildBucket(progress: Record<string, WordProgress>, date: string, isTod
     const p = progress[w.id];
     if (!p) continue;
 
-    // Only a word that actually completed round 5 on this day counts as
-    // learned/reviewed — one still mid-ladder (never cleared round 5)
+    // Only a word that actually completed round 4 on this day counts as
+    // learned/reviewed — one still mid-ladder (never cleared round 4)
     // shouldn't show up here even if it was touched today.
     if (p.successfulReviews >= 1 && p.lastReviewedAt === date) {
       (p.successfulReviews === 1 ? learned : reviewed).push(chip(w));
@@ -75,7 +75,7 @@ function buildBucket(progress: Record<string, WordProgress>, date: string, isTod
     // shifting as the word is reviewed — it only makes sense read against
     // today, not projected onto a past day that's already settled.
     if (isToday) {
-      const reviewEligible = p.round === 5 && p.successfulReviews >= 1 && !p.fullyMastered;
+      const reviewEligible = p.round === MAX_ROUND && p.successfulReviews >= 1 && !p.fullyMastered;
       if (reviewEligible && p.nextReviewDue && p.nextReviewDue <= t) due.push(chip(w));
     }
   }

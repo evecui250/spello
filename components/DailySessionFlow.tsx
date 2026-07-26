@@ -11,7 +11,7 @@ import {
   touchStreak, markCongratsShown, getDailyStats, addEarnedPuppy, addEarnedUpgrade,
 } from '../lib/storage';
 import {
-  wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, REVIEW_BASE_ROUND,
+  wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint, REVIEW_BASE_ROUND,
   allClearedRoundOne, buildMcqChoices, buildMatchingPages,
 } from '../lib/practice';
 import { Word } from '../lib/words';
@@ -34,7 +34,6 @@ const ROUND_LABELS: Record<Round, string> = {
   2: 'Round 2 — half the letters hinted',
   3: 'Round 3 — first letter hint',
   4: 'Round 4 — no hints',
-  5: 'Round 5 — no hints',
 };
 
 const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
@@ -240,7 +239,28 @@ export default function DailySessionFlow() {
     const articleRight = !needsArticle || articleGuess === word.article;
     submitResult(wordRight && articleRight);
   };
-  const handleGiveUp = () => submitResult(false);
+  // A deliberate "give me more help" request — demotes one round (more
+  // scaffolding) instead of retrying the same round the way a wrong typed
+  // answer does. Not available at round 1 (nothing lower to demote to); the
+  // button itself is hidden then. Counts as a mistake for SRS purposes, same
+  // as a wrong answer, since the learner didn't recall it unaided.
+  const handleHint = () => {
+    if (!word || feedback !== null || currentRound <= 1) return;
+    const progress = getWordProgress(word.id);
+    const { progress: updated, nextRound } = requestHint(progress, currentRound);
+    const finalProgress = roundMode === 'study' ? { ...updated, round: nextRound } : updated;
+    saveWordProgress(finalProgress);
+    scheduleSync();
+    if (roundMode === 'review') reviewRoundsRef.current[word.id] = nextRound;
+
+    setCurrentRound(nextRound);
+    const h = generateHint(word.de, nextRound);
+    const chars = [...word.de];
+    setHint(h);
+    setValues(chars.map((c, i) => (h[i] ? '' : c)));
+    setArticleValues(['', '', '']);
+    setAttemptKey(k => k + 1);
+  };
 
   function finishStudyRounds(ds: DailySession) {
     // Pages are fully padded to 5 (or fewer, only if the whole batch is
@@ -510,7 +530,7 @@ export default function DailySessionFlow() {
         <div>
           <div className="text-sm font-medium text-indigo-600 mb-1">{ROUND_LABELS[currentRound]}</div>
           <div className="flex gap-1">
-            {([1, 2, 3, 4, 5] as Round[]).map(n => (
+            {([1, 2, 3, 4] as Round[]).map(n => (
               <div key={n} className={`h-2 flex-1 rounded-full ${n <= currentRound ? 'bg-indigo-500' : 'bg-indigo-100'}`} />
             ))}
           </div>
@@ -582,9 +602,11 @@ export default function DailySessionFlow() {
             >
               Check
             </button>
-            <button onClick={handleGiveUp} className="w-full text-slate-400 py-1 text-sm font-medium hover:text-slate-600 transition-colors">
-              I don't remember
-            </button>
+            {currentRound > 1 && (
+              <button onClick={handleHint} className="w-full text-slate-400 py-1 text-sm font-medium hover:text-slate-600 transition-colors">
+                Hint
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-3">

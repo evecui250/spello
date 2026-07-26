@@ -5,11 +5,11 @@ import {
   getAllProgress, getSettings, today, MAX_ROUND, Round, WordProgress,
   getDailySession, saveDailySession, SessionPhase,
 } from './storage';
-import { recordRound5Success, simulateDaysToMastery } from './srs';
+import { recordRound4Success, simulateDaysToMastery } from './srs';
 
 // Reviews always start from this baseline difficulty — the word isn't new,
 // so testing it from round 1 would be too easy.
-export const REVIEW_BASE_ROUND: Round = 5;
+export const REVIEW_BASE_ROUND: Round = 4;
 
 function shuffled<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
@@ -30,7 +30,7 @@ export function wordsById(ids: string[]): Word[] {
 const SHORT_WORD_GRACE_COUNT = 100;
 const SHORT_WORD_MAX_LENGTH = 6;
 
-// Study pool: words that haven't reached round 5 yet — brand new words and
+// Study pool: words that haven't reached round 4 yet — brand new words and
 // words still climbing the round 1-4 ladder, however many days that's taken.
 // Words already in progress (abandoned mid-ladder) are prioritized over
 // brand-new ones, so an unfinished word gets picked up again before more
@@ -103,7 +103,7 @@ export function resizeTodayStudyBatch(newSize: number): void {
   }
 }
 
-// Review pool: words that have earned at least one coin (reached round 5 and
+// Review pool: words that have earned at least one coin (reached round 4 and
 // been tested there successfully) and aren't fully mastered yet. By default,
 // only words that are actually due (today >= nextReviewDue, per the SRS
 // schedule) are eligible — spacing grows with mastery, so a strong word
@@ -138,10 +138,10 @@ export function buildReviewWords(
 // Round 1: nothing revealed in the tiles (the word is shown separately as reference text).
 // Round 2: ~50% of letters revealed, always including the first letter.
 // Round 3: only the first letter revealed.
-// Round 4 & 5: no hints — full recall.
+// Round 4: no hints — full recall.
 export function generateHint(word: string, round: Round): boolean[] {
   const n = [...word].length;
-  if (round === 1 || round === 4 || round === 5) return Array.from({ length: n }, () => true);
+  if (round === 1 || round === 4) return Array.from({ length: n }, () => true);
   if (round === 3) return Array.from({ length: n }, (_, i) => i !== 0);
 
   // round 2
@@ -207,11 +207,14 @@ export function checkAnswer(word: string, answer: string): boolean {
   return word.toLowerCase() === answer.trim().toLowerCase();
 }
 
-// Wrong answer → stay at the same round and just try it again (no demotion).
-// Correct answer below round 5 → promote one round.
-// Correct answer at round 5 → this is a real successful no-hint pass, so it
+// Wrong answer → stay at the same round and just try it again (no demotion —
+// see requestHint below for the learner-initiated way to actually drop a
+// round for more scaffolding).
+// Correct answer below round 4 → promote one round.
+// Correct answer at round 4 → this is a real successful no-hint pass, so it
 // feeds the SRS scoring (mastery score, mascot stage, next review date) —
-// same bookkeeping a Review success gets.
+// same bookkeeping a Review success gets. Round 4 is now the ceiling: one
+// clean no-hint pass is the whole pass condition, there's no round 5.
 export function applyResult(progress: WordProgress, correct: boolean): WordProgress {
   const lastPracticed = today();
 
@@ -224,7 +227,22 @@ export function applyResult(progress: WordProgress, correct: boolean): WordProgr
     return { ...progress, round, lastPracticed };
   }
 
-  return { ...recordRound5Success(progress), round: MAX_ROUND, lastPracticed };
+  return { ...recordRound4Success(progress), round: MAX_ROUND, lastPracticed };
+}
+
+// A learner-requested hint: explicitly demotes one round for more scaffolding
+// (round 3 shows the first letter, round 2 shows ~half, round 1 is a full
+// copy) — a deliberate ask, distinct from a wrong typed answer, which just
+// retries at the same round. Counts the same as a mistake for SRS purposes
+// (shrinks the eventual growth increment when the word is finally passed),
+// since the learner is telling us they didn't know it unaided. Not available
+// at round 1 — already the most scaffolded there is, nowhere lower to go.
+export function requestHint(progress: WordProgress, currentRound: Round): { progress: WordProgress; nextRound: Round } {
+  const nextRound = Math.max(1, currentRound - 1) as Round;
+  return {
+    progress: { ...progress, pendingMistakes: progress.pendingMistakes + 1, lastPracticed: today() },
+    nextRound,
+  };
 }
 
 export interface ReviewOutcome {
@@ -233,21 +251,24 @@ export interface ReviewOutcome {
   // meaningful when `isFinal` is false (isFinal means it's leaving the queue).
   nextRound: Round;
   // True once this word's review episode is over: either a full pass at
-  // round 5 (whether on the first try or after climbing back from a
-  // mistake), or a one-shot "Review Extra" practice attempt.
+  // round 4 (whether on the first try or after climbing back from a hint
+  // demotion), or a one-shot "Review Extra" practice attempt.
   isFinal: boolean;
   // True if this attempt actually happened on-schedule and can affect
   // mastery — false for "Review Extra" bonus practice on a not-yet-due word.
   scored: boolean;
 }
 
-// Review scoring: every review episode starts at REVIEW_BASE_ROUND. A wrong
-// answer stays at the same round (same as Study — no demotion) and keeps it
-// in the session's queue for another try — it does NOT get rescheduled for
-// tomorrow, since the user is expected to keep retrying today. Only the
-// round-5 answer that actually concludes the episode (first try, or after
-// however many retries) touches the SRS schedule, using whatever
-// pendingMistakes built up along the way for the growth increment.
+// Review scoring: every review episode starts at REVIEW_BASE_ROUND (= the
+// new MAX_ROUND, 4) — correct there immediately passes it, same as any other
+// round-4 completion. A wrong typed answer stays at the same round (same as
+// Study — no demotion; see requestHint for the deliberate way to drop a
+// round) and keeps it in the session's queue for another try — it does NOT
+// get rescheduled for tomorrow, since the user is expected to keep retrying
+// today. Only the round-4 answer that actually concludes the episode (first
+// try, or after however many retries/hint-demotions) touches the SRS
+// schedule, using whatever pendingMistakes built up along the way for the
+// growth increment.
 export function applyReviewResult(progress: WordProgress, correct: boolean, currentRound: Round): ReviewOutcome {
   const t = today();
 
@@ -261,7 +282,7 @@ export function applyReviewResult(progress: WordProgress, correct: boolean, curr
 
   if (correct) {
     if (currentRound >= REVIEW_BASE_ROUND) {
-      return { progress: recordRound5Success(progress, t), nextRound: MAX_ROUND, isFinal: true, scored: true };
+      return { progress: recordRound4Success(progress, t), nextRound: MAX_ROUND, isFinal: true, scored: true };
     }
     const nextRound = (currentRound + 1) as Round;
     return { progress: { ...progress, lastPracticed: t }, nextRound, isFinal: false, scored: true };

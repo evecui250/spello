@@ -2,8 +2,12 @@
 
 import { Level, LEVEL_ORDER } from './words';
 
-export type Round = 1 | 2 | 3 | 4 | 5;
-export const MAX_ROUND: Round = 5;
+// Round 5 was removed — completing round 4 (full recall, no hints) once is
+// now the pass condition, both for a word's first climb in Study and for a
+// Review episode. See lib/practice.ts's requestHint for the "give me more
+// hints" demotion path (round 1 has nowhere lower to go).
+export type Round = 1 | 2 | 3 | 4;
+export const MAX_ROUND: Round = 4;
 
 // The 4-stage dachshund mascot — a word's memory strength, derived from its
 // masteryScore. See lib/srs.ts for the scoring/stage logic.
@@ -23,11 +27,11 @@ export interface WordProgress {
   growthScore: number;        // M' — monotonic; drives mascotStage + retirement. Only
                                // ever increases: a mistake shrinks the *next* increment,
                                // it doesn't undo progress already made.
-  successfulReviews: number;  // S — total successful no-hint (round 5) passes
+  successfulReviews: number;  // S — total successful no-hint (round 4) passes
   pendingMistakes: number;    // failed attempts since the last successful review;
                                // consumed (feeding both M and the next growthScore
                                // increment), then reset, on the next success
-  lastReviewedAt?: string;    // date of the last successful round-5 pass
+  lastReviewedAt?: string;    // date of the last successful round-4 pass
   nextReviewDue?: string;     // date this word next becomes eligible for Review
   mascotStage: MascotStageId; // derived from growthScore, stored for convenient display
 }
@@ -477,7 +481,7 @@ export interface DailyStats {
   date: string;
   studyDone: boolean;
   reviewDone: boolean;
-  studiedCount: number;   // words brought to round 5 today, across all rounds (main + any extras)
+  studiedCount: number;   // words brought to round 4 today, across all rounds (main + any extras)
   reviewedCount: number;  // words reviewed today, across all review batches
   congratsShown: boolean; // whether the "both sections done" card has been shown today
   // Cumulative across every round today (main + extras) — kept separate from

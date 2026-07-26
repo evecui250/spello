@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   buildStudyWords, buildReviewWords, generateHint, checkAnswer, applyResult,
-  applyReviewResult, REVIEW_BASE_ROUND, wordsById,
+  applyReviewResult, requestHint, REVIEW_BASE_ROUND, wordsById,
 } from '../lib/practice';
 import {
   getWordProgress, saveWordProgress, getSettings, touchStreak, markStudyGoalDone,
@@ -29,7 +29,6 @@ const ROUND_LABELS: Record<Round, string> = {
   2: 'Round 2 — half the letters hinted',
   3: 'Round 3 — first letter hint',
   4: 'Round 4 — no hints',
-  5: 'Round 5 — no hints',
 };
 
 const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
@@ -53,7 +52,7 @@ interface HistoryEntry {
 export default function PracticeSession({ mode }: Props) {
   const [settings, setSettings] = useState<Settings | null>(null);
 
-  // Study mode: a queue of words to cycle through until every one reaches round 5.
+  // Study mode: a queue of words to cycle through until every one reaches round 4.
   const [queue, setQueue] = useState<Word[]>([]);
   const [totalStudyWords, setTotalStudyWords] = useState(0);
 
@@ -92,7 +91,7 @@ export default function PracticeSession({ mode }: Props) {
   const handleNextRef = useRef<() => void>(() => {});
   // Review mode only: which rung a word should resume at when it comes back
   // around in the queue after a mistake (round 4) or a recovery pass that
-  // isn't the final one yet (back up to round 5). Session-local — it's never
+  // isn't the final one yet (back up to round 4). Session-local — it's never
   // persisted, since the stored round always stays at MAX_ROUND for review
   // eligibility (see buildReviewWords).
   const reviewRoundsRef = useRef<Record<string, Round>>({});
@@ -200,12 +199,12 @@ export default function PracticeSession({ mode }: Props) {
         delete reviewRoundsRef.current[word.id];
       } else {
         // Stays in the queue for another try — remember which rung to
-        // resume at (round 4 after a mistake, or back up to 5 to finish).
+        // resume at (a lower round after a hint, or back up to 4 to finish).
         reviewRoundsRef.current[word.id] = outcome.nextRound;
       }
     } else {
       updated = applyResult(progress, correct);
-      // Study: only "done" the first time this ladder climb reaches round 5.
+      // Study: only "done" the first time this ladder climb reaches round 4.
       completed = progress.round === MAX_ROUND && correct;
       earnedBadge = updated.studiedTimes > progress.studiedTimes;
     }
@@ -231,7 +230,28 @@ export default function PracticeSession({ mode }: Props) {
     submitResult(wordRight && articleRight);
   };
 
-  const handleGiveUp = () => submitResult(false);
+  // A deliberate "give me more help" request — demotes one round (more
+  // scaffolding) instead of retrying the same round the way a wrong typed
+  // answer does. Not available at round 1 (nothing lower to demote to); the
+  // button itself is hidden then. Counts as a mistake for SRS purposes, same
+  // as a wrong answer, since the learner didn't recall it unaided.
+  const handleHint = () => {
+    if (!word || feedback !== null || currentRound <= 1) return;
+    const progress = getWordProgress(word.id);
+    const { progress: updated, nextRound } = requestHint(progress, currentRound);
+    const finalProgress = mode === 'study' ? { ...updated, round: nextRound } : updated;
+    saveWordProgress(finalProgress);
+    scheduleSync();
+    if (mode === 'review') reviewRoundsRef.current[word.id] = nextRound;
+
+    setCurrentRound(nextRound);
+    const h = generateHint(word.de, nextRound);
+    const chars = [...word.de];
+    setHint(h);
+    setValues(chars.map((c, i) => (h[i] ? '' : c)));
+    setArticleValues(['', '', '']);
+    setAttemptKey(k => k + 1);
+  };
 
   // Congrats + streak: re-checked after EVERY session that finishes,
   // including "extra" ones — not just the first regular completion of the
@@ -526,7 +546,7 @@ export default function PracticeSession({ mode }: Props) {
         <div>
           <div className="text-sm font-medium text-indigo-600 mb-1">{ROUND_LABELS[currentRound]}</div>
           <div className="flex gap-1">
-            {([1, 2, 3, 4, 5] as Round[]).map(n => (
+            {([1, 2, 3, 4] as Round[]).map(n => (
               <div
                 key={n}
                 className={`h-2 flex-1 rounded-full ${n <= currentRound ? 'bg-indigo-500' : 'bg-indigo-100'}`}
@@ -615,12 +635,14 @@ export default function PracticeSession({ mode }: Props) {
             >
               Check
             </button>
-            <button
-              onClick={handleGiveUp}
-              className="w-full text-slate-400 py-1 text-sm font-medium hover:text-slate-600 transition-colors"
-            >
-              I don't remember
-            </button>
+            {currentRound > 1 && (
+              <button
+                onClick={handleHint}
+                className="w-full text-slate-400 py-1 text-sm font-medium hover:text-slate-600 transition-colors"
+              >
+                Hint
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-3">
