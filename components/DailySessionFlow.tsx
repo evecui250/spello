@@ -473,6 +473,7 @@ export default function DailySessionFlow() {
         studiedCount={dailyStats.studiedCount}
         reviewedCount={dailyStats.reviewedCount}
         language="German"
+        level={settings?.level}
         onClose={handleCloseCongrats}
       />
     );

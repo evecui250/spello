@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { WORDS, Word } from '../../lib/words';
-import { getAllProgress, MascotStageId, WordProgress, today } from '../../lib/storage';
+import { getAllProgress, getSettings, MascotStageId, WordProgress, today } from '../../lib/storage';
 import { addDays } from '../../lib/srs';
 import DachshundMascot from '../../components/Mascot';
 import CongratsModal from '../../components/CongratsModal';
@@ -126,7 +126,7 @@ function DayCard({ bucket, isToday, onViewCongrats }: { bucket: DayBucket; isTod
           onClick={onViewCongrats}
           className="mt-1 self-start text-sm font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-full px-3 py-1.5 transition-colors"
         >
-          🎉 View congrats card
+          View congrats card
         </button>
       )}
     </div>
@@ -243,6 +243,7 @@ export default function ProgressPage() {
           studiedCount={bucket.learned.length}
           reviewedCount={bucket.reviewed.length}
           language="German"
+          level={getSettings().level}
           date={bucket.date}
           onClose={() => setShowCongrats(false)}
         />

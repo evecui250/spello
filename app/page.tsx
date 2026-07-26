@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation';
 import {
   getStreak, getAllProgress, getSettings, today, MAX_ROUND,
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
+  getTotalGoalDays,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
 import { wordsForLevel } from '../lib/words';
 import { SYNCED_EVENT } from '../lib/sync';
 import Logo from '../components/Logo';
+import GoalDaysBadge from '../components/GoalDaysBadge';
 import {
   FlameIcon, SproutIcon, StarIcon, LayersIcon, CheckCircleIcon,
 } from '../components/icons';
@@ -58,6 +60,7 @@ export default function HomePage() {
   const [previewStudyCount, setPreviewStudyCount] = useState(0);
   const [previewReviewCount, setPreviewReviewCount] = useState(0);
   const [totalWords, setTotalWords] = useState(0);
+  const [totalGoalDays, setTotalGoalDays] = useState(0);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -72,6 +75,7 @@ export default function HomePage() {
     // trigger the pull.
     const load = () => {
       setStreak(getStreak().count);
+      setTotalGoalDays(getTotalGoalDays());
       const progress = getAllProgress();
       setMasteredCount(Object.values(progress).filter(p => p.fullyMastered).length);
       // "Learning" = has earned its first puppy (cleared round 5 at least
@@ -167,6 +171,10 @@ export default function HomePage() {
         <Logo variant="full" size={140} />
         <p className="text-emerald-100/70 text-sm tracking-wide mt-1">Master spelling, one word at a time.</p>
       </div>
+
+      {totalGoalDays > 0 && (
+        <GoalDaysBadge days={totalGoalDays} size={96} className="rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.25)]" />
+      )}
 
       <div className="flex flex-wrap justify-center gap-3">
         {stats.map(s => <StatBubble key={s.label} stat={s} />)}

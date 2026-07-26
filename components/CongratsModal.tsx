@@ -11,6 +11,10 @@ interface Props {
   // card (see Progress's daily history) passes that day's date instead, so
   // the stamp in the corner matches the counts being shown.
   date?: string;
+  // Which vocabulary book this session was on, e.g. "B1" — shown under the
+  // date stamp as "German B1" so a saved/shared card says which book it's
+  // from. 'B2_old' displays as plain "B2" — that suffix is internal only.
+  level?: string;
 }
 
 // public/congrats.png is the shareable card's background art (1254x1254,
@@ -54,7 +58,7 @@ function drawCount(ctx: CanvasRenderingContext2D, box: typeof NEW_WORDS_BOX, val
   ctx.fillText(String(value), cx, cy + fontSize * 0.06);
 }
 
-export default function CongratsModal({ studiedCount, reviewedCount, language, onClose, date }: Props) {
+export default function CongratsModal({ studiedCount, reviewedCount, language, onClose, date, level }: Props) {
   const [imgUrl, setImgUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -85,6 +89,15 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
       ctx.textBaseline = 'alphabetic';
       ctx.fillText(dateStr, IMG_SIZE - 70, 90);
 
+      // Which vocabulary book this session was on, e.g. "German B1" — a
+      // second, slightly smaller line right under the date. 'B2_old' shows
+      // as plain "B2"; that suffix is an internal detail only.
+      if (level) {
+        const levelLabel = level === 'B2_old' ? 'B2' : level;
+        ctx.font = '600 20px system-ui, -apple-system, sans-serif';
+        ctx.fillText(`${language} ${levelLabel}`, IMG_SIZE - 70, 118);
+      }
+
       canvas.toBlob(blob => {
         if (blob && !cancelled) setImgUrl(URL.createObjectURL(blob));
       });
@@ -95,7 +108,7 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
     bg.src = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/congrats.png`;
 
     return () => { cancelled = true; };
-  }, [studiedCount, reviewedCount, language, date]);
+  }, [studiedCount, reviewedCount, language, date, level]);
 
   useEffect(() => () => { if (imgUrl) URL.revokeObjectURL(imgUrl); }, [imgUrl]);
 

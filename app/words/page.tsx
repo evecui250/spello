@@ -23,7 +23,10 @@ export default function WordsPage() {
   // The vocabulary book itself — follows Settings' CEFR level (a separate
   // concept from filterLevel above, which is the New/Learning/Mastered
   // progress filter). Browsing an A1 profile shouldn't surface B2-only words.
-  const words = useMemo(() => wordsForLevel(getSettings().level), []);
+  const words = useMemo(
+    () => [...wordsForLevel(getSettings().level)].sort((a, b) => a.de.localeCompare(b.de, 'de')),
+    [],
+  );
   const categories = useMemo(
     () => [...new Set(words.map(w => w.category).filter(Boolean))] as string[],
     [words],

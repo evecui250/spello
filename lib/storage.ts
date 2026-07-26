@@ -67,6 +67,10 @@ const EXTRA_REVIEW_KEY = 'wb2_extra_review_limit';
 const ACTIVE_LEVEL_KEY = 'wb2_active_level';
 const MIGRATION_FLAG = 'wb2_migrated_per_level_v1';
 const B2_RENAME_FLAG = 'wb2_migrated_b2_to_b2_old_v1';
+// Deliberately NOT level-namespaced — a lifetime count of calendar days on
+// which ANY level's study or review goal was completed. Switching levels
+// doesn't reset or affect it.
+const GOAL_DAYS_KEY = 'wb2_goal_days_total';
 
 const DEFAULT_SETTINGS: Settings = {
   studyBatchSize: 15, dailyReview: 25, language: 'de', level: 'A1',
@@ -186,6 +190,39 @@ function localDateString(d: Date): string {
 
 export function today(): string {
   return localDateString(new Date());
+}
+
+// --- Lifetime goal-days counter (level-independent) ---
+// A running total of calendar days on which the user finished at least one
+// goal (study or review) in ANY level — unlike the per-level streak, this
+// never resets and isn't affected by which level is active.
+
+interface GoalDaysRecord {
+  count: number;
+  lastCountedDate: string;
+}
+
+function getGoalDaysRecord(): GoalDaysRecord {
+  if (typeof window === 'undefined') return { count: 0, lastCountedDate: '' };
+  try {
+    return JSON.parse(localStorage.getItem(GOAL_DAYS_KEY) || 'null') ?? { count: 0, lastCountedDate: '' };
+  } catch {
+    return { count: 0, lastCountedDate: '' };
+  }
+}
+
+// At most one increment per calendar day, no matter how many goals (across
+// however many levels) get completed that day.
+function touchGoalDaysCounter(): void {
+  if (typeof window === 'undefined') return;
+  const rec = getGoalDaysRecord();
+  const t = today();
+  if (rec.lastCountedDate === t) return;
+  localStorage.setItem(GOAL_DAYS_KEY, JSON.stringify({ count: rec.count + 1, lastCountedDate: t }));
+}
+
+export function getTotalGoalDays(): number {
+  return getGoalDaysRecord().count;
 }
 
 // --- Progress ---
@@ -472,6 +509,7 @@ export function markStudyGoalDone(count: number): DailyStats {
   stats.studyDone = true;
   stats.studiedCount += count;
   saveDailyStats(stats);
+  touchGoalDaysCounter();
   return stats;
 }
 
@@ -503,6 +541,7 @@ export function markReviewGoalDone(count: number): DailyStats {
   stats.reviewDone = true;
   stats.reviewedCount += count;
   saveDailyStats(stats);
+  touchGoalDaysCounter();
   return stats;
 }
 

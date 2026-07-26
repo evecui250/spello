@@ -65,6 +65,15 @@ export function speakWord(word: Word): void {
   }
   const audio = new Audio(audioUrlForWord(word));
   currentAudio = audio;
-  audio.addEventListener('error', () => speakWithBrowserVoice(spokenForm(word)));
-  audio.play().catch(() => speakWithBrowserVoice(spokenForm(word)));
+  const fallback = () => {
+    // A newer speakWord() call can supersede this one (pausing this audio
+    // on purpose to start the next), which also rejects this play()
+    // promise with an AbortError — that's not a real playback failure and
+    // must not trigger the (lower-quality, possibly wrong-accent) browser
+    // TTS fallback. Only fall back if we're still the current audio.
+    if (currentAudio !== audio) return;
+    speakWithBrowserVoice(spokenForm(word));
+  };
+  audio.addEventListener('error', fallback);
+  audio.play().catch(fallback);
 }

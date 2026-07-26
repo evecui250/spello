@@ -556,7 +556,7 @@ const WORDS_PART_1: Word[] = [
   { id: 'w493', de: 'bluten', en: 'to bleed', type: 'verb', level: 'B1' },
   { id: 'w494', de: 'blühen', en: 'to bloom', type: 'verb', level: 'B1' },
   { id: 'w495', de: 'Boden', article: 'der', plural: 'Böden', en: 'floor', type: 'noun', level: 'B1' },
-  { id: 'w496', de: 'Bogen', article: 'der', plural: 'Bögen', en: 'sheet (of paper)', type: 'noun', level: 'A1' },
+  { id: 'w496', de: 'Bogen', article: 'der', plural: 'Bögen', en: 'arc / sheet (of paper)', type: 'noun', level: 'A1' },
   { id: 'w497', de: 'Bohne', article: 'die', plural: 'Bohnen', en: 'bean', type: 'noun', level: 'A2' },
   { id: 'w498', de: 'Bonbon', article: 'das', plural: 'Bonbons', en: 'candy, sweet', type: 'noun', level: 'B2_old' },
   { id: 'w499', de: 'Boot', article: 'das', plural: 'Boote', en: 'boat', type: 'noun', level: 'B2_old' },

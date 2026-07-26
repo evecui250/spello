@@ -435,6 +435,7 @@ export default function PracticeSession({ mode }: Props) {
             studiedCount={dailyStats.studiedCount}
             reviewedCount={dailyStats.reviewedCount}
             language={LANG_NAMES[settings?.language ?? 'de'] ?? 'German'}
+            level={settings?.level}
             onClose={() => setShowCongrats(false)}
           />
         )}
