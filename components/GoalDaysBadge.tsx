@@ -6,19 +6,25 @@
 // count can just be overlaid as plain HTML text on top of the image. Hole
 // center/diameter measured directly off the rendered SVG (transparent-pixel
 // scan, not a guess): center ≈ (511, 673) of 1024, usable diameter ≈ 300.
+// Reused for both the lifetime goal-days count and the day streak — same
+// badge art, different number/label passed in by the caller.
 const HOLE_CENTER_X_PCT = 49.9;
 const HOLE_CENTER_Y_PCT = 65.7;
 const HOLE_DIAMETER_PCT = 29.3;
-const TEXT_COLOR = '#5a3a86';
+// Warm deep red-orange sampled directly from the flame ring's own darker
+// rim tone, so the number reads as part of the badge instead of clashing
+// with it the way the earlier cool purple did.
+const TEXT_COLOR = '#8a0f0d';
 
 interface Props {
-  days: number;
+  count: number;
   size?: number;
   className?: string;
+  label?: string;
 }
 
-export default function GoalDaysBadge({ days, size = 96, className }: Props) {
-  const digits = String(days).length;
+export default function GoalDaysBadge({ count, size = 96, className, label }: Props) {
+  const digits = String(count).length;
   // Shrink for multi-digit counts so a big total still fits the circle.
   const fontSize = (digits <= 2 ? size * 0.3 : size * 0.3 * (2.4 / (digits + 0.4)));
 
@@ -27,7 +33,7 @@ export default function GoalDaysBadge({ days, size = 96, className }: Props) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/days_counter_v2.svg`}
-        alt={`${days} total day${days === 1 ? '' : 's'} goal completed`}
+        alt={label ? `${count} ${label}` : `${count}`}
         width={size}
         height={size}
         className="absolute inset-0 w-full h-full"
@@ -44,7 +50,7 @@ export default function GoalDaysBadge({ days, size = 96, className }: Props) {
           fontSize,
         }}
       >
-        {days}
+        {count}
       </div>
     </div>
   );

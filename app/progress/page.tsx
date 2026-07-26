@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { WORDS, Word } from '../../lib/words';
-import { getAllProgress, getSettings, MascotStageId, WordProgress, today } from '../../lib/storage';
+import {
+  getAllProgress, getSettings, getStreak, getTotalGoalDays, MascotStageId, WordProgress, today,
+} from '../../lib/storage';
 import { addDays } from '../../lib/srs';
 import DachshundMascot from '../../components/Mascot';
 import CongratsModal from '../../components/CongratsModal';
+import GoalDaysBadge from '../../components/GoalDaysBadge';
 
 const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
 const STAGE_COLORS: Record<MascotStageId, string> = {
@@ -137,9 +140,13 @@ export default function ProgressPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress> | null>(null);
   const [date, setDate] = useState(() => today());
   const [showCongrats, setShowCongrats] = useState(false);
+  const [totalGoalDays, setTotalGoalDays] = useState(0);
+  const [streakCount, setStreakCount] = useState(0);
 
   useEffect(() => {
     setProgress(getAllProgress());
+    setTotalGoalDays(getTotalGoalDays());
+    setStreakCount(getStreak().count);
   }, []);
 
   if (!progress) return null;
@@ -164,6 +171,17 @@ export default function ProgressPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Progress</h1>
+
+      <div className="flex justify-center gap-6">
+        <div className="flex flex-col items-center gap-1">
+          <GoalDaysBadge count={totalGoalDays} size={80} label="goal days" />
+          <span className="text-xs text-emerald-100/70">Goal Days</span>
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <GoalDaysBadge count={streakCount} size={80} label="day streak" />
+          <span className="text-xs text-emerald-100/70">Streak</span>
+        </div>
+      </div>
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
         <h2 className="font-semibold text-stone-800 mb-1">Words breakdown</h2>
