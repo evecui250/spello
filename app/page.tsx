@@ -172,9 +172,7 @@ export default function HomePage() {
         <p className="text-emerald-100/70 text-sm tracking-wide mt-1">Master spelling, one word at a time.</p>
       </div>
 
-      {totalGoalDays > 0 && (
-        <GoalDaysBadge days={totalGoalDays} size={96} className="rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.25)]" />
-      )}
+      <GoalDaysBadge days={totalGoalDays} size={96} className="rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.25)]" />
 
       <div className="flex flex-wrap justify-center gap-3">
         {stats.map(s => <StatBubble key={s.label} stat={s} />)}

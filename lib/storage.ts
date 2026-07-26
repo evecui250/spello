@@ -202,10 +202,35 @@ interface GoalDaysRecord {
   lastCountedDate: string;
 }
 
+// One-time backfill for anyone adopting this counter after already having
+// practice history: approximates "days a goal was completed" as distinct
+// calendar days (across every level) on which at least one word was
+// successfully reviewed — not a perfect record of "the full daily goal was
+// finished" (that was never tracked per-day historically), but a reasonable
+// stand-in so an existing user's count doesn't start back at zero.
+function backfillGoalDaysFromHistory(): GoalDaysRecord {
+  const days = new Set<string>();
+  for (const level of LEVEL_ORDER) {
+    const progress = getAllProgressForLevel(level);
+    for (const id of Object.keys(progress)) {
+      const lastReviewedAt = progress[id].lastReviewedAt;
+      if (lastReviewedAt) days.add(lastReviewedAt);
+    }
+  }
+  const t = today();
+  return { count: days.size, lastCountedDate: days.has(t) ? t : '' };
+}
+
 function getGoalDaysRecord(): GoalDaysRecord {
   if (typeof window === 'undefined') return { count: 0, lastCountedDate: '' };
+  const raw = localStorage.getItem(GOAL_DAYS_KEY);
+  if (raw === null) {
+    const backfilled = backfillGoalDaysFromHistory();
+    localStorage.setItem(GOAL_DAYS_KEY, JSON.stringify(backfilled));
+    return backfilled;
+  }
   try {
-    return JSON.parse(localStorage.getItem(GOAL_DAYS_KEY) || 'null') ?? { count: 0, lastCountedDate: '' };
+    return JSON.parse(raw) ?? { count: 0, lastCountedDate: '' };
   } catch {
     return { count: 0, lastCountedDate: '' };
   }
