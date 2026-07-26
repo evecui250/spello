@@ -1,50 +1,77 @@
 'use client';
 
-// public/days_counter_v2.svg (1024x1024) is a flame-ring badge with a
-// genuinely transparent circular hole left for the count — unlike the old
-// PNG version, there's no baked-in placeholder digit to erase, so the real
-// count can just be overlaid as plain HTML text on top of the image. Hole
-// center/diameter measured directly off the rendered SVG (transparent-pixel
-// scan, not a guess): center ≈ (511, 673) of 1024, usable diameter ≈ 300.
-// Reused for both the lifetime goal-days count and the day streak — same
-// badge art, different number/label passed in by the caller.
-const HOLE_CENTER_X_PCT = 49.9;
-const HOLE_CENTER_Y_PCT = 65.7;
-const HOLE_DIAMETER_PCT = 29.3;
-// Warm deep red-orange sampled directly from the flame ring's own darker
-// rim tone, so the number reads as part of the badge instead of clashing
-// with it the way the earlier cool purple did.
-const TEXT_COLOR = '#8a0f0d';
+// public/goal_days_badge.png and public/streak_days_badge.png (cropped from
+// a single days_counter_v3.png sprite, with its baked-in checkerboard
+// "transparent" placeholder pattern removed via flood-fill — see git history
+// for the extraction script) have a real transparent background, but — same
+// gotcha as the earlier PNG badge — the cream circle isn't blank: it already
+// has its own placeholder digits ("28"/"14") drawn in. numberBox positions
+// the real count; coverBox is a same-cream-color patch drawn first, sized
+// generously around numberBox, to fully hide the original placeholder digit
+// before the real one is drawn on top — without reaching the leaf-divider/
+// label text sitting just below it in the same circle. All measured
+// directly off the art (grid-overlay pixel measurement, not a guess).
+const VARIANTS = {
+  goal: {
+    image: 'goal_days_badge.png',
+    aspectRatio: 766 / 722,
+    numberBox: { x0: 31.86, x1: 72.02, y0: 37.86, y1: 60.05 },
+    coverBox: { x0: 25, x1: 79, y0: 34, y1: 63 },
+  },
+  streak: {
+    image: 'streak_days_badge.png',
+    aspectRatio: 769 / 727,
+    numberBox: { x0: 35.08, x1: 68.78, y0: 39.66, y1: 59.82 },
+    coverBox: { x0: 28, x1: 76, y0: 36, y1: 63 },
+  },
+} as const;
+
+const TEXT_COLOR = '#2f4a2c';
+const CREAM = '#f7eed9';
 
 interface Props {
+  variant: keyof typeof VARIANTS;
   count: number;
   size?: number;
   className?: string;
   label?: string;
 }
 
-export default function GoalDaysBadge({ count, size = 96, className, label }: Props) {
+export default function GoalDaysBadge({ variant, count, size = 96, className, label }: Props) {
+  const { image, aspectRatio, numberBox, coverBox } = VARIANTS[variant];
+  const width = size;
+  const height = size * aspectRatio;
   const digits = String(count).length;
-  // Shrink for multi-digit counts so a big total still fits the circle.
-  const fontSize = (digits <= 2 ? size * 0.3 : size * 0.3 * (2.4 / (digits + 0.4)));
+  const boxHeightPx = ((numberBox.y1 - numberBox.y0) / 100) * height;
+  const fontSize = (digits <= 2 ? boxHeightPx * 0.85 : boxHeightPx * 0.85 * (1.7 / (digits + 0.7)));
 
   return (
-    <div className={`relative shrink-0 ${className ?? ''}`} style={{ width: size, height: size }}>
+    <div className={`relative shrink-0 ${className ?? ''}`} style={{ width, height }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/days_counter_v2.svg`}
+        src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${image}`}
         alt={label ? `${count} ${label}` : `${count}`}
-        width={size}
-        height={size}
+        width={width}
+        height={height}
         className="absolute inset-0 w-full h-full"
+      />
+      <div
+        className="absolute"
+        style={{
+          left: `${coverBox.x0}%`,
+          top: `${coverBox.y0}%`,
+          width: `${coverBox.x1 - coverBox.x0}%`,
+          height: `${coverBox.y1 - coverBox.y0}%`,
+          backgroundColor: CREAM,
+        }}
       />
       <div
         className="absolute flex items-center justify-center font-extrabold"
         style={{
-          left: `${HOLE_CENTER_X_PCT}%`,
-          top: `${HOLE_CENTER_Y_PCT}%`,
-          width: `${HOLE_DIAMETER_PCT}%`,
-          height: `${HOLE_DIAMETER_PCT}%`,
+          left: `${(numberBox.x0 + numberBox.x1) / 2}%`,
+          top: `${(numberBox.y0 + numberBox.y1) / 2}%`,
+          width: `${numberBox.x1 - numberBox.x0}%`,
+          height: `${numberBox.y1 - numberBox.y0}%`,
           transform: 'translate(-50%, -50%)',
           color: TEXT_COLOR,
           fontSize,

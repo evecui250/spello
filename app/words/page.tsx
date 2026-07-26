@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { wordsForLevel } from '../../lib/words';
+import { wordsForLevel, Word } from '../../lib/words';
 import { getAllProgress, getSettings, WordProgress, today } from '../../lib/storage';
 import { daysBetween } from '../../lib/srs';
 import SpeakerButton from '../../components/SpeakerButton';
@@ -13,6 +13,20 @@ function reviewLabel(nextReviewDue?: string): string | null {
   if (!nextReviewDue) return null;
   const days = daysBetween(today(), nextReviewDue);
   return days <= 0 ? 'due now' : `in ${days} day${days === 1 ? '' : 's'}`;
+}
+
+// Lower is more relevant — a German prefix match (e.g. "ob" → "oben") is far
+// more useful than a word that merely contains the letters mid-way through
+// (e.g. "Autobahn"), or one that only matches via its English translation.
+// Returns null for no match at all, so it can double as the search filter.
+function searchRank(w: Word, q: string): number | null {
+  const de = w.de.toLowerCase();
+  const en = w.en.toLowerCase();
+  if (de.startsWith(q)) return 0;
+  if (de.includes(q)) return 1;
+  if (en.startsWith(q)) return 2;
+  if (en.includes(q)) return 3;
+  return null;
 }
 
 export default function WordsPage() {
@@ -42,18 +56,20 @@ export default function WordsPage() {
   // New, same as a word that hasn't been touched at all.
   const earned = (p?: WordProgress) => !!p && p.studiedTimes > 0;
 
-  const filtered = words.filter(w => {
-    const p = progress[w.id];
-    if (filterLevel === 'new' && earned(p)) return false;
-    if (filterLevel === 'mastered' && !p?.fullyMastered) return false;
-    if (filterLevel === 'learning' && (!earned(p) || p?.fullyMastered)) return false;
-    if (filterCategory !== 'all' && w.category !== filterCategory) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return w.de.toLowerCase().includes(q) || w.en.toLowerCase().includes(q);
-    }
-    return true;
-  });
+  const q = search.toLowerCase();
+  const filtered = words
+    .filter(w => {
+      const p = progress[w.id];
+      if (filterLevel === 'new' && earned(p)) return false;
+      if (filterLevel === 'mastered' && !p?.fullyMastered) return false;
+      if (filterLevel === 'learning' && (!earned(p) || p?.fullyMastered)) return false;
+      if (filterCategory !== 'all' && w.category !== filterCategory) return false;
+      return true;
+    })
+    .map(w => ({ w, rank: search ? searchRank(w, q) : 0 }))
+    .filter((x): x is { w: Word; rank: number } => x.rank !== null)
+    .sort((a, b) => a.rank - b.rank)
+    .map(x => x.w);
 
   return (
     <div className="flex flex-col gap-4">

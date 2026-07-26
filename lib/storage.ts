@@ -534,7 +534,6 @@ export function markStudyGoalDone(count: number): DailyStats {
   stats.studyDone = true;
   stats.studiedCount += count;
   saveDailyStats(stats);
-  touchGoalDaysCounter();
   return stats;
 }
 
@@ -566,14 +565,18 @@ export function markReviewGoalDone(count: number): DailyStats {
   stats.reviewDone = true;
   stats.reviewedCount += count;
   saveDailyStats(stats);
-  touchGoalDaysCounter();
   return stats;
 }
 
+// Called exactly when the congrats card is actually reached (both today's
+// study and review goals done, or there was genuinely nothing to do for
+// one of them) — this, not either individual goal, is what counts as
+// "finished the day's goal" for the lifetime goal-days counter.
 export function markCongratsShown(): void {
   const stats = getDailyStats();
   stats.congratsShown = true;
   saveDailyStats(stats);
+  touchGoalDaysCounter();
 }
 
 // Cumulative-for-the-day puppy/upgrade tally, for the congrats card — see

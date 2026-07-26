@@ -170,43 +170,42 @@ export default function ProgressPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Progress</h1>
-
       <div className="flex justify-center gap-6">
         <div className="flex flex-col items-center gap-1">
-          <GoalDaysBadge count={totalGoalDays} size={80} label="goal days" />
+          <GoalDaysBadge variant="goal" count={totalGoalDays} size={80} label="goal days" />
           <span className="text-xs text-emerald-100/70">Goal Days</span>
         </div>
         <div className="flex flex-col items-center gap-1">
-          <GoalDaysBadge count={streakCount} size={80} label="day streak" />
+          <GoalDaysBadge variant="streak" count={streakCount} size={80} label="day streak" />
           <span className="text-xs text-emerald-100/70">Streak</span>
         </div>
       </div>
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
-        <h2 className="font-semibold text-stone-800 mb-1">Words breakdown</h2>
-        <p className="text-stone-500 text-sm mb-4">
-          How your started words are progressing.
-        </p>
+        <h2 className="font-semibold text-stone-800 mb-4">Words breakdown</h2>
         {introducedCount === 0 && (
           <p className="text-stone-500 text-sm mb-3">Study a few words to start growing your first dachshund.</p>
         )}
-        <div className="flex flex-col gap-3">
+        {/* A single bar whose segments sum to 100% of introduced words — unlike
+            each stage racing to its own 100%, this can't misleadingly "fill up"
+            at a handful of words; it only shifts which segment dominates. */}
+        <div className="h-4 rounded-full overflow-hidden bg-slate-100 flex mb-4">
+          {introducedCount > 0 && bars.map(b => (
+            b.count > 0 && (
+              <div
+                key={b.id}
+                className={`h-full ${b.color} transition-all`}
+                style={{ width: `${(b.count / introducedCount) * 100}%` }}
+              />
+            )
+          ))}
+        </div>
+        <div className="grid grid-cols-4 gap-2">
           {bars.map(b => (
-            <div key={b.id} className="flex items-center gap-3">
-              <div className="flex flex-col items-center gap-0.5 shrink-0 w-12">
-                <DachshundMascot stage={b.id} className="w-11 h-11" />
-                <span className="text-[10px] font-medium text-stone-500">{STAGE_LABEL[b.id]}</span>
-              </div>
-              <div className="flex-1">
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-3 rounded-full ${b.color} transition-all`}
-                    style={{ width: `${introducedCount === 0 ? 0 : (b.count / introducedCount) * 100}%` }}
-                  />
-                </div>
-              </div>
-              <span className="text-stone-500 text-sm w-10 text-right shrink-0">{b.count}</span>
+            <div key={b.id} className="flex flex-col items-center gap-1">
+              <DachshundMascot stage={b.id} className="w-10 h-10" />
+              <span className="text-[10px] font-medium text-stone-500">{STAGE_LABEL[b.id]}</span>
+              <span className="text-sm font-semibold text-stone-700">{b.count}</span>
             </div>
           ))}
         </div>
