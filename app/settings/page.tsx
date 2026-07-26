@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getSettings, saveSettings, switchToLevel, clearAllProgress, Settings } from '../../lib/storage';
-import { estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
+import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
 import { Level, wordsForLevel } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
@@ -128,7 +128,6 @@ export default function SettingsPage() {
         </div>
         <div className="-mt-4 flex flex-col gap-0.5">
           <p className="text-stone-500 text-sm">This vocabulary book has {wordsForLevel(level).length} words for {level}.</p>
-          <p className="text-stone-500 text-sm">Switching level is its own separate profile — progress, streak, and pace stay independent. More languages and levels (C1, C2…) are coming soon.</p>
         </div>
 
         <div>
@@ -196,8 +195,8 @@ export default function SettingsPage() {
             <span className="text-right">
               {forecast.wordsRemaining === 0
                 ? 'All words introduced'
-                : `~${forecast.daysToIntroduceAll} days to learn all`}
-              {' · '}~{forecast.daysToMasterAll} days to master all
+                : `~${daysToWeeks(forecast.daysToIntroduceAll)} weeks to learn all`}
+              {' · '}~{daysToWeeks(forecast.daysToMasterAll)} weeks to master all
             </span>
           </div>
           {showPaceInfo && (
@@ -205,8 +204,9 @@ export default function SettingsPage() {
               Each word gets a mastery score instead of a fixed review count.
               A correct review raises it and pushes the next review further
               away (spaced repetition); a mistake slows the next gain but
-              never erases progress already made. After about 4 clean
-              reviews spread across a few months, a word is fully mastered.
+              never erases progress already made. After the first time you
+              learn a word, plus about 3 clean reviews spread across a few
+              months, it&apos;s fully mastered.
             </div>
           )}
         </div>

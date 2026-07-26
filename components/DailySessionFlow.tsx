@@ -409,10 +409,12 @@ export default function DailySessionFlow() {
   if (session.phase === 'study-done') {
     return (
       <div className="text-center py-16">
-        <div className="text-5xl mb-4">✅</div>
         <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           Study complete!
         </h2>
+        <p className="text-amber-100/80 mb-6">
+          Today {session.studyWordIds.length} word{session.studyWordIds.length === 1 ? '' : 's'} learned.
+        </p>
         {session.earnedPuppies > 0 && (
           <div className="mx-auto mb-6 max-w-xs bg-amber-50/75 backdrop-blur-sm border border-amber-100/50 rounded-2xl px-5 py-4 flex flex-col items-center gap-1.5">
             <DachshundMascot stage="puppy" className="w-20 h-20" />
@@ -439,10 +441,12 @@ export default function DailySessionFlow() {
     if (total === 0) return null;
     return (
       <div className="text-center py-16">
-        <div className="text-5xl mb-4">⬆️</div>
         <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
-          {total} upgraded today!
+          Today {session.reviewWordIds.length} word{session.reviewWordIds.length === 1 ? '' : 's'} reviewed
         </h2>
+        <p className="text-amber-100/80 mb-6">
+          Among them, {total} {total === 1 ? 'was' : 'were'} upgraded to the next level.
+        </p>
         <div className="mx-auto mb-6 max-w-xs bg-amber-50/75 backdrop-blur-sm border border-amber-100/50 rounded-2xl px-5 py-4 flex flex-wrap justify-center gap-x-5 gap-y-2">
           {STAGE_ORDER.filter(s => session.earnedUpgrades[s]).map(s => (
             <div key={s} className="flex items-center gap-1.5">
@@ -601,8 +605,6 @@ export default function DailySessionFlow() {
           </div>
         )}
       </div>
-
-      {word.category && <div className="text-center text-emerald-100/60 text-xs">{word.category}</div>}
     </div>
   );
 }

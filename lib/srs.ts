@@ -78,9 +78,9 @@ export const MASTERY_GROWTH_THRESHOLD = 6.0;
 
 export const MASCOT_STAGES: MascotStageInfo[] = [
   { id: 'puppy', name: 'Puppy Dachshund', visualKey: 'mascot-puppy', isMastered: false, minScore: 0 },
-  { id: 'short', name: 'Short Dachshund', visualKey: 'mascot-short', isMastered: false, minScore: 3.0 },
-  { id: 'medium', name: 'Medium Dachshund', visualKey: 'mascot-medium', isMastered: false, minScore: 4.5 },
-  { id: 'long-crowned', name: 'Long Dachshund with Crown', visualKey: 'mascot-long-crowned', isMastered: true, minScore: MASTERY_GROWTH_THRESHOLD },
+  { id: 'short', name: 'Young Dachshund', visualKey: 'mascot-short', isMastered: false, minScore: 3.0 },
+  { id: 'medium', name: 'Adult Dachshund', visualKey: 'mascot-medium', isMastered: false, minScore: 4.5 },
+  { id: 'long-crowned', name: 'Master Dachshund', visualKey: 'mascot-long-crowned', isMastered: true, minScore: MASTERY_GROWTH_THRESHOLD },
 ];
 
 export function getMascotStage(growthScore: number): MascotStageInfo {

@@ -175,6 +175,14 @@ export function estimateProgressForecast(studyBatchSize: number): ProgressForeca
   return { wordsRemaining, daysToIntroduceAll, daysToMasterAll };
 }
 
+// Forecasts read more naturally in weeks once they run past a couple of
+// weeks — used by Settings/Welcome's "at this pace" display. Infinity (a
+// batch size of 0) passes through unchanged rather than becoming NaN.
+export function daysToWeeks(days: number): number {
+  if (!Number.isFinite(days)) return days;
+  return Math.max(1, Math.round(days / 7));
+}
+
 export function checkAnswer(word: string, answer: string): boolean {
   return word.toLowerCase() === answer.trim().toLowerCase();
 }

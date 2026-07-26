@@ -170,29 +170,28 @@ export default function ProgressPage() {
         <p className="text-stone-500 text-sm mb-4">
           How your started words are progressing.
         </p>
-        {introducedCount === 0 ? (
-          <p className="text-stone-500 text-sm">Study a few words to start growing your first dachshund.</p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {bars.map(b => (
-              <div key={b.id} className="flex items-center gap-3">
-                <div className="flex flex-col items-center gap-0.5 shrink-0 w-12">
-                  <DachshundMascot stage={b.id} className="w-11 h-11" />
-                  <span className="text-[10px] font-medium text-stone-500">{STAGE_LABEL[b.id]}</span>
-                </div>
-                <div className="flex-1">
-                  <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-3 rounded-full ${b.color} transition-all`}
-                      style={{ width: `${(b.count / introducedCount) * 100}%` }}
-                    />
-                  </div>
-                </div>
-                <span className="text-stone-500 text-sm w-10 text-right shrink-0">{b.count}</span>
-              </div>
-            ))}
-          </div>
+        {introducedCount === 0 && (
+          <p className="text-stone-500 text-sm mb-3">Study a few words to start growing your first dachshund.</p>
         )}
+        <div className="flex flex-col gap-3">
+          {bars.map(b => (
+            <div key={b.id} className="flex items-center gap-3">
+              <div className="flex flex-col items-center gap-0.5 shrink-0 w-12">
+                <DachshundMascot stage={b.id} className="w-11 h-11" />
+                <span className="text-[10px] font-medium text-stone-500">{STAGE_LABEL[b.id]}</span>
+              </div>
+              <div className="flex-1">
+                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-3 rounded-full ${b.color} transition-all`}
+                    style={{ width: `${introducedCount === 0 ? 0 : (b.count / introducedCount) * 100}%` }}
+                  />
+                </div>
+              </div>
+              <span className="text-stone-500 text-sm w-10 text-right shrink-0">{b.count}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-col gap-3">

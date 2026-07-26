@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { saveSettings, markOnboardingDone, Settings, MascotStageId } from '../../lib/storage';
-import { estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
+import { daysToWeeks, estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
 import { Level } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
 import Logo from '../../components/Logo';
@@ -15,9 +15,9 @@ type Step = typeof STEPS[number];
 
 const MASCOT_INTRO: { id: MascotStageId; name: string; reviews: string }[] = [
   { id: 'puppy', name: 'Puppy', reviews: 'after first learning' },
-  { id: 'short', name: 'Short Dachshund', reviews: 'after your 1st review' },
-  { id: 'medium', name: 'Medium Dachshund', reviews: 'after your 2nd review' },
-  { id: 'long-crowned', name: 'Long Dachshund with Crown', reviews: 'after your 3rd review — fully mastered' },
+  { id: 'short', name: 'Young Dachshund', reviews: 'after your 1st review' },
+  { id: 'medium', name: 'Adult Dachshund', reviews: 'after your 2nd review' },
+  { id: 'long-crowned', name: 'Master Dachshund', reviews: 'after your 3rd review — fully mastered' },
 ];
 
 function StepDots({ step }: { step: Step }) {
@@ -103,7 +103,7 @@ export default function WelcomePage() {
                 </select>
               </div>
             </div>
-            <p className="text-stone-400 text-sm">More languages and levels are coming soon.</p>
+            <p className="text-stone-400 text-sm">Not sure which level? A1 is the easiest, for absolute beginners — B1 is the most advanced available right now.</p>
           </div>
           <button
             onClick={() => setStep('pace')}
@@ -161,7 +161,7 @@ export default function WelcomePage() {
             <div className="bg-amber-100/60 rounded-xl px-4 py-3 text-sm text-amber-800 flex items-center justify-between gap-3">
               <span className="font-semibold shrink-0">At this pace</span>
               <span className="text-right">
-                ~{forecast.daysToIntroduceAll} days to learn all · ~{forecast.daysToMasterAll} days to master all
+                ~{daysToWeeks(forecast.daysToIntroduceAll)} weeks to learn all · ~{daysToWeeks(forecast.daysToMasterAll)} weeks to master all
               </span>
             </div>
 
@@ -218,12 +218,20 @@ export default function WelcomePage() {
             <AccountPanel />
           </div>
           <div className="flex flex-col items-center gap-3 w-full">
-            <button
-              onClick={() => setStep('mascots')}
-              className="w-full bg-indigo-600 text-white py-3.5 rounded-2xl font-semibold shadow-md hover:bg-indigo-700 active:scale-95 transition-all"
-            >
-              Continue
-            </button>
+            <div className="flex gap-3 w-full">
+              <button
+                onClick={() => setStep('pace')}
+                className="flex-1 bg-amber-50/75 text-stone-700 py-3.5 rounded-2xl font-semibold border border-amber-100/50 hover:bg-amber-50 active:scale-95 transition-all"
+              >
+                Back
+              </button>
+              <button
+                onClick={() => setStep('mascots')}
+                className="flex-[2] bg-indigo-600 text-white py-3.5 rounded-2xl font-semibold shadow-md hover:bg-indigo-700 active:scale-95 transition-all"
+              >
+                Continue
+              </button>
+            </div>
             <p className="text-emerald-100/50 text-sm">Optional — you can skip this and sign in anytime from Settings.</p>
           </div>
         </div>
@@ -247,12 +255,20 @@ export default function WelcomePage() {
               ))}
             </div>
           </div>
-          <button
-            onClick={finish}
-            className="w-full bg-indigo-600 text-white py-3.5 rounded-2xl font-semibold shadow-md hover:bg-indigo-700 active:scale-95 transition-all"
-          >
-            Start Learning
-          </button>
+          <div className="flex gap-3 w-full">
+            <button
+              onClick={() => setStep('account')}
+              className="flex-1 bg-amber-50/75 text-stone-700 py-3.5 rounded-2xl font-semibold border border-amber-100/50 hover:bg-amber-50 active:scale-95 transition-all"
+            >
+              Back
+            </button>
+            <button
+              onClick={finish}
+              className="flex-[2] bg-indigo-600 text-white py-3.5 rounded-2xl font-semibold shadow-md hover:bg-indigo-700 active:scale-95 transition-all"
+            >
+              Start Learning
+            </button>
+          </div>
         </div>
       )}
     </div>

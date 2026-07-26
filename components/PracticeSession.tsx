@@ -385,14 +385,13 @@ export default function PracticeSession({ mode }: Props) {
 
     return (
       <div className="text-center py-16">
-        <div className="text-5xl mb-4">✅</div>
         <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           {mode === 'study' ? 'Study session complete!' : 'Batch complete!'}
         </h2>
         <p className="text-emerald-100/70 mb-4">
           {mode === 'study'
-            ? `You brought ${totalStudyWords} word${totalStudyWords === 1 ? '' : 's'} to round 5 today.`
-            : `You reviewed ${totalReviewWords} word${totalReviewWords === 1 ? '' : 's'}.`}
+            ? `Today ${totalStudyWords} word${totalStudyWords === 1 ? '' : 's'} learned.`
+            : `Today ${totalReviewWords} word${totalReviewWords === 1 ? '' : 's'} reviewed.`}
         </p>
 
         {mode === 'study' && earned.length > 0 && (
@@ -407,7 +406,7 @@ export default function PracticeSession({ mode }: Props) {
         {mode === 'review' && earned.length > 0 && (
           <div className="mx-auto mb-6 max-w-xs bg-amber-50/75 backdrop-blur-sm border border-amber-100/50 rounded-2xl px-5 py-4 flex flex-col items-center gap-3">
             <p className="text-slate-700 font-semibold">
-              {earned.length} upgraded today
+              Among them, {earned.length} {earned.length === 1 ? 'was' : 'were'} upgraded to the next level.
             </p>
             <div className="flex flex-wrap justify-center gap-x-5 gap-y-2">
               {STAGE_ORDER.filter(s => stageCounts[s]).map(s => (
@@ -645,10 +644,6 @@ export default function PracticeSession({ mode }: Props) {
           </div>
         )}
       </div>
-
-      {word.category && (
-        <div className="text-center text-emerald-100/60 text-xs">{word.category}</div>
-      )}
     </div>
   );
 }
