@@ -12,7 +12,7 @@ import GoalDaysBadge from '../../components/GoalDaysBadge';
 
 const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
 const STAGE_COLORS: Record<MascotStageId, string> = {
-  puppy: 'bg-slate-300',
+  puppy: 'bg-sky-500',
   short: 'bg-yellow-400',
   medium: 'bg-amber-500',
   'long-crowned': 'bg-green-500',
@@ -163,6 +163,7 @@ export default function ProgressPage() {
     stageCounts[p.mascotStage] += 1;
   }
   const bars = STAGE_ORDER.map(id => ({ id, count: stageCounts[id], color: STAGE_COLORS[id] }));
+  const maxStageCount = Math.max(...bars.map(b => b.count), 1);
 
   const bucket = buildBucket(progress, date, date === t);
   const canGoBack = date > minDate;
@@ -172,11 +173,11 @@ export default function ProgressPage() {
     <div className="flex flex-col gap-6">
       <div className="flex justify-center gap-6">
         <div className="flex flex-col items-center gap-1">
-          <GoalDaysBadge variant="goal" count={totalGoalDays} size={80} label="goal days" />
+          <GoalDaysBadge variant="goal" count={totalGoalDays} size={112} label="goal days" />
           <span className="text-xs text-emerald-100/70">Goal Days</span>
         </div>
         <div className="flex flex-col items-center gap-1">
-          <GoalDaysBadge variant="streak" count={streakCount} size={80} label="day streak" />
+          <GoalDaysBadge variant="streak" count={streakCount} size={112} label="day streak" />
           <span className="text-xs text-emerald-100/70">Streak</span>
         </div>
       </div>
@@ -186,26 +187,26 @@ export default function ProgressPage() {
         {introducedCount === 0 && (
           <p className="text-stone-500 text-sm mb-3">Study a few words to start growing your first dachshund.</p>
         )}
-        {/* A single bar whose segments sum to 100% of introduced words — unlike
-            each stage racing to its own 100%, this can't misleadingly "fill up"
-            at a handful of words; it only shifts which segment dominates. */}
-        <div className="h-4 rounded-full overflow-hidden bg-slate-100 flex mb-4">
-          {introducedCount > 0 && bars.map(b => (
-            b.count > 0 && (
+        {/* Each bar's height is relative to whichever stage currently has the
+            most words, not to a fixed total — so distribution 2-4-4-8 and
+            1-2-2-4 render identically. That means it never "fills up" and
+            stays meaningful regardless of how many words are introduced. */}
+        <div className="flex items-end justify-around gap-3 h-28">
+          {bars.map(b => (
+            <div key={b.id} className="flex flex-col items-center justify-end h-full flex-1 gap-1">
+              <span className="text-sm font-semibold text-stone-700">{b.count}</span>
               <div
-                key={b.id}
-                className={`h-full ${b.color} transition-all`}
-                style={{ width: `${(b.count / introducedCount) * 100}%` }}
+                className={`w-full max-w-10 rounded-t-md ${b.color} transition-all`}
+                style={{ height: `${b.count > 0 ? Math.max((b.count / maxStageCount) * 100, 6) : 2}%` }}
               />
-            )
+            </div>
           ))}
         </div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="flex justify-around gap-3 mt-2">
           {bars.map(b => (
-            <div key={b.id} className="flex flex-col items-center gap-1">
+            <div key={b.id} className="flex flex-col items-center gap-1 flex-1">
               <DachshundMascot stage={b.id} className="w-10 h-10" />
               <span className="text-[10px] font-medium text-stone-500">{STAGE_LABEL[b.id]}</span>
-              <span className="text-sm font-semibold text-stone-700">{b.count}</span>
             </div>
           ))}
         </div>

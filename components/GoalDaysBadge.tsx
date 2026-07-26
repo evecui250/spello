@@ -15,14 +15,14 @@ const VARIANTS = {
   goal: {
     image: 'goal_days_badge.png',
     aspectRatio: 766 / 722,
-    numberBox: { x0: 31.86, x1: 72.02, y0: 37.86, y1: 60.05 },
-    coverBox: { x0: 25, x1: 79, y0: 34, y1: 63 },
+    numberBox: { x0: 33.9, x1: 72.7, y0: 39.2, y1: 63.2 },
+    coverBox: { x0: 30.5, x1: 76.2, y0: 33.9, y1: 64.75 },
   },
   streak: {
     image: 'streak_days_badge.png',
     aspectRatio: 769 / 727,
-    numberBox: { x0: 35.08, x1: 68.78, y0: 39.66, y1: 59.82 },
-    coverBox: { x0: 28, x1: 76, y0: 36, y1: 63 },
+    numberBox: { x0: 35.1, x1: 69.5, y0: 41, y1: 62.4 },
+    coverBox: { x0: 31.6, x1: 72.9, y0: 37.7, y1: 64.4 },
   },
 } as const;
 
