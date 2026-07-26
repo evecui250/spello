@@ -122,7 +122,7 @@ export default function SettingsPage() {
               <option value="A1">A1</option>
               <option value="A2">A2</option>
               <option value="B1">B1</option>
-              <option value="B2_old">B2 (old)</option>
+              <option value="B2">B2</option>
             </select>
           </div>
         </div>

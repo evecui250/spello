@@ -99,11 +99,11 @@ export default function WelcomePage() {
                   <option value="A1">A1</option>
                   <option value="A2">A2</option>
                   <option value="B1">B1</option>
-                  <option value="B2_old">B2 (old)</option>
+                  <option value="B2">B2</option>
                 </select>
               </div>
             </div>
-            <p className="text-stone-400 text-sm">Not sure which level? A1 is the easiest, for absolute beginners — B1 is the most advanced available right now.</p>
+            <p className="text-stone-400 text-sm">Not sure which level? A1 is the easiest, for absolute beginners — B2 is the most advanced available right now.</p>
           </div>
           <button
             onClick={() => setStep('pace')}

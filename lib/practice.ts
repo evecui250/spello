@@ -22,6 +22,14 @@ export function wordsById(ids: string[]): Word[] {
   return ids.map(id => WORDS_BY_ID.get(id)).filter((w): w is Word => !!w);
 }
 
+// Beginners find long words disproportionately harder to type from scratch —
+// for A1, until a learner has been introduced to their first SHORT_WORD_
+// GRACE_COUNT words, new words are drawn short-first (article not counted
+// toward length). Tied to words actually introduced, not calendar days, so
+// it adapts to whatever pace the learner is actually keeping.
+const SHORT_WORD_GRACE_COUNT = 100;
+const SHORT_WORD_MAX_LENGTH = 6;
+
 // Study pool: words that haven't reached round 5 yet — brand new words and
 // words still climbing the round 1-4 ladder, however many days that's taken.
 // Words already in progress (abandoned mid-ladder) are prioritized over
@@ -31,16 +39,28 @@ export function buildStudyWords(
   limit = getSettings().studyBatchSize,
   excludeIds: Set<string> = new Set(),
 ): Word[] {
+  const settings = getSettings();
   const allProgress = getAllProgress();
   const inProgress: Word[] = [];
   const fresh: Word[] = [];
-  for (const w of wordsForLevel(getSettings().level)) {
+  for (const w of wordsForLevel(settings.level)) {
     if (excludeIds.has(w.id)) continue;
     const p = allProgress[w.id];
     if (!p) fresh.push(w);
     else if (!p.fullyMastered && p.round < MAX_ROUND) inProgress.push(w);
   }
-  return [...shuffled(inProgress), ...shuffled(fresh)].slice(0, limit);
+
+  let freshOrdered = shuffled(fresh);
+  if (settings.level === 'A1') {
+    const introducedCount = wordsForLevel('A1').filter(w => allProgress[w.id]).length;
+    if (introducedCount < SHORT_WORD_GRACE_COUNT) {
+      const short = freshOrdered.filter(w => [...w.de].length <= SHORT_WORD_MAX_LENGTH);
+      const long = freshOrdered.filter(w => [...w.de].length > SHORT_WORD_MAX_LENGTH);
+      freshOrdered = [...short, ...long];
+    }
+  }
+
+  return [...shuffled(inProgress), ...freshOrdered].slice(0, limit);
 }
 
 // Called when the user changes "New words per day" in Settings, so the
