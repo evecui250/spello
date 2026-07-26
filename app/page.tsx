@@ -167,12 +167,17 @@ export default function HomePage() {
         />
       ))}
 
+      <div className="w-full flex justify-end items-center gap-2">
+        <span className="text-xs text-emerald-100/70 text-right leading-tight">
+          Goal-reached<br />days
+        </span>
+        <GoalDaysBadge days={totalGoalDays} size={56} />
+      </div>
+
       <div className="flex flex-col items-center gap-1">
         <Logo variant="full" size={140} />
         <p className="text-emerald-100/70 text-sm tracking-wide mt-1">Master spelling, one word at a time.</p>
       </div>
-
-      <GoalDaysBadge days={totalGoalDays} size={96} className="rounded-2xl shadow-[0_4px_16px_rgba(0,0,0,0.25)]" />
 
       <div className="flex flex-wrap justify-center gap-3">
         {stats.map(s => <StatBubble key={s.label} stat={s} />)}

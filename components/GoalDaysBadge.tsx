@@ -1,19 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-
-// public/days_counter.png (1254x1254) is a mascot badge with a placeholder
-// "7" carved into the stone plaque. These are that glyph's pixel bounds
-// (measured directly off the PNG via a zoomed grid overlay, not color
-// matching — see CongratsModal's NEW_WORDS_BOX comment for why that's the
-// reliable way to do this). BG_FILL/TEXT_COLOR are sampled from the plaque's
-// cream background and the flatter "DAYS" text below it, so the swapped-in
-// real count blends into the same plaque instead of the "7"'s own carved-
-// stone bevel shading (which isn't something a flat fillText can replicate).
-const IMG_SIZE = 1254;
-const DIGIT_BOX = { x0: 560, x1: 790, y0: 550, y1: 852 };
-const BG_FILL = '#e6ccbb';
-const TEXT_COLOR = '#44305a';
+// public/days_counter_v2.svg (1024x1024) is a flame-ring badge with a
+// genuinely transparent circular hole left for the count — unlike the old
+// PNG version, there's no baked-in placeholder digit to erase, so the real
+// count can just be overlaid as plain HTML text on top of the image. Hole
+// center/diameter measured directly off the rendered SVG (transparent-pixel
+// scan, not a guess): center ≈ (511, 673) of 1024, usable diameter ≈ 300.
+const HOLE_CENTER_X_PCT = 49.9;
+const HOLE_CENTER_Y_PCT = 65.7;
+const HOLE_DIAMETER_PCT = 29.3;
+const TEXT_COLOR = '#5a3a86';
 
 interface Props {
   days: number;
@@ -22,63 +18,34 @@ interface Props {
 }
 
 export default function GoalDaysBadge({ days, size = 96, className }: Props) {
-  const [imgUrl, setImgUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = IMG_SIZE;
-    canvas.height = IMG_SIZE;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let cancelled = false;
-
-    const draw = (bg: HTMLImageElement) => {
-      if (cancelled) return;
-
-      ctx.drawImage(bg, 0, 0, IMG_SIZE, IMG_SIZE);
-
-      ctx.fillStyle = BG_FILL;
-      ctx.fillRect(DIGIT_BOX.x0, DIGIT_BOX.y0, DIGIT_BOX.x1 - DIGIT_BOX.x0, DIGIT_BOX.y1 - DIGIT_BOX.y0);
-
-      const cx = (DIGIT_BOX.x0 + DIGIT_BOX.x1) / 2;
-      const cy = (DIGIT_BOX.y0 + DIGIT_BOX.y1) / 2;
-      const boxHeight = DIGIT_BOX.y1 - DIGIT_BOX.y0;
-      const digits = String(days).length;
-      // Shrink for multi-digit counts so a big total still fits the box the
-      // single placeholder digit was carved into.
-      const fontSize = digits <= 1 ? boxHeight * 0.85 : boxHeight * 0.85 * (1.7 / (digits + 0.7));
-      ctx.fillStyle = TEXT_COLOR;
-      ctx.font = `800 ${fontSize}px system-ui, -apple-system, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(days), cx, cy + fontSize * 0.05);
-
-      canvas.toBlob(blob => {
-        if (blob && !cancelled) setImgUrl(URL.createObjectURL(blob));
-      });
-    };
-
-    const bg = new window.Image();
-    bg.onload = () => draw(bg);
-    bg.src = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/days_counter.png`;
-
-    return () => { cancelled = true; };
-  }, [days]);
-
-  useEffect(() => () => { if (imgUrl) URL.revokeObjectURL(imgUrl); }, [imgUrl]);
-
-  if (!imgUrl) return <div style={{ width: size, height: size }} className={className} />;
+  const digits = String(days).length;
+  // Shrink for multi-digit counts so a big total still fits the circle.
+  const fontSize = (digits <= 2 ? size * 0.3 : size * 0.3 * (2.4 / (digits + 0.4)));
 
   return (
-    // Locally generated (canvas → blob URL) — no remote source to optimize.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={imgUrl}
-      alt={`${days} total day${days === 1 ? '' : 's'} goal completed`}
-      width={size}
-      height={size}
-      className={className}
-    />
+    <div className={`relative shrink-0 ${className ?? ''}`} style={{ width: size, height: size }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/days_counter_v2.svg`}
+        alt={`${days} total day${days === 1 ? '' : 's'} goal completed`}
+        width={size}
+        height={size}
+        className="absolute inset-0 w-full h-full"
+      />
+      <div
+        className="absolute flex items-center justify-center font-extrabold"
+        style={{
+          left: `${HOLE_CENTER_X_PCT}%`,
+          top: `${HOLE_CENTER_Y_PCT}%`,
+          width: `${HOLE_DIAMETER_PCT}%`,
+          height: `${HOLE_DIAMETER_PCT}%`,
+          transform: 'translate(-50%, -50%)',
+          color: TEXT_COLOR,
+          fontSize,
+        }}
+      >
+        {days}
+      </div>
+    </div>
   );
 }
