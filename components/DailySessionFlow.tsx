@@ -24,10 +24,23 @@ import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
 import { speakWord } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
-import { correctSentence, watchSignedIn, SentenceCorrection } from '../lib/ai';
+import { correctSentence } from '../lib/ai';
 
 function shuffled<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
+}
+
+// Locates wordForm inside sentence (case-insensitive) so callers can
+// highlight/blank it — used by both BlankedSentence (rounds 2+/review) and
+// the round-1 corrected-sentence display (underlines the target word).
+function splitOnWordForm(sentence: string, wordForm: string): { before: string; match: string; after: string } | null {
+  const idx = sentence.toLowerCase().indexOf(wordForm.toLowerCase());
+  if (idx === -1) return null;
+  return {
+    before: sentence.slice(0, idx),
+    match: sentence.slice(idx, idx + wordForm.length),
+    after: sentence.slice(idx + wordForm.length),
+  };
 }
 
 const ROUND_LABELS: Record<Round, string> = {
@@ -41,28 +54,32 @@ const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'
 
 type RoundMode = 'study' | 'review';
 
-// Round 1 for a signed-in learner: instead of copying the word (still used
-// as a fallback when signed out — the AI call needs a user to log usage
-// against), the learner invents their own sentence using the word, wrong
-// grammar/English mixed in is expected, and an AI correction becomes the
-// word's permanent example sentence (shown on Word List and, blanked out,
-// on later rounds — see BlankedSentence below).
+// Round 1: instead of copying the word, the learner invents their own
+// sentence using it — wrong grammar/English mixed in is expected — and an
+// AI correction becomes the word's permanent example sentence (shown on
+// Word List and, blanked out, on later rounds — see BlankedSentence below).
+// Requires sign-in (enforced app-wide by AuthGate, see app/layout.tsx),
+// since the AI call needs a real user to log usage against.
 function SentenceExercise({
   word, level, onCorrected,
 }: {
   word: Word;
   level: string;
-  onCorrected: (correction: SentenceCorrection) => void;
+  onCorrected: (correction: { sentence: string; wordForm: string }) => void;
 }) {
   const [input, setInput] = useState('');
-  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'not-used'>('idle');
 
   async function handleSubmit() {
     if (!input.trim() || status === 'loading') return;
     setStatus('loading');
     try {
-      const correction = await correctSentence(word.id, word.de, level, input.trim());
-      onCorrected(correction);
+      const result = await correctSentence(word.id, word.de, level, input.trim());
+      if (!result.used) {
+        setStatus('not-used');
+        return;
+      }
+      onCorrected(result);
     } catch {
       setStatus('error');
     }
@@ -81,13 +98,18 @@ function SentenceExercise({
         <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Write your own sentence using this word</div>
         <textarea
           value={input}
-          onChange={e => setInput(e.target.value)}
+          onChange={e => { setInput(e.target.value); if (status === 'not-used') setStatus('idle'); }}
           disabled={status === 'loading'}
-          placeholder="Don't worry about grammar — just try!"
+          placeholder="Don't worry about grammar — mixing in English is fine too, we'll turn it into correct German."
           rows={2}
           className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 resize-none disabled:opacity-60"
         />
       </div>
+      {status === 'not-used' && (
+        <p className="text-amber-700 text-sm text-center">
+          Try to actually use "{word.de}" somewhere in your sentence (any form is fine).
+        </p>
+      )}
       {status === 'error' && (
         <p className="text-red-600 text-sm text-center">Couldn't get a correction — check your connection and try again.</p>
       )}
@@ -109,28 +131,25 @@ function SentenceExercise({
 // however the word actually appears in the sentence (which may differ from
 // its dictionary form, e.g. plural/case endings).
 function BlankedSentence({ example, revealed }: { example: { sentence: string; wordForm: string }; revealed: boolean }) {
-  const idx = example.sentence.toLowerCase().indexOf(example.wordForm.toLowerCase());
-  if (idx === -1) {
+  const parts = splitOnWordForm(example.sentence, example.wordForm);
+  if (!parts) {
     if (!revealed) return null;
     return (
       <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
-        <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Example sentence</div>
+        <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Your sentence</div>
         <div className="text-stone-700 italic">{example.sentence}</div>
       </div>
     );
   }
-  const before = example.sentence.slice(0, idx);
-  const match = example.sentence.slice(idx, idx + example.wordForm.length);
-  const after = example.sentence.slice(idx + example.wordForm.length);
   return (
     <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
-      <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Example sentence</div>
+      <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Your sentence</div>
       <div className="text-stone-700 italic">
-        {before}
+        {parts.before}
         <span className={revealed ? 'font-bold text-indigo-700 not-italic' : 'inline-block bg-indigo-200 text-transparent rounded select-none'}>
-          {revealed ? match : ' '.repeat(Math.max(match.length, 3))}
+          {revealed ? parts.match : ' '.repeat(Math.max(parts.match.length, 3))}
         </span>
-        {after}
+        {parts.after}
       </div>
     </div>
   );
@@ -164,12 +183,11 @@ export default function DailySessionFlow() {
   // remounts fresh for the next page.
   const [matchingPageKey, setMatchingPageKey] = useState(0);
   const [mcqCurrent, setMcqCurrent] = useState<{ word: Word; choices: string[] } | null>(null);
-  const [isSignedIn, setIsSignedIn] = useState(false);
   // The current word's saved example sentence (round 2+/review only — see
   // BlankedSentence), and the just-produced correction for the round-1
   // sentence exercise (shown in place of the generic "✓ Correct!" banner).
   const [exampleSentence, setExampleSentence] = useState<{ sentence: string; wordForm: string } | null>(null);
-  const [sentenceResult, setSentenceResult] = useState<SentenceCorrection | null>(null);
+  const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string } | null>(null);
   // "Review" = already fully learned, back for spaced repetition. "New" =
   // never touched before today. "Continuing" = mid-ladder from a PREVIOUS
   // day (not brand new, hasn't reached round 4 yet either) — this is the
@@ -320,12 +338,6 @@ export default function DailySessionFlow() {
 
   // --- Mount: load today's session (Home always creates one before routing
   // here) and resume at whatever phase it's at. ---
-  // Subscribed (not a one-shot check) so it can't race the Supabase client
-  // still rehydrating its session from storage on a freshly-loaded page —
-  // this fires immediately with whatever the current state actually is, and
-  // again on any later sign-in/out.
-  useEffect(() => watchSignedIn(setIsSignedIn), []);
-
   useEffect(() => {
     const s = getSettings();
     setSettings(s);
@@ -790,7 +802,7 @@ export default function DailySessionFlow() {
           <div className="text-2xl font-semibold text-slate-700">{word.en}</div>
         </div>
 
-        {currentRound === 1 && roundMode === 'study' && isSignedIn ? (
+        {currentRound === 1 && roundMode === 'study' ? (
           feedback === null ? (
             <SentenceExercise
               key={word.id}
@@ -805,7 +817,20 @@ export default function DailySessionFlow() {
             <div className="flex flex-col gap-3">
               <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
                 <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium">Here's a natural way to say it</div>
-                <div className="text-lg text-green-800">{sentenceResult?.sentence}</div>
+                <div className="text-lg text-green-800">
+                  {(() => {
+                    if (!sentenceResult) return null;
+                    const parts = splitOnWordForm(sentenceResult.sentence, sentenceResult.wordForm);
+                    if (!parts) return sentenceResult.sentence;
+                    return (
+                      <>
+                        {parts.before}
+                        <span className="underline decoration-2 underline-offset-2">{parts.match}</span>
+                        {parts.after}
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
               <button
                 onClick={handleNext}
@@ -817,16 +842,7 @@ export default function DailySessionFlow() {
           )
         ) : (
           <>
-            {currentRound === 1 && (
-              <div className="text-center -mt-1">
-                <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
-                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
-                  {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
-                </div>
-              </div>
-            )}
-
-            {currentRound > 1 && exampleSentence && (
+            {exampleSentence && (
               <BlankedSentence example={exampleSentence} revealed={feedback !== null} />
             )}
 

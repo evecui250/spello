@@ -8,9 +8,8 @@ import { Level } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
 import Logo from '../../components/Logo';
 import DachshundMascot from '../../components/Mascot';
-import AccountPanel from '../../components/AccountPanel';
 
-const STEPS = ['language', 'pace', 'account', 'mascots'] as const;
+const STEPS = ['language', 'pace', 'mascots'] as const;
 type Step = typeof STEPS[number];
 
 const MASCOT_INTRO: { id: MascotStageId; name: string; reviews: string }[] = [
@@ -203,36 +202,11 @@ export default function WelcomePage() {
               Back
             </button>
             <button
-              onClick={() => setStep('account')}
+              onClick={() => setStep('mascots')}
               className="flex-[2] bg-indigo-600 text-white py-3.5 rounded-2xl font-semibold shadow-md hover:bg-indigo-700 active:scale-95 transition-all"
             >
               Continue
             </button>
-          </div>
-        </div>
-      )}
-
-      {step === 'account' && (
-        <div className="w-full flex flex-col gap-6">
-          <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6">
-            <AccountPanel />
-          </div>
-          <div className="flex flex-col items-center gap-3 w-full">
-            <div className="flex gap-3 w-full">
-              <button
-                onClick={() => setStep('pace')}
-                className="flex-1 bg-amber-50/75 text-stone-700 py-3.5 rounded-2xl font-semibold border border-amber-100/50 hover:bg-amber-50 active:scale-95 transition-all"
-              >
-                Back
-              </button>
-              <button
-                onClick={() => setStep('mascots')}
-                className="flex-[2] bg-indigo-600 text-white py-3.5 rounded-2xl font-semibold shadow-md hover:bg-indigo-700 active:scale-95 transition-all"
-              >
-                Continue
-              </button>
-            </div>
-            <p className="text-emerald-100/50 text-sm">Optional — you can skip this and sign in anytime from Settings.</p>
           </div>
         </div>
       )}
@@ -257,7 +231,7 @@ export default function WelcomePage() {
           </div>
           <div className="flex gap-3 w-full">
             <button
-              onClick={() => setStep('account')}
+              onClick={() => setStep('pace')}
               className="flex-1 bg-amber-50/75 text-stone-700 py-3.5 rounded-2xl font-semibold border border-amber-100/50 hover:bg-amber-50 active:scale-95 transition-all"
             >
               Back

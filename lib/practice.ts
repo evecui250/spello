@@ -93,6 +93,10 @@ export function resizeTodayStudyBatch(newSize: number): void {
     // without this they'd silently never get either.
     session.mcqQueueIds = [...session.mcqQueueIds, ...extra.map(w => w.id)];
     session.mcq2QueueIds = [...session.mcq2QueueIds, ...extra.map(w => w.id)];
+    // Keep the live round-ladder queue (see DailySessionFlow) in step too —
+    // without this it goes stale and the progress bar's "done / total" count
+    // can go negative or otherwise stop matching the resized batch.
+    if (session.studyQueueIds) session.studyQueueIds = [...session.studyQueueIds, ...extra.map(w => w.id)];
     saveDailySession(session);
   } else if (targetSize < existing.length) {
     const keepPending = pendingIds.slice(0, targetSize - doneIds.length);
@@ -104,6 +108,7 @@ export function resizeTodayStudyBatch(newSize: number): void {
     session.mcq2WrongIds = session.mcq2WrongIds.filter(id => kept.has(id));
     session.round1AttemptedIds = session.round1AttemptedIds.filter(id => kept.has(id));
     session.round2AttemptedIds = session.round2AttemptedIds.filter(id => kept.has(id));
+    if (session.studyQueueIds) session.studyQueueIds = session.studyQueueIds.filter(id => kept.has(id));
     saveDailySession(session);
   }
 }

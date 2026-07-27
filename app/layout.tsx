@@ -4,6 +4,7 @@ import '../styles/globals.css';
 import NavBar from '../components/NavBar';
 import ForestBackground from '../components/ForestBackground';
 import SyncGate from '../components/SyncGate';
+import AuthGate from '../components/AuthGate';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
@@ -23,7 +24,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SyncGate />
         <ForestBackground />
         <NavBar />
-        <main className="max-w-2xl mx-auto px-4 py-6">{children}</main>
+        <main className="max-w-2xl mx-auto px-4 py-6">
+          <AuthGate>{children}</AuthGate>
+        </main>
       </body>
     </html>
   );

@@ -2,24 +2,15 @@
 
 import { supabase } from './supabase';
 
-export interface SentenceCorrection {
-  sentence: string;
-  wordForm: string;
-}
-
-// True when a Supabase session exists — the round-1 "write your own
-// sentence" exercise needs this (see correctSentence below) since the AI
-// call is gated/logged per user; callers fall back to the old copy-the-word
-// exercise when signed out instead of attempting the call.
-export async function isSignedIn(): Promise<boolean> {
-  const { data } = await supabase.auth.getSession();
-  return !!data.session;
-}
+export type SentenceCorrectionResult =
+  | { used: true; sentence: string; wordForm: string }
+  | { used: false };
 
 // Fires immediately with the current signed-in state, then again on every
-// sign-in/out — more reliable than a one-shot isSignedIn() check, which can
-// race a freshly-mounted page against the Supabase client still finishing
-// its own session rehydration from storage. Returns an unsubscribe function.
+// sign-in/out — safe against a freshly-mounted page racing the Supabase
+// client still finishing its own session rehydration from storage (a
+// one-shot getSession() check right at mount could otherwise read `null`
+// briefly). Returns an unsubscribe function.
 export function watchSignedIn(cb: (signedIn: boolean) => void): () => void {
   const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
     cb(!!session);
@@ -60,11 +51,12 @@ export async function correctSentence(
   wordDe: string,
   level: string,
   userSentence: string,
-): Promise<SentenceCorrection> {
+): Promise<SentenceCorrectionResult> {
   const { data, error } = await supabase.functions.invoke('correct-sentence', {
     body: { wordId, wordDe, level, userSentence },
   });
   if (error) throw error;
+  if (data?.used === false) return { used: false };
   if (!data?.sentence || !data?.wordForm) throw new Error('Malformed AI response');
-  return { sentence: data.sentence, wordForm: data.wordForm };
+  return { used: true, sentence: data.sentence, wordForm: data.wordForm };
 }

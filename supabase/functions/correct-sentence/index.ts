@@ -67,16 +67,23 @@ Deno.serve(async (req: Request) => {
           {
             role: 'system',
             content:
-              'You are a German tutor correcting a beginner’s attempt at a sentence. ' +
-              'The learner tried to use a specific German word in a sentence, possibly with ' +
-              'wrong grammar, wrong word order, or English words mixed in. Rewrite their ' +
-              'attempt as ONE natural, grammatically correct German sentence that still uses ' +
-              `the word "${wordDe}" (in its correct inflected form). Keep it simple and ` +
-              `beginner-appropriate (CEFR ${level || 'A1'}). ` +
-              'Respond with a JSON object with exactly two fields: "sentence" (the corrected ' +
-              'German sentence) and "wordForm" (the exact inflected form of the word as it ' +
-              'literally appears, verbatim, inside "sentence" — this must be an exact ' +
-              'substring match so it can be highlighted).',
+              'You are a German tutor for a beginner practicing a specific target word: ' +
+              `"${wordDe}" (CEFR ${level || 'A1'}). ` +
+              'First, decide whether their attempt actually tries to use this word — in ANY ' +
+              'form (any conjugation, declension, case ending, or plural). If it is a noun, ' +
+              'do NOT require the article (der/die/das) to be present or correct — only the ' +
+              'core word matters for this check. If they did not attempt the word at all, ' +
+              'respond with exactly this JSON: {"used": false}. ' +
+              'Otherwise (even with wrong grammar, wrong form, or English words mixed in), ' +
+              'rewrite their attempt as ONE natural sentence a native German speaker would ' +
+              'actually say — prefer the most common, idiomatic everyday phrasing over a ' +
+              'stiff or overly literal one — that still uses the word ' +
+              `"${wordDe}" (in its correct inflected form, which may differ from the ` +
+              'dictionary form). Keep it simple and beginner-appropriate. Respond with ' +
+              'exactly this JSON: {"used": true, "sentence": the corrected German sentence, ' +
+              '"wordForm": the exact inflected form of the word as it literally appears, ' +
+              'verbatim, inside "sentence" — this must be an exact substring match so it can ' +
+              'be highlighted}.',
           },
           { role: 'user', content: userSentence },
         ],
@@ -93,18 +100,13 @@ Deno.serve(async (req: Request) => {
 
     const result = await completion.json();
     const raw: string = result.choices?.[0]?.message?.content ?? '{}';
-    let parsed: { sentence?: string; wordForm?: string } = {};
+    let parsed: { used?: boolean; sentence?: string; wordForm?: string } = {};
     try {
       parsed = JSON.parse(raw);
     } catch {
       // leave parsed empty — caught by the check below
     }
-    if (!parsed.sentence || !parsed.wordForm) {
-      console.error('Malformed AI response:', raw);
-      return json({ error: 'AI returned an unexpected format' }, 502);
-    }
     const usage = result.usage ?? {};
-
     await supabase.from('ai_usage').insert({
       user_id: userId,
       word_id: wordId,
@@ -114,7 +116,15 @@ Deno.serve(async (req: Request) => {
       output_tokens: usage.completion_tokens ?? 0,
     });
 
-    return json({ sentence: parsed.sentence, wordForm: parsed.wordForm });
+    if (parsed.used === false) {
+      return json({ used: false });
+    }
+    if (!parsed.sentence || !parsed.wordForm) {
+      console.error('Malformed AI response:', raw);
+      return json({ error: 'AI returned an unexpected format' }, 502);
+    }
+
+    return json({ used: true, sentence: parsed.sentence, wordForm: parsed.wordForm });
   } catch (err) {
     console.error('correct-sentence error:', err);
     return json({ error: 'Unexpected error' }, 500);

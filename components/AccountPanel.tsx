@@ -84,9 +84,10 @@ export default function AccountPanel({ onSync }: Props) {
 
   return (
     <div>
-      <label className="block font-semibold text-stone-800 mb-1">Sync your progress (optional)</label>
+      <label className="block font-semibold text-stone-800 mb-1">Sign in</label>
       <p className="text-stone-500 text-sm mb-3">
-        Sign in with a magic link to keep your progress across devices. Not required to use the app.
+        Sign in with a magic link — this keeps your progress synced across devices and unlocks
+        the AI sentence-writing exercises.
       </p>
       {status === 'sent' ? (
         <p className="text-green-700 text-sm bg-green-50 border border-green-100 rounded-lg px-3 py-2">
