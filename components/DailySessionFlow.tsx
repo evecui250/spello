@@ -60,6 +60,22 @@ type RoundMode = 'study' | 'review';
 // Word List and, blanked out, on later rounds — see BlankedSentence below).
 // Requires sign-in (enforced app-wide by AuthGate, see app/layout.tsx),
 // since the AI call needs a real user to log usage against.
+// Shown above both the input step and the result step (see the parent's
+// currentRound === 1 branch) so the word stays visible throughout — the
+// correction lands on the same card instead of swapping to what reads as a
+// different screen. No "New word" caption here: the New/Continuing/Review
+// badge already at the top of the card says that.
+function SentenceWordHeader({ word }: { word: Word }) {
+  return (
+    <div className="text-center -mt-1">
+      <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
+        {word.article ? `${word.article} ` : ''}{word.de}{' '}
+        <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
+      </div>
+    </div>
+  );
+}
+
 function SentenceExercise({
   word, level, onCorrected,
 }: {
@@ -87,18 +103,18 @@ function SentenceExercise({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="text-center -mt-1">
-        <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">New word</div>
-        <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
-          {word.article ? `${word.article} ` : ''}{word.de}{' '}
-          <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
-        </div>
-      </div>
+      <SentenceWordHeader word={word} />
       <div>
-        <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Write your own sentence using this word</div>
+        <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Create your own sentence!</div>
         <textarea
           value={input}
           onChange={e => { setInput(e.target.value); if (status === 'not-used') setStatus('idle'); }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit();
+            }
+          }}
           disabled={status === 'loading'}
           placeholder="Don't worry about grammar — mixing in English is fine too, we'll turn it into correct German."
           rows={2}
@@ -815,6 +831,7 @@ export default function DailySessionFlow() {
             />
           ) : (
             <div className="flex flex-col gap-3">
+              <SentenceWordHeader word={word} />
               <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
                 <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium">Here's a natural way to say it</div>
                 <div className="text-lg text-green-800">
