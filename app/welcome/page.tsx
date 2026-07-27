@@ -46,8 +46,8 @@ export default function WelcomePage() {
   const [requireArticle, setRequireArticle] = useState(false);
 
   const forecast = useMemo(
-    () => estimateProgressForecast(studyBatchSize),
-    [studyBatchSize],
+    () => estimateProgressForecast(studyBatchSize, dailyReview),
+    [studyBatchSize, dailyReview],
   );
   const recommendedReview = useMemo(
     () => recommendedDailyReview(studyBatchSize),

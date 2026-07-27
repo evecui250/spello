@@ -71,6 +71,7 @@ const EXTRA_REVIEW_KEY = 'wb2_extra_review_limit';
 const ACTIVE_LEVEL_KEY = 'wb2_active_level';
 const MIGRATION_FLAG = 'wb2_migrated_per_level_v1';
 const B2_RENAME_FLAG = 'wb2_migrated_b2_to_b2_old_v1';
+const ROUND5_REMOVAL_FLAG = 'wb2_migrated_round5_removal_v1';
 // Deliberately NOT level-namespaced — a lifetime count of calendar days on
 // which ANY level's study or review goal was completed. Switching levels
 // doesn't reset or affect it.
@@ -145,6 +146,42 @@ function migrateB2ToB2Old(): void {
   localStorage.setItem(B2_RENAME_FLAG, '1');
 }
 
+// One-time fix for a data-migration edge case from removing round 5: a word
+// that was mid-climb at round 4 under the OLD 5-round system (promoted
+// there, but not yet tested/passed at the old round 5) suddenly looked
+// "already at the new ceiling" once MAX_ROUND dropped to 4 — silently
+// excluded from the study queue as if already done, without ever actually
+// passing through recordRound4Success. That left it invisible to review
+// forever (buildReviewWords requires successfulReviews >= 1) despite still
+// counting toward that day's "words learned" tally (which just counts the
+// batch, not genuine passes). Demotes any such orphaned record one round so
+// it naturally re-enters the queue and gets a real round-4 test next time.
+function migrateOrphanedRound4(): void {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem(ROUND5_REMOVAL_FLAG)) return;
+  for (const level of LEVEL_ORDER) {
+    const key = namespacedKey(KEYS.progress, level);
+    const raw = localStorage.getItem(key);
+    if (!raw) continue;
+    try {
+      const data = JSON.parse(raw) as Record<string, Partial<WordProgress>>;
+      let changed = false;
+      for (const id of Object.keys(data)) {
+        const p = data[id];
+        if ((p.round ?? 1) >= MAX_ROUND && !p.fullyMastered && (p.successfulReviews ?? 0) === 0) {
+          data[id] = { ...p, round: (MAX_ROUND - 1) as Round };
+          changed = true;
+        }
+      }
+      if (changed) localStorage.setItem(key, JSON.stringify(data));
+    } catch {
+      // Malformed record — leave untouched, same as every other place that
+      // parses this key defensively.
+    }
+  }
+  localStorage.setItem(ROUND5_REMOVAL_FLAG, '1');
+}
+
 // Raw key name, not a namespaced one — avoids infinite recursion through
 // namespacedKey's own migration call.
 function namespacedKey(base: string, level: Level): string {
@@ -155,6 +192,7 @@ export function getActiveLevel(): Level {
   if (typeof window === 'undefined') return 'A1';
   migrateLegacyKeysToB2();
   migrateB2ToB2Old();
+  migrateOrphanedRound4();
   return (localStorage.getItem(ACTIVE_LEVEL_KEY) as Level) || 'A1';
 }
 
@@ -164,6 +202,7 @@ export function getActiveLevel(): Level {
 function levelKey(base: string, level?: Level): string {
   migrateLegacyKeysToB2();
   migrateB2ToB2Old();
+  migrateOrphanedRound4();
   return namespacedKey(base, level ?? getActiveLevel());
 }
 
@@ -174,6 +213,7 @@ export function switchToLevel(level: Level): Settings {
   if (typeof window !== 'undefined') {
     migrateLegacyKeysToB2();
     migrateB2ToB2Old();
+    migrateOrphanedRound4();
     localStorage.setItem(ACTIVE_LEVEL_KEY, level);
   }
   return getSettings();
@@ -427,28 +467,12 @@ export function saveSettingsForLevel(level: Level, s: Settings): void {
   localStorage.setItem(levelKey(KEYS.settingsUpdatedAt, level), new Date().toISOString());
 }
 
-// When settings last changed on this device — lets a remote sync pull decide
-// whether its copy is actually newer before overwriting a local edit.
-export function getSettingsUpdatedAt(): string {
-  if (typeof window === 'undefined') return '';
-  return localStorage.getItem(levelKey(KEYS.settingsUpdatedAt)) || '';
-}
-
+// When this level's settings last changed on this device — lets a remote
+// sync pull decide whether its copy is actually newer before overwriting a
+// local edit (see sync.ts's pullAndMerge, compared per level).
 export function getSettingsUpdatedAtForLevel(level: Level): string {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem(levelKey(KEYS.settingsUpdatedAt, level)) || '';
-}
-
-// The whole remote row is pushed/pulled as one bundle (every level at once),
-// so "is the remote settings blob newer than mine" has to compare against
-// whichever level was edited most recently, not just the active one.
-export function getMostRecentSettingsUpdatedAt(): string {
-  let latest = '';
-  for (const level of LEVEL_ORDER) {
-    const t = getSettingsUpdatedAtForLevel(level);
-    if (t > latest) latest = t;
-  }
-  return latest;
 }
 
 // --- Onboarding ---

@@ -5,7 +5,7 @@ import {
   getActiveLevel,
   getAllProgressForLevel, saveAllProgressForLevel, WordProgress,
   getStreakForLevel, saveStreakForLevel, Streak,
-  getSettingsForLevel, saveSettingsForLevel, getMostRecentSettingsUpdatedAt, Settings,
+  getSettingsForLevel, saveSettingsForLevel, getSettingsUpdatedAtForLevel, Settings,
 } from './storage';
 import { Level, LEVEL_ORDER } from './words';
 
@@ -112,19 +112,21 @@ export async function pullAndMerge(userId: string): Promise<void> {
     }
   }
 
-  // Settings are pushed/pulled as one all-levels bundle, so the staleness
-  // check is against the most recently edited level on this device, not any
-  // one level in particular — otherwise a pull (which runs on every page
-  // load while signed in) could clobber a change made moments ago on
-  // whichever level wasn't currently active.
-  const localSettingsUpdatedAt = getMostRecentSettingsUpdatedAt();
-  const remoteIsNewer = !localSettingsUpdatedAt
-    || (!!data.updated_at && data.updated_at > localSettingsUpdatedAt);
-  if (remoteIsNewer) {
-    for (const level of LEVEL_ORDER) {
-      const remoteSettings = remoteSettingsByLevel[level];
-      if (remoteSettings) saveSettingsForLevel(level, remoteSettings);
-    }
+  // Settings are pushed/pulled as one all-levels bundle, but the staleness
+  // check is still done per level — the remote row only carries one shared
+  // updated_at, but comparing it against THIS level's own local edit time
+  // (not the most-recently-edited level across the whole device) means a
+  // level nobody has touched on this device yet always accepts the remote
+  // copy, instead of getting silently blocked by an unrelated level having
+  // been edited more recently here. A level edited moments ago locally still
+  // isn't clobbered, since its own updated-at wins that comparison.
+  for (const level of LEVEL_ORDER) {
+    const remoteSettings = remoteSettingsByLevel[level];
+    if (!remoteSettings) continue;
+    const localUpdatedAt = getSettingsUpdatedAtForLevel(level);
+    const remoteIsNewer = !localUpdatedAt
+      || (!!data.updated_at && data.updated_at > localUpdatedAt);
+    if (remoteIsNewer) saveSettingsForLevel(level, remoteSettings);
   }
 }
 
@@ -205,6 +207,7 @@ export function watchAuthAndSync(): () => void {
 }
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingUserId: string | null = null;
 
 // Call after any local mutation. Debounced and a no-op when signed out, so
 // it's safe to sprinkle after every save without worrying about network cost.
@@ -213,7 +216,40 @@ export function scheduleSync(): void {
   supabase.auth.getSession().then(({ data }) => {
     const userId = data.session?.user.id;
     if (!userId) return;
+    pendingUserId = userId;
     if (pushTimer) clearTimeout(pushTimer);
-    pushTimer = setTimeout(() => pushToRemote(userId), 1500);
+    pushTimer = setTimeout(() => {
+      pushTimer = null;
+      pushToRemote(userId);
+    }, 1500);
   });
+}
+
+// Pushes a still-pending debounced sync immediately instead of waiting out
+// the rest of the 1.5s window — see watchForUnloadFlush, which calls this
+// right before the page is hidden/closed. Without this, finishing a session
+// and then quickly closing the tab/app (very common, especially on mobile)
+// could drop that session's progress from ever reaching the cloud, since the
+// debounce timer never gets to fire.
+function flushPendingSync(): void {
+  if (!pushTimer || !pendingUserId) return;
+  clearTimeout(pushTimer);
+  pushTimer = null;
+  pushToRemote(pendingUserId);
+}
+
+// Mounted once, globally (see SyncGate) — flushes any pending sync as soon
+// as the page is backgrounded or unloaded, rather than only on whatever's
+// left of the debounce timer. 'visibilitychange' catches the common mobile
+// case (switching apps) while the page is still briefly alive in the
+// background; 'pagehide' catches an outright close/navigation.
+export function watchForUnloadFlush(): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const onVisibilityChange = () => { if (document.hidden) flushPendingSync(); };
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  window.addEventListener('pagehide', flushPendingSync);
+  return () => {
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('pagehide', flushPendingSync);
+  };
 }

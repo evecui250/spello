@@ -170,12 +170,18 @@ export interface ProgressForecast {
 
 // Rough forecast for the Settings page: how many days at the given pace
 // until every word has been studied at least once, and until every word is
-// mastered (mascot stage 4, M >= 10). daysToMasterAll assumes review
-// capacity isn't a bottleneck — i.e. dailyReview is generous enough to
-// review every due word — since with exponentially-spaced reviews the true
-// due-word volume on any given day depends on the whole history of when
-// each word was introduced, which isn't tractable to forecast exactly here.
-export function estimateProgressForecast(studyBatchSize: number): ProgressForecast {
+// mastered (mascot stage 4, M >= 10). daysToMasterAll's baseline assumes
+// review capacity isn't a bottleneck — i.e. dailyReview is generous enough
+// to review every due word — since with exponentially-spaced reviews the
+// true due-word volume on any given day depends on the whole history of
+// when each word was introduced, which isn't tractable to forecast exactly
+// here. What IS tractable: comparing dailyReview against the steady-state
+// load this study pace eventually produces (recommendedDailyReview) — if
+// the cap is below that, reviews queue up behind it, so the natural timeline
+// is stretched proportionally to how underprovisioned the cap is. Rough, but
+// it means moving the review slider actually moves this number, instead of
+// silently assuming unlimited review capacity regardless of what's set.
+export function estimateProgressForecast(studyBatchSize: number, dailyReview: number): ProgressForecast {
   const allProgress = getAllProgress();
   const levelWords = wordsForLevel(getSettings().level);
   let introduced = 0;
@@ -190,7 +196,10 @@ export function estimateProgressForecast(studyBatchSize: number): ProgressForeca
   // to crossing the mastery score, assuming on-schedule reviews with no
   // mistakes. The last word introduced still needs this full runway after
   // it's introduced; earlier words mature in parallel alongside it.
-  const daysToMasterAll = daysToIntroduceAll + simulateDaysToMastery();
+  const naturalDays = simulateDaysToMastery();
+  const neededReviewCapacity = recommendedDailyReview(studyBatchSize);
+  const bottleneckFactor = dailyReview > 0 ? Math.max(1, neededReviewCapacity / dailyReview) : Infinity;
+  const daysToMasterAll = daysToIntroduceAll + naturalDays * bottleneckFactor;
 
   return { wordsRemaining, daysToIntroduceAll, daysToMasterAll };
 }

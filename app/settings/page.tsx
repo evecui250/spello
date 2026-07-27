@@ -51,9 +51,9 @@ export default function SettingsPage() {
   // Recomputed live as the sliders move, so the user can see the effect of
   // a pace change immediately.
   const forecast = useMemo(
-    () => estimateProgressForecast(studyBatchSize),
+    () => estimateProgressForecast(studyBatchSize, dailyReview),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [studyBatchSize, cleared],
+    [studyBatchSize, dailyReview, cleared],
   );
 
   const recommendedReview = useMemo(
