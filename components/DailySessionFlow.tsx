@@ -24,13 +24,14 @@ import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
 import { speakWord } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
+import { correctSentence, isSignedIn as checkSignedIn, SentenceCorrection } from '../lib/ai';
 
 function shuffled<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
 }
 
 const ROUND_LABELS: Record<Round, string> = {
-  1: 'Round 1 — copy the word',
+  1: 'Round 1 — use it in a sentence',
   2: 'Round 2 — half the letters hinted',
   3: 'Round 3 — first letter hint',
   4: 'Round 4 — no hints',
@@ -39,6 +40,101 @@ const ROUND_LABELS: Record<Round, string> = {
 const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
 
 type RoundMode = 'study' | 'review';
+
+// Round 1 for a signed-in learner: instead of copying the word (still used
+// as a fallback when signed out — the AI call needs a user to log usage
+// against), the learner invents their own sentence using the word, wrong
+// grammar/English mixed in is expected, and an AI correction becomes the
+// word's permanent example sentence (shown on Word List and, blanked out,
+// on later rounds — see BlankedSentence below).
+function SentenceExercise({
+  word, level, onCorrected,
+}: {
+  word: Word;
+  level: string;
+  onCorrected: (correction: SentenceCorrection) => void;
+}) {
+  const [input, setInput] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+
+  async function handleSubmit() {
+    if (!input.trim() || status === 'loading') return;
+    setStatus('loading');
+    try {
+      const correction = await correctSentence(word.id, word.de, level, input.trim());
+      onCorrected(correction);
+    } catch {
+      setStatus('error');
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="text-center -mt-1">
+        <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">New word</div>
+        <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
+          {word.article ? `${word.article} ` : ''}{word.de}{' '}
+          <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
+        </div>
+      </div>
+      <div>
+        <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Write your own sentence using this word</div>
+        <textarea
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          disabled={status === 'loading'}
+          placeholder="Don't worry about grammar — just try!"
+          rows={2}
+          className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 resize-none disabled:opacity-60"
+        />
+      </div>
+      {status === 'error' && (
+        <p className="text-red-600 text-sm text-center">Couldn't get a correction — check your connection and try again.</p>
+      )}
+      <button
+        onClick={handleSubmit}
+        disabled={!input.trim() || status === 'loading'}
+        className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
+      >
+        {status === 'loading' ? 'Checking…' : 'Check'}
+      </button>
+    </div>
+  );
+}
+
+// Extra reinforcement on rounds 2-4 / review (never touches scoring): shows
+// the AI-corrected example sentence from this word's round 1, with the word
+// itself blanked out until the round is answered. wordForm is the exact
+// inflected substring the AI reported using, so the blank lines up with
+// however the word actually appears in the sentence (which may differ from
+// its dictionary form, e.g. plural/case endings).
+function BlankedSentence({ example, revealed }: { example: { sentence: string; wordForm: string }; revealed: boolean }) {
+  const idx = example.sentence.toLowerCase().indexOf(example.wordForm.toLowerCase());
+  if (idx === -1) {
+    if (!revealed) return null;
+    return (
+      <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
+        <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Example sentence</div>
+        <div className="text-stone-700 italic">{example.sentence}</div>
+      </div>
+    );
+  }
+  const before = example.sentence.slice(0, idx);
+  const match = example.sentence.slice(idx, idx + example.wordForm.length);
+  const after = example.sentence.slice(idx + example.wordForm.length);
+  return (
+    <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
+      <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Example sentence</div>
+      <div className="text-stone-700 italic">
+        {before}
+        <span className={revealed ? 'font-bold text-indigo-700 not-italic' : 'inline-block bg-indigo-200 text-transparent rounded select-none'}>
+          {revealed ? match : ' '.repeat(Math.max(match.length, 3))}
+        </span>
+        {after}
+      </div>
+    </div>
+  );
+}
 
 function isRoundsDone(id: string, mode: RoundMode): boolean {
   const p = getWordProgress(id);
@@ -68,6 +164,12 @@ export default function DailySessionFlow() {
   // remounts fresh for the next page.
   const [matchingPageKey, setMatchingPageKey] = useState(0);
   const [mcqCurrent, setMcqCurrent] = useState<{ word: Word; choices: string[] } | null>(null);
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  // The current word's saved example sentence (round 2+/review only — see
+  // BlankedSentence), and the just-produced correction for the round-1
+  // sentence exercise (shown in place of the generic "✓ Correct!" banner).
+  const [exampleSentence, setExampleSentence] = useState<{ sentence: string; wordForm: string } | null>(null);
+  const [sentenceResult, setSentenceResult] = useState<SentenceCorrection | null>(null);
   // Choices already shown per word this round-1.5 pass, in-memory only (a
   // retry within the redo loop should get fresh distractors; losing this on
   // a reload is a harmless cosmetic detail, not a correctness issue).
@@ -100,6 +202,8 @@ export default function DailySessionFlow() {
     setFeedback(null);
     setJustCompleted(false);
     setAttemptKey(k => k + 1);
+    setExampleSentence(progress.exampleSentence ?? null);
+    setSentenceResult(null);
     if (round === 1 && getSettings().autoPlayAudio) speakWord(w);
   };
 
@@ -203,6 +307,7 @@ export default function DailySessionFlow() {
   useEffect(() => {
     const s = getSettings();
     setSettings(s);
+    checkSignedIn().then(setIsSignedIn);
     const ds = getDailySession();
     if (!ds) { setReady(true); return; }
 
@@ -242,7 +347,7 @@ export default function DailySessionFlow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.phase]);
 
-  const submitResult = (correct: boolean) => {
+  const submitResult = (correct: boolean, extra?: Partial<WordProgress>) => {
     if (!session || !word || !settings || feedback !== null) return;
     const progress = getWordProgress(word.id);
     const beforeStage = progress.mascotStage;
@@ -267,7 +372,7 @@ export default function DailySessionFlow() {
       }
     } else {
       const roundBefore = progress.round;
-      const updated = applyResult(progress, correct);
+      const updated = { ...applyResult(progress, correct), ...extra };
       const completed = progress.round === MAX_ROUND && correct;
       const earnedBadge = updated.studiedTimes > progress.studiedTimes;
 
@@ -491,7 +596,11 @@ export default function DailySessionFlow() {
     const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Enter' && armed) handleNextRef.current(); };
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('keydown', onKeyDown);
-    const timer = feedback === true ? setTimeout(() => handleNextRef.current(), 1500) : undefined;
+    // Suppressed for the round-1 sentence exercise — the corrected sentence
+    // needs a moment to actually read, not a fixed 1.5s flash, so that case
+    // waits for the learner's own "Next" click instead.
+    const isSentenceRoundDone = currentRound === 1 && roundMode === 'study' && sentenceResult !== null;
+    const timer = feedback === true && !isSentenceRoundDone ? setTimeout(() => handleNextRef.current(), 1500) : undefined;
     return () => {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('keydown', onKeyDown);
@@ -642,95 +751,127 @@ export default function DailySessionFlow() {
         </div>
 
         <div className="text-center">
-          <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">English</div>
           <div className="text-2xl font-semibold text-slate-700">{word.en}</div>
         </div>
 
-        {currentRound === 1 && (
-          <div className="text-center -mt-1">
-            <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
-            <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
-              {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
-            </div>
-          </div>
-        )}
-
-        {word.type === 'noun' && word.article && (
-          needsArticle ? (
-            <div className="text-center -mb-2">
-              <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Article — der / die / das</div>
-              <LetterInputRow
-                ref={articleRowRef}
-                chars={['_', '_', '_']}
-                hint={[true, true, true]}
-                values={articleValues}
-                onChange={setArticleValues}
-                onSubmit={handleSubmit}
-                disabled={feedback !== null}
-                activeInputRef={activeInputRef}
-                resetFocusKey={`article-${word.id}-${attemptKey}`}
-                autoFocus
-                onFilled={() => letterRowRef.current?.focusFirstEmpty()}
-              />
-            </div>
+        {currentRound === 1 && roundMode === 'study' && isSignedIn ? (
+          feedback === null ? (
+            <SentenceExercise
+              key={word.id}
+              word={word}
+              level={settings.level}
+              onCorrected={correction => {
+                setSentenceResult(correction);
+                submitResult(true, { exampleSentence: correction });
+              }}
+            />
           ) : (
-            <div className="flex justify-center gap-2">
-              <span className="bg-indigo-100 text-indigo-700 font-bold px-4 py-1 rounded-full text-lg">{word.article}</span>
+            <div className="flex flex-col gap-3">
+              <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
+                <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium">Here's a natural way to say it</div>
+                <div className="text-lg text-green-800">{sentenceResult?.sentence}</div>
+              </div>
+              <button
+                onClick={handleNext}
+                className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+              >
+                Next →
+              </button>
             </div>
           )
-        )}
-
-        <LetterInputRow
-          ref={letterRowRef}
-          chars={chars}
-          hint={hint}
-          values={values}
-          onChange={next => setValues(word.type === 'noun' && next[0] ? [next[0].toUpperCase(), ...next.slice(1)] : next)}
-          onSubmit={handleSubmit}
-          disabled={feedback !== null}
-          activeInputRef={activeInputRef}
-          resetFocusKey={`${word.id}-${attemptKey}`}
-          autoFocus={!needsArticle}
-          onBackspaceAtStart={needsArticle ? () => {
-            setArticleValues(v => v.map((c, i) => (i === v.length - 1 ? '' : c)));
-            articleRowRef.current?.focusLast();
-          } : undefined}
-        />
-
-        {feedback === null ? (
-          <div className="flex flex-col gap-3">
-            <SpecialCharButtons inputRef={activeInputRef} />
-            <button
-              onClick={handleSubmit}
-              disabled={!wordComplete}
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
-            >
-              Check
-            </button>
-            {currentRound > 1 && (
-              <button onClick={handleHint} className="w-full text-slate-400 py-1 text-sm font-medium hover:text-slate-600 transition-colors">
-                Hint
-              </button>
-            )}
-          </div>
         ) : (
-          <div className="flex flex-col gap-3">
-            <div className={`text-center py-3 rounded-xl font-semibold text-lg ${feedback ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-              {feedback ? '✓ Correct!' : (
-                <>
-                  ✗ The answer is:{' '}
-                  <span className="font-mono">{word.article ? `${word.article} ` : ''}{word.de}</span>{' '}
-                  <SpeakerButton word={word} className="align-middle text-red-600 hover:text-red-800 transition-colors" />
-                </>
-              )}
-            </div>
-            <button
-              onClick={handleNext}
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
-            >
-              Next →
-            </button>
-          </div>
+          <>
+            {currentRound === 1 && (
+              <div className="text-center -mt-1">
+                <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
+                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
+                  {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
+                </div>
+              </div>
+            )}
+
+            {currentRound > 1 && exampleSentence && (
+              <BlankedSentence example={exampleSentence} revealed={feedback !== null} />
+            )}
+
+            {word.type === 'noun' && word.article && (
+              needsArticle ? (
+                <div className="text-center -mb-2">
+                  <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Article — der / die / das</div>
+                  <LetterInputRow
+                    ref={articleRowRef}
+                    chars={['_', '_', '_']}
+                    hint={[true, true, true]}
+                    values={articleValues}
+                    onChange={setArticleValues}
+                    onSubmit={handleSubmit}
+                    disabled={feedback !== null}
+                    activeInputRef={activeInputRef}
+                    resetFocusKey={`article-${word.id}-${attemptKey}`}
+                    autoFocus
+                    onFilled={() => letterRowRef.current?.focusFirstEmpty()}
+                  />
+                </div>
+              ) : (
+                <div className="flex justify-center gap-2">
+                  <span className="bg-indigo-100 text-indigo-700 font-bold px-4 py-1 rounded-full text-lg">{word.article}</span>
+                </div>
+              )
+            )}
+
+            <LetterInputRow
+              ref={letterRowRef}
+              chars={chars}
+              hint={hint}
+              values={values}
+              onChange={next => setValues(word.type === 'noun' && next[0] ? [next[0].toUpperCase(), ...next.slice(1)] : next)}
+              onSubmit={handleSubmit}
+              disabled={feedback !== null}
+              activeInputRef={activeInputRef}
+              resetFocusKey={`${word.id}-${attemptKey}`}
+              autoFocus={!needsArticle}
+              onBackspaceAtStart={needsArticle ? () => {
+                setArticleValues(v => v.map((c, i) => (i === v.length - 1 ? '' : c)));
+                articleRowRef.current?.focusLast();
+              } : undefined}
+            />
+
+            {feedback === null ? (
+              <div className="flex flex-col gap-3">
+                <SpecialCharButtons inputRef={activeInputRef} />
+                <button
+                  onClick={handleSubmit}
+                  disabled={!wordComplete}
+                  className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
+                >
+                  Check
+                </button>
+                {currentRound > 1 && (
+                  <button onClick={handleHint} className="w-full text-slate-400 py-1 text-sm font-medium hover:text-slate-600 transition-colors">
+                    Hint
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div className={`text-center py-3 rounded-xl font-semibold text-lg ${feedback ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                  {feedback ? '✓ Correct!' : (
+                    <>
+                      ✗ The answer is:{' '}
+                      <span className="font-mono">{word.article ? `${word.article} ` : ''}{word.de}</span>{' '}
+                      <SpeakerButton word={word} className="align-middle text-red-600 hover:text-red-800 transition-colors" />
+                    </>
+                  )}
+                </div>
+                <button
+                  onClick={handleNext}
+                  className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

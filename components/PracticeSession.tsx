@@ -557,7 +557,6 @@ export default function PracticeSession({ mode }: Props) {
 
         {/* English translation — always visible */}
         <div className="text-center">
-          <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">English</div>
           <div className="text-2xl font-semibold text-slate-700">{word.en}</div>
         </div>
 

@@ -124,6 +124,7 @@ export default function WordsPage() {
   const earned = (p?: WordProgress) => !!p && p.studiedTimes > 0;
 
   function WordItem({ w }: { w: Word }) {
+    const sentence = progress[w.id]?.exampleSentence;
     return (
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex items-center justify-between">
         <div>
@@ -133,6 +134,7 @@ export default function WordsPage() {
           <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
           {w.plural && <span className="text-stone-500 text-sm ml-2">· {w.plural}</span>}
           <div className="text-stone-500 text-sm">{w.en}</div>
+          {sentence && <div className="text-stone-500 text-sm italic mt-0.5">{sentence.sentence}</div>}
         </div>
         <span className="shrink-0 flex flex-col items-center gap-0.5">
           {earned(progress[w.id]) ? (

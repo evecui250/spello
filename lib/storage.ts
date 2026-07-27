@@ -34,6 +34,12 @@ export interface WordProgress {
   lastReviewedAt?: string;    // date of the last successful round-4 pass
   nextReviewDue?: string;     // date this word next becomes eligible for Review
   mascotStage: MascotStageId; // derived from growthScore, stored for convenient display
+
+  // Set once, the first time the learner writes their own round-1 sentence
+  // and it comes back AI-corrected (see lib/ai.ts's correctSentence). Shown
+  // on the Word List, and re-shown (word blanked out) on rounds 2-4/review
+  // as an extra recall cue — never touches scoring.
+  exampleSentence?: { sentence: string; wordForm: string };
 }
 
 export interface Streak {
@@ -355,6 +361,7 @@ function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): Wo
     mascotStage: p?.mascotStage ?? (
       fullyMastered ? 'long-crowned' : growthScore >= 4.5 ? 'medium' : growthScore >= 3.0 ? 'short' : 'puppy'
     ),
+    exampleSentence: p?.exampleSentence,
   };
 }
 
