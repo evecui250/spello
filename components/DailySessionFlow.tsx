@@ -176,6 +176,28 @@ export default function DailySessionFlow() {
     setMcqCurrent({ word: w, choices });
   }
 
+  // Pre-review reminder for a word's first or second review (see
+  // reviewMcqQueueIds) — a single pass, no retry-until-clean loop, since
+  // this is a warmup nudge before the recall test, not a mastery gate.
+  function enterReviewMcqPhase(ds: DailySession) {
+    if (ds.reviewMcqQueueIds.length === 0) {
+      const next: DailySession = { ...ds, phase: 'review-rounds' };
+      persistSession(next);
+      enterRoundsPhase(next, 'review');
+      return;
+    }
+    const w = wordsById([ds.reviewMcqQueueIds[0]])[0];
+    if (!w) {
+      const next: DailySession = { ...ds, reviewMcqQueueIds: ds.reviewMcqQueueIds.slice(1) };
+      persistSession(next);
+      enterReviewMcqPhase(next);
+      return;
+    }
+    const { choices } = buildMcqChoices(w, mcqSeenRef.current[w.id] ?? []);
+    mcqSeenRef.current[w.id] = [...(mcqSeenRef.current[w.id] ?? []), ...choices];
+    setMcqCurrent({ word: w, choices });
+  }
+
   // --- Mount: load today's session (Home always creates one before routing
   // here) and resume at whatever phase it's at. ---
   useEffect(() => {
@@ -194,6 +216,7 @@ export default function DailySessionFlow() {
     if (ds.phase === 'study-rounds') enterRoundsPhase(ds, 'study');
     else if (ds.phase === 'study-mcq') enterMcqPhase(ds);
     else if (ds.phase === 'study-mcq-2') enterMcq2Phase(ds);
+    else if (ds.phase === 'review-mcq') enterReviewMcqPhase(ds);
     else if (ds.phase === 'review-rounds') enterRoundsPhase(ds, 'review');
     setReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -333,6 +356,16 @@ export default function DailySessionFlow() {
     enterMcqPhase(next);
   }
 
+  // Pre-review reminder: just moves on regardless of right/wrong — see
+  // enterReviewMcqPhase.
+  function handleReviewMcqAnswer() {
+    if (!session || !mcqCurrent) return;
+    const next: DailySession = { ...session, reviewMcqQueueIds: session.reviewMcqQueueIds.slice(1) };
+    setMcqCurrent(null);
+    persistSession(next);
+    enterReviewMcqPhase(next);
+  }
+
   function advanceStudyQueue() {
     if (!session) return;
     const rest = queue.slice(1);
@@ -418,7 +451,11 @@ export default function DailySessionFlow() {
 
   function handleContinueToReview() {
     if (!session) return;
-    if (session.reviewWordIds.length > 0) {
+    if (session.reviewMcqQueueIds.length > 0) {
+      const next: DailySession = { ...session, phase: 'review-mcq' };
+      persistSession(next);
+      enterReviewMcqPhase(next);
+    } else if (session.reviewWordIds.length > 0) {
       const next: DailySession = { ...session, phase: 'review-rounds' };
       persistSession(next);
       enterRoundsPhase(next, 'review');
@@ -481,6 +518,11 @@ export default function DailySessionFlow() {
   if (session.phase === 'study-mcq' || session.phase === 'study-mcq-2') {
     if (!mcqCurrent) return null;
     return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} choices={mcqCurrent.choices} onAnswer={handleMcqBatchAnswer} />;
+  }
+
+  if (session.phase === 'review-mcq') {
+    if (!mcqCurrent) return null;
+    return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} choices={mcqCurrent.choices} onAnswer={handleReviewMcqAnswer} />;
   }
 
   if (session.phase === 'study-matching' || session.phase === 'review-matching') {

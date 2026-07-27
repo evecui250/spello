@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { wordsForLevel, Word } from '../../lib/words';
-import { getAllProgress, getSettings, MascotStageId, WordProgress, today } from '../../lib/storage';
+import { getAllProgress, getSettings, WordProgress, today } from '../../lib/storage';
 import { addDays, daysBetween } from '../../lib/srs';
 import SpeakerButton from '../../components/SpeakerButton';
 import DachshundMascot from '../../components/Mascot';
@@ -30,18 +30,20 @@ function searchRank(w: Word, q: string): number | null {
   return null;
 }
 
-type Familiarity = 'all' | 'new' | 'learning' | 'familiar' | 'strong' | 'mastered';
+type Familiarity = 'all' | 'new' | 'learning' | 'mastered';
 
-// Maps a word's progress onto the filter's 5 buckets — a direct 1:1 with the
-// 4 mascot stages (puppy/short/medium/long-crowned -> learning/familiar/
-// strong/mastered) plus "new" for no progress record at all yet.
-function familiarityOf(p?: WordProgress): Exclude<Familiarity, 'all'> {
-  if (!p) return 'new';
-  if (p.fullyMastered) return 'mastered';
-  const stageMap: Record<MascotStageId, Exclude<Familiarity, 'all' | 'new'>> = {
-    puppy: 'learning', short: 'familiar', medium: 'strong', 'long-crowned': 'mastered',
-  };
-  return stageMap[p.mascotStage];
+// "New" = hasn't completed its first learning pass yet (round 4 success),
+// even if attempts are already in progress. "Learning" = has completed at
+// least one pass — spans all 4 mascot stages, including fully mastered
+// words (it's a broad "has this been engaged with" bucket, not mutually
+// exclusive with "Mastered"). "Mastered" is a specific, overlapping
+// drill-down for the fullyMastered subset of "Learning".
+function matchesFamiliarity(p: WordProgress | undefined, filter: Familiarity): boolean {
+  if (filter === 'all') return true;
+  const earned = !!p && p.studiedTimes > 0;
+  if (filter === 'new') return !earned;
+  if (filter === 'learning') return earned;
+  return !!p?.fullyMastered;
 }
 
 // The earliest date any word was touched — used as the date picker's lower
@@ -91,7 +93,7 @@ export default function WordsPage() {
   const filtered = words
     .filter(w => {
       const p = progress[w.id];
-      if (filterFamiliarity !== 'all' && familiarityOf(p) !== filterFamiliarity) return false;
+      if (!matchesFamiliarity(p, filterFamiliarity)) return false;
       // A word only counts for a given day if it was actually learned or
       // reviewed then — lastReviewedAt is set on every successful round-4
       // pass, whether that's the first (learned) or a later one (reviewed).
@@ -173,8 +175,6 @@ export default function WordsPage() {
           <option value="all">All words</option>
           <option value="new">New</option>
           <option value="learning">Learning</option>
-          <option value="familiar">Familiar</option>
-          <option value="strong">Strong</option>
           <option value="mastered">Mastered</option>
         </select>
 

@@ -665,7 +665,7 @@ export function saveTodayStudyBatch(wordIds: string[]): void {
 export type SessionPhase =
   | 'study-rounds' | 'study-mcq' | 'study-mcq-2' | 'study-matching'
   | 'study-done'
-  | 'review-rounds' | 'review-matching'
+  | 'review-mcq' | 'review-rounds' | 'review-matching'
   | 'report'
   | 'congrats'
   | 'done';
@@ -688,6 +688,13 @@ export interface DailySession {
   // lib/practice.ts).
   round1AttemptedIds: string[];
   round2AttemptedIds: string[];
+  // Words on their first or second review (about to cross puppy->short or
+  // short->medium) get a "what does this word mean?" reminder before the
+  // round-4 recall test — this is that one-shot queue, populated when
+  // entering review (see lib/practice.ts's wordsNeedingReviewMcq), drained
+  // one word at a time regardless of right/wrong (no retry loop — it's a
+  // reminder, not a gate).
+  reviewMcqQueueIds: string[];
   matchingQueueIds: string[]; // which page comes next in the matching quiz
   earnedPuppies: number;
   earnedUpgrades: Partial<Record<MascotStageId, number>>;
@@ -713,13 +720,25 @@ export function saveDailySession(s: DailySession): void {
 }
 
 export function startDailySession(studyWordIds: string[], reviewWordIds: string[], isExtra = false): DailySession {
+  // Words on their first or second review (about to cross puppy->short or
+  // short->medium) get the "what does this word mean?" reminder before
+  // anything else in review — computed up front so it's also what decides
+  // the initial phase below when there's nothing to study today.
+  const progress = getAllProgress();
+  const reviewMcqQueueIds = reviewWordIds.filter(id => {
+    const s = progress[id]?.successfulReviews ?? 0;
+    return s === 1 || s === 2;
+  });
+
   const s: DailySession = {
     date: today(),
     // 'report' is the universal fallback when there's nothing to study AND
     // nothing to review — it renders nothing (0 upgrades) and immediately
     // cascades into 'congrats', so the streak/congrats bookkeeping still
     // goes through the one code path that owns it.
-    phase: studyWordIds.length > 0 ? 'study-rounds' : reviewWordIds.length > 0 ? 'review-rounds' : 'report',
+    phase: studyWordIds.length > 0 ? 'study-rounds'
+      : reviewMcqQueueIds.length > 0 ? 'review-mcq'
+      : reviewWordIds.length > 0 ? 'review-rounds' : 'report',
     studyWordIds,
     reviewWordIds,
     // Every study word owes a first-time round-1.5 check — this queue
@@ -731,6 +750,7 @@ export function startDailySession(studyWordIds: string[], reviewWordIds: string[
     mcq2WrongIds: [],
     round1AttemptedIds: [],
     round2AttemptedIds: [],
+    reviewMcqQueueIds,
     matchingQueueIds: [],
     earnedPuppies: 0,
     earnedUpgrades: {},

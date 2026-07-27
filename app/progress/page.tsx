@@ -18,8 +18,12 @@ const STAGE_COLORS: Record<MascotStageId, string> = {
   medium: '#588157',
   'long-crowned': '#5b3a5e',
 };
+// "Introduced" rather than "Learning" here — the Word List's own Learning
+// filter now means something broader (earned at least one badge, any of the
+// 4 stages including Mastered), so reusing the same word for just the
+// puppy-stage bar would mean two different things in two places.
 const STAGE_LABEL: Record<MascotStageId, string> = {
-  puppy: 'Learning',
+  puppy: 'Introduced',
   short: 'Familiar',
   medium: 'Strong',
   'long-crowned': 'Mastered',
