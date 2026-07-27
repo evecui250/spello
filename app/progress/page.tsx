@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { WORDS } from '../../lib/words';
+import { WORDS, wordsForLevel } from '../../lib/words';
 import {
-  getAllProgress, getStreak, getTotalGoalDays, MascotStageId, WordProgress,
+  getAllProgress, getSettings, getStreak, getTotalGoalDays, MascotStageId, WordProgress,
 } from '../../lib/storage';
 import DachshundMascot from '../../components/Mascot';
 import GoalDaysBadge from '../../components/GoalDaysBadge';
@@ -48,6 +48,7 @@ export default function ProgressPage() {
   }
   const bars = STAGE_ORDER.map(id => ({ id, count: stageCounts[id], color: STAGE_COLORS[id] }));
   const maxStageCount = Math.max(...bars.map(b => b.count), 1);
+  const totalWords = wordsForLevel(getSettings().level).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -57,7 +58,8 @@ export default function ProgressPage() {
       </div>
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
-        <h2 className="font-semibold text-stone-800 mb-4">Words breakdown</h2>
+        <h2 className="font-semibold text-stone-800">Words breakdown</h2>
+        <p className="text-stone-500 text-sm mb-4">{totalWords} words total in this vocabulary book.</p>
         {introducedCount === 0 && (
           <p className="text-stone-500 text-sm mb-3">Study a few words to start growing your first dachshund.</p>
         )}

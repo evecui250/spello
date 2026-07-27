@@ -73,7 +73,7 @@ export function buildStudyWords(
 // shrinking drops from the not-yet-finished tail first, but never below
 // however many are already done today — a smaller pace shouldn't undo
 // progress already made.
-const RESIZABLE_STUDY_PHASES: SessionPhase[] = ['study-rounds', 'study-mcq', 'study-matching'];
+const RESIZABLE_STUDY_PHASES: SessionPhase[] = ['study-rounds', 'study-mcq', 'study-mcq-2', 'study-matching'];
 
 export function resizeTodayStudyBatch(newSize: number): void {
   const session = getDailySession();
@@ -89,9 +89,10 @@ export function resizeTodayStudyBatch(newSize: number): void {
   if (targetSize > existing.length) {
     const extra = buildStudyWords(targetSize - existing.length, new Set(existing));
     session.studyWordIds = [...existing, ...extra.map(w => w.id)];
-    // Brand new to today's batch, so they owe a round-1.5 check too —
-    // without this they'd silently never get one.
+    // Brand new to today's batch, so they owe both round-1.5 checks too —
+    // without this they'd silently never get either.
     session.mcqQueueIds = [...session.mcqQueueIds, ...extra.map(w => w.id)];
+    session.mcq2QueueIds = [...session.mcq2QueueIds, ...extra.map(w => w.id)];
     saveDailySession(session);
   } else if (targetSize < existing.length) {
     const keepPending = pendingIds.slice(0, targetSize - doneIds.length);
@@ -99,6 +100,10 @@ export function resizeTodayStudyBatch(newSize: number): void {
     const kept = new Set(session.studyWordIds);
     session.mcqQueueIds = session.mcqQueueIds.filter(id => kept.has(id));
     session.mcqWrongIds = session.mcqWrongIds.filter(id => kept.has(id));
+    session.mcq2QueueIds = session.mcq2QueueIds.filter(id => kept.has(id));
+    session.mcq2WrongIds = session.mcq2WrongIds.filter(id => kept.has(id));
+    session.round1AttemptedIds = session.round1AttemptedIds.filter(id => kept.has(id));
+    session.round2AttemptedIds = session.round2AttemptedIds.filter(id => kept.has(id));
     saveDailySession(session);
   }
 }
@@ -302,15 +307,22 @@ export function applyReviewResult(progress: WordProgress, correct: boolean, curr
 }
 
 // ============================================================================
-// Round 1.5 — DE -> EN translation choice, and the end-of-section matching
-// quiz. Both are reinforcement layered on top of the round ladder above:
-// neither ever touches masteryScore/growthScore/nextReviewDue.
+// Round 1.5 / 2.5 — DE -> EN translation choice, and the end-of-section
+// matching quiz. Both are reinforcement layered on top of the round ladder
+// above: neither ever touches masteryScore/growthScore/nextReviewDue.
 // ============================================================================
 
-// True once every word in a batch has cleared round 1 — the gate for
-// entering the batch-wide round-1.5 checkpoint (study-mcq phase).
-export function allClearedRoundOne(ids: string[], progress: Record<string, WordProgress>): boolean {
-  return ids.every(id => (progress[id]?.round ?? 1) >= 2);
+// True once every word in a batch is past `round` OR has had its first
+// attempt AT `round` recorded this session (right or wrong) — the gate for
+// entering the batch-wide round-1.5/2.5 checkpoints (study-mcq / study-mcq-2
+// phases). Deliberately "attempted", not "advanced": a word that answered
+// wrong and stayed at the same round still counts, so a couple of stragglers
+// can't indefinitely block the whole batch from reaching the checkpoint —
+// only reaching round 4 (unaffected by the round-1/2 gates) still requires
+// an actual correct pass.
+export function allAttemptedRound(ids: string[], progress: Record<string, WordProgress>, round: Round, attemptedIds: string[]): boolean {
+  const attempted = new Set(attemptedIds);
+  return ids.every(id => (progress[id]?.round ?? 1) > round || attempted.has(id));
 }
 
 // Picks 3 wrong English choices for `word`, preferring words from the same

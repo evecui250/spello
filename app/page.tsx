@@ -3,46 +3,19 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  getStreak, getAllProgress, getSettings, today, MAX_ROUND,
+  getAllProgress, getSettings, today, MAX_ROUND,
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
-import { wordsForLevel } from '../lib/words';
 import { SYNCED_EVENT } from '../lib/sync';
 import Logo from '../components/Logo';
-import {
-  FlameIcon, SproutIcon, StarIcon, LayersIcon, CheckCircleIcon,
-} from '../components/icons';
+import { CheckCircleIcon } from '../components/icons';
 
 // Once today's main goal is done, "Study more" pulls a smaller bonus round
 // instead of the user's full daily pace — repeatable as many times as there
 // are still words available.
 const EXTRA_STUDY_SIZE = 5;
 const EXTRA_REVIEW_SIZE = 10;
-
-interface BubbleStat {
-  icon: (props: { className?: string }) => React.JSX.Element;
-  value: number;
-  label: string;
-  ring: string;
-  iconColor: string;
-  drift: number;
-  delay: number;
-}
-
-function StatBubble({ stat }: { stat: BubbleStat }) {
-  const Icon = stat.icon;
-  return (
-    <div
-      className={`animate-bubble-float flex flex-col items-center justify-center gap-0.5 w-[4.6rem] h-[4.6rem] shrink-0 rounded-full bg-white/10 backdrop-blur-md border ${stat.ring} shadow-[0_0_20px_rgba(0,0,0,0.15)]`}
-      style={{ animationDelay: `${stat.delay}s`, ['--drift' as string]: `${stat.drift}px` }}
-    >
-      <Icon className={`w-4 h-4 ${stat.iconColor}`} />
-      <div className="text-lg font-bold text-white leading-none">{stat.value}</div>
-      <div className="text-[8px] text-white/70 text-center leading-tight px-1">{stat.label}</div>
-    </div>
-  );
-}
 
 const FIREFLIES_HOME = [
   { top: '4%', left: '18%', delay: 0.4 },
@@ -51,15 +24,11 @@ const FIREFLIES_HOME = [
 
 export default function HomePage() {
   const router = useRouter();
-  const [streak, setStreak] = useState(0);
-  const [masteredCount, setMasteredCount] = useState(0);
-  const [learningCount, setLearningCount] = useState(0);
   const [session, setSession] = useState<DailySession | null>(null);
   const [previewStudyCount, setPreviewStudyCount] = useState(0);
   const [previewReviewCount, setPreviewReviewCount] = useState(0);
   const [totalStudyCount, setTotalStudyCount] = useState(0);
   const [totalReviewCount, setTotalReviewCount] = useState(0);
-  const [totalWords, setTotalWords] = useState(0);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -73,16 +42,8 @@ export default function HomePage() {
     // state until they happen to visit Settings, the only page that used to
     // trigger the pull.
     const load = () => {
-      setStreak(getStreak().count);
       const progress = getAllProgress();
-      setMasteredCount(Object.values(progress).filter(p => p.fullyMastered).length);
-      // "Learning" = has earned its first puppy (cleared round 4 at least
-      // once) and isn't fully mastered yet — matches the Words page's
-      // definition. A word still mid-ladder (rounds 1-4, no puppy earned
-      // yet) doesn't count here, same as it shows "New" there.
-      setLearningCount(Object.values(progress).filter(p => p.studiedTimes > 0 && !p.fullyMastered).length);
       const settings = getSettings();
-      setTotalWords(wordsForLevel(settings.level).length);
       const ds = getDailySession();
       setSession(ds);
       if (!ds) {
@@ -139,13 +100,6 @@ export default function HomePage() {
     router.push('/practice');
   };
 
-  const stats: BubbleStat[] = [
-    { icon: FlameIcon, value: streak, label: 'day streak', ring: 'border-amber-200/40', iconColor: 'text-amber-300', drift: -8, delay: 0 },
-    { icon: SproutIcon, value: learningCount, label: 'learning', ring: 'border-sky-200/40', iconColor: 'text-sky-300', drift: 8, delay: 0.7 },
-    { icon: StarIcon, value: masteredCount, label: 'mastered', ring: 'border-emerald-200/40', iconColor: 'text-emerald-300', drift: -6, delay: 1.4 },
-    { icon: LayersIcon, value: totalWords, label: 'total words', ring: 'border-violet-200/40', iconColor: 'text-violet-300', drift: 7, delay: 2.1 },
-  ];
-
   if (!ready) return null;
 
   const isDoneForNow = session?.phase === 'done';
@@ -179,10 +133,6 @@ export default function HomePage() {
       <div className="flex flex-col items-center gap-1">
         <Logo variant="full" size={140} />
         <p className="text-emerald-100/70 text-sm tracking-wide mt-1">Master spelling, one word at a time.</p>
-      </div>
-
-      <div className="flex flex-wrap justify-center gap-3">
-        {stats.map(s => <StatBubble key={s.label} stat={s} />)}
       </div>
 
       <div className="w-full flex flex-col items-center gap-3">

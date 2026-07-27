@@ -663,7 +663,7 @@ export function saveTodayStudyBatch(wordIds: string[]): void {
 // case a fresh session simply gets started) resumes cleanly. Naturally
 // invalidated once the date rolls over, same pattern as DailyStats.
 export type SessionPhase =
-  | 'study-rounds' | 'study-mcq' | 'study-matching'
+  | 'study-rounds' | 'study-mcq' | 'study-mcq-2' | 'study-matching'
   | 'study-done'
   | 'review-rounds' | 'review-matching'
   | 'report'
@@ -678,6 +678,16 @@ export interface DailySession {
   mcqQueueIds: string[];    // not-yet-tested ids in the current round-1.5 pass
   mcqWrongIds: string[];    // wrong this pass — seeds the next pass, redone
                              // immediately (not deferred to a later round)
+  mcq2QueueIds: string[];  // same idea, for the second checkpoint after round 2
+  mcq2WrongIds: string[];
+  // Ids that have had at least one attempt (right or wrong) at round 1 (resp.
+  // round 2) this session — the checkpoint gate fires once every study word
+  // is either past that round already or has this attempt recorded, so a
+  // wrong answer that leaves a word sitting at the same round no longer
+  // blocks the checkpoint from ever arriving (see allAttemptedRound in
+  // lib/practice.ts).
+  round1AttemptedIds: string[];
+  round2AttemptedIds: string[];
   matchingQueueIds: string[]; // which page comes next in the matching quiz
   earnedPuppies: number;
   earnedUpgrades: Partial<Record<MascotStageId, number>>;
@@ -714,9 +724,13 @@ export function startDailySession(studyWordIds: string[], reviewWordIds: string[
     reviewWordIds,
     // Every study word owes a first-time round-1.5 check — this queue
     // doubles as that work list AND as the "have we already run the
-    // batch-wide gate" flag (see allClearedRoundOne in lib/practice.ts).
+    // batch-wide gate" flag (see allAttemptedRound in lib/practice.ts).
     mcqQueueIds: [...studyWordIds],
     mcqWrongIds: [],
+    mcq2QueueIds: [...studyWordIds],
+    mcq2WrongIds: [],
+    round1AttemptedIds: [],
+    round2AttemptedIds: [],
     matchingQueueIds: [],
     earnedPuppies: 0,
     earnedUpgrades: {},

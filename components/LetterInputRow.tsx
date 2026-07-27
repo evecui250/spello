@@ -1,6 +1,29 @@
 'use client';
 
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+
+// Tile sizing: shrinks just enough to keep a word on one row when only a
+// letter or two would otherwise spill onto a new one — but a bigger overflow
+// (3+ letters) is left to wrap normally rather than squeezing tiles down to
+// the point of being hard to read/tap. Works for any number of wrap levels
+// (a very long word needing 2 rows vs 3), not just the one-row case.
+const GAP_PX = 8;
+const DEFAULT_TILE_PX = 36;
+const MIN_TILE_PX = 24;
+
+function computeTileSize(n: number, containerWidth: number): number {
+  if (containerWidth <= 0 || n === 0) return DEFAULT_TILE_PX;
+  for (let tile = DEFAULT_TILE_PX; tile >= MIN_TILE_PX; tile -= 2) {
+    const perRow = Math.max(1, Math.floor((containerWidth + GAP_PX) / (tile + GAP_PX)));
+    if (n <= perRow) return tile; // fits on one row at this size
+    const lastRowCount = n % perRow === 0 ? perRow : n % perRow;
+    // A dangling last row of just 1-2 tiles is the "spilled a letter or two"
+    // case worth shrinking for; anything bigger is an intentional-looking
+    // wrap, so stop shrinking and accept it at this size.
+    if (lastRowCount > 2) return tile;
+  }
+  return MIN_TILE_PX;
+}
 
 interface Props {
   chars: string[];
@@ -40,18 +63,40 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
   ref,
 ) {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
   const editableIndices = hint.map((h, i) => (h ? i : -1)).filter(i => i !== -1);
 
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setContainerWidth(el.offsetWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const tileSize = computeTileSize(chars.length, containerWidth);
+
+  // requestAnimationFrame instead of an arbitrary setTimeout delay — fires as
+  // soon as the DOM is actually ready to be focused (refs attached), which is
+  // the minimum possible gap between the triggering action and the focus()
+  // call. Mobile browsers only reliably pop up the on-screen keyboard for a
+  // focus() that happens essentially immediately after a genuine user
+  // gesture (tap/keystroke) — any longer delay risks it being silently
+  // ignored, so minimizing this gap (rather than the previous fixed 50-80ms)
+  // gives autofocus the best realistic chance of actually opening it.
   useImperativeHandle(ref, () => ({
     focusFirstEmpty: () => {
       const target = editableIndices.find(i => !values[i]) ?? editableIndices[0];
       if (target === undefined) return;
-      setTimeout(() => inputRefs.current[target]?.focus(), 50);
+      requestAnimationFrame(() => inputRefs.current[target]?.focus());
     },
     focusLast: () => {
       const target = editableIndices[editableIndices.length - 1];
       if (target === undefined) return;
-      setTimeout(() => focusIndex(target), 50);
+      requestAnimationFrame(() => focusIndex(target));
     },
   }));
 
@@ -59,8 +104,8 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
     if (disabled || !autoFocus) return;
     const first = editableIndices[0];
     if (first === undefined) return;
-    const t = setTimeout(() => inputRefs.current[first]?.focus(), 80);
-    return () => clearTimeout(t);
+    const frame = requestAnimationFrame(() => inputRefs.current[first]?.focus());
+    return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetFocusKey, disabled, autoFocus]);
 
@@ -105,8 +150,12 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
     }
   };
 
+  const tileHeight = Math.round(tileSize * (44 / 36));
+  const fontSize = Math.max(14, Math.round(20 * (tileSize / DEFAULT_TILE_PX)));
+  const tileStyle = { width: tileSize, height: tileHeight, fontSize };
+
   return (
-    <div className="flex flex-wrap gap-2 justify-center">
+    <div ref={containerRef} className="flex flex-wrap gap-2 justify-center">
       {chars.map((ch, i) =>
         hint[i] ? (
           <input
@@ -114,6 +163,7 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
             ref={el => { inputRefs.current[i] = el; }}
             type="text"
             inputMode="text"
+            lang="de"
             maxLength={1}
             value={values[i] ?? ''}
             disabled={disabled}
@@ -123,12 +173,14 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
             autoComplete="off"
             autoCapitalize="none"
             spellCheck={false}
-            className="w-9 h-11 text-center text-xl font-mono font-bold border-b-2 border-indigo-500 text-indigo-800 focus:outline-none focus:bg-indigo-50 disabled:bg-transparent"
+            style={tileStyle}
+            className="text-center font-mono font-bold border-b-2 border-indigo-500 text-indigo-800 focus:outline-none focus:bg-indigo-50 disabled:bg-transparent"
           />
         ) : (
           <div
             key={i}
-            className="w-9 h-11 flex items-end justify-center pb-1 text-xl font-mono font-bold border-b-2 border-slate-300 text-slate-500"
+            style={tileStyle}
+            className="flex items-end justify-center pb-1 font-mono font-bold border-b-2 border-slate-300 text-slate-500"
           >
             {ch}
           </div>

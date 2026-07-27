@@ -12,7 +12,7 @@ import {
 } from '../lib/storage';
 import {
   wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint, REVIEW_BASE_ROUND,
-  allClearedRoundOne, buildMcqChoices, buildMatchingPages,
+  allAttemptedRound, buildMcqChoices, buildMatchingPages,
 } from '../lib/practice';
 import { Word } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
@@ -148,6 +148,34 @@ export default function DailySessionFlow() {
     setMcqCurrent({ word: w, choices });
   }
 
+  // Round 2.5 — same idea as round 1.5 above, fired again once every word's
+  // had its first attempt at round 2, using the parallel mcq2* fields so it
+  // doesn't interfere with checkpoint 1's own (already-drained) queue.
+  function enterMcq2Phase(ds: DailySession) {
+    if (ds.mcq2QueueIds.length === 0) {
+      if (ds.mcq2WrongIds.length === 0) {
+        const next: DailySession = { ...ds, phase: 'study-rounds' };
+        persistSession(next);
+        enterRoundsPhase(next, 'study');
+        return;
+      }
+      const next: DailySession = { ...ds, mcq2QueueIds: shuffled(ds.mcq2WrongIds), mcq2WrongIds: [] };
+      persistSession(next);
+      enterMcq2Phase(next);
+      return;
+    }
+    const w = wordsById([ds.mcq2QueueIds[0]])[0];
+    if (!w) {
+      const next: DailySession = { ...ds, mcq2QueueIds: ds.mcq2QueueIds.slice(1) };
+      persistSession(next);
+      enterMcq2Phase(next);
+      return;
+    }
+    const { choices } = buildMcqChoices(w, mcqSeenRef.current[w.id] ?? []);
+    mcqSeenRef.current[w.id] = [...(mcqSeenRef.current[w.id] ?? []), ...choices];
+    setMcqCurrent({ word: w, choices });
+  }
+
   // --- Mount: load today's session (Home always creates one before routing
   // here) and resume at whatever phase it's at. ---
   useEffect(() => {
@@ -165,6 +193,7 @@ export default function DailySessionFlow() {
     setSession(ds);
     if (ds.phase === 'study-rounds') enterRoundsPhase(ds, 'study');
     else if (ds.phase === 'study-mcq') enterMcqPhase(ds);
+    else if (ds.phase === 'study-mcq-2') enterMcq2Phase(ds);
     else if (ds.phase === 'review-rounds') enterRoundsPhase(ds, 'review');
     setReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -214,6 +243,7 @@ export default function DailySessionFlow() {
         addEarnedUpgrade(stage);
       }
     } else {
+      const roundBefore = progress.round;
       const updated = applyResult(progress, correct);
       const completed = progress.round === MAX_ROUND && correct;
       const earnedBadge = updated.studiedTimes > progress.studiedTimes;
@@ -223,10 +253,22 @@ export default function DailySessionFlow() {
       setFeedback(correct);
       setJustCompleted(completed);
 
-      if (earnedBadge) {
-        persistSession({ ...session, earnedPuppies: session.earnedPuppies + 1 });
-        addEarnedPuppy();
+      // Record this word's first attempt at round 1 (resp. round 2) whether
+      // it was right or wrong — see allAttemptedRound: a wrong answer that
+      // leaves the word at the same round must still let the checkpoint
+      // arrive once every word's had its shot, not wait for every word to
+      // eventually answer correctly.
+      let nextSession = session;
+      if (roundBefore === 1 && !session.round1AttemptedIds.includes(word.id)) {
+        nextSession = { ...nextSession, round1AttemptedIds: [...nextSession.round1AttemptedIds, word.id] };
+      } else if (roundBefore === 2 && !session.round2AttemptedIds.includes(word.id)) {
+        nextSession = { ...nextSession, round2AttemptedIds: [...nextSession.round2AttemptedIds, word.id] };
       }
+      if (earnedBadge) {
+        nextSession = { ...nextSession, earnedPuppies: nextSession.earnedPuppies + 1 };
+      }
+      if (nextSession !== session) persistSession(nextSession);
+      if (earnedBadge) addEarnedPuppy();
     }
 
     if (settings.autoPlayAudio) speakWord(word);
@@ -274,6 +316,15 @@ export default function DailySessionFlow() {
 
   function handleMcqBatchAnswer(correct: boolean) {
     if (!session || !mcqCurrent) return;
+    if (session.phase === 'study-mcq-2') {
+      const rest = session.mcq2QueueIds.slice(1);
+      const wrong = correct ? session.mcq2WrongIds : [...session.mcq2WrongIds, mcqCurrent.word.id];
+      const next: DailySession = { ...session, mcq2QueueIds: rest, mcq2WrongIds: wrong };
+      setMcqCurrent(null);
+      persistSession(next);
+      enterMcq2Phase(next);
+      return;
+    }
     const rest = session.mcqQueueIds.slice(1);
     const wrong = correct ? session.mcqWrongIds : [...session.mcqWrongIds, mcqCurrent.word.id];
     const next: DailySession = { ...session, mcqQueueIds: rest, mcqWrongIds: wrong };
@@ -288,10 +339,22 @@ export default function DailySessionFlow() {
     if (!justCompleted) rest.push(queue[0]);
     setQueue(rest);
 
-    if (session.mcqQueueIds.length > 0 && allClearedRoundOne(session.studyWordIds, getAllProgress())) {
+    const progress = getAllProgress();
+    if (session.mcqQueueIds.length > 0 && allAttemptedRound(session.studyWordIds, progress, 1, session.round1AttemptedIds)) {
       const next: DailySession = { ...session, phase: 'study-mcq' };
       persistSession(next);
       enterMcqPhase(next);
+      return;
+    }
+    // Checkpoint 2 only becomes reachable once checkpoint 1 has fully
+    // drained — its own gate can't be satisfied before checkpoint 1's
+    // anyway (round 2 needs round 1 first), but this keeps the two in their
+    // natural order rather than relying on that alone.
+    if (session.mcqQueueIds.length === 0 && session.mcq2QueueIds.length > 0
+      && allAttemptedRound(session.studyWordIds, progress, 2, session.round2AttemptedIds)) {
+      const next: DailySession = { ...session, phase: 'study-mcq-2' };
+      persistSession(next);
+      enterMcq2Phase(next);
       return;
     }
 
@@ -415,7 +478,7 @@ export default function DailySessionFlow() {
     );
   }
 
-  if (session.phase === 'study-mcq') {
+  if (session.phase === 'study-mcq' || session.phase === 'study-mcq-2') {
     if (!mcqCurrent) return null;
     return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} choices={mcqCurrent.choices} onAnswer={handleMcqBatchAnswer} />;
   }
