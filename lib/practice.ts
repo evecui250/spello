@@ -144,22 +144,40 @@ export function buildReviewWords(
   return pool.slice(0, limit);
 }
 
+// Punctuation within a word (e.g. the hyphen in "Start-up") isn't something
+// to test recall of — it's always shown, never a blank tile to fill in,
+// regardless of round.
+function isLetter(ch: string): boolean {
+  return /[a-zA-ZäöüÄÖÜß]/.test(ch);
+}
+
 // Returns hint pattern: true = hidden (user must type it), false = revealed (locked, pre-filled).
 // Round 1: nothing revealed in the tiles (the word is shown separately as reference text).
 // Round 2: ~50% of letters revealed, always including the first letter.
 // Round 3: only the first letter revealed.
 // Round 4: no hints — full recall.
 export function generateHint(word: string, round: Round): boolean[] {
-  const n = [...word].length;
-  if (round === 1 || round === 4) return Array.from({ length: n }, () => true);
-  if (round === 3) return Array.from({ length: n }, (_, i) => i !== 0);
+  const chars = [...word];
+  const n = chars.length;
+  const letterIndices = chars.map((c, i) => (isLetter(c) ? i : -1)).filter(i => i !== -1);
 
-  // round 2
-  const revealCount = Math.max(1, Math.round(n / 2));
-  const revealed = new Set([0]);
-  const rest = shuffled(Array.from({ length: n - 1 }, (_, i) => i + 1));
-  rest.slice(0, revealCount - 1).forEach(i => revealed.add(i));
-  return Array.from({ length: n }, (_, i) => !revealed.has(i));
+  let base: boolean[];
+  if (round === 1 || round === 4) {
+    base = Array.from({ length: n }, () => true);
+  } else if (round === 3) {
+    base = Array.from({ length: n }, (_, i) => i !== letterIndices[0]);
+  } else {
+    // round 2 — the reveal budget/randomization only considers letter
+    // positions, so a hyphen or similar never eats into the "half revealed"
+    // allowance (it's revealed unconditionally below anyway).
+    const revealCount = Math.max(1, Math.round(letterIndices.length / 2));
+    const revealed = new Set([letterIndices[0]]);
+    const rest = shuffled(letterIndices.slice(1));
+    rest.slice(0, revealCount - 1).forEach(i => revealed.add(i));
+    base = Array.from({ length: n }, (_, i) => !revealed.has(i));
+  }
+
+  return base.map((h, i) => (isLetter(chars[i]) ? h : false));
 }
 
 // Suggests a daily review count. Each word needs exactly 3 successful

@@ -808,7 +808,9 @@ export default function DailySessionFlow() {
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
         <div>
           <div className="flex items-center justify-between mb-1">
-            <div className="text-sm font-medium text-indigo-600">{ROUND_LABELS[currentRound]}</div>
+            <div className="text-sm font-medium text-indigo-600">
+              {currentRound === 1 && exampleSentence ? 'Round 1 — copy the word' : ROUND_LABELS[currentRound]}
+            </div>
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
               wordStatus === 'Review' ? 'bg-emerald-100 text-emerald-700'
                 : wordStatus === 'Continuing' ? 'bg-amber-100 text-amber-700'
@@ -829,7 +831,13 @@ export default function DailySessionFlow() {
           <div className="text-2xl font-semibold text-slate-700">{word.en}</div>
         </div>
 
-        {currentRound === 1 && roundMode === 'study' ? (
+        {/* !exampleSentence excludes a word demoted BACK to round 1 via Hint
+            from round 2 — it's not a brand-new word (it already has a saved
+            sentence from its real round-1 pass), so it shouldn't be asked to
+            write another one. That case falls through to the else branch's
+            round-1 handling instead (the old copy-the-word tiles, with the
+            existing sentence still shown via BlankedSentence). */}
+        {currentRound === 1 && roundMode === 'study' && !exampleSentence ? (
           feedback === null ? (
             <SentenceExercise
               key={word.id}
@@ -870,6 +878,19 @@ export default function DailySessionFlow() {
           )
         ) : (
           <>
+            {/* Only reachable at round 1 via a Hint demotion from round 2 (see
+                the !exampleSentence gate above) — the word already has a
+                saved sentence, so this is the old copy-the-word reference,
+                not a fresh introduction. */}
+            {currentRound === 1 && (
+              <div className="text-center -mt-1">
+                <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
+                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
+                  {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
+                </div>
+              </div>
+            )}
+
             {exampleSentence && (
               <BlankedSentence example={exampleSentence} revealed={feedback !== null} />
             )}
