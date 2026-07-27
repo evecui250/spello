@@ -645,10 +645,20 @@ export default function DailySessionFlow() {
   const isRoundScreen = session?.phase === 'study-rounds' || session?.phase === 'review-rounds';
   useEffect(() => {
     if (feedback === null || !isRoundScreen) return;
-    let armed = false;
-    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Enter') armed = true; };
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Enter' && armed) handleNextRef.current(); };
-    window.addEventListener('keyup', onKeyUp);
+    // Time-gated rather than requiring a keyup-then-keydown: the sentence
+    // exercise's Check is async (awaits the AI call), so by the time
+    // `feedback` actually flips true and this effect attaches, the Enter
+    // press that triggered Check has long since released — its keyup never
+    // reaches this listener, so a "must see a keyup before arming" gate
+    // just silently eats the next fresh press, forcing a second one to
+    // register. A short ignore-window after attaching still filters out
+    // key-repeat from a still-held Enter carrying over from a *synchronous*
+    // submit (e.g. LetterInputRow's rounds), without needing that press's
+    // keyup to ever be observed.
+    const attachedAt = Date.now();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && Date.now() - attachedAt > 300) handleNextRef.current();
+    };
     window.addEventListener('keydown', onKeyDown);
     // Suppressed for the round-1 sentence exercise — the corrected sentence
     // needs a moment to actually read, not a fixed 1.5s flash, so that case
@@ -656,7 +666,6 @@ export default function DailySessionFlow() {
     const isSentenceRoundDone = currentRound === 1 && roundMode === 'study' && sentenceResult !== null;
     const timer = feedback === true && !isSentenceRoundDone ? setTimeout(() => handleNextRef.current(), 1500) : undefined;
     return () => {
-      window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('keydown', onKeyDown);
       if (timer) clearTimeout(timer);
     };

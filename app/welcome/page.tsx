@@ -229,6 +229,15 @@ export default function WelcomePage() {
               ))}
             </div>
           </div>
+          <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-1">
+            <div className="font-semibold text-stone-800">Create your own sentence!</div>
+            <p className="text-stone-500 text-sm">
+              For a brand-new word, instead of just copying it you'll write your own sentence
+              using it — don't worry about grammar, or even mixing in English. AI turns it into
+              a natural, correct German sentence, which then shows up as that word's example on
+              your Word List.
+            </p>
+          </div>
           <div className="flex gap-3 w-full">
             <button
               onClick={() => setStep('pace')}
