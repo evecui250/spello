@@ -163,7 +163,9 @@ function BlankedSentence({ example, revealed }: { example: { sentence: string; w
       <div className="text-stone-700 italic">
         {parts.before}
         <span className={revealed ? 'font-bold text-indigo-700 not-italic' : 'inline-block bg-indigo-200 text-transparent rounded select-none'}>
-          {revealed ? parts.match : ' '.repeat(Math.max(parts.match.length, 3))}
+          {/* A regular space collapses in HTML, shrinking the blank to a barely-visible
+              sliver instead of a block the width of the hidden word — \u00A0 doesn't collapse. */}
+          {revealed ? parts.match : '\u00A0'.repeat(Math.max(parts.match.length, 3))}
         </span>
         {parts.after}
       </div>

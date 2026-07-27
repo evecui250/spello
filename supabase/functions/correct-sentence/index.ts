@@ -78,8 +78,15 @@ Deno.serve(async (req: Request) => {
               'rewrite their attempt as ONE natural sentence a native German speaker would ' +
               'actually say — prefer the most common, idiomatic everyday phrasing over a ' +
               'stiff or overly literal one — that still uses the word ' +
-              `"${wordDe}" (in its correct inflected form, which may differ from the ` +
-              'dictionary form). Keep it simple and beginner-appropriate. Respond with ' +
+              `"${wordDe}" correctly conjugated for its subject and tense (in its correct ` +
+              'inflected form, which may differ from the dictionary form). This applies even ' +
+              'to modern loanword verbs borrowed from English, which conjugate exactly like ' +
+              'any regular German weak verb: "chatten" -> "ich chatte", "du chattest"; ' +
+              '"googeln" -> "er googelt"; "liken" -> "ich like", "sie liked". Before ' +
+              `answering, double-check that "${wordDe}" is not left as a bare, unconjugated ` +
+              'infinitive in your output where German grammar requires a conjugated form — ' +
+              'that is a common mistake to avoid. Keep it simple and beginner-appropriate. ' +
+              'Respond with ' +
               'exactly this JSON: {"used": true, "sentence": the corrected German sentence, ' +
               '"wordForm": the exact inflected form of the word as it literally appears, ' +
               'verbatim, inside "sentence" — this must be an exact substring match so it can ' +
