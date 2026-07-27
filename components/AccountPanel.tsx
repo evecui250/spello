@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { SYNCED_EVENT } from '../lib/sync';
+import { getAiUsageStats, AiUsageStats } from '../lib/ai';
 
 interface Props {
   // Called after remote data has been pulled and merged in, so the caller
@@ -15,6 +16,7 @@ export default function AccountPanel({ onSync }: Props) {
   const [inputEmail, setInputEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const [aiStats, setAiStats] = useState<AiUsageStats | null>(null);
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -30,6 +32,11 @@ export default function AccountPanel({ onSync }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!email) { setAiStats(null); return; }
+    getAiUsageStats().then(setAiStats);
+  }, [email]);
 
   const handleSendLink = async () => {
     if (!inputEmail.trim()) return;
@@ -59,6 +66,11 @@ export default function AccountPanel({ onSync }: Props) {
         <div>
           <div className="font-semibold text-stone-800">Signed in</div>
           <p className="text-stone-500 text-sm">{email} — progress syncs automatically.</p>
+          {aiStats && aiStats.calls > 0 && (
+            <p className="text-stone-400 text-xs mt-1">
+              AI sentence corrections used: {aiStats.calls} ({(aiStats.inputTokens + aiStats.outputTokens).toLocaleString()} tokens)
+            </p>
+          )}
         </div>
         <button
           onClick={handleSignOut}

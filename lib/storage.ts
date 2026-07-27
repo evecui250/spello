@@ -703,6 +703,15 @@ export interface DailySession {
   // reminder, not a gate).
   reviewMcqQueueIds: string[];
   matchingQueueIds: string[]; // which page comes next in the matching quiz
+  // The exact in-session order of the study/review round-ladder queue,
+  // updated every time it changes (a wrong answer requeues a word to the
+  // back). Undefined means "not entered yet this session" — enterRoundsPhase
+  // then builds it fresh from studyWordIds/reviewWordIds. Without this,
+  // quitting mid-round and coming back would recompute the queue from
+  // scratch in original list order, landing on a different word than
+  // whichever one was actually on screen when the learner left.
+  studyQueueIds?: string[];
+  reviewQueueIds?: string[];
   earnedPuppies: number;
   earnedUpgrades: Partial<Record<MascotStageId, number>>;
   isExtra: boolean; // true for a "Study more"/"Review more" bonus round, so

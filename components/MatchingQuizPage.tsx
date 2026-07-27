@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { Word } from '../lib/words';
+import { getSettings } from '../lib/storage';
+import { speakWord } from '../lib/speech';
 
 interface Props {
   words: Word[];
@@ -35,6 +37,7 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
       setCorrectIds(prev => new Set(prev).add(selectedGerman));
       setSelectedGerman(null);
       setSelectedEnglish(null);
+      if (getSettings().autoPlayAudio) speakWord(word);
       return;
     }
     setWrongFlash({ german: selectedGerman, english: selectedEnglish });

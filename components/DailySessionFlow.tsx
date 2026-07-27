@@ -24,7 +24,7 @@ import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
 import { speakWord } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
-import { correctSentence, isSignedIn as checkSignedIn, SentenceCorrection } from '../lib/ai';
+import { correctSentence, watchSignedIn, SentenceCorrection } from '../lib/ai';
 
 function shuffled<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
@@ -170,6 +170,12 @@ export default function DailySessionFlow() {
   // sentence exercise (shown in place of the generic "✓ Correct!" banner).
   const [exampleSentence, setExampleSentence] = useState<{ sentence: string; wordForm: string } | null>(null);
   const [sentenceResult, setSentenceResult] = useState<SentenceCorrection | null>(null);
+  // "Review" = already fully learned, back for spaced repetition. "New" =
+  // never touched before today. "Continuing" = mid-ladder from a PREVIOUS
+  // day (not brand new, hasn't reached round 4 yet either) — this is the
+  // one that looks confusingly like "new" without a label, since it still
+  // shows up in the study queue and can start anywhere from round 2-4.
+  const [wordStatus, setWordStatus] = useState<'New' | 'Continuing' | 'Review'>('New');
   // Choices already shown per word this round-1.5 pass, in-memory only (a
   // retry within the redo loop should get fresh distractors; losing this on
   // a reload is a harmless cosmetic detail, not a correctness issue).
@@ -204,22 +210,32 @@ export default function DailySessionFlow() {
     setAttemptKey(k => k + 1);
     setExampleSentence(progress.exampleSentence ?? null);
     setSentenceResult(null);
+    setWordStatus(mode === 'review' ? 'Review' : (progress.lastPracticed && progress.lastPracticed !== today() ? 'Continuing' : 'New'));
     if (round === 1 && getSettings().autoPlayAudio) speakWord(w);
   };
 
   function enterRoundsPhase(ds: DailySession, mode: RoundMode) {
     const ids = mode === 'study' ? ds.studyWordIds : ds.reviewWordIds;
-    const pending = ids.filter(id => !isRoundsDone(id, mode));
+    // Resume the exact in-session order if one was already persisted (see
+    // studyQueueIds/reviewQueueIds); only the very first entry into this
+    // phase this session falls back to computing it fresh from `ids`.
+    const persistedQueueIds = mode === 'study' ? ds.studyQueueIds : ds.reviewQueueIds;
+    const sourceIds = persistedQueueIds !== undefined ? persistedQueueIds : ids;
+    const pending = sourceIds.filter(id => !isRoundsDone(id, mode));
     const words = wordsById(pending);
     setQueue(words);
     setTotalWords(ids.length);
     reviewRoundsRef.current = {};
+    const withQueue: DailySession = mode === 'study'
+      ? { ...ds, studyQueueIds: pending }
+      : { ...ds, reviewQueueIds: pending };
+    persistSession(withQueue);
     if (words.length > 0) {
       loadCurrent(words[0], mode);
     } else if (mode === 'study') {
-      finishStudyRounds(ds);
+      finishStudyRounds(withQueue);
     } else {
-      finishReviewRounds(ds);
+      finishReviewRounds(withQueue);
     }
   }
 
@@ -304,10 +320,15 @@ export default function DailySessionFlow() {
 
   // --- Mount: load today's session (Home always creates one before routing
   // here) and resume at whatever phase it's at. ---
+  // Subscribed (not a one-shot check) so it can't race the Supabase client
+  // still rehydrating its session from storage on a freshly-loaded page —
+  // this fires immediately with whatever the current state actually is, and
+  // again on any later sign-in/out.
+  useEffect(() => watchSignedIn(setIsSignedIn), []);
+
   useEffect(() => {
     const s = getSettings();
     setSettings(s);
-    checkSignedIn().then(setIsSignedIn);
     const ds = getDailySession();
     if (!ds) { setReady(true); return; }
 
@@ -476,10 +497,11 @@ export default function DailySessionFlow() {
     const rest = queue.slice(1);
     if (!justCompleted) rest.push(queue[0]);
     setQueue(rest);
+    const restIds = rest.map(w => w.id);
 
     const progress = getAllProgress();
     if (session.mcqQueueIds.length > 0 && allAttemptedRound(session.studyWordIds, progress, 1, session.round1AttemptedIds)) {
-      const next: DailySession = { ...session, phase: 'study-mcq' };
+      const next: DailySession = { ...session, phase: 'study-mcq', studyQueueIds: restIds };
       persistSession(next);
       enterMcqPhase(next);
       return;
@@ -490,14 +512,16 @@ export default function DailySessionFlow() {
     // natural order rather than relying on that alone.
     if (session.mcqQueueIds.length === 0 && session.mcq2QueueIds.length > 0
       && allAttemptedRound(session.studyWordIds, progress, 2, session.round2AttemptedIds)) {
-      const next: DailySession = { ...session, phase: 'study-mcq-2' };
+      const next: DailySession = { ...session, phase: 'study-mcq-2', studyQueueIds: restIds };
       persistSession(next);
       enterMcq2Phase(next);
       return;
     }
 
+    const next: DailySession = { ...session, studyQueueIds: restIds };
+    persistSession(next);
     if (rest.length > 0) loadCurrent(rest[0], 'study');
-    else finishStudyRounds(session);
+    else finishStudyRounds(next);
   }
 
   function advanceReviewQueue() {
@@ -505,8 +529,10 @@ export default function DailySessionFlow() {
     const rest = queue.slice(1);
     if (!justCompleted) rest.push(queue[0]);
     setQueue(rest);
+    const next: DailySession = { ...session, reviewQueueIds: rest.map(w => w.id) };
+    persistSession(next);
     if (rest.length > 0) loadCurrent(rest[0], 'review');
-    else finishReviewRounds(session);
+    else finishReviewRounds(next);
   }
 
   const handleNext = () => {
@@ -742,7 +768,17 @@ export default function DailySessionFlow() {
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
         <div>
-          <div className="text-sm font-medium text-indigo-600 mb-1">{ROUND_LABELS[currentRound]}</div>
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-sm font-medium text-indigo-600">{ROUND_LABELS[currentRound]}</div>
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+              wordStatus === 'Review' ? 'bg-emerald-100 text-emerald-700'
+                : wordStatus === 'Continuing' ? 'bg-amber-100 text-amber-700'
+                  : 'bg-indigo-100 text-indigo-700'
+            }`}
+            >
+              {wordStatus}
+            </span>
+          </div>
           <div className="flex gap-1">
             {([1, 2, 3, 4] as Round[]).map(n => (
               <div key={n} className={`h-2 flex-1 rounded-full ${n <= currentRound ? 'bg-indigo-500' : 'bg-indigo-100'}`} />
