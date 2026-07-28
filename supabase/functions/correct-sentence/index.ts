@@ -1,10 +1,14 @@
-// Takes a beginner's rough attempt at a German sentence using a given word
-// (broken grammar / English mixed in is expected — see Spello's round-1
-// "invent a sentence" exercise) and returns a natural, corrected German
-// sentence using that word. The OpenAI key lives only here (a Supabase
-// secret), never in client code, since Spello ships as a public static site
-// with no server of its own. Every call is logged to ai_usage for spend
-// tracking.
+// Corrects a beginner's attempt at TRANSLATING an English sentence into
+// German (the English sentence itself comes from generate-sentence — see
+// Spello's round-1 translation exercise). Broken grammar / English words
+// mixed in is expected. Corrects THEIR translation (grammar, spelling,
+// word order) rather than substituting an independent translation of the
+// English sentence — different learners can validly translate the same
+// sentence differently (synonyms, word order), so the correction should
+// track what they actually wrote. The OpenAI key lives only here (a
+// Supabase secret), never in client code, since Spello ships as a public
+// static site with no server of its own. Every call is logged to ai_usage
+// for spend tracking.
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -21,7 +25,8 @@ interface RequestBody {
   wordId: string;
   wordDe: string;
   level: string;
-  userSentence: string;
+  englishPrompt: string;
+  userTranslation: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -46,12 +51,12 @@ Deno.serve(async (req: Request) => {
     const userId = userData.user.id;
 
     const body = (await req.json()) as RequestBody;
-    const { wordId, wordDe, level, userSentence } = body;
-    if (!wordId || !wordDe || !userSentence || userSentence.trim().length === 0) {
-      return json({ error: 'Missing wordId, wordDe, or userSentence' }, 400);
+    const { wordId, wordDe, level, englishPrompt, userTranslation } = body;
+    if (!wordId || !wordDe || !englishPrompt || !userTranslation || userTranslation.trim().length === 0) {
+      return json({ error: 'Missing wordId, wordDe, englishPrompt, or userTranslation' }, 400);
     }
-    if (userSentence.length > 300) {
-      return json({ error: 'Sentence too long' }, 400);
+    if (userTranslation.length > 300) {
+      return json({ error: 'Translation too long' }, 400);
     }
 
     const completion = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -67,32 +72,35 @@ Deno.serve(async (req: Request) => {
           {
             role: 'system',
             content:
-              'You are a German tutor for a beginner practicing a specific target word: ' +
-              `"${wordDe}" (CEFR ${level || 'A1'}). ` +
-              'First, decide whether their attempt actually tries to use this word — in ANY ' +
-              'form (any conjugation, declension, case ending, or plural). If it is a noun, ' +
-              'do NOT require the article (der/die/das) to be present or correct — only the ' +
-              'core word matters for this check. If they did not attempt the word at all, ' +
-              'respond with exactly this JSON: {"used": false}. ' +
-              'Otherwise (even with wrong grammar, wrong form, or English words mixed in), ' +
-              'rewrite their attempt as ONE natural sentence a native German speaker would ' +
-              'actually say — prefer the most common, idiomatic everyday phrasing over a ' +
-              'stiff or overly literal one — that still uses the word ' +
-              `"${wordDe}" correctly conjugated for its subject and tense (in its correct ` +
-              'inflected form, which may differ from the dictionary form). This applies even ' +
-              'to modern loanword verbs borrowed from English, which conjugate exactly like ' +
-              'any regular German weak verb: "chatten" -> "ich chatte", "du chattest"; ' +
-              '"googeln" -> "er googelt"; "liken" -> "ich like", "sie liked". Before ' +
-              `answering, double-check that "${wordDe}" is not left as a bare, unconjugated ` +
-              'infinitive in your output where German grammar requires a conjugated form — ' +
-              'that is a common mistake to avoid. Keep it simple and beginner-appropriate. ' +
-              'Respond with ' +
-              'exactly this JSON: {"used": true, "sentence": the corrected German sentence, ' +
-              '"wordForm": the exact inflected form of the word as it literally appears, ' +
-              'verbatim, inside "sentence" — this must be an exact substring match so it can ' +
-              'be highlighted}.',
+              'You are a German tutor. The learner was asked to translate this English ' +
+              `sentence into German: "${englishPrompt}". They attempted a translation ` +
+              '(given in the next message). This exercise specifically tests the word ' +
+              `"${wordDe}" (CEFR ${level || 'A1'}). First, decide whether their attempt tries ` +
+              'to render this word in German at all — in ANY form (any conjugation, ' +
+              'declension, case ending, or plural). If it is a noun, do NOT require the ' +
+              'article (der/die/das) to be present or correct — only the core word matters ' +
+              'for this check. If they did not attempt it at all, respond with exactly this ' +
+              'JSON: {"used": false}. ' +
+              'Otherwise (even with wrong grammar, wrong word order, wrong form, or English ' +
+              'words mixed in), correct THEIR OWN translation attempt — fix grammar, spelling, ' +
+              'and word order — while keeping their own word choices and sentence structure as ' +
+              'much as possible. Different learners can validly translate the same sentence ' +
+              'differently (synonyms, word order); do NOT discard their approach and produce ' +
+              'your own independent translation of the English sentence — only fall back to a ' +
+              'fresh natural translation if their attempt is too garbled or unrelated to fix. ' +
+              `Make sure "${wordDe}" is correctly conjugated for its subject and tense in your ` +
+              'output (in its correct inflected form, which may differ from the dictionary ' +
+              'form). This applies even to modern loanword verbs borrowed from English, which ' +
+              'conjugate exactly like any regular German weak verb: "chatten" -> "ich chatte", ' +
+              '"du chattest"; "googeln" -> "er googelt"; "liken" -> "ich like", "sie liked". ' +
+              `Before answering, double-check that "${wordDe}" is not left as a bare, ` +
+              'unconjugated infinitive in your output where German grammar requires a ' +
+              'conjugated form — that is a common mistake to avoid. Respond with exactly this ' +
+              'JSON: {"used": true, "sentence": their corrected translation, "wordForm": the ' +
+              'exact inflected form of the word as it literally appears, verbatim, inside ' +
+              '"sentence" — this must be an exact substring match so it can be highlighted}.',
           },
-          { role: 'user', content: userSentence },
+          { role: 'user', content: userTranslation },
         ],
         temperature: 0.3,
         max_tokens: 150,

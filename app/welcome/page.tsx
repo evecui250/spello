@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { saveSettings, markOnboardingDone, Settings, MascotStageId } from '../../lib/storage';
+import { getSettings, saveSettings, markOnboardingDone, Settings, MascotStageId } from '../../lib/storage';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
 import { Level } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
@@ -37,12 +37,18 @@ export default function WelcomePage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>('language');
 
-  const [language, setLanguage] = useState('de');
-  const [level, setLevel] = useState<Level>('A1');
-  const [studyBatchSize, setStudyBatchSize] = useState(15);
-  const [dailyReview, setDailyReview] = useState(25);
-  const [autoPlayAudio, setAutoPlayAudio] = useState(true);
-  const [requireArticle, setRequireArticle] = useState(false);
+  // Lazily seeded from whatever's already saved (relevant when this page is
+  // revisited from Settings after onboarding is done) — falls back to the
+  // same defaults a first-time visitor gets, so clicking through without
+  // changing anything just re-saves what was already there instead of
+  // silently resetting it to these defaults.
+  const existing = useMemo(() => getSettings(), []);
+  const [language, setLanguage] = useState(existing.language);
+  const [level, setLevel] = useState<Level>(existing.level);
+  const [studyBatchSize, setStudyBatchSize] = useState(existing.studyBatchSize);
+  const [dailyReview, setDailyReview] = useState(existing.dailyReview);
+  const [autoPlayAudio, setAutoPlayAudio] = useState(existing.autoPlayAudio);
+  const [requireArticle, setRequireArticle] = useState(existing.requireArticle);
 
   const forecast = useMemo(
     () => estimateProgressForecast(studyBatchSize, dailyReview),

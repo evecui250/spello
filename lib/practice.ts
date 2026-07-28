@@ -1,6 +1,6 @@
 'use client';
 
-import { WORDS, Word, wordsForLevel } from './words';
+import { WORDS, Word, wordsForLevel, Level } from './words';
 import {
   getAllProgress, getSettings, today, Round, WordProgress, MascotStageId,
   getDailySession, saveDailySession, SessionPhase,
@@ -48,17 +48,76 @@ export function buildStudyWords(
     else if (!p.mascotStage) inProgress.push(w);
   }
 
-  let freshOrdered = shuffled(fresh);
+  let freshOrdered: Word[];
   if (settings.level === 'A1') {
+    // The ~220 curated high-frequency words (see lib/words.ts's
+    // `highFrequency` field) always come before any other fresh A1 word —
+    // they use the old copy-the-word round 1 (see isBootstrapCopyWord)
+    // rather than the AI translation exercise, so a true beginner learns
+    // this core vocabulary before being asked to translate sentences.
+    const freshHighFreq = shuffled(fresh.filter(w => w.highFrequency));
+    const freshOther = shuffled(fresh.filter(w => !w.highFrequency));
     const introducedCount = wordsForLevel('A1').filter(w => allProgress[w.id]).length;
+    let otherOrdered = freshOther;
     if (introducedCount < SHORT_WORD_GRACE_COUNT) {
-      const short = freshOrdered.filter(w => [...w.de].length <= SHORT_WORD_MAX_LENGTH);
-      const long = freshOrdered.filter(w => [...w.de].length > SHORT_WORD_MAX_LENGTH);
-      freshOrdered = [...short, ...long];
+      const short = freshOther.filter(w => [...w.de].length <= SHORT_WORD_MAX_LENGTH);
+      const long = freshOther.filter(w => [...w.de].length > SHORT_WORD_MAX_LENGTH);
+      otherOrdered = [...short, ...long];
     }
+    freshOrdered = [...freshHighFreq, ...otherOrdered];
+  } else {
+    freshOrdered = shuffled(fresh);
   }
 
   return [...shuffled(inProgress), ...freshOrdered].slice(0, limit);
+}
+
+// The ~220 curated high-frequency A1 words (see lib/words.ts) always use
+// the old copy-the-word round 1, never the AI translation exercise —
+// checked independently of progress, since it's the same rule whether this
+// is the word's first pass or a Hint-triggered demotion back to round 1.
+export function isBootstrapCopyWord(word: Word): boolean {
+  return word.level === 'A1' && !!word.highFrequency;
+}
+
+// Which levels' full vocabulary counts as "already known" for a given
+// level's translation-exercise sentences — full CEFR progression, not
+// "everything earlier in LEVEL_ORDER" (B2_old is a parallel corpus for the
+// same level as B2, built on the same A1/A2/B1 foundation, not on B2 itself;
+// C1/C2 have no words yet but are listed for completeness).
+const PREREQUISITE_LEVELS: Record<Level, Level[]> = {
+  A1: [],
+  A2: ['A1'],
+  B1: ['A1', 'A2'],
+  B2: ['A1', 'A2', 'B1'],
+  B2_old: ['A1', 'A2', 'B1'],
+  C1: ['A1', 'A2', 'B1', 'B2'],
+  C2: ['A1', 'A2', 'B1', 'B2', 'C1'],
+};
+
+// Vocabulary the AI-generated sentence (see lib/ai.ts's generateSentence)
+// is allowed to use: every word in a lower CEFR level (assumed known
+// outright — full list, not gated by this app's own progress) plus words
+// in the CURRENT level the learner has already finished introducing
+// (mascotStage set). For A1, this naturally includes the ~220 bootstrap
+// words once they're done, without needing to special-case them — they're
+// just "current-level words with mascotStage set" like any other.
+// Returns deduped English glosses (what the AI actually needs — the
+// learner has to know the English concept to translate it into German).
+export function getKnownVocabulary(level: Level): string[] {
+  const progress = getAllProgress();
+  const lowerWords = PREREQUISITE_LEVELS[level].flatMap(l => wordsForLevel(l));
+  const currentLearnt = wordsForLevel(level).filter(w => progress[w.id]?.mascotStage);
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const w of [...lowerWords, ...currentLearnt]) {
+    const key = w.en.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(w.en);
+    }
+  }
+  return result;
 }
 
 // Called when the user changes "New words per day" in Settings, so the

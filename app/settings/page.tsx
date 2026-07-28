@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { getSettings, saveSettings, switchToLevel, clearAllProgress, Settings } from '../../lib/storage';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
 import { Level, wordsForLevel } from '../../lib/words';
@@ -237,6 +238,13 @@ export default function SettingsPage() {
           />
         </div>
       </div>
+
+      <Link
+        href="/welcome"
+        className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-4 font-semibold text-stone-700 hover:bg-amber-50 transition-colors"
+      >
+        View welcome guide
+      </Link>
 
       <div className="bg-red-50/70 backdrop-blur-sm rounded-2xl border border-red-200/50 shadow-sm p-6 flex flex-col gap-3">
         <div>

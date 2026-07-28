@@ -12,10 +12,10 @@ import {
 } from '../lib/storage';
 import {
   wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint,
-  buildMcqChoices, buildMatchingPages,
+  buildMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord,
 } from '../lib/practice';
 import { REVIEW_PLAN } from '../lib/srs';
-import { Word } from '../lib/words';
+import { Word, Level } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
 import SpeakerButton from './SpeakerButton';
@@ -25,7 +25,7 @@ import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
 import { speakWord } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
-import { correctSentence } from '../lib/ai';
+import { correctSentence, generateSentence } from '../lib/ai';
 
 // Locates wordForm inside sentence (case-insensitive) so callers can
 // highlight/blank it — used by both BlankedSentence (rounds 2+/review) and
@@ -51,17 +51,22 @@ const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'
 
 type RoundMode = 'study' | 'review';
 
-// Round 1: instead of copying the word, the learner invents their own
-// sentence using it — wrong grammar/English mixed in is expected — and an
-// AI correction becomes the word's permanent example sentence (shown on
-// Word List and, blanked out, on later rounds — see BlankedSentence below).
-// Requires sign-in (enforced app-wide by AuthGate, see app/layout.tsx),
-// since the AI call needs a real user to log usage against.
-// Shown above both the input step and the result step (see the parent's
-// currentRound === 1 branch) so the word stays visible throughout — the
-// correction lands on the same card instead of swapping to what reads as a
-// different screen. No "New word" caption here: the New/Continuing/Review
-// badge already at the top of the card says that.
+// Round 1 (translation exercise, all non-bootstrap words — see
+// isBootstrapCopyWord): the AI generates an English sentence built only
+// from vocabulary the learner already knows (lib/practice.ts's
+// getKnownVocabulary) plus the new word, the learner translates it into
+// German, and a second AI call corrects their OWN translation attempt
+// (preserving their word choices/approach, not substituting an independent
+// translation — see correct-sentence's prompt). The corrected translation
+// becomes the word's permanent example sentence (shown on Word List and,
+// blanked out, on later rounds — see BlankedSentence below). Requires
+// sign-in (enforced app-wide by AuthGate, see app/layout.tsx), since the AI
+// calls need a real user to log usage against.
+// SentenceWordHeader is shown above both the input step and the result step
+// (see the parent's currentRound === 1 branch) so the word stays visible
+// throughout — the correction lands on the same card instead of swapping to
+// what reads as a different screen. No "New word" caption here: the
+// New/Continuing/Review badge already at the top of the card says that.
 function SentenceWordHeader({ word }: { word: Word }) {
   return (
     <div className="text-center -mt-1">
@@ -77,17 +82,34 @@ function SentenceExercise({
   word, level, onCorrected,
 }: {
   word: Word;
-  level: string;
+  level: Level;
   onCorrected: (correction: { sentence: string; wordForm: string }) => void;
 }) {
+  const [promptSentence, setPromptSentence] = useState<string | null>(null);
+  const [promptStatus, setPromptStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [promptRetry, setPromptRetry] = useState(0);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'not-used'>('idle');
 
+  useEffect(() => {
+    let cancelled = false;
+    setPromptStatus('loading');
+    generateSentence(word.id, word.de, word.en, level, getKnownVocabulary(level))
+      .then(sentence => {
+        if (cancelled) return;
+        setPromptSentence(sentence);
+        setPromptStatus('ready');
+      })
+      .catch(() => { if (!cancelled) setPromptStatus('error'); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [word.id, promptRetry]);
+
   async function handleSubmit() {
-    if (!input.trim() || status === 'loading') return;
+    if (!input.trim() || status === 'loading' || !promptSentence) return;
     setStatus('loading');
     try {
-      const result = await correctSentence(word.id, word.de, level, input.trim());
+      const result = await correctSentence(word.id, word.de, level, promptSentence, input.trim());
       if (!result.used) {
         setStatus('not-used');
         return;
@@ -101,38 +123,57 @@ function SentenceExercise({
   return (
     <div className="flex flex-col gap-3">
       <SentenceWordHeader word={word} />
-      <div>
-        <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Create your own sentence!</div>
-        <textarea
-          value={input}
-          onChange={e => { setInput(e.target.value); if (status === 'not-used') setStatus('idle'); }}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSubmit();
-            }
-          }}
-          disabled={status === 'loading'}
-          placeholder="Don't worry about grammar — mixing in English is fine too, we'll turn it into correct German."
-          rows={2}
-          className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 resize-none disabled:opacity-60"
-        />
-      </div>
-      {status === 'not-used' && (
-        <p className="text-amber-700 text-sm text-center">
-          Try to actually use "{word.de}" somewhere in your sentence (any form is fine).
-        </p>
+      {promptStatus === 'loading' && (
+        <p className="text-stone-500 text-sm text-center py-4">Preparing a sentence…</p>
       )}
-      {status === 'error' && (
-        <p className="text-red-600 text-sm text-center">Couldn't get a correction — check your connection and try again.</p>
+      {promptStatus === 'error' && (
+        <div className="flex flex-col gap-2">
+          <p className="text-red-600 text-sm text-center">Couldn't prepare a sentence — check your connection and try again.</p>
+          <button
+            onClick={() => setPromptRetry(k => k + 1)}
+            className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+          >
+            Retry
+          </button>
+        </div>
       )}
-      <button
-        onClick={handleSubmit}
-        disabled={!input.trim() || status === 'loading'}
-        className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
-      >
-        {status === 'loading' ? 'Checking…' : 'Check'}
-      </button>
+      {promptStatus === 'ready' && promptSentence && (
+        <>
+          <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
+            <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate this sentence into German!</div>
+            <div className="text-stone-700 italic">{promptSentence}</div>
+          </div>
+          <textarea
+            value={input}
+            onChange={e => { setInput(e.target.value); if (status === 'not-used') setStatus('idle'); }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
+            disabled={status === 'loading'}
+            placeholder="Your best attempt is fine — mixing in English is OK too."
+            rows={2}
+            className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 resize-none disabled:opacity-60"
+          />
+          {status === 'not-used' && (
+            <p className="text-amber-700 text-sm text-center">
+              Try to actually use "{word.de}" somewhere in your translation (any form is fine).
+            </p>
+          )}
+          {status === 'error' && (
+            <p className="text-red-600 text-sm text-center">Couldn't get a correction — check your connection and try again.</p>
+          )}
+          <button
+            onClick={handleSubmit}
+            disabled={!input.trim() || status === 'loading'}
+            className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
+          >
+            {status === 'loading' ? 'Checking…' : 'Check'}
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -719,7 +760,7 @@ export default function DailySessionFlow() {
         <div>
           <div className="flex items-center justify-between mb-1">
             <div className="text-sm font-medium text-indigo-600">
-              {currentRound === 1 && exampleSentence ? 'Round 1 — copy the word' : ROUND_LABELS[currentRound]}
+              {currentRound === 1 && (exampleSentence || isBootstrapCopyWord(word)) ? 'Round 1 — copy the word' : ROUND_LABELS[currentRound]}
             </div>
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
               wordStatus === 'Review' ? 'bg-emerald-100 text-emerald-700'
@@ -741,13 +782,16 @@ export default function DailySessionFlow() {
           <div className="text-2xl font-semibold text-slate-700">{word.en}</div>
         </div>
 
-        {/* !exampleSentence excludes a word demoted BACK to round 1 via Hint
-            from round 2 — it's not a brand-new word (it already has a saved
-            sentence from its real round-1 pass), so it shouldn't be asked to
-            write another one. That case falls through to the else branch's
-            round-1 handling instead (the old copy-the-word tiles, with the
-            existing sentence still shown via BlankedSentence). */}
-        {currentRound === 1 && roundMode === 'study' && !exampleSentence ? (
+        {/* Two reasons the translation exercise is skipped for round 1:
+            !exampleSentence excludes a word demoted BACK to round 1 via Hint
+            from round 2 — it already has a saved sentence from its real
+            round-1 pass, so it shouldn't be asked to translate another one.
+            isBootstrapCopyWord excludes A1's ~220 curated high-frequency
+            words permanently — they always use the old copy-the-word
+            mechanic instead, never the AI exercise. Both cases fall through
+            to the else branch's round-1 handling (copy-the-word tiles, with
+            any existing sentence still shown via BlankedSentence). */}
+        {currentRound === 1 && roundMode === 'study' && !isBootstrapCopyWord(word) && !exampleSentence ? (
           feedback === null ? (
             <SentenceExercise
               key={word.id}
@@ -788,10 +832,9 @@ export default function DailySessionFlow() {
           )
         ) : (
           <>
-            {/* Only reachable at round 1 via a Hint demotion from round 2 (see
-                the !exampleSentence gate above) — the word already has a
-                saved sentence, so this is the old copy-the-word reference,
-                not a fresh introduction. */}
+            {/* Reachable at round 1 either as A1 bootstrap words' genuine
+                first pass, or via a Hint demotion from round 2 for a word
+                that already has a saved sentence (see the gate above). */}
             {currentRound === 1 && (
               <div className="text-center -mt-1">
                 <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
