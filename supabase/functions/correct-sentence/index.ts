@@ -95,7 +95,10 @@ Deno.serve(async (req: Request) => {
               '"du chattest"; "googeln" -> "er googelt"; "liken" -> "ich like", "sie liked". ' +
               `Before answering, double-check that "${wordDe}" is not left as a bare, ` +
               'unconjugated infinitive in your output where German grammar requires a ' +
-              'conjugated form — that is a common mistake to avoid. Respond with exactly this ' +
+              'conjugated form — that is a common mistake to avoid. Always end your corrected ' +
+              'sentence with correct terminal punctuation matching the English sentence\'s own ' +
+              'punctuation (a period, question mark, or exclamation mark) — add it even if the ' +
+              'learner\'s attempt omitted it. Respond with exactly this ' +
               'JSON: {"used": true, "sentence": their corrected translation, "wordForm": the ' +
               'exact inflected form of the word as it literally appears, verbatim, inside ' +
               '"sentence" — this must be an exact substring match so it can be highlighted}.',

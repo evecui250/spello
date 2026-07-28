@@ -40,6 +40,60 @@ function splitOnWordForm(sentence: string, wordForm: string): { before: string; 
   };
 }
 
+// Splits into alternating word / non-word (whitespace, punctuation) tokens,
+// covering German letters (umlauts, ß) as "word" characters.
+function tokenize(s: string): string[] {
+  return s.match(/[A-Za-zÀ-ÖØ-öø-ÿß']+|[^A-Za-zÀ-ÖØ-öø-ÿß']+/g) ?? [];
+}
+
+// Diffs the learner's own typed attempt against the AI's corrected version,
+// word by word (case-insensitive, via longest-common-subsequence), so the
+// round-1 "Correction" box can underline specifically what the learner got
+// wrong instead of always underlining the target vocabulary word — those
+// are frequently not the same place (e.g. the correction is a grammar fix
+// elsewhere in the sentence, and the target word itself was already fine).
+function diffCorrectionSegments(userInput: string, corrected: string): { text: string; changed: boolean }[] {
+  const correctedTokens = tokenize(corrected);
+  const isWord = (t: string) => /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(t);
+  const correctedWordPositions: number[] = [];
+  const correctedWords: string[] = [];
+  correctedTokens.forEach((t, i) => {
+    if (isWord(t)) { correctedWordPositions.push(i); correctedWords.push(t.toLowerCase()); }
+  });
+  const originalWords = tokenize(userInput).filter(isWord).map(w => w.toLowerCase());
+
+  const m = originalWords.length;
+  const n = correctedWords.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = originalWords[i - 1] === correctedWords[j - 1]
+        ? dp[i - 1][j - 1] + 1
+        : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  const matchedCorrectedWordIdx = new Set<number>();
+  let i = m, j = n;
+  while (i > 0 && j > 0) {
+    if (originalWords[i - 1] === correctedWords[j - 1]) {
+      matchedCorrectedWordIdx.add(j - 1);
+      i--; j--;
+    } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+      i--;
+    } else {
+      j--;
+    }
+  }
+
+  const wordPosToTokenIdx = new Map(correctedWordPositions.map((tokenIdx, wordPos) => [wordPos, tokenIdx]));
+  const changedTokenIdx = new Set<number>();
+  for (let w = 0; w < n; w++) {
+    if (!matchedCorrectedWordIdx.has(w)) changedTokenIdx.add(wordPosToTokenIdx.get(w)!);
+  }
+
+  return correctedTokens.map((text, idx) => ({ text, changed: changedTokenIdx.has(idx) }));
+}
+
 const ROUND_LABELS: Record<Round, string> = {
   1: 'Round 1 — use it in a sentence',
   2: 'Round 2 — half the letters hinted',
@@ -189,19 +243,13 @@ function SentenceExercise({
           {correction ? (
             <>
               <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
-                <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium">Here's a natural way to say it</div>
+                <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium">Correction</div>
                 <div className="text-lg text-green-800">
-                  {(() => {
-                    const parts = splitOnWordForm(correction.sentence, correction.wordForm);
-                    if (!parts) return correction.sentence;
-                    return (
-                      <>
-                        {parts.before}
-                        <span className="underline decoration-2 underline-offset-2">{parts.match}</span>
-                        {parts.after}
-                      </>
-                    );
-                  })()}
+                  {diffCorrectionSegments(input, correction.sentence).map((seg, i) => (
+                    seg.changed
+                      ? <span key={i} className="underline decoration-2 underline-offset-2">{seg.text}</span>
+                      : <span key={i}>{seg.text}</span>
+                  ))}
                 </div>
               </div>
               <button
@@ -467,7 +515,11 @@ export default function DailySessionFlow() {
       }
     }
 
-    if (settings.autoPlayAudio) speakWord(word);
+    // The round-1 translate exercise already auto-plays the corrected
+    // sentence itself (see SentenceExercise) — playing the bare word here
+    // too would overlap it, so skip this generic word-audio call for that
+    // one case only.
+    if (settings.autoPlayAudio && !extra?.exampleSentence) speakWord(word);
   };
 
   const handleSubmit = () => {

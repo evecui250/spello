@@ -46,6 +46,11 @@ function speakWithBrowserVoice(text: string): void {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'de-DE';
   utterance.rate = 0.9;
+  // Explicit max — the Web Speech API caps here regardless (no way to
+  // amplify a quiet system voice beyond this from JS), so this is really
+  // just documenting intent, not the fix for the loudness mismatch itself
+  // (see WORD_AUDIO_VOLUME below).
+  utterance.volume = 1;
   const voice = pickGermanVoice();
   if (voice) utterance.voice = voice;
   window.speechSynthesis.cancel();
@@ -60,6 +65,14 @@ export function speakText(text: string): void {
   speakWithBrowserVoice(text);
 }
 
+// The pre-recorded word clips (gpt-4o-mini-tts) are mastered noticeably
+// louder than most on-device browser voices used for sentence playback —
+// there's no way to amplify a quiet system voice from JS, so this pulls the
+// louder side down instead. A rough first pass since actual loudness is
+// very device/voice-dependent; nudge this if words still sound louder (or
+// now too quiet) compared to sentences on your device.
+const WORD_AUDIO_VOLUME = 0.85;
+
 let currentAudio: HTMLAudioElement | null = null;
 
 // Plays this word's pre-generated recording — the same voice for every user
@@ -72,6 +85,7 @@ export function speakWord(word: Word): void {
     currentAudio = null;
   }
   const audio = new Audio(audioUrlForWord(word));
+  audio.volume = WORD_AUDIO_VOLUME;
   currentAudio = audio;
   const fallback = () => {
     // A newer speakWord() call can supersede this one (pausing this audio
