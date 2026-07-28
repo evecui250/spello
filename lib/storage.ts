@@ -9,31 +9,31 @@ import { Level, LEVEL_ORDER } from './words';
 export type Round = 1 | 2 | 3 | 4;
 export const MAX_ROUND: Round = 4;
 
-// The 4-stage dachshund mascot — a word's memory strength, derived from its
-// masteryScore. See lib/srs.ts for the scoring/stage logic.
+// The 4-stage dachshund mascot — a word's progress through the fixed
+// review schedule (see lib/srs.ts's REVIEW_PLAN/OFFSET_AFTER_STAGE).
 export type MascotStageId = 'puppy' | 'short' | 'medium' | 'long-crowned';
 
 export interface WordProgress {
   id: string;
-  round: Round;        // current difficulty level, 1 (copy word) .. 5 (no hints)
-  studiedTimes: number; // legacy coin count — kept in sync with successfulReviews for
-                         // existing displays (Stats, Words badges, the congrats card)
+  round: Round;        // current rung on the 1-4 ladder
+  studiedTimes: number; // total milestone passes (1-4) — "earned" signal for
+                         // Word List/Stats/congrats card
   fullyMastered: boolean; // kept in sync with mascotStage === 'long-crowned'
   lastPracticed?: string;
 
-  // --- Spaced-repetition fields (see lib/srs.ts) ---
-  masteryScore: number;       // M — scheduling-only score; can dip after a mistake,
-                               // drives nextReviewDue's interval. Not used for the mascot.
-  growthScore: number;        // M' — monotonic; drives mascotStage + retirement. Only
-                               // ever increases: a mistake shrinks the *next* increment,
-                               // it doesn't undo progress already made.
-  successfulReviews: number;  // S — total successful no-hint (round 4) passes
-  pendingMistakes: number;    // failed attempts since the last successful review;
-                               // consumed (feeding both M and the next growthScore
-                               // increment), then reset, on the next success
-  lastReviewedAt?: string;    // date of the last successful round-4 pass
-  nextReviewDue?: string;     // date this word next becomes eligible for Review
-  mascotStage: MascotStageId; // derived from growthScore, stored for convenient display
+  // successfulReviews mirrors studiedTimes (both incremented together on
+  // every milestone pass) — kept as a separate field for sync/back-compat
+  // smoothness with existing remote data, not because it means anything
+  // studiedTimes doesn't.
+  successfulReviews: number;
+  lastReviewedAt?: string;    // date of the last milestone pass
+  nextReviewDue?: string;     // date this word's next review becomes due;
+                               // undefined once fullyMastered (retired)
+  // undefined = hasn't finished Day 1 (introduction) yet — this is the
+  // load-bearing signal buildStudyWords/buildReviewWords key off. Set (and
+  // never cleared) the moment round 2 first passes; advances one stage per
+  // review milestone thereafter. See lib/srs.ts's recordMilestonePass.
+  mascotStage?: MascotStageId;
 
   // Set once, the first time the learner writes their own round-1 sentence
   // and it comes back AI-corrected (see lib/ai.ts's correctSentence). Shown
@@ -316,51 +316,38 @@ export function getAllProgress(): Record<string, WordProgress> {
   }
 }
 
-function addOneDay(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
-
-// Fills in defaults for any progress record saved under an older schema.
-// Records from before the SRS system get sensible one-time defaults here —
-// legacy coin count becomes the initial successfulReviews/masteryScore, and
-// nextReviewDue defaults to "due now" rather than being stuck waiting for a
-// date that was never set. Everything self-corrects the next time the word
-// is actually reviewed (see lib/srs.ts).
+// Fills in defaults for any progress record saved under an older schema,
+// and grandfathers existing in-flight words into the fixed review schedule
+// (see lib/srs.ts) that replaced the old mastery-score formula.
 function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): WordProgress {
   const successfulReviews = p?.successfulReviews ?? p?.studiedTimes ?? 0;
   const fullyMastered = p?.fullyMastered ?? false;
-  // Legacy records predate growthScore — treat their past coin count as if
-  // every pass had been clean (1.5 each), a reasonable one-time assumption
-  // that self-corrects as the word is reviewed again going forward.
-  const growthScore = p?.growthScore ?? successfulReviews * 1.5;
-  let nextReviewDue = p?.nextReviewDue ?? today();
-  // One-time migration: words that reached their first-ever review before the
-  // "first review is 1 day later" fix shipped were scheduled ~3 days out
-  // (the old mastery-based formula). Pull those back to lastPracticed+1 so
-  // already-learned words get the same fast first review as new ones —
-  // otherwise this is stuck on the stale value forever, since the fix only
-  // changes how *new* completions compute the date, not ones already saved.
-  if (successfulReviews === 1 && p?.lastPracticed) {
-    const target = addOneDay(p.lastPracticed);
-    if (nextReviewDue > target) nextReviewDue = target;
+  // Only a record that actually earned a stage under either the old or new
+  // system carries one forward — no default-to-'puppy' here, since that
+  // would wrongly make a word still mid-introduction (round 1/2, no stage
+  // yet) look review-eligible to buildReviewWords.
+  const mascotStage = p?.mascotStage ?? (fullyMastered ? 'long-crowned' : undefined);
+  // Grandfathering: a word already past introduction (has a stage) but with
+  // no next-review date, or one that's already overdue, becomes due today
+  // instead of trying to reverse-engineer a historical schedule — the exact
+  // same "meet it where it is" treatment an overdue review already gets.
+  // A genuinely future-dated old-schedule date is left alone (avoids
+  // dumping a huge backlog on a long-time user's first post-migration day).
+  let nextReviewDue = p?.nextReviewDue;
+  if (mascotStage && mascotStage !== 'long-crowned' && (!nextReviewDue || nextReviewDue < today())) {
+    nextReviewDue = today();
   }
+  if (mascotStage === 'long-crowned') nextReviewDue = undefined;
   return {
     id,
     round: (p?.round as Round) ?? 1,
     studiedTimes: p?.studiedTimes ?? successfulReviews,
     fullyMastered,
     lastPracticed: p?.lastPracticed,
-    masteryScore: p?.masteryScore ?? successfulReviews * 1.5,
-    growthScore,
     successfulReviews,
-    pendingMistakes: p?.pendingMistakes ?? 0,
     lastReviewedAt: p?.lastReviewedAt ?? p?.lastPracticed,
     nextReviewDue,
-    mascotStage: p?.mascotStage ?? (
-      fullyMastered ? 'long-crowned' : growthScore >= 4.5 ? 'medium' : growthScore >= 3.0 ? 'short' : 'puppy'
-    ),
+    mascotStage,
     exampleSentence: p?.exampleSentence,
   };
 }
@@ -642,26 +629,6 @@ export function resetDailyGoalsForExtraRound(): void {
   saveDailyStats(stats);
 }
 
-// --- Today's study batch (legacy — still used by the Study Extra flow's
-// underlying PracticeSession component; the main daily flow below has its
-// own studyWordIds instead) ---
-
-export function getTodayStudyBatch(): string[] | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = JSON.parse(localStorage.getItem(levelKey(KEYS.studyBatch)) || 'null');
-    if (raw && raw.date === today() && Array.isArray(raw.wordIds)) return raw.wordIds;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveTodayStudyBatch(wordIds: string[]): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(levelKey(KEYS.studyBatch), JSON.stringify({ date: today(), wordIds }));
-}
-
 // --- Today's single merged daily session ---
 // One guided flow per day: study the day's new words (with the round-1.5
 // translation-choice checkpoint woven in), a matching-quiz recap, then the
@@ -670,9 +637,9 @@ export function saveTodayStudyBatch(wordIds: string[]): void {
 // case a fresh session simply gets started) resumes cleanly. Naturally
 // invalidated once the date rolls over, same pattern as DailyStats.
 export type SessionPhase =
-  | 'study-rounds' | 'study-mcq' | 'study-mcq-2' | 'study-matching'
+  | 'study-rounds' | 'study-matching'
   | 'study-done'
-  | 'review-mcq' | 'review-rounds' | 'review-matching'
+  | 'review-mcq' | 'review-rounds'
   | 'report'
   | 'congrats'
   | 'done';
@@ -682,25 +649,14 @@ export interface DailySession {
   phase: SessionPhase;
   studyWordIds: string[];
   reviewWordIds: string[];
-  mcqQueueIds: string[];    // not-yet-tested ids in the current round-1.5 pass
-  mcqWrongIds: string[];    // wrong this pass — seeds the next pass, redone
-                             // immediately (not deferred to a later round)
-  mcq2QueueIds: string[];  // same idea, for the second checkpoint after round 2
-  mcq2WrongIds: string[];
-  // Ids that have had at least one attempt (right or wrong) at round 1 (resp.
-  // round 2) this session — the checkpoint gate fires once every study word
-  // is either past that round already or has this attempt recorded, so a
-  // wrong answer that leaves a word sitting at the same round no longer
-  // blocks the checkpoint from ever arriving (see allAttemptedRound in
-  // lib/practice.ts).
-  round1AttemptedIds: string[];
-  round2AttemptedIds: string[];
-  // Words on their first or second review (about to cross puppy->short or
-  // short->medium) get a "what does this word mean?" reminder before the
-  // round-4 recall test — this is that one-shot queue, populated when
-  // entering review (see lib/practice.ts's wordsNeedingReviewMcq), drained
-  // one word at a time regardless of right/wrong (no retry loop — it's a
-  // reminder, not a gate).
+  // Set once every study word has finished round 1 (the sentence exercise)
+  // and the mid-Day-1 matching quiz has run — keeps it from firing twice if
+  // the session is resumed mid-round-2.
+  studyMatchingDone: boolean;
+  // Every review-eligible word gets this "what does this word mean?"
+  // reminder before its round-ladder continuation, regardless of which
+  // milestone (1st/2nd/3rd review) it's on — drained one word at a time
+  // regardless of right/wrong (no retry loop, it's a reminder not a gate).
   reviewMcqQueueIds: string[];
   matchingQueueIds: string[]; // which page comes next in the matching quiz
   // The exact in-session order of the study/review round-ladder queue,
@@ -736,15 +692,11 @@ export function saveDailySession(s: DailySession): void {
 }
 
 export function startDailySession(studyWordIds: string[], reviewWordIds: string[], isExtra = false): DailySession {
-  // Words on their first or second review (about to cross puppy->short or
-  // short->medium) get the "what does this word mean?" reminder before
-  // anything else in review — computed up front so it's also what decides
-  // the initial phase below when there's nothing to study today.
-  const progress = getAllProgress();
-  const reviewMcqQueueIds = reviewWordIds.filter(id => {
-    const s = progress[id]?.successfulReviews ?? 0;
-    return s === 1 || s === 2;
-  });
+  // Every review-eligible word gets the pre-review "what does this word
+  // mean?" reminder, regardless of which milestone (1st/2nd/3rd review)
+  // it's on — computed up front so it's also what decides the initial
+  // phase below when there's nothing to study today.
+  const reviewMcqQueueIds = [...reviewWordIds];
 
   const s: DailySession = {
     date: today(),
@@ -757,15 +709,7 @@ export function startDailySession(studyWordIds: string[], reviewWordIds: string[
       : reviewWordIds.length > 0 ? 'review-rounds' : 'report',
     studyWordIds,
     reviewWordIds,
-    // Every study word owes a first-time round-1.5 check — this queue
-    // doubles as that work list AND as the "have we already run the
-    // batch-wide gate" flag (see allAttemptedRound in lib/practice.ts).
-    mcqQueueIds: [...studyWordIds],
-    mcqWrongIds: [],
-    mcq2QueueIds: [...studyWordIds],
-    mcq2WrongIds: [],
-    round1AttemptedIds: [],
-    round2AttemptedIds: [],
+    studyMatchingDone: false,
     reviewMcqQueueIds,
     matchingQueueIds: [],
     earnedPuppies: 0,

@@ -139,7 +139,7 @@ export default function WordsPage() {
         <span className="shrink-0 flex flex-col items-center gap-0.5">
           {earned(progress[w.id]) ? (
             <>
-              <DachshundMascot stage={progress[w.id].mascotStage} className="w-11 h-11" />
+              <DachshundMascot stage={progress[w.id].mascotStage ?? 'puppy'} className="w-11 h-11" />
               {!progress[w.id].fullyMastered && (
                 <span className="text-[10px] text-stone-500 whitespace-nowrap">
                   {reviewLabel(progress[w.id].nextReviewDue)}

@@ -6,14 +6,15 @@ import { useRouter } from 'next/navigation';
 import {
   getDailySession, saveDailySession, DailySession, SessionPhase,
   getWordProgress, saveWordProgress, getAllProgress, getSettings, today,
-  MAX_ROUND, Round, WordProgress, MascotStageId, Settings,
+  Round, WordProgress, MascotStageId, Settings,
   isStudyGoalDoneToday, isReviewGoalDoneToday, markStudyGoalDone, markReviewGoalDone,
   touchStreak, markCongratsShown, getDailyStats, addEarnedPuppy, addEarnedUpgrade,
 } from '../lib/storage';
 import {
-  wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint, REVIEW_BASE_ROUND,
-  allAttemptedRound, buildMcqChoices, buildMatchingPages,
+  wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint,
+  buildMcqChoices, buildMatchingPages,
 } from '../lib/practice';
+import { REVIEW_PLAN } from '../lib/srs';
 import { Word } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
@@ -25,10 +26,6 @@ import CongratsModal from './CongratsModal';
 import { speakWord } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
 import { correctSentence } from '../lib/ai';
-
-function shuffled<T>(arr: T[]): T[] {
-  return [...arr].sort(() => Math.random() - 0.5);
-}
 
 // Locates wordForm inside sentence (case-insensitive) so callers can
 // highlight/blank it — used by both BlankedSentence (rounds 2+/review) and
@@ -175,8 +172,8 @@ function BlankedSentence({ example, revealed }: { example: { sentence: string; w
 
 function isRoundsDone(id: string, mode: RoundMode): boolean {
   const p = getWordProgress(id);
-  if (mode === 'study') return p.round >= MAX_ROUND;
-  return !!(p.nextReviewDue && p.nextReviewDue > today());
+  if (mode === 'study') return !!p.mascotStage;
+  return p.fullyMastered || !!(p.nextReviewDue && p.nextReviewDue > today());
 }
 
 export default function DailySessionFlow() {
@@ -234,7 +231,8 @@ export default function DailySessionFlow() {
 
   const loadCurrent = (w: Word, mode: RoundMode) => {
     const progress = getWordProgress(w.id);
-    const round = mode === 'review' ? (reviewRoundsRef.current[w.id] ?? REVIEW_BASE_ROUND) : progress.round;
+    const reviewStartRound = REVIEW_PLAN[(progress.mascotStage ?? 'puppy') as 'puppy' | 'short' | 'medium'].startRound;
+    const round = mode === 'review' ? (reviewRoundsRef.current[w.id] ?? reviewStartRound) : progress.round;
     setCurrentRound(round);
     const h = generateHint(w.de, round);
     const chars = [...w.de];
@@ -275,64 +273,7 @@ export default function DailySessionFlow() {
     }
   }
 
-  // Round 1.5: every word in mcqQueueIds gets asked once; wrong ones queue
-  // up in mcqWrongIds and get redone (with fresh choices) as soon as this
-  // pass finishes — repeating until a full pass is clean, then back to the
-  // round ladder for round 2 onward.
-  function enterMcqPhase(ds: DailySession) {
-    if (ds.mcqQueueIds.length === 0) {
-      if (ds.mcqWrongIds.length === 0) {
-        const next: DailySession = { ...ds, phase: 'study-rounds' };
-        persistSession(next);
-        enterRoundsPhase(next, 'study');
-        return;
-      }
-      const next: DailySession = { ...ds, mcqQueueIds: shuffled(ds.mcqWrongIds), mcqWrongIds: [] };
-      persistSession(next);
-      enterMcqPhase(next);
-      return;
-    }
-    const w = wordsById([ds.mcqQueueIds[0]])[0];
-    if (!w) {
-      const next: DailySession = { ...ds, mcqQueueIds: ds.mcqQueueIds.slice(1) };
-      persistSession(next);
-      enterMcqPhase(next);
-      return;
-    }
-    const { choices } = buildMcqChoices(w, mcqSeenRef.current[w.id] ?? []);
-    mcqSeenRef.current[w.id] = [...(mcqSeenRef.current[w.id] ?? []), ...choices];
-    setMcqCurrent({ word: w, choices });
-  }
-
-  // Round 2.5 — same idea as round 1.5 above, fired again once every word's
-  // had its first attempt at round 2, using the parallel mcq2* fields so it
-  // doesn't interfere with checkpoint 1's own (already-drained) queue.
-  function enterMcq2Phase(ds: DailySession) {
-    if (ds.mcq2QueueIds.length === 0) {
-      if (ds.mcq2WrongIds.length === 0) {
-        const next: DailySession = { ...ds, phase: 'study-rounds' };
-        persistSession(next);
-        enterRoundsPhase(next, 'study');
-        return;
-      }
-      const next: DailySession = { ...ds, mcq2QueueIds: shuffled(ds.mcq2WrongIds), mcq2WrongIds: [] };
-      persistSession(next);
-      enterMcq2Phase(next);
-      return;
-    }
-    const w = wordsById([ds.mcq2QueueIds[0]])[0];
-    if (!w) {
-      const next: DailySession = { ...ds, mcq2QueueIds: ds.mcq2QueueIds.slice(1) };
-      persistSession(next);
-      enterMcq2Phase(next);
-      return;
-    }
-    const { choices } = buildMcqChoices(w, mcqSeenRef.current[w.id] ?? []);
-    mcqSeenRef.current[w.id] = [...(mcqSeenRef.current[w.id] ?? []), ...choices];
-    setMcqCurrent({ word: w, choices });
-  }
-
-  // Pre-review reminder for a word's first or second review (see
+  // Pre-review reminder for every review-eligible word (see
   // reviewMcqQueueIds) — a single pass, no retry-until-clean loop, since
   // this is a warmup nudge before the recall test, not a mastery gate.
   function enterReviewMcqPhase(ds: DailySession) {
@@ -370,8 +311,6 @@ export default function DailySessionFlow() {
 
     setSession(ds);
     if (ds.phase === 'study-rounds') enterRoundsPhase(ds, 'study');
-    else if (ds.phase === 'study-mcq') enterMcqPhase(ds);
-    else if (ds.phase === 'study-mcq-2') enterMcq2Phase(ds);
     else if (ds.phase === 'review-mcq') enterReviewMcqPhase(ds);
     else if (ds.phase === 'review-rounds') enterRoundsPhase(ds, 'review');
     setReady(true);
@@ -413,8 +352,8 @@ export default function DailySessionFlow() {
       setFeedback(correct);
       setJustCompleted(outcome.isFinal);
 
-      if (outcome.isFinal && outcome.scored && correct && beforeStage !== outcome.progress.mascotStage) {
-        const stage = outcome.progress.mascotStage;
+      const stage = outcome.progress.mascotStage;
+      if (outcome.isFinal && outcome.scored && correct && stage && beforeStage !== stage) {
         persistSession({
           ...session,
           earnedUpgrades: { ...session.earnedUpgrades, [stage]: (session.earnedUpgrades[stage] ?? 0) + 1 },
@@ -422,9 +361,10 @@ export default function DailySessionFlow() {
         addEarnedUpgrade(stage);
       }
     } else {
-      const roundBefore = progress.round;
+      // Day 1 (introduction) completes on a clean round-2 pass — correct at
+      // round 1 just promotes to round 2 (applyResult), it isn't "done" yet.
+      const completed = progress.round === 2 && correct;
       const updated = { ...applyResult(progress, correct), ...extra };
-      const completed = progress.round === MAX_ROUND && correct;
       const earnedBadge = updated.studiedTimes > progress.studiedTimes;
 
       saveWordProgress(updated);
@@ -432,22 +372,10 @@ export default function DailySessionFlow() {
       setFeedback(correct);
       setJustCompleted(completed);
 
-      // Record this word's first attempt at round 1 (resp. round 2) whether
-      // it was right or wrong — see allAttemptedRound: a wrong answer that
-      // leaves the word at the same round must still let the checkpoint
-      // arrive once every word's had its shot, not wait for every word to
-      // eventually answer correctly.
-      let nextSession = session;
-      if (roundBefore === 1 && !session.round1AttemptedIds.includes(word.id)) {
-        nextSession = { ...nextSession, round1AttemptedIds: [...nextSession.round1AttemptedIds, word.id] };
-      } else if (roundBefore === 2 && !session.round2AttemptedIds.includes(word.id)) {
-        nextSession = { ...nextSession, round2AttemptedIds: [...nextSession.round2AttemptedIds, word.id] };
-      }
       if (earnedBadge) {
-        nextSession = { ...nextSession, earnedPuppies: nextSession.earnedPuppies + 1 };
+        persistSession({ ...session, earnedPuppies: session.earnedPuppies + 1 });
+        addEarnedPuppy();
       }
-      if (nextSession !== session) persistSession(nextSession);
-      if (earnedBadge) addEarnedPuppy();
     }
 
     if (settings.autoPlayAudio) speakWord(word);
@@ -483,33 +411,37 @@ export default function DailySessionFlow() {
     setAttemptKey(k => k + 1);
   };
 
-  function finishStudyRounds(ds: DailySession) {
-    // Pages are fully padded to 5 (or fewer, only if the whole batch is
-    // under 5) up front, so the queue is just consumed 5 at a time — see
-    // currentMatchingPage/handleMatchingPageComplete.
-    persistSession({ ...ds, phase: 'study-matching', matchingQueueIds: buildMatchingPages(ds.studyWordIds).flat() });
-  }
-  function finishReviewRounds(ds: DailySession) {
-    persistSession({ ...ds, phase: 'review-matching', matchingQueueIds: buildMatchingPages(ds.reviewWordIds).flat() });
+  // The mid-Day-1 checkpoint — pages are fully padded to 5 (or fewer, only
+  // if the whole batch is under 5) up front, so the queue is just consumed
+  // 5 at a time — see currentMatchingPage/handleMatchingPageComplete.
+  function enterStudyMatching(ds: DailySession) {
+    persistSession({
+      ...ds, phase: 'study-matching', studyMatchingDone: true,
+      matchingQueueIds: buildMatchingPages(ds.studyWordIds).flat(),
+    });
   }
 
-  function handleMcqBatchAnswer(correct: boolean) {
-    if (!session || !mcqCurrent) return;
-    if (session.phase === 'study-mcq-2') {
-      const rest = session.mcq2QueueIds.slice(1);
-      const wrong = correct ? session.mcq2WrongIds : [...session.mcq2WrongIds, mcqCurrent.word.id];
-      const next: DailySession = { ...session, mcq2QueueIds: rest, mcq2WrongIds: wrong };
-      setMcqCurrent(null);
-      persistSession(next);
-      enterMcq2Phase(next);
-      return;
+  // Day 1 truly complete for every word in today's batch (round 2 passed —
+  // see isRoundsDone's study branch).
+  function finishStudyRounds(ds: DailySession) {
+    markStudyGoalDone(ds.studyWordIds.length);
+    if (ds.reviewWordIds.length === 0) {
+      // Nothing to review today — skip the "Continue to review" interim
+      // screen entirely and go straight toward the congrats card (via
+      // 'report', which itself auto-skips to 'congrats' if there's
+      // nothing to show there either).
+      markReviewGoalDone(0);
+      persistSession({ ...ds, phase: 'report' });
+    } else {
+      persistSession({ ...ds, phase: 'study-done' });
     }
-    const rest = session.mcqQueueIds.slice(1);
-    const wrong = correct ? session.mcqWrongIds : [...session.mcqWrongIds, mcqCurrent.word.id];
-    const next: DailySession = { ...session, mcqQueueIds: rest, mcqWrongIds: wrong };
-    setMcqCurrent(null);
-    persistSession(next);
-    enterMcqPhase(next);
+  }
+
+  // Every review word has reached its own milestone's cap round — no
+  // matching quiz on review days (Day-1-only per the schedule).
+  function finishReviewRounds(ds: DailySession) {
+    markReviewGoalDone(ds.reviewWordIds.length);
+    persistSession({ ...ds, phase: 'report' });
   }
 
   // Pre-review reminder: just moves on regardless of right/wrong — see
@@ -529,23 +461,17 @@ export default function DailySessionFlow() {
     setQueue(rest);
     const restIds = rest.map(w => w.id);
 
-    const progress = getAllProgress();
-    if (session.mcqQueueIds.length > 0 && allAttemptedRound(session.studyWordIds, progress, 1, session.round1AttemptedIds)) {
-      const next: DailySession = { ...session, phase: 'study-mcq', studyQueueIds: restIds };
-      persistSession(next);
-      enterMcqPhase(next);
-      return;
-    }
-    // Checkpoint 2 only becomes reachable once checkpoint 1 has fully
-    // drained — its own gate can't be satisfied before checkpoint 1's
-    // anyway (round 2 needs round 1 first), but this keeps the two in their
-    // natural order rather than relying on that alone.
-    if (session.mcqQueueIds.length === 0 && session.mcq2QueueIds.length > 0
-      && allAttemptedRound(session.studyWordIds, progress, 2, session.round2AttemptedIds)) {
-      const next: DailySession = { ...session, phase: 'study-mcq-2', studyQueueIds: restIds };
-      persistSession(next);
-      enterMcq2Phase(next);
-      return;
+    // The mid-Day-1 matching quiz fires once, exactly when every word in
+    // today's batch has finished round 1 (the sentence exercise always
+    // promotes round 1 -> 2 on submit, so "round >= 2" is that signal) —
+    // before round 2 continues.
+    if (!session.studyMatchingDone) {
+      const progress = getAllProgress();
+      const allDoneRound1 = session.studyWordIds.every(id => (progress[id]?.round ?? 1) >= 2);
+      if (allDoneRound1) {
+        enterStudyMatching({ ...session, studyQueueIds: restIds });
+        return;
+      }
     }
 
     const next: DailySession = { ...session, studyQueueIds: restIds };
@@ -591,23 +517,12 @@ export default function DailySessionFlow() {
     finishMatchingPhase(session);
   }
 
+  // Only ever reached from study-matching (no matching quiz on review days)
+  // — returns to the round ladder so round 2 continues.
   function finishMatchingPhase(ds: DailySession) {
-    if (ds.phase === 'study-matching') {
-      markStudyGoalDone(ds.studyWordIds.length);
-      if (ds.reviewWordIds.length === 0) {
-        // Nothing to review today — skip the "Continue to review" interim
-        // screen entirely and go straight toward the congrats card (via
-        // 'report', which itself auto-skips to 'congrats' if there's
-        // nothing to show there either).
-        markReviewGoalDone(0);
-        persistSession({ ...ds, phase: 'report' });
-      } else {
-        persistSession({ ...ds, phase: 'study-done' });
-      }
-    } else {
-      markReviewGoalDone(ds.reviewWordIds.length);
-      persistSession({ ...ds, phase: 'report' });
-    }
+    const next: DailySession = { ...ds, phase: 'study-rounds' };
+    persistSession(next);
+    enterRoundsPhase(next, 'study');
   }
 
   function handleContinueToReview() {
@@ -689,17 +604,12 @@ export default function DailySessionFlow() {
     );
   }
 
-  if (session.phase === 'study-mcq' || session.phase === 'study-mcq-2') {
-    if (!mcqCurrent) return null;
-    return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} choices={mcqCurrent.choices} onAnswer={handleMcqBatchAnswer} />;
-  }
-
   if (session.phase === 'review-mcq') {
     if (!mcqCurrent) return null;
     return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} choices={mcqCurrent.choices} onAnswer={handleReviewMcqAnswer} />;
   }
 
-  if (session.phase === 'study-matching' || session.phase === 'review-matching') {
+  if (session.phase === 'study-matching') {
     const page = currentMatchingPage(session);
     if (page.length === 0) return null;
     return <MatchingQuizPage key={matchingPageKey} words={page} onComplete={handleMatchingPageComplete} />;

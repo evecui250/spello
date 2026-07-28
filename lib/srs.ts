@@ -1,34 +1,6 @@
 'use client';
 
-import { MascotStageId, WordProgress, today } from './storage';
-
-// ============================================================================
-// Mastery Score (M) — scheduling only
-//
-//   M = (S * 1.5) + log2(daysElapsed + 1) - (2 * mistakes),  floored at 0
-//
-//   S           = total successful no-hint (round 4) passes
-//   daysElapsed  = calendar days since the word was last successfully reviewed
-//   mistakes     = failed attempts since that last success
-//
-// This drives review scheduling (getNextReviewInterval) only. It can dip
-// after a mistake — that's fine, it just means "review this again sooner."
-// It does NOT drive the mascot or retirement anymore; see growthScore below.
-// ============================================================================
-export function calculateMasteryScore(
-  successfulReviews: number,
-  daysElapsed: number,
-  mistakes: number,
-): number {
-  const raw = successfulReviews * 1.5 + Math.log2(daysElapsed + 1) - 2 * mistakes;
-  return Math.max(0, raw);
-}
-
-// Interval doubles with mastery — 2^M days — clamped to [1, 120].
-export function getNextReviewInterval(masteryScore: number): number {
-  const days = Math.round(2 ** masteryScore);
-  return Math.min(120, Math.max(1, days));
-}
+import { MascotStageId, Round, WordProgress, today } from './storage';
 
 export function addDays(dateStr: string, days: number): string {
   const d = new Date(`${dateStr}T00:00:00Z`);
@@ -43,116 +15,65 @@ export function daysBetween(fromStr: string, toStr: string): number {
 }
 
 // ============================================================================
-// Growth Score (M') — drives the mascot and retirement
-//
-// Monotonic: it only ever increases. A successful round-4 pass adds an
-// increment that's full value if the pass was clean (no mistake since the
-// last success), and smaller the more mistakes preceded it — so a forgotten
-// word climbs slower, but a mistake never erases progress already earned.
-//
-//   increment = 1.5 / (1 + mistakesSincePreviousSuccess * 0.5)
-//
-// Clean pass -> +1.5. One mistake first -> +1.0. Two -> +0.75. Etc.
-// ============================================================================
-const GROWTH_INCREMENT_BASE = 1.5;
-const GROWTH_MISTAKE_DECAY = 0.5;
-
-export function calculateGrowthIncrement(pendingMistakes: number): number {
-  return GROWTH_INCREMENT_BASE / (1 + pendingMistakes * GROWTH_MISTAKE_DECAY);
-}
-
-// ============================================================================
-// Mascot stages — thresholds on growthScore. A clean word lands exactly on
-// a new stage with each successful pass: pass 1 -> Puppy (1.5), pass 2 ->
-// Short (3.0), pass 3 -> Medium (4.5), pass 4 -> Mastered (6.0).
-// ============================================================================
-export interface MascotStageInfo {
-  id: MascotStageId;
-  name: string;
-  visualKey: string;  // for a future UI layer to map to actual artwork
-  isMastered: boolean;
-  minScore: number;
-}
-
-export const MASTERY_GROWTH_THRESHOLD = 6.0;
-
-export const MASCOT_STAGES: MascotStageInfo[] = [
-  { id: 'puppy', name: 'Puppy Dachshund', visualKey: 'mascot-puppy', isMastered: false, minScore: 0 },
-  { id: 'short', name: 'Young Dachshund', visualKey: 'mascot-short', isMastered: false, minScore: 3.0 },
-  { id: 'medium', name: 'Adult Dachshund', visualKey: 'mascot-medium', isMastered: false, minScore: 4.5 },
-  { id: 'long-crowned', name: 'Master Dachshund', visualKey: 'mascot-long-crowned', isMastered: true, minScore: MASTERY_GROWTH_THRESHOLD },
-];
-
-export function getMascotStage(growthScore: number): MascotStageInfo {
-  let stage = MASCOT_STAGES[0];
-  for (const s of MASCOT_STAGES) {
-    if (growthScore >= s.minScore) stage = s;
-  }
-  return stage;
-}
-
-// ============================================================================
-// Wiring — applied on the round-4 pass that actually concludes a word's
-// climb, whether that happened in Study or after however many retries in
-// Review. Mistakes along the way are tracked separately (WordProgress.
-// pendingMistakes, bumped directly in practice.ts) — they shrink this
-// pass's growth increment but don't touch the schedule until this fires.
+// Fixed review schedule — replaces the old mastery-score/growth-score
+// formulas entirely. Every word goes through exactly 4 milestones (one per
+// mascot stage): introduction (round 1 sentence -> round 2), then 3 reviews
+// at fixed offsets from whenever the previous milestone actually completed
+// (not from a fixed introduction date, so a late review doesn't throw off
+// the rest of the schedule — same forgiving behavior the old system had for
+// overdue reviews).
 // ============================================================================
 
-// The very first successful pass gets a short 1-day interval instead of the
-// formula's ~3 days (2^1.5) — closer to real forgetting-curve practice (the
-// steepest drop-off is in the first 24-48h), and it guarantees a word
-// learned today shows up for review again tomorrow rather than sitting out
-// for a few days. Every later pass still uses the normal exponential
-// formula unchanged.
-function reviewIntervalFor(successfulReviews: number, masteryScore: number): number {
-  return successfulReviews === 1 ? 1 : getNextReviewInterval(masteryScore);
-}
+// Days to wait after passing a given stage before its next review is due.
+// null = fully mastered, retired from review for good.
+export const OFFSET_AFTER_STAGE: Record<MascotStageId, number | null> = {
+  puppy: 1,
+  short: 3,
+  medium: 5,
+  'long-crowned': null,
+};
 
-// A successful round-4 pass: banks a coin (legacy field, kept for existing
-// UI), advances S and growthScore, and reschedules the next review using
-// the freshly recalculated M.
-export function recordRound4Success(progress: WordProgress, todayStr: string = today()): WordProgress {
-  const successfulReviews = progress.successfulReviews + 1;
-  const daysElapsed = progress.lastReviewedAt ? daysBetween(progress.lastReviewedAt, todayStr) : 0;
-  const masteryScore = calculateMasteryScore(successfulReviews, daysElapsed, progress.pendingMistakes);
-  const growthScore = progress.growthScore + calculateGrowthIncrement(progress.pendingMistakes);
-  const stage = getMascotStage(growthScore);
+// Each review milestone's starting round (wherever the word left off last
+// time), the round it must pass to complete that milestone, and the stage
+// it advances to on a pass. Only the 3 non-terminal stages ever enter a
+// review (long-crowned is retired).
+export const REVIEW_PLAN: Record<'puppy' | 'short' | 'medium', {
+  nextStage: MascotStageId;
+  startRound: Round;
+  capRound: Round;
+}> = {
+  puppy:  { nextStage: 'short',        startRound: 2, capRound: 3 },
+  short:  { nextStage: 'medium',       startRound: 3, capRound: 4 },
+  medium: { nextStage: 'long-crowned', startRound: 4, capRound: 4 },
+};
+
+// The round a word sits at once it reaches a given stage — used to make
+// sure `round` never reports lower than what was actually just passed.
+const ROUND_FOR_STAGE: Record<MascotStageId, Round> = {
+  puppy: 2, short: 3, medium: 4, 'long-crowned': 4,
+};
+
+// Total days from introduction to full mastery, on-schedule with no
+// mistakes: 1 (1st review) + 3 (2nd) + 5 (3rd) = 9. Replaces the old
+// simulateDaysToMastery — no simulation needed, the schedule is fixed.
+export const MASTERY_DAYS_AFTER_INTRODUCTION = 9;
+
+// The single write path for advancing a word to its next milestone —
+// called on a clean pass at round 2 (introduction) or at a review's cap
+// round (1st/2nd/3rd review). Sets the new stage, reschedules the next
+// review at its fixed offset from today (or retires the word for good at
+// long-crowned), and keeps round/studiedTimes/successfulReviews/
+// fullyMastered in step.
+export function recordMilestonePass(progress: WordProgress, toStage: MascotStageId, todayStr: string = today()): WordProgress {
+  const offset = OFFSET_AFTER_STAGE[toStage];
   return {
     ...progress,
-    successfulReviews,
-    pendingMistakes: 0,
-    masteryScore,
-    growthScore,
-    mascotStage: stage.id,
+    mascotStage: toStage,
+    round: Math.max(progress.round, ROUND_FOR_STAGE[toStage]) as Round,
     lastReviewedAt: todayStr,
-    nextReviewDue: addDays(todayStr, reviewIntervalFor(successfulReviews, masteryScore)),
-    // Kept in sync so the existing coin/mastered UI (Stats, Words badges,
-    // Home's mastered count, the congrats card) keeps working unchanged.
-    studiedTimes: successfulReviews,
-    fullyMastered: stage.isMastered,
+    nextReviewDue: offset === null ? undefined : addDays(todayStr, offset),
+    fullyMastered: toStage === 'long-crowned',
+    studiedTimes: progress.studiedTimes + 1,
+    successfulReviews: progress.successfulReviews + 1,
   };
-}
-
-// For the Settings-page forecast: how many calendar days it takes one word
-// to go from "just introduced" (1 clean pass) to mastered (growthScore >=
-// 6.0, i.e. 4 clean passes), assuming every review happens exactly on
-// schedule with no mistakes. Days-per-pass still comes from M's scheduling
-// (which does compound); the pass count needed comes from growthScore's
-// flat, linear climb.
-export function simulateDaysToMastery(): number {
-  let successfulReviews = 1;
-  let masteryScore = calculateMasteryScore(successfulReviews, 0, 0);
-  let growthScore = GROWTH_INCREMENT_BASE;
-  let totalDays = 0;
-  let guard = 0;
-  while (growthScore < MASTERY_GROWTH_THRESHOLD && guard < 100) {
-    const interval = reviewIntervalFor(successfulReviews, masteryScore);
-    totalDays += interval;
-    successfulReviews += 1;
-    masteryScore = calculateMasteryScore(successfulReviews, interval, 0);
-    growthScore += GROWTH_INCREMENT_BASE;
-    guard += 1;
-  }
-  return totalDays;
 }

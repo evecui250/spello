@@ -48,7 +48,7 @@ export default function ProgressPage() {
     const p = progress[w.id];
     if (!p || p.studiedTimes === 0) continue;
     introducedCount++;
-    stageCounts[p.mascotStage] += 1;
+    stageCounts[p.mascotStage ?? 'puppy'] += 1;
   }
   const bars = STAGE_ORDER.map(id => ({ id, count: stageCounts[id], color: STAGE_COLORS[id] }));
   const maxStageCount = Math.max(...bars.map(b => b.count), 1);

@@ -3,7 +3,7 @@
 import { supabase } from './supabase';
 import {
   getActiveLevel,
-  getAllProgressForLevel, saveAllProgressForLevel, WordProgress,
+  getAllProgressForLevel, saveAllProgressForLevel, WordProgress, MascotStageId,
   getStreakForLevel, saveStreakForLevel, Streak,
   getSettingsForLevel, saveSettingsForLevel, getSettingsUpdatedAtForLevel, Settings,
 } from './storage';
@@ -50,8 +50,19 @@ function renameB2Key<T>(obj: Partial<Record<string, T>>): Partial<Record<Level, 
   return out;
 }
 
+// Earlier stage = less mature; no stage at all (still mid-introduction) ranks
+// below every real stage.
+const STAGE_RANK: Record<MascotStageId, number> = { puppy: 0, short: 1, medium: 2, 'long-crowned': 3 };
+function stageRank(p: WordProgress): number {
+  return p.mascotStage ? STAGE_RANK[p.mascotStage] : -1;
+}
+
 // Prefers whichever side is "further along" for each word, so syncing never
-// loses progress made on either device.
+// loses progress made on either device. Compares by mascotStage first, not
+// raw `round` — round alone isn't a reliable "further along" signal (a
+// stale/legacy record can carry a mismatched round value that has nothing
+// to do with actual milestones passed, which used to let a stale remote
+// row silently overwrite correct local progress).
 function mergeProgress(
   local: Record<string, WordProgress>,
   remote: Record<string, WordProgress>,
@@ -61,10 +72,10 @@ function mergeProgress(
     const r = remote[id];
     const l = merged[id];
     if (!l) { merged[id] = r; continue; }
-    const remoteIsFurther = r.round !== l.round
-      ? r.round > l.round
-      : r.studiedTimes !== l.studiedTimes
-        ? r.studiedTimes > l.studiedTimes
+    const remoteIsFurther = stageRank(r) !== stageRank(l)
+      ? stageRank(r) > stageRank(l)
+      : r.successfulReviews !== l.successfulReviews
+        ? r.successfulReviews > l.successfulReviews
         : (r.lastPracticed ?? '') > (l.lastPracticed ?? '');
     if (remoteIsFurther) merged[id] = r;
   }

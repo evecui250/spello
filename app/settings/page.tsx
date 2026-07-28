@@ -201,12 +201,10 @@ export default function SettingsPage() {
           </div>
           {showPaceInfo && (
             <div className="absolute top-full left-0 mt-2 z-10 w-full bg-amber-50/95 backdrop-blur-sm border border-amber-100 rounded-xl px-4 py-3 text-sm text-stone-700 shadow-lg">
-              Each word gets a mastery score instead of a fixed review count.
-              A correct review raises it and pushes the next review further
-              away (spaced repetition); a mistake slows the next gain but
-              never erases progress already made. After the first time you
-              learn a word, plus about 3 clean reviews spread across a few
-              months, it&apos;s fully mastered.
+              Each word follows a fixed schedule instead of a score: review
+              it 1 day after you learn it, 3 days after that, then 5 days
+              after that — three reviews, about 9 days total, and
+              it&apos;s fully mastered.
             </div>
           )}
         </div>

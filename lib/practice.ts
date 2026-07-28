@@ -2,14 +2,10 @@
 
 import { WORDS, Word, wordsForLevel } from './words';
 import {
-  getAllProgress, getSettings, today, MAX_ROUND, Round, WordProgress,
+  getAllProgress, getSettings, today, Round, WordProgress, MascotStageId,
   getDailySession, saveDailySession, SessionPhase,
 } from './storage';
-import { recordRound4Success, simulateDaysToMastery } from './srs';
-
-// Reviews always start from this baseline difficulty — the word isn't new,
-// so testing it from round 1 would be too easy.
-export const REVIEW_BASE_ROUND: Round = 4;
+import { recordMilestonePass, REVIEW_PLAN, MASTERY_DAYS_AFTER_INTRODUCTION } from './srs';
 
 function shuffled<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
@@ -30,11 +26,13 @@ export function wordsById(ids: string[]): Word[] {
 const SHORT_WORD_GRACE_COUNT = 100;
 const SHORT_WORD_MAX_LENGTH = 6;
 
-// Study pool: words that haven't reached round 4 yet — brand new words and
-// words still climbing the round 1-4 ladder, however many days that's taken.
-// Words already in progress (abandoned mid-ladder) are prioritized over
-// brand-new ones, so an unfinished word gets picked up again before more
-// new words are introduced.
+// Study pool: brand-new words, plus words that have started introduction
+// (round 1/2) but haven't finished it yet — i.e. no mascotStage assigned.
+// Once a word passes round 2 for the first time (mascotStage set), it's
+// done with Study for good and moves to the review pool instead, however
+// many further reviews it still owes. Words already in progress (abandoned
+// mid-introduction) are prioritized over brand-new ones, so an unfinished
+// word gets picked up again before more new words are introduced.
 export function buildStudyWords(
   limit = getSettings().studyBatchSize,
   excludeIds: Set<string> = new Set(),
@@ -47,7 +45,7 @@ export function buildStudyWords(
     if (excludeIds.has(w.id)) continue;
     const p = allProgress[w.id];
     if (!p) fresh.push(w);
-    else if (!p.fullyMastered && p.round < MAX_ROUND) inProgress.push(w);
+    else if (!p.mascotStage) inProgress.push(w);
   }
 
   let freshOrdered = shuffled(fresh);
@@ -73,14 +71,16 @@ export function buildStudyWords(
 // shrinking drops from the not-yet-finished tail first, but never below
 // however many are already done today — a smaller pace shouldn't undo
 // progress already made.
-const RESIZABLE_STUDY_PHASES: SessionPhase[] = ['study-rounds', 'study-mcq', 'study-mcq-2', 'study-matching'];
+// Scoped to study-rounds only — a size change made while the mid-Day-1
+// matching quiz is on-screen just takes effect on the next visit instead.
+const RESIZABLE_STUDY_PHASES: SessionPhase[] = ['study-rounds'];
 
 export function resizeTodayStudyBatch(newSize: number): void {
   const session = getDailySession();
   if (!session || !RESIZABLE_STUDY_PHASES.includes(session.phase)) return;
 
   const allProgress = getAllProgress();
-  const isDone = (id: string) => (allProgress[id]?.round ?? 1) >= MAX_ROUND;
+  const isDone = (id: string) => !!allProgress[id]?.mascotStage;
   const existing = session.studyWordIds;
   const doneIds = existing.filter(isDone);
   const pendingIds = existing.filter(id => !isDone(id));
@@ -89,10 +89,6 @@ export function resizeTodayStudyBatch(newSize: number): void {
   if (targetSize > existing.length) {
     const extra = buildStudyWords(targetSize - existing.length, new Set(existing));
     session.studyWordIds = [...existing, ...extra.map(w => w.id)];
-    // Brand new to today's batch, so they owe both round-1.5 checks too —
-    // without this they'd silently never get either.
-    session.mcqQueueIds = [...session.mcqQueueIds, ...extra.map(w => w.id)];
-    session.mcq2QueueIds = [...session.mcq2QueueIds, ...extra.map(w => w.id)];
     // Keep the live round-ladder queue (see DailySessionFlow) in step too —
     // without this it goes stale and the progress bar's "done / total" count
     // can go negative or otherwise stop matching the resized batch.
@@ -102,25 +98,21 @@ export function resizeTodayStudyBatch(newSize: number): void {
     const keepPending = pendingIds.slice(0, targetSize - doneIds.length);
     session.studyWordIds = [...doneIds, ...keepPending];
     const kept = new Set(session.studyWordIds);
-    session.mcqQueueIds = session.mcqQueueIds.filter(id => kept.has(id));
-    session.mcqWrongIds = session.mcqWrongIds.filter(id => kept.has(id));
-    session.mcq2QueueIds = session.mcq2QueueIds.filter(id => kept.has(id));
-    session.mcq2WrongIds = session.mcq2WrongIds.filter(id => kept.has(id));
-    session.round1AttemptedIds = session.round1AttemptedIds.filter(id => kept.has(id));
-    session.round2AttemptedIds = session.round2AttemptedIds.filter(id => kept.has(id));
     if (session.studyQueueIds) session.studyQueueIds = session.studyQueueIds.filter(id => kept.has(id));
     saveDailySession(session);
   }
 }
 
-// Review pool: words that have earned at least one coin (reached round 4 and
-// been tested there successfully) and aren't fully mastered yet. By default,
-// only words that are actually due (today >= nextReviewDue, per the SRS
-// schedule) are eligible — spacing grows with mastery, so a strong word
-// might not be due again for weeks or months. Pass `includeToday` to bypass
-// the schedule for early bonus practice (the "Review Extra" flow); those
-// attempts don't affect the schedule or score (see applyReviewResult).
-// `excludeIds` lets a session pull additional batches via "Review more".
+// Earlier stage = less mature = reviewed first when due dates tie.
+const STAGE_RANK: Record<MascotStageId, number> = { puppy: 0, short: 1, medium: 2, 'long-crowned': 3 };
+
+// Review pool: words that have finished introduction (mascotStage set) and
+// aren't fully mastered yet — regardless of which of the 3 review
+// milestones they're on. By default, only words actually due (today >=
+// nextReviewDue) are eligible. Pass `includeToday` to bypass the schedule
+// for early bonus practice (the "Review Extra" flow); those attempts don't
+// affect the schedule (see applyReviewResult). `excludeIds` lets a session
+// pull additional batches via "Review more".
 export function buildReviewWords(
   limit = getSettings().dailyReview,
   excludeIds: Set<string> = new Set(),
@@ -130,16 +122,16 @@ export function buildReviewWords(
   const t = today();
   const pool = wordsForLevel(getSettings().level).filter(w => {
     const p = allProgress[w.id];
-    if (!p || p.fullyMastered || p.round !== MAX_ROUND || p.successfulReviews < 1) return false;
+    if (!p || !p.mascotStage || p.fullyMastered) return false;
     if (excludeIds.has(w.id)) return false;
     if (!includeToday && p.nextReviewDue && p.nextReviewDue > t) return false;
     return true;
   });
-  // Most overdue first, then weakest (lowest mastery score) first.
+  // Most overdue first, then earliest-stage (least mature) first.
   pool.sort((a, b) => {
     const dueA = allProgress[a.id].nextReviewDue ?? t;
     const dueB = allProgress[b.id].nextReviewDue ?? t;
-    return dueA.localeCompare(dueB) || allProgress[a.id].masteryScore - allProgress[b.id].masteryScore;
+    return dueA.localeCompare(dueB) || STAGE_RANK[allProgress[a.id].mascotStage!] - STAGE_RANK[allProgress[b.id].mascotStage!];
   });
   return pool.slice(0, limit);
 }
@@ -180,12 +172,12 @@ export function generateHint(word: string, round: Round): boolean[] {
   return base.map((h, i) => (isLetter(chars[i]) ? h : false));
 }
 
-// Suggests a daily review count. Each word needs exactly 3 successful
-// reviews after introduction to retire (at ~day 3, ~day 35, and ~day 155,
-// per the SRS schedule in lib/srs.ts) — so once the pace has been running
-// long enough for all three cohorts to be active simultaneously, steady-state
-// daily review load converges to 3x the study pace (three cohorts' worth of
-// words landing on any given day).
+// Suggests a daily review count. Each word needs exactly 3 reviews after
+// introduction to retire (at +1, +4, and +9 days, per the fixed schedule in
+// lib/srs.ts) — so once the pace has been running long enough for all three
+// cohorts to be active simultaneously, steady-state daily review load
+// converges to 3x the study pace (three cohorts' worth of words landing on
+// any given day).
 export function recommendedDailyReview(studyBatchSize: number): number {
   return Math.max(1, Math.min(100, Math.round(studyBatchSize * 3)));
 }
@@ -196,19 +188,16 @@ export interface ProgressForecast {
   daysToMasterAll: number;
 }
 
-// Rough forecast for the Settings page: how many days at the given pace
-// until every word has been studied at least once, and until every word is
-// mastered (mascot stage 4, M >= 10). daysToMasterAll's baseline assumes
-// review capacity isn't a bottleneck — i.e. dailyReview is generous enough
-// to review every due word — since with exponentially-spaced reviews the
-// true due-word volume on any given day depends on the whole history of
-// when each word was introduced, which isn't tractable to forecast exactly
-// here. What IS tractable: comparing dailyReview against the steady-state
-// load this study pace eventually produces (recommendedDailyReview) — if
-// the cap is below that, reviews queue up behind it, so the natural timeline
-// is stretched proportionally to how underprovisioned the cap is. Rough, but
-// it means moving the review slider actually moves this number, instead of
-// silently assuming unlimited review capacity regardless of what's set.
+// Forecast for the Settings page: how many days at the given pace until
+// every word has been studied at least once, and until every word is fully
+// mastered. daysToMasterAll's baseline is the fixed schedule's own runway
+// (MASTERY_DAYS_AFTER_INTRODUCTION — 9 days, on-schedule) — the last word
+// introduced still needs this full runway after it's introduced; earlier
+// words mature in parallel alongside it. Comparing dailyReview against the
+// steady-state load this study pace eventually produces
+// (recommendedDailyReview) stretches that runway proportionally if the
+// review cap is underprovisioned, so moving the review slider actually
+// moves this number instead of assuming unlimited review capacity.
 export function estimateProgressForecast(studyBatchSize: number, dailyReview: number): ProgressForecast {
   const allProgress = getAllProgress();
   const levelWords = wordsForLevel(getSettings().level);
@@ -220,14 +209,9 @@ export function estimateProgressForecast(studyBatchSize: number, dailyReview: nu
   const wordsRemaining = levelWords.length - introduced;
   const daysToIntroduceAll = studyBatchSize > 0 ? Math.ceil(wordsRemaining / studyBatchSize) : Infinity;
 
-  // The natural pace the SRS formula itself produces, from first study pass
-  // to crossing the mastery score, assuming on-schedule reviews with no
-  // mistakes. The last word introduced still needs this full runway after
-  // it's introduced; earlier words mature in parallel alongside it.
-  const naturalDays = simulateDaysToMastery();
   const neededReviewCapacity = recommendedDailyReview(studyBatchSize);
   const bottleneckFactor = dailyReview > 0 ? Math.max(1, neededReviewCapacity / dailyReview) : Infinity;
-  const daysToMasterAll = daysToIntroduceAll + naturalDays * bottleneckFactor;
+  const daysToMasterAll = daysToIntroduceAll + MASTERY_DAYS_AFTER_INTRODUCTION * bottleneckFactor;
 
   return { wordsRemaining, daysToIntroduceAll, daysToMasterAll };
 }
@@ -244,41 +228,39 @@ export function checkAnswer(word: string, answer: string): boolean {
   return word.toLowerCase() === answer.trim().toLowerCase();
 }
 
-// Wrong answer → stay at the same round and just try it again (no demotion —
-// see requestHint below for the learner-initiated way to actually drop a
-// round for more scaffolding).
-// Correct answer below round 4 → promote one round.
-// Correct answer at round 4 → this is a real successful no-hint pass, so it
-// feeds the SRS scoring (mastery score, mascot stage, next review date) —
-// same bookkeeping a Review success gets. Round 4 is now the ceiling: one
-// clean no-hint pass is the whole pass condition, there's no round 5.
+// Wrong answer or an explicit Hint request both demote one round for more
+// scaffolding (never below round 1 — round 1 is the sentence exercise,
+// which is exempt from ever being retriggered by a wrong round-2 answer;
+// see the caller in components/DailySessionFlow.tsx, which shows the old
+// copy-the-word tiles instead when a word demoted to round 1 already has
+// an exampleSentence).
+function demoteRound(currentRound: Round, floor: Round = 1): Round {
+  return Math.max(floor, currentRound - 1) as Round;
+}
+
+// Round 1 (the sentence exercise) always "passes" on submit — this only
+// ever runs with progress.round already at 1 (promote to 2) or 2 (a real
+// test: wrong demotes to round 1, correct completes introduction).
 export function applyResult(progress: WordProgress, correct: boolean): WordProgress {
   const lastPracticed = today();
 
   if (!correct) {
-    return { ...progress, lastPracticed };
+    return { ...progress, round: demoteRound(progress.round), lastPracticed };
   }
-
-  if (progress.round < MAX_ROUND) {
-    const round = (progress.round + 1) as Round;
-    return { ...progress, round, lastPracticed };
+  if (progress.round < 2) {
+    return { ...progress, round: (progress.round + 1) as Round, lastPracticed };
   }
-
-  return { ...recordRound4Success(progress), round: MAX_ROUND, lastPracticed };
+  return recordMilestonePass({ ...progress, lastPracticed }, 'puppy', lastPracticed);
 }
 
-// A learner-requested hint: explicitly demotes one round for more scaffolding
-// (round 3 shows the first letter, round 2 shows ~half, round 1 is a full
-// copy) — a deliberate ask, distinct from a wrong typed answer, which just
-// retries at the same round. Counts the same as a mistake for SRS purposes
-// (shrinks the eventual growth increment when the word is finally passed),
-// since the learner is telling us they didn't know it unaided. Not available
-// at round 1 — already the most scaffolded there is, nowhere lower to go.
+// A learner-requested hint: explicitly demotes one round for more
+// scaffolding, same demotion a wrong answer now causes — a proactive ask
+// instead of a reactive one. Not available at round 1 (nothing lower to
+// go — the button itself is hidden then).
 export function requestHint(progress: WordProgress, currentRound: Round): { progress: WordProgress; nextRound: Round } {
-  const nextRound = Math.max(1, currentRound - 1) as Round;
   return {
-    progress: { ...progress, pendingMistakes: progress.pendingMistakes + 1, lastPracticed: today() },
-    nextRound,
+    progress: { ...progress, lastPracticed: today() },
+    nextRound: demoteRound(currentRound),
   };
 }
 
@@ -287,65 +269,44 @@ export interface ReviewOutcome {
   // The round to show next time this word comes up in this session — only
   // meaningful when `isFinal` is false (isFinal means it's leaving the queue).
   nextRound: Round;
-  // True once this word's review episode is over: either a full pass at
-  // round 4 (whether on the first try or after climbing back from a hint
-  // demotion), or a one-shot "Review Extra" practice attempt.
+  // True once this word's review episode is over: either a clean pass at
+  // its milestone's cap round, or a one-shot "Review Extra" practice attempt.
   isFinal: boolean;
   // True if this attempt actually happened on-schedule and can affect
   // mastery — false for "Review Extra" bonus practice on a not-yet-due word.
   scored: boolean;
 }
 
-// Review scoring: every review episode starts at REVIEW_BASE_ROUND (= the
-// new MAX_ROUND, 4) — correct there immediately passes it, same as any other
-// round-4 completion. A wrong typed answer stays at the same round (same as
-// Study — no demotion; see requestHint for the deliberate way to drop a
-// round) and keeps it in the session's queue for another try — it does NOT
-// get rescheduled for tomorrow, since the user is expected to keep retrying
-// today. Only the round-4 answer that actually concludes the episode (first
-// try, or after however many retries/hint-demotions) touches the SRS
-// schedule, using whatever pendingMistakes built up along the way for the
-// growth increment.
+// Review scoring: each of the 3 review milestones (1st/2nd/3rd) has its own
+// start round and cap round, derived from the word's CURRENT mascotStage
+// (see lib/srs.ts's REVIEW_PLAN) — a word can only ever be on the one
+// milestone that stage implies. Correct at the cap round completes that
+// milestone (recordMilestonePass advances the stage and reschedules).
+// Correct below the cap promotes one round, same visit. Wrong now demotes
+// one round (same as Hint), floored at this milestone's own start round —
+// it can't drop back into a PREVIOUS milestone's territory.
 export function applyReviewResult(progress: WordProgress, correct: boolean, currentRound: Round): ReviewOutcome {
   const t = today();
 
   // Not actually due yet — only reachable via "Review Extra" pulling in a
   // word early. That's bonus practice: gives feedback, but doesn't touch
-  // the SRS schedule, score, or round, since reviewing early doesn't tell
-  // us anything about long-term recall the way an on-schedule review does.
+  // the schedule or round, since reviewing early doesn't tell us anything
+  // about long-term recall the way an on-schedule review does.
   if (progress.nextReviewDue && progress.nextReviewDue > t) {
-    return { progress, nextRound: REVIEW_BASE_ROUND, isFinal: true, scored: false };
+    return { progress, nextRound: currentRound, isFinal: true, scored: false };
   }
+
+  const stage = (progress.mascotStage ?? 'puppy') as 'puppy' | 'short' | 'medium';
+  const plan = REVIEW_PLAN[stage];
 
   if (correct) {
-    if (currentRound >= REVIEW_BASE_ROUND) {
-      return { progress: recordRound4Success(progress, t), nextRound: MAX_ROUND, isFinal: true, scored: true };
+    if (currentRound >= plan.capRound) {
+      return { progress: recordMilestonePass(progress, plan.nextStage, t), nextRound: plan.capRound, isFinal: true, scored: true };
     }
-    const nextRound = (currentRound + 1) as Round;
-    return { progress: { ...progress, lastPracticed: t }, nextRound, isFinal: false, scored: true };
+    return { progress: { ...progress, lastPracticed: t }, nextRound: (currentRound + 1) as Round, isFinal: false, scored: true };
   }
 
-  const updated = { ...progress, pendingMistakes: progress.pendingMistakes + 1, lastPracticed: t };
-  return { progress: updated, nextRound: currentRound, isFinal: false, scored: true };
-}
-
-// ============================================================================
-// Round 1.5 / 2.5 — DE -> EN translation choice, and the end-of-section
-// matching quiz. Both are reinforcement layered on top of the round ladder
-// above: neither ever touches masteryScore/growthScore/nextReviewDue.
-// ============================================================================
-
-// True once every word in a batch is past `round` OR has had its first
-// attempt AT `round` recorded this session (right or wrong) — the gate for
-// entering the batch-wide round-1.5/2.5 checkpoints (study-mcq / study-mcq-2
-// phases). Deliberately "attempted", not "advanced": a word that answered
-// wrong and stayed at the same round still counts, so a couple of stragglers
-// can't indefinitely block the whole batch from reaching the checkpoint —
-// only reaching round 4 (unaffected by the round-1/2 gates) still requires
-// an actual correct pass.
-export function allAttemptedRound(ids: string[], progress: Record<string, WordProgress>, round: Round, attemptedIds: string[]): boolean {
-  const attempted = new Set(attemptedIds);
-  return ids.every(id => (progress[id]?.round ?? 1) > round || attempted.has(id));
+  return { progress: { ...progress, lastPracticed: t }, nextRound: demoteRound(currentRound, plan.startRound), isFinal: false, scored: true };
 }
 
 // Picks 3 wrong English choices for `word`, preferring words from the same

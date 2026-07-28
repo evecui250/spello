@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  getAllProgress, getSettings, today, MAX_ROUND,
+  getAllProgress, getSettings, today,
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
@@ -67,8 +67,11 @@ export default function HomePage() {
         // Mid-session — show what's actually still left against today's
         // original batch size, so "5/15 new" reflects 10 already done.
         const t = today();
-        setPreviewStudyCount(ds.studyWordIds.filter(id => (progress[id]?.round ?? 1) < MAX_ROUND).length);
-        setPreviewReviewCount(ds.reviewWordIds.filter(id => !(progress[id]?.nextReviewDue && progress[id].nextReviewDue > t)).length);
+        setPreviewStudyCount(ds.studyWordIds.filter(id => !progress[id]?.mascotStage).length);
+        setPreviewReviewCount(ds.reviewWordIds.filter(id => {
+          const p = progress[id];
+          return !p?.fullyMastered && !(p?.nextReviewDue && p.nextReviewDue > t);
+        }).length);
         setTotalStudyCount(ds.studyWordIds.length);
         setTotalReviewCount(ds.reviewWordIds.length);
       }
