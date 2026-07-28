@@ -64,13 +64,16 @@ export default function HomePage() {
         setTotalStudyCount(studyCount);
         setTotalReviewCount(reviewCount);
       } else {
-        // Mid-session — show what's actually still left against today's
-        // original batch size, so "5/15 new" reflects 10 already done.
+        // Mid-session — count what's actually been COMPLETED so far against
+        // today's original batch size, so "11/15 new" means 11 done (matches
+        // how the round card's own "completedCount / totalWords" counts —
+        // this used to count the opposite, REMAINING words instead, which
+        // read the same on screen but meant "4 done" when it showed "11").
         const t = today();
-        setPreviewStudyCount(ds.studyWordIds.filter(id => !progress[id]?.mascotStage).length);
+        setPreviewStudyCount(ds.studyWordIds.filter(id => !!progress[id]?.mascotStage).length);
         setPreviewReviewCount(ds.reviewWordIds.filter(id => {
           const p = progress[id];
-          return !p?.fullyMastered && !(p?.nextReviewDue && p.nextReviewDue > t);
+          return !!(p?.fullyMastered || (p?.nextReviewDue && p.nextReviewDue > t));
         }).length);
         setTotalStudyCount(ds.studyWordIds.length);
         setTotalReviewCount(ds.reviewWordIds.length);
