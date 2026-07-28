@@ -5,6 +5,7 @@ import { WORDS, wordsForLevel } from '../../lib/words';
 import {
   getAllProgress, getSettings, getStreak, getTotalGoalDays, MascotStageId, WordProgress,
 } from '../../lib/storage';
+import { SYNCED_EVENT } from '../../lib/sync';
 import DachshundMascot from '../../components/Mascot';
 import GoalDaysBadge from '../../components/GoalDaysBadge';
 
@@ -35,9 +36,19 @@ export default function ProgressPage() {
   const [streakCount, setStreakCount] = useState(0);
 
   useEffect(() => {
-    setProgress(getAllProgress());
-    setTotalGoalDays(getTotalGoalDays());
-    setStreakCount(getStreak().count);
+    // Also re-reads on SYNCED_EVENT (matches Home's pattern) — otherwise a
+    // signed-in pull-and-merge that finishes after this page has already
+    // mounted (e.g. a fresh load that lands here first, before Home) would
+    // leave these counts stuck at whatever local storage had before the
+    // pull, until the next manual reload.
+    const load = () => {
+      setProgress(getAllProgress());
+      setTotalGoalDays(getTotalGoalDays());
+      setStreakCount(getStreak().count);
+    };
+    load();
+    window.addEventListener(SYNCED_EVENT, load);
+    return () => window.removeEventListener(SYNCED_EVENT, load);
   }, []);
 
   if (!progress) return null;

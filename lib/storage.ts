@@ -35,11 +35,14 @@ export interface WordProgress {
   // review milestone thereafter. See lib/srs.ts's recordMilestonePass.
   mascotStage?: MascotStageId;
 
-  // Set once, the first time the learner writes their own round-1 sentence
-  // and it comes back AI-corrected (see lib/ai.ts's correctSentence). Shown
-  // on the Word List, and re-shown (word blanked out) on rounds 2-4/review
-  // as an extra recall cue — never touches scoring.
-  exampleSentence?: { sentence: string; wordForm: string };
+  // Set once, the first time the learner translates round-1's AI-generated
+  // English sentence and it comes back AI-corrected (see lib/ai.ts's
+  // correctSentence). Shown on the Word List, and re-shown (word blanked
+  // out) on rounds 2-4/review as an extra recall cue — never touches
+  // scoring. englishPrompt is the original English sentence they translated
+  // (absent for A1 bootstrap words, which skip the sentence exercise
+  // entirely — see isBootstrapCopyWord).
+  exampleSentence?: { sentence: string; wordForm: string; englishPrompt?: string };
 }
 
 export interface Streak {

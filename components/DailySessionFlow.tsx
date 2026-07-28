@@ -23,7 +23,7 @@ import TranslationChoiceCard from './TranslationChoiceCard';
 import MatchingQuizPage from './MatchingQuizPage';
 import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
-import { speakWord } from '../lib/speech';
+import { speakWord, speakText } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
 import { correctSentence, generateSentence } from '../lib/ai';
 
@@ -79,11 +79,17 @@ function SentenceWordHeader({ word }: { word: Word }) {
 }
 
 function SentenceExercise({
-  word, level, onCorrected,
+  word, level, correction, onCorrected, onNext,
 }: {
   word: Word;
   level: Level;
-  onCorrected: (correction: { sentence: string; wordForm: string }) => void;
+  // Owned by the parent (persists across this same render — see the
+  // round-1 branch below, which no longer swaps to a separate result view
+  // on correction, so the learner's own typed attempt stays visible
+  // alongside the correction instead of disappearing).
+  correction: { sentence: string; wordForm: string; englishPrompt?: string } | null;
+  onCorrected: (correction: { sentence: string; wordForm: string; englishPrompt?: string }) => void;
+  onNext: () => void;
 }) {
   // Almost every word already has a pre-generated exercisePrompt baked into
   // lib/words.ts (see scripts/generate-exercise-prompts.py) — instant, no
@@ -112,6 +118,14 @@ function SentenceExercise({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [word.id, promptRetry]);
 
+  // The corrected sentence has no pre-recorded audio file of its own (unlike
+  // single vocabulary words) — always the free on-device browser voice, same
+  // as speakWord's own fallback path, so this costs no API/AI usage at all.
+  useEffect(() => {
+    if (correction && getSettings().autoPlayAudio) speakText(correction.sentence);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [correction]);
+
   async function handleSubmit() {
     if (!input.trim() || status === 'loading' || !promptSentence) return;
     setStatus('loading');
@@ -121,7 +135,7 @@ function SentenceExercise({
         setStatus('not-used');
         return;
       }
-      onCorrected(result);
+      onCorrected({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt: promptSentence });
     } catch {
       setStatus('error');
     }
@@ -156,10 +170,10 @@ function SentenceExercise({
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                handleSubmit();
+                if (!correction) handleSubmit();
               }
             }}
-            disabled={status === 'loading'}
+            disabled={status === 'loading' || !!correction}
             placeholder="Your best attempt is fine — mixing in English is OK too."
             rows={2}
             className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 resize-none disabled:opacity-60"
@@ -172,13 +186,40 @@ function SentenceExercise({
           {status === 'error' && (
             <p className="text-red-600 text-sm text-center">Couldn't get a correction — check your connection and try again.</p>
           )}
-          <button
-            onClick={handleSubmit}
-            disabled={!input.trim() || status === 'loading'}
-            className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
-          >
-            {status === 'loading' ? 'Checking…' : 'Check'}
-          </button>
+          {correction ? (
+            <>
+              <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
+                <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium">Here's a natural way to say it</div>
+                <div className="text-lg text-green-800">
+                  {(() => {
+                    const parts = splitOnWordForm(correction.sentence, correction.wordForm);
+                    if (!parts) return correction.sentence;
+                    return (
+                      <>
+                        {parts.before}
+                        <span className="underline decoration-2 underline-offset-2">{parts.match}</span>
+                        {parts.after}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+              <button
+                onClick={onNext}
+                className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+              >
+                Next →
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={!input.trim() || status === 'loading'}
+              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
+            >
+              {status === 'loading' ? 'Checking…' : 'Check'}
+            </button>
+          )}
         </>
       )}
     </div>
@@ -250,7 +291,7 @@ export default function DailySessionFlow() {
   // BlankedSentence), and the just-produced correction for the round-1
   // sentence exercise (shown in place of the generic "✓ Correct!" banner).
   const [exampleSentence, setExampleSentence] = useState<{ sentence: string; wordForm: string } | null>(null);
-  const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string } | null>(null);
+  const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string; englishPrompt?: string } | null>(null);
   // "Review" = already fully learned, back for spaced repetition. "New" =
   // never touched before today. "Continuing" = mid-ladder from a PREVIOUS
   // day (not brand new, hasn't reached round 4 yet either) — this is the
@@ -664,6 +705,12 @@ export default function DailySessionFlow() {
   }
 
   if (session.phase === 'study-done') {
+    // Every word in studyWordIds started the day without a mascotStage (that's
+    // what made it eligible for today's batch — see buildStudyWords) and, by
+    // the time this phase is reached, all of them have one (that's what
+    // finishStudyRounds's completion check means) — so the whole batch is
+    // this session's newly-Introduced words, no extra date filtering needed.
+    const todaysWords = wordsById(session.studyWordIds);
     return (
       <div className="text-center py-16">
         <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
@@ -678,6 +725,38 @@ export default function DailySessionFlow() {
             <p className="text-slate-700 font-semibold">
               {session.earnedPuppies} pupp{session.earnedPuppies === 1 ? 'y' : 'ies'} earned today!
             </p>
+          </div>
+        )}
+        {todaysWords.length > 0 && (
+          <div className="mx-auto mb-6 max-w-sm flex flex-col gap-2 text-left">
+            <div className="text-amber-100/70 text-xs font-semibold uppercase tracking-wide text-center mb-1">
+              Words introduced today
+            </div>
+            {todaysWords.map(w => {
+              const sentence = getWordProgress(w.id).exampleSentence;
+              return (
+                <div key={w.id} className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-stone-800">
+                      {w.article ? `${w.article} ` : ''}{w.de}
+                      <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
+                    </span>
+                    <span className="shrink-0 text-[10px] font-medium text-stone-500 bg-slate-100 rounded-full px-2 py-0.5">
+                      Introduced
+                    </span>
+                  </div>
+                  <div className="text-stone-500 text-sm">{w.en}</div>
+                  {sentence && (
+                    <div className="mt-1.5 pt-1.5 border-t border-amber-100/60 flex flex-col gap-0.5">
+                      {sentence.englishPrompt && (
+                        <div className="text-stone-500 text-xs">{sentence.englishPrompt}</div>
+                      )}
+                      <div className="text-stone-700 text-sm italic">{sentence.sentence}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
         <div className="flex flex-col items-center gap-3">
@@ -799,44 +878,17 @@ export default function DailySessionFlow() {
             to the else branch's round-1 handling (copy-the-word tiles, with
             any existing sentence still shown via BlankedSentence). */}
         {currentRound === 1 && roundMode === 'study' && !isBootstrapCopyWord(word) && !exampleSentence ? (
-          feedback === null ? (
-            <SentenceExercise
-              key={word.id}
-              word={word}
-              level={settings.level}
-              onCorrected={correction => {
-                setSentenceResult(correction);
-                submitResult(true, { exampleSentence: correction });
-              }}
-            />
-          ) : (
-            <div className="flex flex-col gap-3">
-              <SentenceWordHeader word={word} />
-              <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
-                <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium">Here's a natural way to say it</div>
-                <div className="text-lg text-green-800">
-                  {(() => {
-                    if (!sentenceResult) return null;
-                    const parts = splitOnWordForm(sentenceResult.sentence, sentenceResult.wordForm);
-                    if (!parts) return sentenceResult.sentence;
-                    return (
-                      <>
-                        {parts.before}
-                        <span className="underline decoration-2 underline-offset-2">{parts.match}</span>
-                        {parts.after}
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-              <button
-                onClick={handleNext}
-                className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
-              >
-                Next →
-              </button>
-            </div>
-          )
+          <SentenceExercise
+            key={word.id}
+            word={word}
+            level={settings.level}
+            correction={sentenceResult}
+            onCorrected={correction => {
+              setSentenceResult(correction);
+              submitResult(true, { exampleSentence: correction });
+            }}
+            onNext={handleNext}
+          />
         ) : (
           <>
             {/* Reachable at round 1 either as A1 bootstrap words' genuine

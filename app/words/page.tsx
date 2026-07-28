@@ -2,11 +2,22 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { wordsForLevel, Word } from '../../lib/words';
-import { getAllProgress, getSettings, WordProgress, today } from '../../lib/storage';
+import { getAllProgress, getSettings, WordProgress, MascotStageId, today } from '../../lib/storage';
 import { addDays, daysBetween } from '../../lib/srs';
 import SpeakerButton from '../../components/SpeakerButton';
 import DachshundMascot from '../../components/Mascot';
 import CongratsModal from '../../components/CongratsModal';
+
+// Same wording as Progress page's STAGE_LABEL — "Introduced" rather than
+// "New" for a word that's actually finished Day 1, so this list's badge
+// text matches the mascot-stage terminology used everywhere else instead
+// of implying it hasn't been touched yet.
+const STAGE_LABEL: Record<MascotStageId, string> = {
+  puppy: 'Introduced',
+  short: 'Familiar',
+  medium: 'Strong',
+  'long-crowned': 'Mastered',
+};
 
 // "in 3 days" / "due today" for a word that's still in the review rotation
 // (mastered words are retired from review, so they don't get this label).
@@ -134,14 +145,22 @@ export default function WordsPage() {
           <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
           {w.plural && <span className="text-stone-500 text-sm ml-2">· {w.plural}</span>}
           <div className="text-stone-500 text-sm">{w.en}</div>
-          {sentence && <div className="text-stone-500 text-sm italic mt-0.5">{sentence.sentence}</div>}
+          {sentence && (
+            <div className="mt-0.5 flex flex-col gap-0.5">
+              {sentence.englishPrompt && <div className="text-stone-400 text-xs">{sentence.englishPrompt}</div>}
+              <div className="text-stone-500 text-sm italic">{sentence.sentence}</div>
+            </div>
+          )}
         </div>
         <span className="shrink-0 flex flex-col items-center gap-0.5">
           {earned(progress[w.id]) ? (
             <>
               <DachshundMascot stage={progress[w.id].mascotStage ?? 'puppy'} className="w-11 h-11" />
+              <span className="text-[10px] font-medium text-stone-500 whitespace-nowrap">
+                {STAGE_LABEL[progress[w.id].mascotStage ?? 'puppy']}
+              </span>
               {!progress[w.id].fullyMastered && (
-                <span className="text-[10px] text-stone-500 whitespace-nowrap">
+                <span className="text-[10px] text-stone-400 whitespace-nowrap">
                   {reviewLabel(progress[w.id].nextReviewDue)}
                 </span>
               )}

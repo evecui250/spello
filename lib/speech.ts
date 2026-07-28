@@ -52,6 +52,14 @@ function speakWithBrowserVoice(text: string): void {
   window.speechSynthesis.speak(utterance);
 }
 
+// For arbitrary German text with no pre-recorded file of its own (e.g. a
+// full AI-corrected example sentence, as opposed to a single vocabulary
+// word) — always the free on-device browser voice, no pre-generated
+// recording exists to try first.
+export function speakText(text: string): void {
+  speakWithBrowserVoice(text);
+}
+
 let currentAudio: HTMLAudioElement | null = null;
 
 // Plays this word's pre-generated recording — the same voice for every user
