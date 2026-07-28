@@ -95,22 +95,37 @@ const PREREQUISITE_LEVELS: Record<Level, Level[]> = {
   C2: ['A1', 'A2', 'B1', 'B2', 'C1'],
 };
 
+// Word-count range for the round-1 translation exercise's English sentence,
+// per CEFR level — chosen by difficulty (kept in sync with the standalone
+// copy in scripts/generate-exercise-prompts.py, which pre-generates most of
+// these; this export is only actually exercised by the rare live fallback
+// in lib/ai.ts's generateSentence).
+export const EXERCISE_SENTENCE_WORD_RANGE: Record<Level, { min: number; max: number }> = {
+  A1: { min: 3, max: 6 },
+  A2: { min: 4, max: 8 },
+  B1: { min: 6, max: 12 },
+  B2: { min: 8, max: 14 },
+  B2_old: { min: 8, max: 14 },
+  C1: { min: 10, max: 16 },
+  C2: { min: 12, max: 18 },
+};
+
 // Vocabulary the AI-generated sentence (see lib/ai.ts's generateSentence)
 // is allowed to use: every word in a lower CEFR level (assumed known
-// outright — full list, not gated by this app's own progress) plus words
-// in the CURRENT level the learner has already finished introducing
-// (mascotStage set). For A1, this naturally includes the ~220 bootstrap
-// words once they're done, without needing to special-case them — they're
-// just "current-level words with mascotStage set" like any other.
-// Returns deduped English glosses (what the AI actually needs — the
-// learner has to know the English concept to translate it into German).
+// outright, full list) plus, for A1 only, its own ~220 high-frequency
+// baseline. Deliberately NOT gated by any individual learner's own
+// in-level progress — this is the same guaranteed-safe baseline used to
+// pre-generate most words' exercisePrompt (see lib/words.ts), so the rare
+// live fallback stays consistent with the pre-generated majority rather
+// than mixing two different vocabulary definitions. Returns deduped
+// English glosses (what the AI actually needs — the learner has to know
+// the English concept to translate it into German).
 export function getKnownVocabulary(level: Level): string[] {
-  const progress = getAllProgress();
   const lowerWords = PREREQUISITE_LEVELS[level].flatMap(l => wordsForLevel(l));
-  const currentLearnt = wordsForLevel(level).filter(w => progress[w.id]?.mascotStage);
+  const baseline = level === 'A1' ? wordsForLevel('A1').filter(w => w.highFrequency) : [];
   const seen = new Set<string>();
   const result: string[] = [];
-  for (const w of [...lowerWords, ...currentLearnt]) {
+  for (const w of [...lowerWords, ...baseline]) {
     const key = w.en.toLowerCase();
     if (!seen.has(key)) {
       seen.add(key);

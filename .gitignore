@@ -3,3 +3,4 @@ node_modules/
 out/
 .claude/settings.local.json
 tsconfig.tsbuildinfo
+scripts/.exercise-prompts-cache.json

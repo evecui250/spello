@@ -85,13 +85,20 @@ function SentenceExercise({
   level: Level;
   onCorrected: (correction: { sentence: string; wordForm: string }) => void;
 }) {
-  const [promptSentence, setPromptSentence] = useState<string | null>(null);
-  const [promptStatus, setPromptStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  // Almost every word already has a pre-generated exercisePrompt baked into
+  // lib/words.ts (see scripts/generate-exercise-prompts.py) — instant, no
+  // AI wait at all for this step. generateSentence is only a live fallback
+  // for the rare word missing one (e.g. added to the corpus after the last
+  // batch run). SentenceExercise is remounted (key={word.id}) per word, so
+  // these initializers are safe to read directly from the word prop.
+  const [promptSentence, setPromptSentence] = useState<string | null>(word.exercisePrompt ?? null);
+  const [promptStatus, setPromptStatus] = useState<'loading' | 'ready' | 'error'>(word.exercisePrompt ? 'ready' : 'loading');
   const [promptRetry, setPromptRetry] = useState(0);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'not-used'>('idle');
 
   useEffect(() => {
+    if (word.exercisePrompt) return;
     let cancelled = false;
     setPromptStatus('loading');
     generateSentence(word.id, word.de, word.en, level, getKnownVocabulary(level))

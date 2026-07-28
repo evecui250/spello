@@ -17,6 +17,21 @@ const MODEL = 'gpt-4o-mini';
 // this should never actually bind in practice.
 const MAX_KNOWN_WORDS = 4000;
 
+// Word-count range per level, by difficulty — kept in sync with the
+// standalone copy in scripts/generate-exercise-prompts.py (which
+// pre-generates the vast majority of exercisePrompt values baked into
+// lib/words.ts) and lib/practice.ts's EXERCISE_SENTENCE_WORD_RANGE, so this
+// live fallback stays consistent with the pre-generated majority.
+const WORD_RANGE: Record<string, { min: number; max: number }> = {
+  A1: { min: 3, max: 6 },
+  A2: { min: 4, max: 8 },
+  B1: { min: 6, max: 12 },
+  B2: { min: 8, max: 14 },
+  B2_old: { min: 8, max: 14 },
+  C1: { min: 10, max: 16 },
+  C2: { min: 12, max: 18 },
+};
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -58,6 +73,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Missing wordId, wordDe, or wordEn' }, 400);
     }
     const vocab = (Array.isArray(knownVocabulary) ? knownVocabulary : []).slice(0, MAX_KNOWN_WORDS);
+    const { min: minWords, max: maxWords } = WORD_RANGE[level] ?? { min: 6, max: 14 };
 
     const completion = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -79,9 +95,11 @@ Deno.serve(async (req: Request) => {
               '(2) otherwise ONLY uses vocabulary from this list of words the learner already ' +
               `knows: ${vocab.join(', ')}. You may always use ordinary English function words ` +
               'and grammar (a, the, is, was, to, in, and, of, etc.) even if not in that list. ' +
-              'The sentence should be appropriately simple for this level — not a trivial ' +
-              'isolated phrase, but not complex either — a real, meaningful sentence that ' +
-              'makes sense on its own. Respond with exactly this JSON: {"sentence": "..."}.',
+              `(3) The sentence MUST be between ${minWords} and ${maxWords} words long ` +
+              '(inclusive) — count every word, this is a hard requirement, not a suggestion. ' +
+              'The sentence should be meaningful and make sense on its own, not a trivial or ' +
+              'random-sounding string of words. Respond with exactly this JSON: ' +
+              '{"sentence": "..."}.',
           },
           { role: 'user', content: `Write the sentence for the word "${wordEn}".` },
         ],
