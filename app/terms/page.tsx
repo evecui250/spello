@@ -81,7 +81,7 @@ export default function TermsPage() {
           <h2 className="font-semibold text-stone-800">Contact</h2>
           <p>
             Questions about these terms — reach us at{' '}
-            <span className="font-semibold">[YOUR CONTACT EMAIL]</span>.
+            <span className="font-semibold">evecui250@gmail.com</span>.
           </p>
         </section>
 

@@ -6,6 +6,7 @@ import {
   getAllProgressForLevel, saveAllProgressForLevel, WordProgress, MascotStageId,
   getStreakForLevel, saveStreakForLevel, Streak,
   getSettingsForLevel, saveSettingsForLevel, getSettingsUpdatedAtForLevel, Settings,
+  getGoalDaysRecordForSync, mergeGoalDaysFromSync,
 } from './storage';
 import { Level, LEVEL_ORDER } from './words';
 
@@ -21,6 +22,7 @@ interface RemoteRow {
   progress: ProgressByLevel | Record<string, WordProgress> | null;
   streak: StreakByLevel | Streak | null;
   settings: SettingsByLevel | Settings | null;
+  goal_days: string[] | null;
   updated_at: string | null;
 }
 
@@ -88,7 +90,7 @@ function mergeProgress(
 export async function pullAndMerge(userId: string): Promise<void> {
   const { data, error } = await supabase
     .from('user_progress')
-    .select('progress, streak, settings, updated_at')
+    .select('progress, streak, settings, goal_days, updated_at')
     .eq('user_id', userId)
     .maybeSingle<RemoteRow>();
 
@@ -139,6 +141,13 @@ export async function pullAndMerge(userId: string): Promise<void> {
       || (!!data.updated_at && data.updated_at > localUpdatedAt);
     if (remoteIsNewer) saveSettingsForLevel(level, remoteSettings);
   }
+
+  // Level-independent, and never a "which side wins" comparison — a plain
+  // union of both devices' completed-goal dates is always exactly correct,
+  // unlike trying to compare two raw counts.
+  if (Array.isArray(data.goal_days) && data.goal_days.length > 0) {
+    mergeGoalDaysFromSync(data.goal_days);
+  }
 }
 
 // Pushes every level's local state up as this user's remote snapshot, nested
@@ -169,6 +178,7 @@ async function pushToRemote(userId: string): Promise<void> {
     progress,
     streak,
     settings,
+    goal_days: getGoalDaysRecordForSync(),
     updated_at: new Date().toISOString(),
   };
 

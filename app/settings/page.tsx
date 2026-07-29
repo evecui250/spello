@@ -2,13 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { getSettings, saveSettings, switchToLevel, clearAllProgress, Settings } from '../../lib/storage';
+import { useRouter } from 'next/navigation';
+import { getSettings, saveSettings, switchToLevel, clearAllProgress, resetEverything, Settings } from '../../lib/storage';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
 import { Level, wordsForLevel } from '../../lib/words';
 import { scheduleSync, syncNow } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [studyBatchSize, setStudyBatchSize] = useState(15);
   const [dailyReview, setDailyReview] = useState(25);
   const [language, setLanguage] = useState('de');
@@ -91,6 +93,17 @@ export default function SettingsPage() {
     await syncNow();
     setCleared(true);
     setTimeout(() => setCleared(false), 2000);
+  };
+
+  // Every level, plus onboarding — equivalent to a brand-new signed-in
+  // account. Same immediate-push reasoning as handleClearAll, then routes
+  // straight to onboarding since that's genuinely where a fresh account
+  // lands next.
+  const handleResetEverything = async () => {
+    if (!window.confirm('This will erase ALL progress, streaks, and settings for EVERY level — your account will start over completely, as if brand new. You\'ll stay signed in. This can\'t be undone. Continue?')) return;
+    resetEverything();
+    await syncNow();
+    router.push('/welcome');
   };
 
   return (
@@ -269,6 +282,19 @@ export default function SettingsPage() {
         >
           {cleared ? '✓ Cleared!' : `Clear all progress (${level})`}
         </button>
+
+        <div className="border-t border-red-200/50 pt-3 mt-1">
+          <p className="text-stone-500 text-sm mb-3">
+            Or start over completely — every level's progress, streaks, and settings, as if you
+            just signed up. You'll stay signed in with the same email.
+          </p>
+          <button
+            onClick={handleResetEverything}
+            className="w-full bg-red-100 text-red-800 border-2 border-red-200 py-3 rounded-xl font-semibold hover:bg-red-200 active:scale-95 transition-all"
+          >
+            Reset entire account
+          </button>
+        </div>
       </div>
     </div>
   );

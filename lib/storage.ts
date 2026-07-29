@@ -239,9 +239,14 @@ export function today(): string {
 // goal (study or review) in ANY level — unlike the per-level streak, this
 // never resets and isn't affected by which level is active.
 
+// Stored as the actual set of dates (not just a count) so syncing across
+// devices is an exact set union — a plain running total couldn't be merged
+// correctly (device A's 5 days and device B's 3 days might share some
+// overlap and are almost never a clean max() of each other), and this was
+// never synced at all before, which is exactly why two devices used to
+// show different totals for the same account.
 interface GoalDaysRecord {
-  count: number;
-  lastCountedDate: string;
+  days: string[];
 }
 
 // One-time backfill for anyone adopting this counter after already having
@@ -259,12 +264,11 @@ function backfillGoalDaysFromHistory(): GoalDaysRecord {
       if (lastReviewedAt) days.add(lastReviewedAt);
     }
   }
-  const t = today();
-  return { count: days.size, lastCountedDate: days.has(t) ? t : '' };
+  return { days: [...days].sort() };
 }
 
 function getGoalDaysRecord(): GoalDaysRecord {
-  if (typeof window === 'undefined') return { count: 0, lastCountedDate: '' };
+  if (typeof window === 'undefined') return { days: [] };
   const raw = localStorage.getItem(GOAL_DAYS_KEY);
   if (raw === null) {
     const backfilled = backfillGoalDaysFromHistory();
@@ -272,24 +276,47 @@ function getGoalDaysRecord(): GoalDaysRecord {
     return backfilled;
   }
   try {
-    return JSON.parse(raw) ?? { count: 0, lastCountedDate: '' };
+    const parsed = JSON.parse(raw);
+    // Grandfather the old {count, lastCountedDate} shape (pre-sync) into an
+    // empty set rather than crashing on it — its count is superseded by
+    // whatever the next pull brings down anyway (see sync.ts).
+    if (!parsed || !Array.isArray(parsed.days)) return { days: [] };
+    return parsed;
   } catch {
-    return { count: 0, lastCountedDate: '' };
+    return { days: [] };
   }
 }
 
-// At most one increment per calendar day, no matter how many goals (across
+function saveGoalDaysRecord(rec: GoalDaysRecord): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(GOAL_DAYS_KEY, JSON.stringify(rec));
+}
+
+// At most one new date per calendar day, no matter how many goals (across
 // however many levels) get completed that day.
 function touchGoalDaysCounter(): void {
   if (typeof window === 'undefined') return;
   const rec = getGoalDaysRecord();
   const t = today();
-  if (rec.lastCountedDate === t) return;
-  localStorage.setItem(GOAL_DAYS_KEY, JSON.stringify({ count: rec.count + 1, lastCountedDate: t }));
+  if (rec.days.includes(t)) return;
+  saveGoalDaysRecord({ days: [...rec.days, t].sort() });
 }
 
 export function getTotalGoalDays(): number {
-  return getGoalDaysRecord().count;
+  return getGoalDaysRecord().days.length;
+}
+
+// Level-independent, like the counter itself — sync.ts reads/writes this
+// directly to merge each device's date set into a union instead of trusting
+// either side's raw count.
+export function getGoalDaysRecordForSync(): string[] {
+  return getGoalDaysRecord().days;
+}
+
+export function mergeGoalDaysFromSync(remoteDays: string[]): void {
+  const local = getGoalDaysRecord();
+  const merged = new Set([...local.days, ...remoteDays]);
+  saveGoalDaysRecord({ days: [...merged].sort() });
 }
 
 // --- Progress ---
@@ -718,4 +745,28 @@ export function clearAllProgress(): void {
   localStorage.removeItem(levelKey(KEYS.dailyStats));
   localStorage.removeItem(levelKey(KEYS.studyBatch));
   localStorage.removeItem(levelKey(KEYS.dailySession));
+}
+
+// Wipes every level's progress/streak/settings/session, the lifetime goal-
+// days counter, and the onboarding flag — everything a brand-new signed-in
+// user would start with. Deliberately leaves the Supabase auth session
+// itself untouched (still signed in as the same email) and doesn't touch
+// migration flags (one-time, idempotent, irrelevant to "user data"). Caller
+// is responsible for pushing this cleared state to remote (see syncNow) —
+// same reasoning as clearAllProgress: skipping that would let a later pull
+// silently resurrect everything from the still-stale remote row.
+export function resetEverything(): void {
+  if (typeof window === 'undefined') return;
+  for (const level of LEVEL_ORDER) {
+    localStorage.removeItem(namespacedKey(KEYS.progress, level));
+    localStorage.removeItem(namespacedKey(KEYS.streak, level));
+    localStorage.removeItem(namespacedKey(KEYS.settings, level));
+    localStorage.removeItem(namespacedKey(KEYS.settingsUpdatedAt, level));
+    localStorage.removeItem(namespacedKey(KEYS.dailyStats, level));
+    localStorage.removeItem(namespacedKey(KEYS.studyBatch, level));
+    localStorage.removeItem(namespacedKey(KEYS.dailySession, level));
+  }
+  localStorage.removeItem(GOAL_DAYS_KEY);
+  localStorage.removeItem(ACTIVE_LEVEL_KEY);
+  localStorage.removeItem(KEYS.onboardingDone);
 }

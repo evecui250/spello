@@ -57,8 +57,8 @@ export default function PrivacyPage() {
         <section className="flex flex-col gap-1.5">
           <h2 className="font-semibold text-stone-800">Your choices</h2>
           <ul className="list-disc pl-5 flex flex-col gap-1">
-            <li>Erase your learning progress for a level anytime from Settings → Danger zone.</li>
-            <li>Delete your account and all associated data entirely by emailing us (below) — we don't yet have a self-service delete button, but we'll act on any request promptly.</li>
+            <li>Erase your learning progress for a single level, or reset your entire account back to brand-new (keeping the same sign-in), anytime from Settings → Danger zone.</li>
+            <li>Delete your account and sign-in itself entirely by emailing us (below) — we don't yet have a self-service button for that specific step, but we'll act on any request promptly.</li>
             <li>Sign out anytime from Settings; your local device copy stays until you clear it or a level's progress is erased.</li>
           </ul>
         </section>
@@ -83,7 +83,7 @@ export default function PrivacyPage() {
           <h2 className="font-semibold text-stone-800">Contact</h2>
           <p>
             Questions, deletion requests, anything else — reach us at{' '}
-            <span className="font-semibold">[YOUR CONTACT EMAIL]</span>.
+            <span className="font-semibold">evecui250@gmail.com</span>.
           </p>
         </section>
 
