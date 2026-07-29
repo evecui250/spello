@@ -25,7 +25,7 @@ import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
 import { speakWord, speakText } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
-import { correctSentence, generateSentence } from '../lib/ai';
+import { correctSentence, generateSentence, DailyLimitReachedError } from '../lib/ai';
 
 // Locates wordForm inside sentence (case-insensitive) so callers can
 // highlight/blank it — used by both BlankedSentence (rounds 2+/review) and
@@ -177,10 +177,10 @@ function SentenceExercise({
   // batch run). SentenceExercise is remounted (key={word.id}) per word, so
   // these initializers are safe to read directly from the word prop.
   const [promptSentence, setPromptSentence] = useState<string | null>(word.exercisePrompt ?? null);
-  const [promptStatus, setPromptStatus] = useState<'loading' | 'ready' | 'error'>(word.exercisePrompt ? 'ready' : 'loading');
+  const [promptStatus, setPromptStatus] = useState<'loading' | 'ready' | 'error' | 'limit-reached'>(word.exercisePrompt ? 'ready' : 'loading');
   const [promptRetry, setPromptRetry] = useState(0);
   const [input, setInput] = useState('');
-  const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'not-used'>('idle');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'not-used' | 'limit-reached'>('idle');
 
   useEffect(() => {
     if (word.exercisePrompt) return;
@@ -192,7 +192,10 @@ function SentenceExercise({
         setPromptSentence(sentence);
         setPromptStatus('ready');
       })
-      .catch(() => { if (!cancelled) setPromptStatus('error'); });
+      .catch((e) => {
+        if (cancelled) return;
+        setPromptStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
+      });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [word.id, promptRetry]);
@@ -215,8 +218,8 @@ function SentenceExercise({
         return;
       }
       onCorrected({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt: promptSentence }, input.trim());
-    } catch {
-      setStatus('error');
+    } catch (e) {
+      setStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
     }
   }
 
@@ -237,6 +240,11 @@ function SentenceExercise({
           </button>
         </div>
       )}
+      {promptStatus === 'limit-reached' && (
+        <p className="text-amber-700 text-sm text-center py-4">
+          You've used up today's practice limit — come back tomorrow for more!
+        </p>
+      )}
       {promptStatus === 'ready' && promptSentence && (
         <>
           <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
@@ -252,7 +260,7 @@ function SentenceExercise({
                 if (!correction) handleSubmit();
               }
             }}
-            disabled={status === 'loading' || !!correction}
+            disabled={status === 'loading' || status === 'limit-reached' || !!correction}
             placeholder="Your best attempt is fine — mixing in English is OK too."
             rows={2}
             className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 resize-none disabled:opacity-60"
@@ -264,6 +272,11 @@ function SentenceExercise({
           )}
           {status === 'error' && (
             <p className="text-red-600 text-sm text-center">Couldn't get a correction — check your connection and try again.</p>
+          )}
+          {status === 'limit-reached' && (
+            <p className="text-amber-700 text-sm text-center">
+              You've used up today's practice limit — come back tomorrow for more!
+            </p>
           )}
           {correction ? (
             <>
@@ -287,7 +300,7 @@ function SentenceExercise({
           ) : (
             <button
               onClick={handleSubmit}
-              disabled={!input.trim() || status === 'loading'}
+              disabled={!input.trim() || status === 'loading' || status === 'limit-reached'}
               className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
             >
               {status === 'loading' ? 'Checking…' : 'Check'}

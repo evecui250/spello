@@ -15,6 +15,13 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const MODEL = 'gpt-4o-mini';
 
+// A safety net against a bug or scripted abuse burning through spend, not a
+// ration on legitimate studying — a full day's batch rarely calls this more
+// than ~15-20 times, so this never binds a real learner. Free during the
+// testing phase; swap this flat cap for a per-subscription-tier allowance
+// (still counted the same way, from ai_usage) once there's billing.
+const DAILY_AI_CALL_LIMIT = 50;
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -49,6 +56,17 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Not authenticated' }, 401);
     }
     const userId = userData.user.id;
+
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const { count: callsToday, error: countError } = await supabase
+      .from('ai_usage')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .gte('created_at', todayStart.toISOString());
+    if (!countError && (callsToday ?? 0) >= DAILY_AI_CALL_LIMIT) {
+      return json({ limitReached: true });
+    }
 
     const body = (await req.json()) as RequestBody;
     const { wordId, wordDe, level, englishPrompt, userTranslation } = body;

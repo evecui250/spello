@@ -17,6 +17,11 @@ const MODEL = 'gpt-4o-mini';
 // this should never actually bind in practice.
 const MAX_KNOWN_WORDS = 4000;
 
+// Shared with correct-sentence's own copy of this constant — both functions
+// count against the same ai_usage table, so a user can't dodge the cap by
+// alternating between the two endpoints. See that file for the rationale.
+const DAILY_AI_CALL_LIMIT = 50;
+
 // Word-count range per level, by difficulty — kept in sync with the
 // standalone copy in scripts/generate-exercise-prompts.py (which
 // pre-generates the vast majority of exercisePrompt values baked into
@@ -66,6 +71,17 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Not authenticated' }, 401);
     }
     const userId = userData.user.id;
+
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const { count: callsToday, error: countError } = await supabase
+      .from('ai_usage')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .gte('created_at', todayStart.toISOString());
+    if (!countError && (callsToday ?? 0) >= DAILY_AI_CALL_LIMIT) {
+      return json({ limitReached: true });
+    }
 
     const body = (await req.json()) as RequestBody;
     const { wordId, wordDe, wordEn, level, knownVocabulary } = body;

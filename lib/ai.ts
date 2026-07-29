@@ -6,6 +6,17 @@ export type SentenceCorrectionResult =
   | { used: true; sentence: string; wordForm: string }
   | { used: false };
 
+// Thrown by generateSentence/correctSentence when the server-side daily cap
+// (see the Edge Functions' own DAILY_AI_CALL_LIMIT) has been hit — a
+// distinct type so callers can show a friendly "come back tomorrow" message
+// instead of the generic connection-error retry prompt.
+export class DailyLimitReachedError extends Error {
+  constructor() {
+    super('Daily AI usage limit reached');
+    this.name = 'DailyLimitReachedError';
+  }
+}
+
 
 export interface AiUsageStats {
   calls: number;
@@ -46,6 +57,7 @@ export async function generateSentence(
     body: { wordId, wordDe, wordEn, level, knownVocabulary },
   });
   if (error) throw error;
+  if (data?.limitReached) throw new DailyLimitReachedError();
   if (!data?.sentence) throw new Error('Malformed AI response');
   return data.sentence;
 }
@@ -69,6 +81,7 @@ export async function correctSentence(
     body: { wordId, wordDe, level, englishPrompt, userTranslation },
   });
   if (error) throw error;
+  if (data?.limitReached) throw new DailyLimitReachedError();
   if (data?.used === false) return { used: false };
   if (!data?.sentence || !data?.wordForm) throw new Error('Malformed AI response');
   return { used: true, sentence: data.sentence, wordForm: data.wordForm };
