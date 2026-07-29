@@ -448,8 +448,23 @@ export default function DailySessionFlow() {
     // studyQueueIds/reviewQueueIds); only the very first entry into this
     // phase this session falls back to computing it fresh from `ids`.
     const persistedQueueIds = mode === 'study' ? ds.studyQueueIds : ds.reviewQueueIds;
+    const isFirstEntryToday = persistedQueueIds === undefined;
     const sourceIds = persistedQueueIds !== undefined ? persistedQueueIds : ids;
-    const pending = sourceIds.filter(id => !isRoundsDone(id, mode));
+    let pending = sourceIds.filter(id => !isRoundsDone(id, mode));
+    // A "Continuing" word (started introduction on a previous day, already
+    // past round 1) would otherwise sit wherever buildStudyWords happened to
+    // place it — often near the front, since it's prioritized for
+    // *inclusion* in today's batch. That risks it reaching round 2 (and the
+    // MCQ checkpoint never having fired yet, since that only triggers once
+    // every round-1-needing word clears round 1) before a brand-new word
+    // even gets its first look. Sorting round-1-needing words first, just
+    // once at the start of today's session, guarantees the checkpoint
+    // always runs before anyone's first round-2 attempt — carryovers
+    // included — instead of only covering words that are new today.
+    if (mode === 'study' && isFirstEntryToday) {
+      const progress = getAllProgress();
+      pending = [...pending].sort((a, b) => (progress[a]?.round ?? 1) - (progress[b]?.round ?? 1));
+    }
     const words = wordsById(pending);
     setQueue(words);
     setTotalWords(ids.length);

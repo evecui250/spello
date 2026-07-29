@@ -218,13 +218,15 @@ export function generateHint(word: string, round: Round): boolean[] {
   } else if (round === 3) {
     base = Array.from({ length: n }, (_, i) => i !== letterIndices[0]);
   } else {
-    // round 2 — the reveal budget/randomization only considers letter
-    // positions, so a hyphen or similar never eats into the "half revealed"
-    // allowance (it's revealed unconditionally below anyway).
+    // round 2 — reveal the first half of the word's LETTERS (not a random
+    // half, and not a raw character-count split, so a hyphen or similar
+    // never eats into the allowance — it's revealed unconditionally below
+    // anyway). A real prefix is a much stronger recall cue than scattered
+    // random letters, and being deterministic means recomputing this (e.g.
+    // after switching tabs and back) always reproduces the exact same
+    // reveal instead of a fresh random draw that reads as a different card.
     const revealCount = Math.max(1, Math.round(letterIndices.length / 2));
-    const revealed = new Set([letterIndices[0]]);
-    const rest = shuffled(letterIndices.slice(1));
-    rest.slice(0, revealCount - 1).forEach(i => revealed.add(i));
+    const revealed = new Set(letterIndices.slice(0, revealCount));
     base = Array.from({ length: n }, (_, i) => !revealed.has(i));
   }
 

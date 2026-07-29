@@ -5,6 +5,7 @@ import NavBar from '../components/NavBar';
 import ForestBackground from '../components/ForestBackground';
 import SyncGate from '../components/SyncGate';
 import AuthGate from '../components/AuthGate';
+import ChunkErrorRecovery from '../components/ChunkErrorRecovery';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href={`${base}/apple-touch-icon.png`} />
       </head>
       <body className="min-h-screen text-emerald-50">
+        <ChunkErrorRecovery />
         <SyncGate />
         <ForestBackground />
         <NavBar />
