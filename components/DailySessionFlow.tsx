@@ -105,6 +105,21 @@ const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'
 
 type RoundMode = 'study' | 'review';
 
+// A read-only snapshot of one just-answered round card, kept purely so the
+// learner can page back and glance at what they just did (e.g. re-read a
+// correction) — never re-editable, never re-scored. sentence is set only
+// for a round-1 translate-mode pass; every other round (copy-the-word,
+// typing rounds 2-4, review) shows the plain correct/incorrect banner
+// instead, keyed off word.de/word.article like the live card does.
+interface CardSnapshot {
+  word: Word;
+  roundMode: RoundMode;
+  round: Round;
+  wordStatus: 'New' | 'Continuing' | 'Review';
+  correct: boolean;
+  sentence?: { sentence: string; wordForm: string; englishPrompt?: string; userInput: string } | null;
+}
+
 // Round 1 (translation exercise, all non-bootstrap words — see
 // isBootstrapCopyWord): the AI generates an English sentence built only
 // from vocabulary the learner already knows (lib/practice.ts's
@@ -142,7 +157,10 @@ function SentenceExercise({
   // on correction, so the learner's own typed attempt stays visible
   // alongside the correction instead of disappearing).
   correction: { sentence: string; wordForm: string; englishPrompt?: string } | null;
-  onCorrected: (correction: { sentence: string; wordForm: string; englishPrompt?: string }) => void;
+  // userInput (the learner's own typed attempt) rides along only for the
+  // Back button's history snapshot — the parent keeps it separate from what
+  // actually gets persisted to WordProgress.
+  onCorrected: (correction: { sentence: string; wordForm: string; englishPrompt?: string }, userInput: string) => void;
   onNext: () => void;
 }) {
   // Almost every word already has a pre-generated exercisePrompt baked into
@@ -189,7 +207,7 @@ function SentenceExercise({
         setStatus('not-used');
         return;
       }
-      onCorrected({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt: promptSentence });
+      onCorrected({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt: promptSentence }, input.trim());
     } catch {
       setStatus('error');
     }
@@ -352,6 +370,15 @@ export default function DailySessionFlow() {
   const mcqSeenRef = useRef<Record<string, string[]>>({});
   const [showCongrats, setShowCongrats] = useState(false);
 
+  // Every answered round card this session (study or review), oldest first
+  // — purely a "peek backward" log for the Back button below; never
+  // touches scoring/progress, which is already committed the moment
+  // submitResult runs. historyIndex === null means showing the live,
+  // still-in-progress card; otherwise showing cardHistory[historyIndex]
+  // read-only.
+  const [cardHistory, setCardHistory] = useState<CardSnapshot[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+
   const activeInputRef = useRef<HTMLInputElement | null>(null);
   const letterRowRef = useRef<LetterInputRowHandle | null>(null);
   const articleRowRef = useRef<LetterInputRowHandle | null>(null);
@@ -474,10 +501,20 @@ export default function DailySessionFlow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.phase]);
 
-  const submitResult = (correct: boolean, extra?: Partial<WordProgress>) => {
+  // sentenceForHistory carries the learner's own typed attempt alongside the
+  // correction, purely for the Back button's read-only replay below — it's
+  // never written into WordProgress (extra is the only thing that is).
+  const submitResult = (
+    correct: boolean,
+    extra?: Partial<WordProgress>,
+    sentenceForHistory?: { sentence: string; wordForm: string; englishPrompt?: string; userInput: string },
+  ) => {
     if (!session || !word || !settings || feedback !== null) return;
     const progress = getWordProgress(word.id);
     const beforeStage = progress.mascotStage;
+    setCardHistory(h => [...h, {
+      word, roundMode, round: currentRound, wordStatus, correct, sentence: sentenceForHistory ?? null,
+    }]);
 
     if (roundMode === 'review') {
       const outcome = applyReviewResult(progress, correct, currentRound);
@@ -878,13 +915,122 @@ export default function DailySessionFlow() {
   if (!word) return null;
   const chars = [...word.de];
 
+  // Back button: a pure "peek backward" log, never re-editable/re-scored —
+  // see CardSnapshot. Viewing history swaps out the whole live card for a
+  // read-only one; the one edge case that loses anything is an UNSUBMITTED
+  // in-progress translation (SentenceExercise's own input is local state,
+  // reset on remount) — accepted as a rare, low-stakes tradeoff rather than
+  // keeping every round type's UI permanently mounted-but-hidden just for
+  // this. Every other round type's state (values/hint/articleValues) lives
+  // in this component already, so it's untouched either way.
+  // submitResult pushes the live card's own snapshot into cardHistory the
+  // moment it's answered (feedback !== null) — so once that's happened,
+  // cardHistory's last entry is just a duplicate of what's already on
+  // screen, and the newest entry actually worth paging back TO is one
+  // further behind that.
+  const newestHistoryIndex = feedback !== null ? cardHistory.length - 2 : cardHistory.length - 1;
+
+  if (historyIndex !== null) {
+    const snap = cardHistory[historyIndex];
+    return (
+      <div className="flex flex-col gap-5">
+        <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-sm font-medium text-indigo-600">
+                {snap.round === 1 && (snap.sentence || isBootstrapCopyWord(snap.word)) ? 'Round 1 — copy the word' : ROUND_LABELS[snap.round]}
+              </div>
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                snap.wordStatus === 'Review' ? 'bg-emerald-100 text-emerald-700'
+                  : snap.wordStatus === 'Continuing' ? 'bg-amber-100 text-amber-700'
+                    : 'bg-indigo-100 text-indigo-700'
+              }`}
+              >
+                {snap.wordStatus}
+              </span>
+            </div>
+            <div className="flex gap-1">
+              {([1, 2, 3, 4] as Round[]).map(n => (
+                <div key={n} className={`h-2 flex-1 rounded-full ${n <= snap.round ? 'bg-indigo-500' : 'bg-indigo-100'}`} />
+              ))}
+            </div>
+          </div>
+
+          <div className="text-center">
+            <div className="text-2xl font-semibold text-slate-700">{snap.word.en}</div>
+          </div>
+
+          {snap.sentence ? (
+            <div className="flex flex-col gap-3">
+              <SentenceWordHeader word={snap.word} />
+              <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
+                <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate this sentence into German!</div>
+                <div className="text-stone-700 italic">{snap.sentence.englishPrompt}</div>
+              </div>
+              <div className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-500">
+                {snap.sentence.userInput}
+              </div>
+              <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
+                <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium">Correction</div>
+                <div className="text-lg text-green-800">
+                  {diffCorrectionSegments(snap.sentence.userInput, snap.sentence.sentence).map((seg, i) => (
+                    seg.changed
+                      ? <span key={i} className="underline decoration-2 underline-offset-2">{seg.text}</span>
+                      : <span key={i}>{seg.text}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="text-center -mt-1">
+                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
+                  {snap.word.article ? `${snap.word.article} ` : ''}{snap.word.de}
+                </div>
+              </div>
+              <div className={`text-center py-3 rounded-xl font-semibold text-lg ${snap.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {snap.correct ? '✓ Correct!' : '✗ Wrong that time'}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setHistoryIndex(i => Math.max(0, (i ?? 0) - 1))}
+              disabled={historyIndex === 0}
+              className="flex-1 bg-white text-indigo-700 border-2 border-indigo-100 py-2.5 rounded-xl font-semibold disabled:opacity-40 hover:enabled:bg-indigo-50 transition-all"
+            >
+              ← Older
+            </button>
+            <button
+              onClick={() => setHistoryIndex(i => (i !== null && i < newestHistoryIndex ? i + 1 : null))}
+              className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+            >
+              {historyIndex < newestHistoryIndex ? 'Newer →' : 'Back to current →'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <div className="text-xs text-emerald-100/70">
-          {roundMode === 'study'
-            ? `${completedCount} / ${totalWords} new words learned today`
-            : `${completedCount} / ${totalWords} words reviewed`}
+        <div className="flex items-center justify-between text-xs text-emerald-100/70">
+          <span>
+            {roundMode === 'study'
+              ? `${completedCount} / ${totalWords} new words learned today`
+              : `${completedCount} / ${totalWords} words reviewed`}
+          </span>
+          {newestHistoryIndex >= 0 && (
+            <button
+              onClick={() => setHistoryIndex(newestHistoryIndex)}
+              className="text-amber-200 hover:text-amber-100 underline font-medium"
+            >
+              ← Back
+            </button>
+          )}
         </div>
         <div className="h-2 w-full bg-white/15 rounded-full overflow-hidden">
           <div
@@ -935,9 +1081,9 @@ export default function DailySessionFlow() {
             word={word}
             level={settings.level}
             correction={sentenceResult}
-            onCorrected={correction => {
+            onCorrected={(correction, userInput) => {
               setSentenceResult(correction);
-              submitResult(true, { exampleSentence: correction });
+              submitResult(true, { exampleSentence: correction }, { ...correction, userInput });
             }}
             onNext={handleNext}
           />
