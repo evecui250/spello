@@ -93,7 +93,7 @@ const GOAL_DAYS_KEY = 'wb2_goal_days_total';
 const STREAK_KEY = 'wb2_streak_global';
 
 const DEFAULT_SETTINGS: Settings = {
-  studyBatchSize: 15, dailyReview: 25, language: 'de', level: 'A1',
+  studyBatchSize: 5, dailyReview: 15, language: 'de', level: 'A1',
   autoPlayAudio: true, requireArticle: false,
 };
 
@@ -217,11 +217,26 @@ function levelKey(base: string, level?: Level): string {
 // fresh defaults, if this level has never been used before) — the entry
 // point for "log into a different level" from the Settings level selector.
 export function switchToLevel(level: Level): Settings {
-  if (typeof window !== 'undefined') {
-    migrateLegacyKeysToB2();
-    migrateB2ToB2Old();
-    migrateOrphanedRound4();
-    localStorage.setItem(ACTIVE_LEVEL_KEY, level);
+  if (typeof window === 'undefined') return getSettingsForLevel(level);
+  migrateLegacyKeysToB2();
+  migrateB2ToB2Old();
+  migrateOrphanedRound4();
+
+  // A level switched to for the first time ever starts from wherever the
+  // learner already had their pace/audio/article preferences dialed in,
+  // rather than resetting to the app's hardcoded defaults — those are
+  // personal-taste settings, not something tied to the vocabulary itself,
+  // so there's no reason a new book should feel like starting over on them.
+  // A level that's already been configured before (switching back to it)
+  // keeps its own saved settings untouched, same as always.
+  const isFirstTimeOnThisLevel = localStorage.getItem(levelKey(KEYS.settings, level)) === null;
+  const carryOver = isFirstTimeOnThisLevel ? getSettings() : null;
+
+  localStorage.setItem(ACTIVE_LEVEL_KEY, level);
+  if (carryOver) {
+    const next: Settings = { ...carryOver, level };
+    saveSettingsForLevel(level, next);
+    return next;
   }
   return getSettings();
 }

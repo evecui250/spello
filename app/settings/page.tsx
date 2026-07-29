@@ -11,8 +11,8 @@ import AccountPanel from '../../components/AccountPanel';
 
 export default function SettingsPage() {
   const router = useRouter();
-  const [studyBatchSize, setStudyBatchSize] = useState(15);
-  const [dailyReview, setDailyReview] = useState(25);
+  const [studyBatchSize, setStudyBatchSize] = useState(5);
+  const [dailyReview, setDailyReview] = useState(15);
   const [level, setLevel] = useState<Level>('A1');
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
   const [requireArticle, setRequireArticle] = useState(false);
