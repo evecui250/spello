@@ -33,9 +33,13 @@ function reviewLabel(nextReviewDue?: string): string | null {
 // Returns null for no match at all, so it can double as the search filter.
 function searchRank(w: Word, q: string): number | null {
   const de = w.de.toLowerCase();
+  // Also matched with the article included (e.g. "der Start") — searchRank
+  // only checked the bare word before, so typing the article along with it
+  // (as it's actually displayed/spoken) found nothing.
+  const withArticle = w.article ? `${w.article} ${w.de}`.toLowerCase() : de;
   const en = w.en.toLowerCase();
-  if (de.startsWith(q)) return 0;
-  if (de.includes(q)) return 1;
+  if (de.startsWith(q) || withArticle.startsWith(q)) return 0;
+  if (de.includes(q) || withArticle.includes(q)) return 1;
   if (en.startsWith(q)) return 2;
   if (en.includes(q)) return 3;
   return null;
