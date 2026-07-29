@@ -9,7 +9,7 @@ import { scheduleSync } from '../../lib/sync';
 import Logo from '../../components/Logo';
 import DachshundMascot from '../../components/Mascot';
 
-const STEPS = ['language', 'pace', 'mascots'] as const;
+const STEPS = ['level', 'pace', 'mascots'] as const;
 type Step = typeof STEPS[number];
 
 const MASCOT_INTRO: { id: MascotStageId; name: string; reviews: string }[] = [
@@ -35,7 +35,7 @@ function StepDots({ step }: { step: Step }) {
 
 export default function WelcomePage() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('language');
+  const [step, setStep] = useState<Step>('level');
 
   // Lazily seeded from whatever's already saved (relevant when this page is
   // revisited from Settings after onboarding is done) — falls back to the
@@ -43,7 +43,6 @@ export default function WelcomePage() {
   // changing anything just re-saves what was already there instead of
   // silently resetting it to these defaults.
   const existing = useMemo(() => getSettings(), []);
-  const [language, setLanguage] = useState(existing.language);
   const [level, setLevel] = useState<Level>(existing.level);
   const [studyBatchSize, setStudyBatchSize] = useState(existing.studyBatchSize);
   const [dailyReview, setDailyReview] = useState(existing.dailyReview);
@@ -61,7 +60,7 @@ export default function WelcomePage() {
 
   const finish = () => {
     const settings: Settings = {
-      studyBatchSize, dailyReview, language, level, autoPlayAudio, requireArticle,
+      studyBatchSize, dailyReview, language: 'de', level, autoPlayAudio, requireArticle,
     };
     saveSettings(settings);
     scheduleSync();
@@ -77,36 +76,24 @@ export default function WelcomePage() {
         <StepDots step={step} />
       </div>
 
-      {step === 'language' && (
+      {step === 'level' && (
         <div className="w-full flex flex-col gap-6">
           <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-4">
             <p className="text-stone-500 text-sm -mt-1">
-              Defaults are fine if you&apos;re not sure — you can always change these later in Settings.
+              Defaults are fine if you&apos;re not sure — you can always change this later in Settings.
             </p>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <label className="block font-semibold text-stone-800 mb-1">Language</label>
-                <select
-                  value={language}
-                  onChange={e => setLanguage(e.target.value)}
-                  className="w-full border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="de">German</option>
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="block font-semibold text-stone-800 mb-1">Level</label>
-                <select
-                  value={level}
-                  onChange={e => setLevel(e.target.value as Level)}
-                  className="w-full border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="A1">A1</option>
-                  <option value="A2">A2</option>
-                  <option value="B1">B1</option>
-                  <option value="B2">B2</option>
-                </select>
-              </div>
+            <div>
+              <label className="block font-semibold text-stone-800 mb-1">Level</label>
+              <select
+                value={level}
+                onChange={e => setLevel(e.target.value as Level)}
+                className="w-full border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="A1">A1</option>
+                <option value="A2">A2</option>
+                <option value="B1">B1</option>
+                <option value="B2">B2</option>
+              </select>
             </div>
             <p className="text-stone-400 text-sm">Not sure which level? A1 is the easiest, for absolute beginners — B2 is the most advanced available right now.</p>
           </div>
@@ -202,7 +189,7 @@ export default function WelcomePage() {
           </div>
           <div className="flex gap-3">
             <button
-              onClick={() => setStep('language')}
+              onClick={() => setStep('level')}
               className="flex-1 bg-amber-50/75 text-stone-700 py-3.5 rounded-2xl font-semibold border border-amber-100/50 hover:bg-amber-50 active:scale-95 transition-all"
             >
               Back
@@ -236,12 +223,10 @@ export default function WelcomePage() {
             </div>
           </div>
           <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-1">
-            <div className="font-semibold text-stone-800">Create your own sentence!</div>
+            <div className="font-semibold text-stone-800">Translate to learn new words</div>
             <p className="text-stone-500 text-sm">
-              For a brand-new word, instead of just copying it you'll write your own sentence
-              using it — don't worry about grammar, or even mixing in English. AI turns it into
-              a natural, correct German sentence, which then shows up as that word's example on
-              your Word List.
+              For a brand-new word, you'll translate a short English sentence into German. AI
+              corrects your attempt — it becomes that word's example sentence on your Word List.
             </p>
           </div>
           <div className="flex gap-3 w-full">

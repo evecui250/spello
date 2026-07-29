@@ -13,7 +13,6 @@ export default function SettingsPage() {
   const router = useRouter();
   const [studyBatchSize, setStudyBatchSize] = useState(15);
   const [dailyReview, setDailyReview] = useState(25);
-  const [language, setLanguage] = useState('de');
   const [level, setLevel] = useState<Level>('A1');
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
   const [requireArticle, setRequireArticle] = useState(false);
@@ -25,7 +24,6 @@ export default function SettingsPage() {
   const applySettings = (s: Settings) => {
     setStudyBatchSize(s.studyBatchSize);
     setDailyReview(s.dailyReview);
-    setLanguage(s.language);
     setLevel(s.level);
     setAutoPlayAudio(s.autoPlayAudio);
     setRequireArticle(s.requireArticle);
@@ -73,7 +71,7 @@ export default function SettingsPage() {
   // from current state, which is already up to date by the time this runs.
   const persist = (patch: Partial<Settings>) => {
     const next: Settings = {
-      studyBatchSize, dailyReview, language, level, autoPlayAudio, requireArticle, ...patch,
+      studyBatchSize, dailyReview, language: 'de', level, autoPlayAudio, requireArticle, ...patch,
     };
     saveSettings(next);
     // Review's daily pool is always computed fresh from due words, so a
@@ -124,33 +122,19 @@ export default function SettingsPage() {
       </div>
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-6">
-        <div className="flex gap-4">
-          <div className="flex-1">
-            <label className="block font-semibold text-stone-800 mb-1">Language</label>
-            <select
-              value={language}
-              onChange={e => { setLanguage(e.target.value); persist({ language: e.target.value }); }}
-              className="w-full border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="de">German</option>
-            </select>
-          </div>
-          <div className="flex-1">
-            <label className="block font-semibold text-stone-800 mb-1">Level</label>
-            <select
-              value={level}
-              onChange={e => handleLevelChange(e.target.value as Level)}
-              className="w-full border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="A1">A1</option>
-              <option value="A2">A2</option>
-              <option value="B1">B1</option>
-              <option value="B2">B2</option>
-            </select>
-          </div>
-        </div>
-        <div className="-mt-4 flex flex-col gap-0.5">
-          <p className="text-stone-500 text-sm">This vocabulary book has {wordsForLevel(level).length} words for {level}.</p>
+        <div>
+          <label className="block font-semibold text-stone-800 mb-1">Level</label>
+          <select
+            value={level}
+            onChange={e => handleLevelChange(e.target.value as Level)}
+            className="w-full border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
+          >
+            <option value="A1">A1</option>
+            <option value="A2">A2</option>
+            <option value="B1">B1</option>
+            <option value="B2">B2</option>
+          </select>
+          <p className="text-stone-500 text-sm mt-1">This vocabulary book has {wordsForLevel(level).length} words for {level}.</p>
         </div>
 
         <div>
