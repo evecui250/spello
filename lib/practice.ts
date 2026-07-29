@@ -95,21 +95,6 @@ const PREREQUISITE_LEVELS: Record<Level, Level[]> = {
   C2: ['A1', 'A2', 'B1', 'B2', 'C1'],
 };
 
-// Word-count range for the round-1 translation exercise's English sentence,
-// per CEFR level — chosen by difficulty (kept in sync with the standalone
-// copy in scripts/generate-exercise-prompts.py, which pre-generates most of
-// these; this export is only actually exercised by the rare live fallback
-// in lib/ai.ts's generateSentence).
-export const EXERCISE_SENTENCE_WORD_RANGE: Record<Level, { min: number; max: number }> = {
-  A1: { min: 3, max: 6 },
-  A2: { min: 4, max: 8 },
-  B1: { min: 6, max: 12 },
-  B2: { min: 8, max: 14 },
-  B2_old: { min: 8, max: 14 },
-  C1: { min: 10, max: 16 },
-  C2: { min: 12, max: 18 },
-};
-
 // Vocabulary the AI-generated sentence (see lib/ai.ts's generateSentence)
 // is allowed to use: every word in a lower CEFR level (assumed known
 // outright, full list) plus, for A1 only, its own ~220 high-frequency

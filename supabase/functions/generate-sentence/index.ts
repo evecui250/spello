@@ -20,8 +20,8 @@ const MAX_KNOWN_WORDS = 4000;
 // Word-count range per level, by difficulty — kept in sync with the
 // standalone copy in scripts/generate-exercise-prompts.py (which
 // pre-generates the vast majority of exercisePrompt values baked into
-// lib/words.ts) and lib/practice.ts's EXERCISE_SENTENCE_WORD_RANGE, so this
-// live fallback stays consistent with the pre-generated majority.
+// lib/words.ts), so this live fallback stays consistent with the
+// pre-generated majority.
 const WORD_RANGE: Record<string, { min: number; max: number }> = {
   A1: { min: 3, max: 6 },
   A2: { min: 4, max: 8 },

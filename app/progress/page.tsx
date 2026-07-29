@@ -63,7 +63,16 @@ export default function ProgressPage() {
   }
   const bars = STAGE_ORDER.map(id => ({ id, count: stageCounts[id], color: STAGE_COLORS[id] }));
   const maxStageCount = Math.max(...bars.map(b => b.count), 1);
-  const totalWords = wordsForLevel(getSettings().level).length;
+  const level = getSettings().level;
+  const totalWords = wordsForLevel(level).length;
+
+  // A1 only: the ~220 curated high-frequency words always come first and
+  // use the copy-the-word round 1 (see isBootstrapCopyWord) — sentence
+  // translation only starts once every one of them has at least been
+  // started (buildStudyWords stops prioritizing them the moment none are
+  // left untouched, whether or not they're fully learned yet).
+  const bootstrapWords = level === 'A1' ? wordsForLevel('A1').filter(w => w.highFrequency) : [];
+  const bootstrapRemaining = bootstrapWords.filter(w => !progress[w.id]).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -74,7 +83,14 @@ export default function ProgressPage() {
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
         <h2 className="font-semibold text-stone-800">Words breakdown</h2>
-        <p className="text-stone-500 text-sm mb-4">{totalWords} words total in this vocabulary book.</p>
+        <p className="text-stone-500 text-sm mb-1">{totalWords} words total in this vocabulary book.</p>
+        {bootstrapWords.length > 0 && (
+          <p className="text-stone-500 text-sm mb-4">
+            {bootstrapRemaining > 0
+              ? `${bootstrapRemaining} more word${bootstrapRemaining === 1 ? '' : 's'} to unlock sentence translation.`
+              : 'Sentence translation unlocked!'}
+          </p>
+        )}
         {introducedCount === 0 && (
           <p className="text-stone-500 text-sm mb-3">Study a few words to start growing your first dachshund.</p>
         )}

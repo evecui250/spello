@@ -3941,8 +3941,6 @@ const WORDS_PART_9: Word[] = [
 
 export const WORDS: Word[] = [...WORDS_PART_1, ...WORDS_PART_2, ...WORDS_PART_3, ...WORDS_PART_4, ...WORDS_PART_5, ...WORDS_PART_6, ...WORDS_PART_7, ...WORDS_PART_8, ...WORDS_PART_9];
 
-export const CATEGORIES = [...new Set(WORDS.map(w => w.category).filter(Boolean))] as string[];
-
 // Exclusive by design (see Level above): studying at level N only pulls in
 // words tagged exactly N, not lower levels too.
 export function wordsForLevel(level: Level): Word[] {

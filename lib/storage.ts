@@ -74,9 +74,6 @@ const KEYS = {
   onboardingDone: 'wb2_onboarding_done',
 };
 
-const EXTRA_STUDY_KEY = 'wb2_extra_study_limit';
-const EXTRA_REVIEW_KEY = 'wb2_extra_review_limit';
-
 const ACTIVE_LEVEL_KEY = 'wb2_active_level';
 const MIGRATION_FLAG = 'wb2_migrated_per_level_v1';
 const B2_RENAME_FLAG = 'wb2_migrated_b2_to_b2_old_v1';
@@ -139,14 +136,6 @@ function migrateB2ToB2Old(): void {
     if (val !== null && localStorage.getItem(newKey) === null) {
       localStorage.setItem(newKey, val);
       localStorage.removeItem(oldKey);
-    }
-  }
-  for (const base of [EXTRA_STUDY_KEY, EXTRA_REVIEW_KEY]) {
-    const oldKey = `${base}__B2`;
-    const val = sessionStorage.getItem(oldKey);
-    if (val !== null) {
-      sessionStorage.setItem(`${base}__B2_old`, val);
-      sessionStorage.removeItem(oldKey);
     }
   }
   if (localStorage.getItem(ACTIVE_LEVEL_KEY) === 'B2') {
@@ -562,27 +551,6 @@ export function markStudyGoalDone(count: number): DailyStats {
   return stats;
 }
 
-// Directly sets the study-goal flag, without touching studiedCount. Used
-// when resizing today's batch (see resizeTodayStudyBatch): growing it past
-// an already-finished smaller batch means there's genuinely more to do
-// today, so the goal needs to go back to "not done" until the new words
-// are finished too — it shouldn't stay stuck showing "done" just because
-// the original, smaller batch was.
-export function setStudyGoalDoneFlag(done: boolean): void {
-  const stats = getDailyStats();
-  stats.studyDone = done;
-  saveDailyStats(stats);
-}
-
-// Same idea for Review: lets Home mark the goal met when there's genuinely
-// nothing due today, rather than only ever setting it from within an actual
-// review session (see app/page.tsx).
-export function setReviewGoalDoneFlag(done: boolean): void {
-  const stats = getDailyStats();
-  stats.reviewDone = done;
-  saveDailyStats(stats);
-}
-
 // Records that a review batch finished. `count` is added, since a user can
 // review multiple batches ("Review more") across the day.
 export function markReviewGoalDone(count: number): DailyStats {
@@ -739,39 +707,6 @@ export function startDailySession(studyWordIds: string[], reviewWordIds: string[
   };
   saveDailySession(s);
   return s;
-}
-
-// A one-shot "study N extra words" request from the Home page, consumed by
-// the next study session. Session-scoped so a stale value can't linger.
-export function setExtraStudyLimit(n: number): void {
-  if (typeof window === 'undefined') return;
-  sessionStorage.setItem(levelKey(EXTRA_STUDY_KEY), String(n));
-}
-
-export function takeExtraStudyLimit(): number | null {
-  if (typeof window === 'undefined') return null;
-  const raw = sessionStorage.getItem(levelKey(EXTRA_STUDY_KEY));
-  if (raw === null) return null;
-  sessionStorage.removeItem(levelKey(EXTRA_STUDY_KEY));
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-// Same one-shot handoff, for "review N extra words" — includes words
-// touched today (just-graduated or already-reviewed), unlike the normal
-// due-for-review pool.
-export function setExtraReviewLimit(n: number): void {
-  if (typeof window === 'undefined') return;
-  sessionStorage.setItem(levelKey(EXTRA_REVIEW_KEY), String(n));
-}
-
-export function takeExtraReviewLimit(): number | null {
-  if (typeof window === 'undefined') return null;
-  const raw = sessionStorage.getItem(levelKey(EXTRA_REVIEW_KEY));
-  if (raw === null) return null;
-  sessionStorage.removeItem(levelKey(EXTRA_REVIEW_KEY));
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 // --- Reset ---

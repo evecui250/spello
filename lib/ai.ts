@@ -6,17 +6,6 @@ export type SentenceCorrectionResult =
   | { used: true; sentence: string; wordForm: string }
   | { used: false };
 
-// Fires immediately with the current signed-in state, then again on every
-// sign-in/out — safe against a freshly-mounted page racing the Supabase
-// client still finishing its own session rehydration from storage (a
-// one-shot getSession() check right at mount could otherwise read `null`
-// briefly). Returns an unsubscribe function.
-export function watchSignedIn(cb: (signedIn: boolean) => void): () => void {
-  const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-    cb(!!session);
-  });
-  return () => sub.subscription.unsubscribe();
-}
 
 export interface AiUsageStats {
   calls: number;
