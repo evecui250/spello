@@ -251,6 +251,11 @@ export default function SettingsPage() {
         View welcome guide
       </Link>
 
+      <div className="flex justify-center gap-4 text-sm">
+        <Link href="/terms" className="text-amber-200 hover:text-amber-100 underline">Terms of Service</Link>
+        <Link href="/privacy" className="text-amber-200 hover:text-amber-100 underline">Privacy Policy</Link>
+      </div>
+
       <div className="bg-red-50/70 backdrop-blur-sm rounded-2xl border border-red-200/50 shadow-sm p-6 flex flex-col gap-3">
         <div>
           <h2 className="font-semibold text-red-700">Danger zone</h2>
