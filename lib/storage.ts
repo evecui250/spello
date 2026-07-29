@@ -708,11 +708,31 @@ export interface DailySession {
                      // user quits mid-round and comes back.
 }
 
+// Backfills any fields a session persisted before they existed would be
+// missing (e.g. the MCQ-checkpoint/matching-recap additions) with their
+// startDailySession defaults — a session started yesterday, still sitting
+// in localStorage, otherwise crashes the moment code that assumes a newer
+// field always exists (an array's .length, say) runs against it today.
+// `raw` is typed as a Partial here (unlike everywhere else this data is
+// handled) specifically because that's the whole point — it documents that
+// a real stored session, unlike the DailySession type's own guarantees,
+// can genuinely be missing fields added after it was saved.
+function normalizeDailySession(raw: Partial<DailySession>): DailySession {
+  return {
+    studyMcqDone: false,
+    studyMcqQueueIds: [],
+    studyMcqWrongIds: [],
+    reviewMatchingDone: false,
+    reviewMcqWrongIds: [],
+    ...raw,
+  } as DailySession;
+}
+
 export function getDailySession(): DailySession | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = JSON.parse(localStorage.getItem(levelKey(KEYS.dailySession)) || 'null') as DailySession | null;
-    if (raw && raw.date === today()) return raw;
+    const raw = JSON.parse(localStorage.getItem(levelKey(KEYS.dailySession)) || 'null') as Partial<DailySession> | null;
+    if (raw && raw.date === today()) return normalizeDailySession(raw);
     return null;
   } catch {
     return null;
