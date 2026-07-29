@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { getSettings, saveSettings, switchToLevel, clearAllProgress, Settings } from '../../lib/storage';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
 import { Level, wordsForLevel } from '../../lib/words';
-import { scheduleSync } from '../../lib/sync';
+import { scheduleSync, syncNow } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 
 export default function SettingsPage() {
@@ -80,10 +80,15 @@ export default function SettingsPage() {
     savedTimer.current = setTimeout(() => setSaved(false), 1200);
   };
 
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     if (!window.confirm(`This will erase all learning progress and your streak for the ${level} level — every word starts over. Other levels aren't affected. This can't be undone. Continue?`)) return;
     clearAllProgress();
-    scheduleSync();
+    // Awaited and immediate (not the debounced scheduleSync) — this is a
+    // destructive action, so the cleared state needs to actually reach
+    // remote before the user can navigate away, or a later sign-in sync
+    // pull would resurrect the "removed" progress from the still-stale
+    // remote row.
+    await syncNow();
     setCleared(true);
     setTimeout(() => setCleared(false), 2000);
   };

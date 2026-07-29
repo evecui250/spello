@@ -7,7 +7,7 @@ import {
 } from './storage';
 import { recordMilestonePass, REVIEW_PLAN, MASTERY_DAYS_AFTER_INTRODUCTION } from './srs';
 
-function shuffled<T>(arr: T[]): T[] {
+export function shuffled<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
 }
 

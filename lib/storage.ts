@@ -633,16 +633,18 @@ export function resetDailyGoalsForExtraRound(): void {
 }
 
 // --- Today's single merged daily session ---
-// One guided flow per day: study the day's new words (with the round-1.5
-// translation-choice checkpoint woven in), a matching-quiz recap, then the
-// same for review. `phase` + the queues below capture exactly where the user
-// left off, so navigating away and coming back (even the next day, in which
-// case a fresh session simply gets started) resumes cleanly. Naturally
-// invalidated once the date rolls over, same pattern as DailyStats.
+// One guided flow per day: study the day's new words (with a round-1.5
+// "what does this word mean?" checkpoint once every word's past round 1),
+// a matching-quiz recap at the true end, then the same shape for review
+// (its own pre-review MCQ up front, rounds, then its own matching recap).
+// `phase` + the queues below capture exactly where the user left off, so
+// navigating away and coming back (even the next day, in which case a
+// fresh session simply gets started) resumes cleanly. Naturally invalidated
+// once the date rolls over, same pattern as DailyStats.
 export type SessionPhase =
-  | 'study-rounds' | 'study-matching'
+  | 'study-mcq' | 'study-rounds' | 'study-matching'
   | 'study-done'
-  | 'review-mcq' | 'review-rounds'
+  | 'review-mcq' | 'review-rounds' | 'review-matching'
   | 'report'
   | 'congrats'
   | 'done';
@@ -652,15 +654,26 @@ export interface DailySession {
   phase: SessionPhase;
   studyWordIds: string[];
   reviewWordIds: string[];
-  // Set once every study word has finished round 1 (the sentence exercise)
-  // and the mid-Day-1 matching quiz has run — keeps it from firing twice if
-  // the session is resumed mid-round-2.
+  // Set once the study-mcq checkpoint (every word's had its round-1 pass,
+  // then a "what does this word mean?" MCQ, retried until clean — see
+  // studyMcqWrongIds) has actually run — keeps it from firing twice if the
+  // session is resumed mid-round-2.
+  studyMcqDone: boolean;
+  studyMcqQueueIds: string[];
+  // Wrongly-answered word ids this MCQ pass — once studyMcqQueueIds drains,
+  // a non-empty studyMcqWrongIds becomes the next pass (reshuffled), so a
+  // wrong pick gets asked again instead of just moving on.
+  studyMcqWrongIds: string[];
+  // Set once the end-of-study matching-quiz recap has run.
   studyMatchingDone: boolean;
+  // Set once the end-of-review matching-quiz recap has run.
+  reviewMatchingDone: boolean;
   // Every review-eligible word gets this "what does this word mean?"
   // reminder before its round-ladder continuation, regardless of which
-  // milestone (1st/2nd/3rd review) it's on — drained one word at a time
-  // regardless of right/wrong (no retry loop, it's a reminder not a gate).
+  // milestone (1st/2nd/3rd review) it's on. Same retry-until-clean
+  // mechanic as studyMcqWrongIds above.
   reviewMcqQueueIds: string[];
+  reviewMcqWrongIds: string[];
   matchingQueueIds: string[]; // which page comes next in the matching quiz
   // The exact in-session order of the study/review round-ladder queue,
   // updated every time it changes (a wrong answer requeues a word to the
@@ -712,8 +725,13 @@ export function startDailySession(studyWordIds: string[], reviewWordIds: string[
       : reviewWordIds.length > 0 ? 'review-rounds' : 'report',
     studyWordIds,
     reviewWordIds,
+    studyMcqDone: false,
+    studyMcqQueueIds: [],
+    studyMcqWrongIds: [],
     studyMatchingDone: false,
+    reviewMatchingDone: false,
     reviewMcqQueueIds,
+    reviewMcqWrongIds: [],
     matchingQueueIds: [],
     earnedPuppies: 0,
     earnedUpgrades: {},

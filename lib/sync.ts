@@ -177,6 +177,12 @@ async function pushToRemote(userId: string): Promise<void> {
   const activeSettings = settings[activeLevel];
   const allValues = Object.values(progress).flatMap(p => Object.values(p));
 
+  // Explicit onConflict: without it, upsert falls back to the table's
+  // primary key for conflict detection — if that's ever a separate id
+  // column rather than user_id itself, every "upsert" would silently
+  // INSERT a new row instead of replacing this user's existing one,
+  // leaving stale duplicate rows that a later .maybeSingle() pull can
+  // then trip over.
   const { error } = await supabase.from('user_progress').upsert({
     ...corePayload,
     streak_count: activeStreak.count,
@@ -184,14 +190,31 @@ async function pushToRemote(userId: string): Promise<void> {
     mastered_count: allValues.filter(p => p.fullyMastered).length,
     language: activeSettings?.language,
     level: activeLevel,
-  });
+  }, { onConflict: 'user_id' });
 
   if (error) {
-    const retry = await supabase.from('user_progress').upsert(corePayload);
+    const retry = await supabase.from('user_progress').upsert(corePayload, { onConflict: 'user_id' });
     if (retry.error) {
       console.error('Spello sync failed:', retry.error.message);
     }
   }
+}
+
+// Immediate (non-debounced) push, awaited — for actions where the caller
+// needs to know the upload actually went out before doing anything else
+// (e.g. clearing progress: without this, the debounced scheduleSync's
+// timer could still be pending if the tab closes/navigates away in an
+// environment where the pagehide/visibilitychange flush doesn't fire,
+// leaving the now-cleared local state never actually overwriting remote —
+// so a later pull silently resurrects the "removed" progress).
+export async function syncNow(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user.id;
+  if (!userId) return false;
+  if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
+  await pushToRemote(userId);
+  return true;
 }
 
 // The event fired on window once a signed-in pull-and-merge finishes, so
@@ -214,7 +237,29 @@ export function watchAuthAndSync(): () => void {
       });
     }
   });
-  return () => sub.subscription.unsubscribe();
+
+  // A tab/app left open for a while never re-pulls on its own otherwise —
+  // pullAndMerge only ever ran once, at that tab's own launch. Re-pulling
+  // on refocus (switching back from another app, or from a different
+  // device's tab) is what actually makes a change made elsewhere show up
+  // here without needing a full reload — mergeProgress's "further along
+  // wins" comparison already makes this safe to call anytime.
+  const onVisibilityChange = () => {
+    if (document.visibilityState !== 'visible') return;
+    supabase.auth.getSession().then(({ data }) => {
+      const userId = data.session?.user.id;
+      if (!userId) return;
+      pullAndMerge(userId).then(() => {
+        window.dispatchEvent(new Event(SYNCED_EVENT));
+      });
+    });
+  };
+  document.addEventListener('visibilitychange', onVisibilityChange);
+
+  return () => {
+    sub.subscription.unsubscribe();
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+  };
 }
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
