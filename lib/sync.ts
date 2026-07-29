@@ -4,26 +4,33 @@ import { supabase } from './supabase';
 import {
   getActiveLevel,
   getAllProgressForLevel, saveAllProgressForLevel, WordProgress, MascotStageId,
-  getStreakForLevel, saveStreakForLevel, Streak,
+  getStreak, saveStreak, Streak,
   getSettingsForLevel, saveSettingsForLevel, getSettingsUpdatedAtForLevel, Settings,
   getGoalDaysRecordForSync, mergeGoalDaysFromSync,
 } from './storage';
 import { Level, LEVEL_ORDER } from './words';
 
 // Each level is its own profile locally (see storage.ts) — the remote row
-// mirrors that by nesting every level's progress/streak/settings under its
-// own key, so switching levels on one device and syncing never overwrites
-// another level's cloud backup with the wrong profile's data.
+// mirrors that by nesting every level's progress/settings under its own key,
+// so switching levels on one device and syncing never overwrites another
+// level's cloud backup with the wrong profile's data. Streak (like
+// goal_days) is level-independent — completing any level's daily goal
+// extends the one shared streak, so it's stored flat, not nested.
 type ProgressByLevel = Partial<Record<Level, Record<string, WordProgress>>>;
-type StreakByLevel = Partial<Record<Level, Streak>>;
 type SettingsByLevel = Partial<Record<Level, Settings>>;
+// Legacy shape from before streak became global — one entry per level.
+type LegacyStreakByLevel = Partial<Record<Level, Streak>>;
 
 interface RemoteRow {
   progress: ProgressByLevel | Record<string, WordProgress> | null;
-  streak: StreakByLevel | Streak | null;
+  streak: Streak | LegacyStreakByLevel | null;
   settings: SettingsByLevel | Settings | null;
   goal_days: string[] | null;
   updated_at: string | null;
+}
+
+function isFlatStreak(s: unknown): s is Streak {
+  return !!s && typeof s === 'object' && 'lastDate' in s && 'count' in s;
 }
 
 // Old rows (from before the per-level split) stored a single flat blob that
@@ -100,16 +107,17 @@ export async function pullAndMerge(userId: string): Promise<void> {
   }
   if (!data) return;
 
-  const nested = isNestedByLevel(data.progress) && isNestedByLevel(data.streak);
+  // Streak's own shape is checked separately from progress/settings — since
+  // it's flat now instead of nested-by-level, folding it into the same
+  // "nested" check would misdetect a row with perfectly normal nested
+  // progress/settings as legacy-flat the moment streak stopped being nested.
+  const nested = isNestedByLevel(data.progress) && isNestedByLevel(data.settings);
   // Legacy rows (pre-per-level split) stored one flat blob that was always
   // implicitly the original B2 import — read it as B2_old rather than
   // dropping it.
   const remoteProgressByLevel: ProgressByLevel = nested
     ? renameB2Key(data.progress as ProgressByLevel)
     : { B2_old: (data.progress as Record<string, WordProgress>) ?? {} };
-  const remoteStreakByLevel: StreakByLevel = nested
-    ? renameB2Key(data.streak as StreakByLevel)
-    : { B2_old: data.streak as Streak };
   const remoteSettingsByLevel: SettingsByLevel = nested
     ? renameB2Key((data.settings as SettingsByLevel) ?? {})
     : { B2_old: data.settings as Settings };
@@ -119,10 +127,23 @@ export async function pullAndMerge(userId: string): Promise<void> {
     if (remoteProgress) {
       saveAllProgressForLevel(level, mergeProgress(getAllProgressForLevel(level), remoteProgress));
     }
-    const remoteStreak = remoteStreakByLevel[level];
-    if (remoteStreak && remoteStreak.lastDate > getStreakForLevel(level).lastDate) {
-      saveStreakForLevel(level, remoteStreak);
-    }
+  }
+
+  // Whichever side's streak is further along wins outright (same "further
+  // along survives" spirit as mergeProgress) — a flat Streak from the new
+  // shape compares directly; a legacy per-level blob is reduced to its own
+  // best (highest-count) entry first, so an old row synced before this
+  // change still contributes a sensible starting point instead of being
+  // silently dropped.
+  const remoteStreak: Streak | null = isFlatStreak(data.streak)
+    ? data.streak
+    : data.streak
+      ? Object.values(data.streak as LegacyStreakByLevel).reduce<Streak | null>((best, s) => (
+        !s ? best : !best || s.count > best.count ? s : best
+      ), null)
+      : null;
+  if (remoteStreak && remoteStreak.lastDate > getStreak().lastDate) {
+    saveStreak(remoteStreak);
   }
 
   // Settings are pushed/pulled as one all-levels bundle, but the staleness
@@ -150,28 +171,27 @@ export async function pullAndMerge(userId: string): Promise<void> {
   }
 }
 
-// Pushes every level's local state up as this user's remote snapshot, nested
-// by level (see ProgressByLevel/StreakByLevel/SettingsByLevel above) so each
-// profile keeps its own separate cloud backup. Alongside the full `progress`
-// blob (needed to actually restore state on another device), this also
-// tries to write flat summary columns — streak_count, learning_count,
-// mastered_count, language, level — describing the *currently active*
-// level/profile, so the row is readable at a glance in the Supabase table
-// editor without expanding the JSON. Those columns are optional (added via a
-// follow-up ALTER TABLE); if they don't exist yet, Postgres rejects the
-// whole upsert, so this falls back to the core payload rather than silently
-// failing to sync at all.
+// Pushes every level's local state up as this user's remote snapshot —
+// progress/settings nested by level (see ProgressByLevel/SettingsByLevel
+// above) so each profile keeps its own separate cloud backup; streak and
+// goal_days are flat/global, shared across every level. Alongside the full
+// `progress` blob (needed to actually restore state on another device),
+// this also tries to write flat summary columns — streak_count,
+// learning_count, mastered_count, language, level — describing the
+// *currently active* level/profile, so the row is readable at a glance in
+// the Supabase table editor without expanding the JSON. Those columns are
+// optional (added via a follow-up ALTER TABLE); if they don't exist yet,
+// Postgres rejects the whole upsert, so this falls back to the core
+// payload rather than silently failing to sync at all.
 async function pushToRemote(userId: string): Promise<void> {
   const progress: ProgressByLevel = {};
-  const streak: StreakByLevel = {};
   const settings: SettingsByLevel = {};
   for (const level of LEVEL_ORDER) {
     const p = getAllProgressForLevel(level);
     if (Object.keys(p).length > 0) progress[level] = p;
-    const s = getStreakForLevel(level);
-    if (s.lastDate) streak[level] = s;
     settings[level] = getSettingsForLevel(level);
   }
+  const streak = getStreak();
 
   const corePayload = {
     user_id: userId,
@@ -183,7 +203,6 @@ async function pushToRemote(userId: string): Promise<void> {
   };
 
   const activeLevel = getActiveLevel();
-  const activeStreak = streak[activeLevel] ?? { lastDate: '', count: 0 };
   const activeSettings = settings[activeLevel];
   const allValues = Object.values(progress).flatMap(p => Object.values(p));
 
@@ -195,7 +214,7 @@ async function pushToRemote(userId: string): Promise<void> {
   // then trip over.
   const { error } = await supabase.from('user_progress').upsert({
     ...corePayload,
-    streak_count: activeStreak.count,
+    streak_count: streak.count,
     learning_count: allValues.filter(p => !p.fullyMastered && p.studiedTimes >= 1).length,
     mastered_count: allValues.filter(p => p.fullyMastered).length,
     language: activeSettings?.language,
@@ -275,6 +294,14 @@ export function watchAuthAndSync(): () => void {
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingUserId: string | null = null;
 
+// Debounced just enough to coalesce a rapid string of edits (e.g. dragging a
+// pace slider) into one push, not so long that closing/backgrounding the
+// tab shortly after a change has much chance of losing it before it fires —
+// watchForUnloadFlush covers most of that gap already, but shrinking the
+// window itself is the more reliable half of the fix (those unload events
+// aren't 100% guaranteed to fire on every mobile browser/PWA).
+const SYNC_DEBOUNCE_MS = 500;
+
 // Call after any local mutation. Debounced and a no-op when signed out, so
 // it's safe to sprinkle after every save without worrying about network cost.
 export function scheduleSync(): void {
@@ -287,7 +314,7 @@ export function scheduleSync(): void {
     pushTimer = setTimeout(() => {
       pushTimer = null;
       pushToRemote(userId);
-    }, 1500);
+    }, SYNC_DEBOUNCE_MS);
   });
 }
 

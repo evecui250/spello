@@ -83,6 +83,15 @@ const ROUND5_REMOVAL_FLAG = 'wb2_migrated_round5_removal_v1';
 // doesn't reset or affect it.
 const GOAL_DAYS_KEY = 'wb2_goal_days_total';
 
+// Also deliberately NOT level-namespaced, for the same reason — completing
+// either level's daily goal extends the one shared streak, the same as it
+// counts toward the one shared goal-days total above. Used to be per-level
+// (a relic of the "every level is its own profile" design), which is
+// exactly why it could read differently depending on which level happened
+// to be active, and even show a streak the goal-days count didn't yet
+// reflect.
+const STREAK_KEY = 'wb2_streak_global';
+
 const DEFAULT_SETTINGS: Settings = {
   studyBatchSize: 15, dailyReview: 25, language: 'de', level: 'A1',
   autoPlayAudio: true, requireArticle: false,
@@ -407,12 +416,37 @@ export function saveWordProgress(p: WordProgress): void {
   saveAllProgress(all);
 }
 
-// --- Streak ---
+// --- Streak (global — see STREAK_KEY) ---
+
+// One-time backfill for anyone with existing per-level streaks from before
+// this became global: takes whichever level's streak was furthest along as
+// a reasonable starting point, rather than dropping every existing streak
+// back to zero. Best-effort, same spirit as backfillGoalDaysFromHistory.
+function backfillStreakFromLevels(): Streak {
+  let best: Streak = { lastDate: '', count: 0 };
+  for (const level of LEVEL_ORDER) {
+    try {
+      const raw = localStorage.getItem(namespacedKey(KEYS.streak, level));
+      if (!raw) continue;
+      const s: Streak = JSON.parse(raw);
+      if (s.count > best.count) best = s;
+    } catch {
+      // skip a corrupt legacy entry
+    }
+  }
+  return best;
+}
 
 export function getStreak(): Streak {
   if (typeof window === 'undefined') return { lastDate: '', count: 0 };
+  const raw = localStorage.getItem(STREAK_KEY);
+  if (raw === null) {
+    const backfilled = backfillStreakFromLevels();
+    localStorage.setItem(STREAK_KEY, JSON.stringify(backfilled));
+    return backfilled;
+  }
   try {
-    return JSON.parse(localStorage.getItem(levelKey(KEYS.streak)) || '{"lastDate":"","count":0}');
+    return JSON.parse(raw) ?? { lastDate: '', count: 0 };
   } catch {
     return { lastDate: '', count: 0 };
   }
@@ -430,20 +464,8 @@ export function touchStreak(): void {
 }
 
 export function saveStreak(s: Streak): void {
-  localStorage.setItem(levelKey(KEYS.streak), JSON.stringify(s));
-}
-
-export function getStreakForLevel(level: Level): Streak {
-  if (typeof window === 'undefined') return { lastDate: '', count: 0 };
-  try {
-    return JSON.parse(localStorage.getItem(levelKey(KEYS.streak, level)) || '{"lastDate":"","count":0}');
-  } catch {
-    return { lastDate: '', count: 0 };
-  }
-}
-
-export function saveStreakForLevel(level: Level, s: Streak): void {
-  localStorage.setItem(levelKey(KEYS.streak, level), JSON.stringify(s));
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(STREAK_KEY, JSON.stringify(s));
 }
 
 // --- Settings ---
@@ -741,7 +763,8 @@ export function startDailySession(studyWordIds: string[], reviewWordIds: string[
 export function clearAllProgress(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(levelKey(KEYS.progress));
-  localStorage.removeItem(levelKey(KEYS.streak));
+  // The streak is shared across every level (see STREAK_KEY) — clearing one
+  // level's progress shouldn't erase an achievement earned via any level.
   localStorage.removeItem(levelKey(KEYS.dailyStats));
   localStorage.removeItem(levelKey(KEYS.studyBatch));
   localStorage.removeItem(levelKey(KEYS.dailySession));
@@ -759,7 +782,7 @@ export function resetEverything(): void {
   if (typeof window === 'undefined') return;
   for (const level of LEVEL_ORDER) {
     localStorage.removeItem(namespacedKey(KEYS.progress, level));
-    localStorage.removeItem(namespacedKey(KEYS.streak, level));
+    localStorage.removeItem(namespacedKey(KEYS.streak, level)); // legacy per-level key, harmless if absent
     localStorage.removeItem(namespacedKey(KEYS.settings, level));
     localStorage.removeItem(namespacedKey(KEYS.settingsUpdatedAt, level));
     localStorage.removeItem(namespacedKey(KEYS.dailyStats, level));
@@ -767,6 +790,7 @@ export function resetEverything(): void {
     localStorage.removeItem(namespacedKey(KEYS.dailySession, level));
   }
   localStorage.removeItem(GOAL_DAYS_KEY);
+  localStorage.removeItem(STREAK_KEY);
   localStorage.removeItem(ACTIVE_LEVEL_KEY);
   localStorage.removeItem(KEYS.onboardingDone);
 }

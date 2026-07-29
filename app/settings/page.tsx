@@ -45,7 +45,11 @@ export default function SettingsPage() {
   const handleLevelChange = (newLevel: Level) => {
     const s = switchToLevel(newLevel);
     applySettings(s);
-    scheduleSync();
+    // Immediate, not the debounced scheduleSync — a level switch is a
+    // discrete one-shot action (unlike a slider drag), so there's no rapid-
+    // fire event volume to coalesce, and the sooner it reaches remote the
+    // less chance of it getting lost if the tab closes shortly after.
+    syncNow();
     setSaved(true);
     clearTimeout(savedTimer.current);
     savedTimer.current = setTimeout(() => setSaved(false), 1200);
@@ -83,7 +87,7 @@ export default function SettingsPage() {
   };
 
   const handleClearAll = async () => {
-    if (!window.confirm(`This will erase all learning progress and your streak for the ${level} level — every word starts over. Other levels aren't affected. This can't be undone. Continue?`)) return;
+    if (!window.confirm(`This will erase all learning progress for the ${level} level — every word starts over. Other levels, and your account-wide streak/goal days, aren't affected. This can't be undone. Continue?`)) return;
     clearAllProgress();
     // Awaited and immediate (not the debounced scheduleSync) — this is a
     // destructive action, so the cleared state needs to actually reach
@@ -273,7 +277,7 @@ export default function SettingsPage() {
         <div>
           <h2 className="font-semibold text-red-700">Danger zone</h2>
           <p className="text-stone-500 text-sm mt-1">
-            Erase all word progress, coins, and your streak for the {level} level to start over from scratch. Other levels are untouched.
+            Erase all word progress for the {level} level to start over from scratch. Other levels, and your account-wide streak/goal days, are untouched.
           </p>
         </div>
         <button
