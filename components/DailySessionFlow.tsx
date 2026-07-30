@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   getDailySession, saveDailySession, DailySession, SessionPhase,
   getWordProgress, saveWordProgress, getAllProgress, getSettings, today,
-  Round, WordProgress, MascotStageId, Settings,
+  Round, WordProgress, Settings,
   isStudyGoalDoneToday, isReviewGoalDoneToday, markStudyGoalDone, markReviewGoalDone,
   touchStreak, markCongratsShown, getDailyStats, addEarnedPuppy, addEarnedUpgrade,
 } from '../lib/storage';
@@ -24,6 +24,7 @@ import MatchingQuizPage from './MatchingQuizPage';
 import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
 import { speakWord, speakText } from '../lib/speech';
+import { imageUrlForWord } from '../lib/wordImage';
 import { scheduleSync } from '../lib/sync';
 import { correctSentence, generateSentence, DailyLimitReachedError } from '../lib/ai';
 import { supabase } from '../lib/supabase';
@@ -108,8 +109,6 @@ const ROUND_LABELS: Record<Round, string> = {
   4: 'Round 4 — no hints',
 };
 
-const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
-
 type RoundMode = 'study' | 'review';
 
 // A read-only snapshot of one just-answered round card, kept purely so the
@@ -152,6 +151,26 @@ function SentenceWordHeader({ word }: { word: Word }) {
         <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
       </div>
     </div>
+  );
+}
+
+// Most words don't have a pre-generated illustration yet (see
+// scripts/generate-bootstrap-images.py) — render nothing rather than a
+// broken-image icon when the file 404s.
+function RoundWordImage({ word }: { word: Word }) {
+  const [failed, setFailed] = useState(false);
+  // A new word swapping in should re-attempt a fresh <img> (and re-show it
+  // if a previous word in this session had no image) rather than staying
+  // permanently hidden from an earlier word's error.
+  useEffect(() => setFailed(false), [word.id]);
+  if (failed) return null;
+  return (
+    <img
+      src={imageUrlForWord(word)}
+      alt=""
+      className="w-24 h-24 object-contain mx-auto mb-1"
+      onError={() => setFailed(true)}
+    />
   );
 }
 
@@ -999,24 +1018,48 @@ export default function DailySessionFlow() {
   }
 
   if (session.phase === 'report') {
-    const total = Object.values(session.earnedUpgrades).reduce((a, b) => a + (b ?? 0), 0);
-    if (total === 0) return null;
+    // Every word that reaches this report already passed its review round(s)
+    // today (see applyReviewResult / recordMilestonePass) — there's no
+    // partial-credit state to report separately from the list below, so a
+    // review with nothing to show just skips this phase entirely.
+    if (session.reviewWordIds.length === 0) return null;
+    const reviewedWords = wordsById(session.reviewWordIds);
     return (
       <div className="text-center py-16">
         <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           Today {session.reviewWordIds.length} word{session.reviewWordIds.length === 1 ? '' : 's'} reviewed
         </h2>
-        <p className="text-amber-100/80 mb-6">
-          Among them, {total} {total === 1 ? 'was' : 'were'} upgraded to the next level.
-        </p>
-        <div className="mx-auto mb-6 max-w-xs bg-amber-50/75 backdrop-blur-sm border border-amber-100/50 rounded-2xl px-5 py-4 flex flex-wrap justify-center gap-x-5 gap-y-2">
-          {STAGE_ORDER.filter(s => session.earnedUpgrades[s]).map(s => (
-            <div key={s} className="flex items-center gap-1.5">
-              <DachshundMascot stage={s} className="w-11 h-11" />
-              <span className="text-slate-600 font-medium text-sm">× {session.earnedUpgrades[s]}</span>
+        {reviewedWords.length > 0 && (
+          <div className="mx-auto mb-6 max-w-sm flex flex-col gap-2 text-left">
+            <div className="text-amber-100/70 text-xs font-semibold uppercase tracking-wide text-center mb-1">
+              Words reviewed today
             </div>
-          ))}
-        </div>
+            {reviewedWords.map(w => {
+              const progress = getWordProgress(w.id);
+              const sentence = progress.exampleSentence;
+              return (
+                <div key={w.id} className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="font-semibold text-stone-800">
+                      {w.article ? `${w.article} ` : ''}{w.de}
+                    </span>
+                    <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
+                    <div className="text-stone-500 text-sm">{w.en}</div>
+                    {sentence && (
+                      <div className="mt-1.5 pt-1.5 border-t border-amber-100/60 flex flex-col gap-0.5">
+                        {sentence.englishPrompt && (
+                          <div className="text-stone-500 text-xs">{sentence.englishPrompt}</div>
+                        )}
+                        <div className="text-stone-700 text-sm italic">{sentence.sentence}</div>
+                      </div>
+                    )}
+                  </div>
+                  <DachshundMascot stage={progress.mascotStage ?? 'puppy'} className="w-11 h-11 shrink-0" />
+                </div>
+              );
+            })}
+          </div>
+        )}
         <button
           onClick={handleContinueFromReport}
           className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
@@ -1151,12 +1194,14 @@ export default function DailySessionFlow() {
     );
   }
 
-  // A correct answer fills the NEXT dot right away (while "✓ Correct!" is
-  // still showing, before the auto-advance timer/Next click moves to the
-  // next card) rather than waiting for currentRound to actually update —
-  // capped at the episode's own last round so a cap-round pass doesn't
-  // imply a round beyond what this episode has.
-  const displayRound = feedback === true ? Math.min(currentRound + 1, roundRange[1]) : currentRound;
+  // A dot fills once its round is actually passed — strictly BEFORE
+  // currentRound (already done in an earlier round), or exactly
+  // currentRound the moment "✓ Correct!" shows (filling right away rather
+  // than waiting for currentRound to actually update on advance). Without
+  // the `=== currentRound` case restricted to a correct answer, the
+  // in-progress round's own dot would show filled before it's even been
+  // attempted.
+  const isRoundDotFilled = (n: Round) => n < currentRound || (n === currentRound && feedback === true);
 
   return (
     <div className="flex flex-col gap-5">
@@ -1201,12 +1246,13 @@ export default function DailySessionFlow() {
           </div>
           <div className="flex gap-1">
             {roundsInRange(roundRange).map(n => (
-              <div key={n} className={`h-2 flex-1 rounded-full transition-colors duration-300 ${n <= displayRound ? 'bg-indigo-500' : 'bg-indigo-100'}`} />
+              <div key={n} className={`h-2 flex-1 rounded-full transition-colors duration-300 ${isRoundDotFilled(n) ? 'bg-indigo-500' : 'bg-indigo-100'}`} />
             ))}
           </div>
         </div>
 
         <div className="text-center">
+          <RoundWordImage word={word} />
           <div className="text-2xl font-semibold text-slate-700">{word.en}</div>
         </div>
 
