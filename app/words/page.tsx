@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { wordsForLevel, Word } from '../../lib/words';
 import { getAllProgress, getSettings, WordProgress, MascotStageId, today } from '../../lib/storage';
 import { addDays, daysBetween } from '../../lib/srs';
+import { imageUrlForWord } from '../../lib/wordImage';
 import SpeakerButton from '../../components/SpeakerButton';
 import DachshundMascot from '../../components/Mascot';
 import CongratsModal from '../../components/CongratsModal';
@@ -80,6 +81,21 @@ function formatDateLabel(date: string, isToday: boolean): string {
   return isToday ? `${label} · Today` : label;
 }
 
+// Most words don't have a pre-generated illustration yet — render nothing
+// (rather than a broken-image icon) when the file 404s.
+function WordThumbnail({ word }: { word: Word }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <img
+      src={imageUrlForWord(word)}
+      alt=""
+      className="w-12 h-12 object-contain shrink-0"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export default function WordsPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress>>({});
   const [search, setSearch] = useState('');
@@ -141,20 +157,23 @@ export default function WordsPage() {
   function WordItem({ w }: { w: Word }) {
     const sentence = progress[w.id]?.exampleSentence;
     return (
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex items-center justify-between">
-        <div>
-          <span className="font-semibold text-stone-800">
-            {w.article ? `${w.article} ` : ''}{w.de}
-          </span>
-          <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
-          {w.plural && <span className="text-stone-500 text-sm ml-2">· {w.plural}</span>}
-          <div className="text-stone-500 text-sm">{w.en}</div>
-          {sentence && (
-            <div className="mt-0.5 flex flex-col gap-0.5">
-              {sentence.englishPrompt && <div className="text-stone-400 text-xs">{sentence.englishPrompt}</div>}
-              <div className="text-stone-500 text-sm italic">{sentence.sentence}</div>
-            </div>
-          )}
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <WordThumbnail word={w} />
+          <div className="min-w-0">
+            <span className="font-semibold text-stone-800">
+              {w.article ? `${w.article} ` : ''}{w.de}
+            </span>
+            <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
+            {w.plural && <span className="text-stone-500 text-sm ml-2">· {w.plural}</span>}
+            <div className="text-stone-500 text-sm">{w.en}</div>
+            {sentence && (
+              <div className="mt-0.5 flex flex-col gap-0.5">
+                {sentence.englishPrompt && <div className="text-stone-400 text-xs">{sentence.englishPrompt}</div>}
+                <div className="text-stone-500 text-sm italic">{sentence.sentence}</div>
+              </div>
+            )}
+          </div>
         </div>
         <span className="shrink-0 flex flex-col items-center gap-0.5">
           {earned(progress[w.id]) ? (
