@@ -7,3 +7,4 @@ scripts/.exercise-prompts-cache.json
 scripts/.audio-regen-manifest-*.json
 scripts/.bootstrap-image-manifest.json
 scripts/.a1-rest-image-manifest.json
+scripts/.a1-more-nouns-manifest.json

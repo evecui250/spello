@@ -157,8 +157,8 @@ export default function WordsPage() {
   function WordItem({ w }: { w: Word }) {
     const sentence = progress[w.id]?.exampleSentence;
     return (
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
-        <div className="min-w-0">
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex items-center gap-3">
+        <div className="min-w-0 flex-1">
           <span className="font-semibold text-stone-800">
             {w.article ? `${w.article} ` : ''}{w.de}
           </span>
@@ -173,7 +173,7 @@ export default function WordsPage() {
           )}
         </div>
         <WordThumbnail word={w} />
-        <span className="shrink-0 flex flex-col items-center gap-0.5">
+        <span className="shrink-0 w-20 flex flex-col items-center gap-0.5">
           {earned(progress[w.id]) ? (
             <>
               <DachshundMascot stage={progress[w.id].mascotStage ?? 'puppy'} className="w-11 h-11" />
