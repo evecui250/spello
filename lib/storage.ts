@@ -549,6 +549,26 @@ export function markOnboardingDone(): void {
   localStorage.setItem(KEYS.onboardingDone, '1');
 }
 
+// --- Sign-in (optional — see AuthGate) ---
+// Some users hit real trouble with the magic-link email (spam filters,
+// corporate mail, etc.) — this lets them past the sign-in screen without
+// one, at the cost of no cross-device sync and no AI translate exercise
+// (every word falls back to copy-the-word instead — see DailySessionFlow's
+// signedIn check). Level-independent and persists once set, same as
+// onboarding, so they're not asked again every visit; signing in later from
+// Settings works exactly as if they'd never skipped.
+const SKIPPED_SIGNIN_KEY = 'wb2_skipped_signin';
+
+export function hasSkippedSignIn(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(SKIPPED_SIGNIN_KEY) === '1';
+}
+
+export function markSkippedSignIn(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(SKIPPED_SIGNIN_KEY, '1');
+}
+
 // --- Daily study/review goals ---
 
 export interface DailyStats {

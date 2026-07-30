@@ -26,6 +26,7 @@ import CongratsModal from './CongratsModal';
 import { speakWord, speakText } from '../lib/speech';
 import { scheduleSync } from '../lib/sync';
 import { correctSentence, generateSentence, DailyLimitReachedError } from '../lib/ai';
+import { supabase } from '../lib/supabase';
 
 // Locates wordForm inside sentence (case-insensitive) so callers can
 // highlight/blank it — used by both BlankedSentence (rounds 2+/review) and
@@ -356,6 +357,15 @@ export default function DailySessionFlow() {
   const [session, setSession] = useState<DailySession | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [ready, setReady] = useState(false);
+  // Signed-out users (AuthGate now allows skipping sign-in) can't use the AI
+  // translate exercise — the Edge Function needs a real user to attribute
+  // the OpenAI call to and enforce the daily cap against — so every word
+  // falls back to copy-the-word instead (see the round-1 branch below).
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSignedIn(!!s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   const [queue, setQueue] = useState<Word[]>([]);
   const [totalWords, setTotalWords] = useState(0);
@@ -1178,7 +1188,7 @@ export default function DailySessionFlow() {
         <div>
           <div className="flex items-center justify-between mb-1">
             <div className="text-sm font-medium text-indigo-600">
-              {currentRound === 1 && (exampleSentence || isBootstrapCopyWord(word)) ? 'Round 1 — copy the word' : ROUND_LABELS[currentRound]}
+              {currentRound === 1 && (exampleSentence || isBootstrapCopyWord(word) || !signedIn) ? 'Round 1 — copy the word' : ROUND_LABELS[currentRound]}
             </div>
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
               wordStatus === 'Review' ? 'bg-emerald-100 text-emerald-700'
@@ -1200,16 +1210,20 @@ export default function DailySessionFlow() {
           <div className="text-2xl font-semibold text-slate-700">{word.en}</div>
         </div>
 
-        {/* Two reasons the translation exercise is skipped for round 1:
+        {/* Three reasons the translation exercise is skipped for round 1:
             !exampleSentence excludes a word demoted BACK to round 1 via Hint
             from round 2 — it already has a saved sentence from its real
             round-1 pass, so it shouldn't be asked to translate another one.
             isBootstrapCopyWord excludes A1's ~220 curated high-frequency
             words permanently — they always use the old copy-the-word
-            mechanic instead, never the AI exercise. Both cases fall through
-            to the else branch's round-1 handling (copy-the-word tiles, with
-            any existing sentence still shown via BlankedSentence). */}
-        {currentRound === 1 && roundMode === 'study' && !isBootstrapCopyWord(word) && !exampleSentence ? (
+            mechanic instead, never the AI exercise. !signedIn excludes
+            anyone who skipped sign-in (see AuthGate) — the AI calls need a
+            real user to attribute cost/usage to, so every word falls back
+            to copy-the-word for a signed-out session. All three fall
+            through to the else branch's round-1 handling (copy-the-word
+            tiles, with any existing sentence still shown via
+            BlankedSentence). */}
+        {currentRound === 1 && roundMode === 'study' && signedIn && !isBootstrapCopyWord(word) && !exampleSentence ? (
           <SentenceExercise
             key={word.id}
             word={word}
