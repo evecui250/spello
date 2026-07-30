@@ -1027,13 +1027,10 @@ export default function DailySessionFlow() {
     return (
       <div className="text-center py-16">
         <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
-          Today {session.reviewWordIds.length} word{session.reviewWordIds.length === 1 ? '' : 's'} reviewed
+          {session.reviewWordIds.length} word{session.reviewWordIds.length === 1 ? '' : 's'} reviewed today
         </h2>
         {reviewedWords.length > 0 && (
           <div className="mx-auto mb-6 max-w-sm flex flex-col gap-2 text-left">
-            <div className="text-amber-100/70 text-xs font-semibold uppercase tracking-wide text-center mb-1">
-              Words reviewed today
-            </div>
             {reviewedWords.map(w => {
               const progress = getWordProgress(w.id);
               const sentence = progress.exampleSentence;

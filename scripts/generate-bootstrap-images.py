@@ -54,7 +54,11 @@ MANIFEST_PATH = os.path.join(REPO_ROOT, 'scripts', '.bootstrap-image-manifest.js
 STYLE_TEMPLATE = (
     "A modern, softly colorful illustration of {concept}, isolated with "
     "nothing else in the frame beyond what's specified — no walls, floor, "
-    "or room setting unless mentioned above. Simple, clean, minimal "
+    "or room setting unless mentioned above. The ENTIRE subject must fit "
+    "comfortably within the frame with clear empty margin on all four "
+    "sides — nothing touching, cut off, or cropped by any edge; zoom out "
+    "further if needed so the whole subject, including any extremities "
+    "(wheels, branches, limbs), is fully visible. Simple, clean, minimal "
     "linework and shading, easy to recognize at a glance. Keep the "
     "subject's own natural, true-to-life color exactly as it looks in "
     "real life (e.g. a red apple stays red) — nothing grayed out or "
@@ -69,18 +73,18 @@ CONCEPTS = {
     'w001': 'an evening sky at sunset, warm colors low on the horizon',
     'w024': 'a single apple',
     'w026': 'a person working at a desk with a laptop and papers',
-    'w037': 'a car',
+    'w037': 'a car, viewed from a three-quarter angle with generous space around it',
     'w055': 'a loaf of bread',
     'w056': 'a boy and a slightly younger boy standing together with arms around each other’s shoulders, as brothers',
     'w057': 'a book',
-    'w059': 'a bus',
+    'w059': 'a bus, viewed from a three-quarter angle with generous space around it',
     'w072': 'a mother and father standing together',
     'w082': 'a mother, father, and child standing together as a family',
     'w094': 'a smiling adult woman',
     'w133': 'a single young child playing',
     'w144': 'a scenic countryside landscape with rolling green hills',
     'w151': 'a smiling adult man',
-    'w157': 'the midday sun high in a bright blue sky',
+    'w157': 'the midday sun high overhead with a couple of small soft clouds nearby and gentle sun rays, high noon',
     'w160': 'a sunrise over hills with soft morning light',
     'w162': 'a mother holding her young child’s hand',
     'w165': 'a night sky full of stars with a crescent moon',
@@ -95,17 +99,17 @@ CONCEPTS = {
     'w1398': 'a glass of milk',
     'w1522': 'a smiling elderly woman',
     'w1525': 'a smiling elderly man',
-    'w1857': 'a father with his young son, both waving',
+    'w1857': 'a father with his young son, both smiling (no waving/raised arms)',
     'w1953': 'a street lined with buildings',
-    'w2009': 'a taxi cab',
+    'w2009': 'a taxi cab, viewed from a three-quarter angle with generous space around it',
     'w2013': 'a cup of tea',
     'w2021': 'a classic landline telephone',
-    'w2045': 'a father with his young daughter, both waving',
+    'w2045': 'a father with his young daughter, both smiling (no waving/raised arms)',
     'w2140': 'a smiling adult man holding a young child’s hand',
     'w2283': 'a glass of water',
     'w2341': 'an apartment building exterior',
     'w2392': 'a cozy, simple bedroom interior',
-    'w2404': 'a train',
+    'w2404': 'a train, viewed from a three-quarter angle with generous space around it',
     'w2522': 'an afternoon sun partway down a clear sky',
     'w2535': 'spring blossoms on a tree branch with fresh green sprouts',
     'w2536': 'a bright sun and a blooming sunflower',
@@ -117,9 +121,9 @@ CONCEPTS = {
     'w483': 'a paint swatch card of the color blue',
     'w909': 'a paint swatch card of the color yellow',
     'w963': 'a person smiling broadly with joyful body language, arms raised',
-    'w975': 'a giant redwood tree towering high with a tiny person at its base for scale',
+    'w975': 'a tall redwood tree, shown in full from roots to treetop',
     'w980': 'a paint swatch card of the color green',
-    'w1052': 'a very tall mountain peak reaching into the clouds',
+    'w1052': 'a mountain peak, shown in full from base to summit',
     'w1136': 'an energetic young child or teenager mid-jump',
     'w1181': 'a tiny ladybug next to a single blade of grass',
     'w1224': 'a person in bed with a thermometer in their mouth and a cold compress on their forehead',
@@ -133,7 +137,7 @@ CONCEPTS = {
     'w1779': 'a cheetah running at full speed with a motion-blur effect',
     'w1799': 'a paint swatch card of the color black',
     'w1801': 'a person straining hard to lift a very heavy boulder',
-    'w1808': 'a beautiful flower garden in full bloom',
+    'w1808': 'a small cluster of a few blooming flowers, fully visible',
     'w2032': 'a small pile of gold coins and a sparkling gem',
     'w2296': 'a paint swatch card of the color white',
     # --- verbs ---

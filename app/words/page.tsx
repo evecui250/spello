@@ -158,23 +158,21 @@ export default function WordsPage() {
     const sentence = progress[w.id]?.exampleSentence;
     return (
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <WordThumbnail word={w} />
-          <div className="min-w-0">
-            <span className="font-semibold text-stone-800">
-              {w.article ? `${w.article} ` : ''}{w.de}
-            </span>
-            <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
-            {w.plural && <span className="text-stone-500 text-sm ml-2">· {w.plural}</span>}
-            <div className="text-stone-500 text-sm">{w.en}</div>
-            {sentence && (
-              <div className="mt-0.5 flex flex-col gap-0.5">
-                {sentence.englishPrompt && <div className="text-stone-400 text-xs">{sentence.englishPrompt}</div>}
-                <div className="text-stone-500 text-sm italic">{sentence.sentence}</div>
-              </div>
-            )}
-          </div>
+        <div className="min-w-0">
+          <span className="font-semibold text-stone-800">
+            {w.article ? `${w.article} ` : ''}{w.de}
+          </span>
+          <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
+          {w.plural && <span className="text-stone-500 text-sm ml-2">· {w.plural}</span>}
+          <div className="text-stone-500 text-sm">{w.en}</div>
+          {sentence && (
+            <div className="mt-0.5 flex flex-col gap-0.5">
+              {sentence.englishPrompt && <div className="text-stone-400 text-xs">{sentence.englishPrompt}</div>}
+              <div className="text-stone-500 text-sm italic">{sentence.sentence}</div>
+            </div>
+          )}
         </div>
+        <WordThumbnail word={w} />
         <span className="shrink-0 flex flex-col items-center gap-0.5">
           {earned(progress[w.id]) ? (
             <>
