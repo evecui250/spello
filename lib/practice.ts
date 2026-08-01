@@ -370,39 +370,51 @@ export function applyReviewResult(progress: WordProgress, correct: boolean, curr
   return { progress: { ...progress, lastPracticed: t }, nextRound: demoteRound(currentRound, plan.startRound), isFinal: false, scored: true };
 }
 
-// Picks 3 wrong English choices for `word`, preferring words from the same
-// `category` (only ~200 noun entries have one); falling back to the same
-// `type` (part of speech) when there's no category or too few members; and
-// finally to any other word if even that pool is too small. `seen` (choices
-// already shown to this word this session — tracked in-memory by the caller)
-// is excluded so a retry after a wrong answer gets genuinely different
-// distractors, degrading gracefully to repeats only if the pool is exhausted.
+// Same "der/die/das X" form spoken and shown everywhere else a bare German
+// word appears standalone (round cards, Word List) — used here so the MCQ's
+// German choices carry their article too, not just the noun stem.
+function germanForm(word: Word): string {
+  return word.article ? `${word.article} ${word.de}` : word.de;
+}
+
+// Picks 3 wrong German choices for `word`, always from the SAME LEVEL (a
+// distractor the learner hasn't studied yet would be unrecognizable, not a
+// meaningful test) — preferring words from the same `category` (only ~200
+// noun entries have one); falling back to the same `type` (part of speech)
+// within the level when there's no category or too few members; and
+// finally to any other same-level word if even that pool is too small.
+// `seen` (choices already shown to this word this session — tracked
+// in-memory by the caller) is excluded so a retry after a wrong answer gets
+// genuinely different distractors, degrading gracefully to repeats only if
+// the pool is exhausted.
 export function buildMcqChoices(word: Word, seen: string[] = []): { correct: string; choices: string[] } {
-  const excluded = new Set([word.en.toLowerCase(), ...seen.map(s => s.toLowerCase())]);
-  const pickedEn = new Set<string>();
+  const correctForm = germanForm(word);
+  const excluded = new Set([word.de.toLowerCase(), ...seen.map(s => s.toLowerCase())]);
+  const picked = new Set<string>();
   const wrongChoices: string[] = [];
 
   const addFrom = (pool: Word[]) => {
     for (const w of shuffled(pool)) {
       if (wrongChoices.length >= 3) break;
-      const key = w.en.toLowerCase();
-      if (excluded.has(key) || pickedEn.has(key)) continue;
-      pickedEn.add(key);
-      wrongChoices.push(w.en);
+      const key = w.de.toLowerCase();
+      if (excluded.has(key) || picked.has(key)) continue;
+      picked.add(key);
+      wrongChoices.push(germanForm(w));
     }
   };
 
+  const sameLevel = WORDS.filter(w => w.id !== word.id && w.level === word.level);
   if (word.category) {
-    addFrom(WORDS.filter(w => w.id !== word.id && w.category === word.category));
+    addFrom(sameLevel.filter(w => w.category === word.category));
   }
   if (wrongChoices.length < 3) {
-    addFrom(WORDS.filter(w => w.id !== word.id && w.type === word.type));
+    addFrom(sameLevel.filter(w => w.type === word.type));
   }
   if (wrongChoices.length < 3) {
-    addFrom(WORDS.filter(w => w.id !== word.id));
+    addFrom(sameLevel);
   }
 
-  return { correct: word.en, choices: shuffled([word.en, ...wrongChoices]) };
+  return { correct: correctForm, choices: shuffled([correctForm, ...wrongChoices]) };
 }
 
 // Chunks word ids into matching-quiz pages of exactly 5 each. A page is only

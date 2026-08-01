@@ -2,19 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import { Word } from '../lib/words';
-import SpeakerButton from './SpeakerButton';
 import { speakWord } from '../lib/speech';
 
 interface Props {
   word: Word;
+  correct: string;
   choices: string[];
   onAnswer: (correct: boolean) => void;
 }
 
-// Round 1.5 — the German word is shown, the user picks its English meaning
-// from 4 choices. Reinforcement only: never touches masteryScore/growthScore/
+// Round 1.5 — the English word is shown, the user picks its German meaning
+// (with article, e.g. "die Bibliothek") from 4 choices, all drawn from the
+// word's own level so every option is something the learner could plausibly
+// recognize. Reinforcement only: never touches masteryScore/growthScore/
 // nextReviewDue, only the word's own round-ladder progress does that.
-export default function TranslationChoiceCard({ word, choices, onAnswer }: Props) {
+export default function TranslationChoiceCard({ word, correct: correctChoice, choices, onAnswer }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
 
   // Guards against a stuck retry loop: when the same word is the only one
@@ -35,7 +37,7 @@ export default function TranslationChoiceCard({ word, choices, onAnswer }: Props
     setSelected(choice);
   };
 
-  const correct = selected !== null && selected === word.en;
+  const correct = selected !== null && selected === correctChoice;
 
   // Enter advances once a choice is picked. No arm/disarm double-press guard
   // here (unlike the round-ladder's Enter handling) — a choice is only ever
@@ -65,16 +67,13 @@ export default function TranslationChoiceCard({ word, choices, onAnswer }: Props
   return (
     <div className="flex flex-col gap-5">
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
-        <div className="text-sm font-medium text-indigo-600">What does this word mean?</div>
+        <div className="text-sm font-medium text-indigo-600">Which German word means this?</div>
         <div className="text-center">
-          <span className="font-mono text-2xl font-bold text-indigo-800 tracking-wide">
-            {word.article ? `${word.article} ` : ''}{word.de}
-          </span>
-          <SpeakerButton word={word} className="ml-2 align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
+          <span className="text-2xl font-semibold text-slate-700">{word.en}</span>
         </div>
         <div className="flex flex-col gap-2">
           {choices.map(choice => {
-            const isCorrectChoice = choice === word.en;
+            const isCorrectChoice = choice === correctChoice;
             const isPicked = choice === selected;
             let cls = 'border-2 border-indigo-100 text-slate-700 hover:border-indigo-300';
             if (selected !== null) {

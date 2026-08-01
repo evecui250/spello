@@ -409,7 +409,7 @@ export default function DailySessionFlow() {
   // Bumped on every matching-quiz page completion so MatchingQuizPage always
   // remounts fresh for the next page.
   const [matchingPageKey, setMatchingPageKey] = useState(0);
-  const [mcqCurrent, setMcqCurrent] = useState<{ word: Word; choices: string[] } | null>(null);
+  const [mcqCurrent, setMcqCurrent] = useState<{ word: Word; correct: string; choices: string[] } | null>(null);
   // The current word's saved example sentence (round 2+/review only — see
   // BlankedSentence), and the just-produced correction for the round-1
   // sentence exercise (shown in place of the generic "✓ Correct!" banner).
@@ -535,9 +535,9 @@ export default function DailySessionFlow() {
       enterReviewMcqPhase(next);
       return;
     }
-    const { choices } = buildMcqChoices(w, mcqSeenRef.current[w.id] ?? []);
+    const { correct, choices } = buildMcqChoices(w, mcqSeenRef.current[w.id] ?? []);
     mcqSeenRef.current[w.id] = [...(mcqSeenRef.current[w.id] ?? []), ...choices];
-    setMcqCurrent({ word: w, choices });
+    setMcqCurrent({ word: w, correct, choices });
   }
 
   // Round-1.5 checkpoint — "what does this word mean?" once every study
@@ -564,9 +564,9 @@ export default function DailySessionFlow() {
       enterStudyMcqPhase(next);
       return;
     }
-    const { choices } = buildMcqChoices(w, mcqSeenRef.current[w.id] ?? []);
+    const { correct, choices } = buildMcqChoices(w, mcqSeenRef.current[w.id] ?? []);
     mcqSeenRef.current[w.id] = [...(mcqSeenRef.current[w.id] ?? []), ...choices];
-    setMcqCurrent({ word: w, choices });
+    setMcqCurrent({ word: w, correct, choices });
   }
 
   // --- Mount: load today's session (Home always creates one before routing
@@ -940,7 +940,7 @@ export default function DailySessionFlow() {
   if (session.phase === 'study-mcq' || session.phase === 'review-mcq') {
     if (!mcqCurrent) return null;
     const onAnswer = session.phase === 'study-mcq' ? handleStudyMcqAnswer : handleReviewMcqAnswer;
-    return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} choices={mcqCurrent.choices} onAnswer={onAnswer} />;
+    return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={onAnswer} />;
   }
 
   if (session.phase === 'study-matching' || session.phase === 'review-matching') {
