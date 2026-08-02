@@ -298,6 +298,12 @@ export function today(): string {
   return localDateString(new Date());
 }
 
+function yesterday(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return localDateString(d);
+}
+
 // --- Lifetime goal-days counter (level-independent) ---
 // A running total of calendar days on which the user finished at least one
 // goal (study or review) in ANY level — unlike the per-level streak, this
@@ -495,26 +501,36 @@ function backfillStreakFromLevels(): Streak {
 export function getStreak(): Streak {
   if (typeof window === 'undefined') return { lastDate: '', count: 0 };
   const raw = localStorage.getItem(STREAK_KEY);
+  let s: Streak;
   if (raw === null) {
-    const backfilled = backfillStreakFromLevels();
-    localStorage.setItem(STREAK_KEY, JSON.stringify(backfilled));
-    return backfilled;
+    s = backfillStreakFromLevels();
+    localStorage.setItem(STREAK_KEY, JSON.stringify(s));
+  } else {
+    try {
+      s = JSON.parse(raw) ?? { lastDate: '', count: 0 };
+    } catch {
+      s = { lastDate: '', count: 0 };
+    }
   }
-  try {
-    return JSON.parse(raw) ?? { lastDate: '', count: 0 };
-  } catch {
-    return { lastDate: '', count: 0 };
+  // A streak only stays alive through today or yesterday — any older
+  // lastDate means at least one full day was missed entirely, so it reads
+  // as broken (0) right now rather than waiting for the next touchStreak()
+  // call to silently correct it (which only happens once the user next
+  // completes a goal — until then, the stale nonzero count kept showing).
+  // lastDate itself is left untouched (not persisted here) since
+  // touchStreak still needs the real value to tell "resuming after exactly
+  // a 1-day gap" (count + 1) apart from "resuming after 2+ days" (reset to 1).
+  if (s.lastDate !== today() && s.lastDate !== yesterday()) {
+    return { lastDate: s.lastDate, count: 0 };
   }
+  return s;
 }
 
 export function touchStreak(): void {
   const t = today();
   const s = getStreak();
   if (s.lastDate === t) return;
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  const yesterday = localDateString(d);
-  const newCount = s.lastDate === yesterday ? s.count + 1 : 1;
+  const newCount = s.lastDate === yesterday() ? s.count + 1 : 1;
   saveStreak({ lastDate: t, count: newCount });
 }
 
