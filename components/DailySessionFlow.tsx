@@ -15,7 +15,7 @@ import {
   buildMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
 } from '../lib/practice';
 import { REVIEW_PLAN } from '../lib/srs';
-import { Word, Level, findWordByGermanForm } from '../lib/words';
+import { Word, Level, findWordByGermanForm, findWordByLemma } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
 import SpeakerButton from './SpeakerButton';
@@ -184,11 +184,16 @@ function SentenceExercise({
   // round-1 branch below, which no longer swaps to a separate result view
   // on correction, so the learner's own typed attempt stays visible
   // alongside the correction instead of disappearing).
-  correction: { sentence: string; wordForm: string; englishPrompt?: string } | null;
+  // lemmas (word-as-it-appears -> dictionary form, from correct-sentence's
+  // own AI call) lets word-click resolution below prefer the AI's own
+  // grammatical analysis over findWordByGermanForm's suffix-stripping
+  // guesswork — the only way to correctly resolve irregular plurals, past
+  // participles, and separable-prefix verbs split across the sentence.
+  correction: { sentence: string; wordForm: string; englishPrompt?: string; lemmas?: Record<string, string> } | null;
   // userInput (the learner's own typed attempt) rides along only for the
   // Back button's history snapshot — the parent keeps it separate from what
   // actually gets persisted to WordProgress.
-  onCorrected: (correction: { sentence: string; wordForm: string; englishPrompt?: string }, userInput: string) => void;
+  onCorrected: (correction: { sentence: string; wordForm: string; englishPrompt?: string; lemmas?: Record<string, string> }, userInput: string) => void;
   onNext: () => void;
 }) {
   // Almost every word already has a pre-generated exercisePrompt baked into
@@ -243,7 +248,7 @@ function SentenceExercise({
         setStatus('not-used');
         return;
       }
-      onCorrected({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt: promptSentence }, input.trim());
+      onCorrected({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt: promptSentence, lemmas: result.lemmas }, input.trim());
     } catch (e) {
       setStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
     }
@@ -314,8 +319,16 @@ function SentenceExercise({
                     // either a whole word or a whole non-word (punctuation/
                     // whitespace) run — see tokenize's regex — so there's no
                     // need to re-split; just check whether THIS one looks
-                    // up to a dictionary word at all.
-                    const match = /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(seg.text) ? findWordByGermanForm(seg.text) : undefined;
+                    // up to a dictionary word at all. Prefer the AI's own
+                    // lemma for this exact surface form when it provided one
+                    // (correctly handles irregular plurals, past participles,
+                    // and separable-prefix verbs the suffix-stripping
+                    // heuristic can't) — only fall back to the heuristic when
+                    // the AI didn't cover this token.
+                    const lemma = correction.lemmas?.[seg.text];
+                    const match = /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(seg.text)
+                      ? (lemma ? findWordByLemma(lemma) : undefined) ?? findWordByGermanForm(seg.text)
+                      : undefined;
                     const inner = match ? (
                       <button
                         type="button"
@@ -436,7 +449,7 @@ export default function DailySessionFlow() {
   // BlankedSentence), and the just-produced correction for the round-1
   // sentence exercise (shown in place of the generic "✓ Correct!" banner).
   const [exampleSentence, setExampleSentence] = useState<{ sentence: string; wordForm: string } | null>(null);
-  const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string; englishPrompt?: string } | null>(null);
+  const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; lemmas?: Record<string, string> } | null>(null);
   // "Review" = already fully learned, back for spaced repetition. "New" =
   // never touched before today. "Continuing" = mid-ladder from a PREVIOUS
   // day (not brand new, hasn't reached round 4 yet either) — this is the

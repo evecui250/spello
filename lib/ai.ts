@@ -3,7 +3,7 @@
 import { supabase } from './supabase';
 
 export type SentenceCorrectionResult =
-  | { used: true; sentence: string; wordForm: string }
+  | { used: true; sentence: string; wordForm: string; lemmas: Record<string, string> }
   | { used: false };
 
 // Thrown by generateSentence/correctSentence when the server-side daily cap
@@ -84,5 +84,6 @@ export async function correctSentence(
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (data?.used === false) return { used: false };
   if (!data?.sentence || !data?.wordForm) throw new Error('Malformed AI response');
-  return { used: true, sentence: data.sentence, wordForm: data.wordForm };
+  const lemmas = data?.lemmas && typeof data.lemmas === 'object' ? data.lemmas : {};
+  return { used: true, sentence: data.sentence, wordForm: data.wordForm, lemmas };
 }

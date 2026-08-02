@@ -4023,3 +4023,18 @@ export function findWordByGermanForm(rawToken: string): Word | undefined {
   }
   return candidates ? pickCandidate(candidates, wasCapitalized) : undefined;
 }
+
+// Looks up a dictionary-form lemma directly (e.g. "absagen", "Haus",
+// "schön") — used when the AI correction already told us the lemma for a
+// clicked token (see correct-sentence's "lemmas" field), so we don't need
+// findWordByGermanForm's suffix-stripping guesswork at all. Still runs
+// through the same capitalization tiebreak for the rare cross-level
+// homograph, using the lemma's OWN casing (nouns come back capitalized,
+// verbs/adjectives lowercase, per the prompt) as the signal.
+export function findWordByLemma(lemma: string): Word | undefined {
+  const cleaned = lemma.trim();
+  if (!cleaned) return undefined;
+  const wasCapitalized = /^[A-ZÄÖÜ]/.test(cleaned);
+  const candidates = getGermanFormMap().get(cleaned.toLowerCase());
+  return candidates ? pickCandidate(candidates, wasCapitalized) : undefined;
+}
