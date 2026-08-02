@@ -15,7 +15,7 @@ import {
   buildMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
 } from '../lib/practice';
 import { REVIEW_PLAN } from '../lib/srs';
-import { Word, Level, findWordByGermanForm, findWordByLemma } from '../lib/words';
+import { Word, Level, resolveClickedWord } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
 import SpeakerButton from './SpeakerButton';
@@ -319,15 +319,11 @@ function SentenceExercise({
                     // either a whole word or a whole non-word (punctuation/
                     // whitespace) run — see tokenize's regex — so there's no
                     // need to re-split; just check whether THIS one looks
-                    // up to a dictionary word at all. Prefer the AI's own
-                    // lemma for this exact surface form when it provided one
-                    // (correctly handles irregular plurals, past participles,
-                    // and separable-prefix verbs the suffix-stripping
-                    // heuristic can't) — only fall back to the heuristic when
-                    // the AI didn't cover this token.
-                    const lemma = correction.lemmas?.[seg.text];
+                    // up to a dictionary word at all. See resolveClickedWord
+                    // for the full resolution chain (AI lemma -> heuristic
+                    // -> separable-prefix repair).
                     const match = /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(seg.text)
-                      ? (lemma ? findWordByLemma(lemma) : undefined) ?? findWordByGermanForm(seg.text)
+                      ? resolveClickedWord(seg.text, correction.lemmas, word.de)
                       : undefined;
                     const inner = match ? (
                       <button

@@ -4038,3 +4038,56 @@ export function findWordByLemma(lemma: string): Word | undefined {
   const candidates = getGermanFormMap().get(cleaned.toLowerCase());
   return candidates ? pickCandidate(candidates, wasCapitalized) : undefined;
 }
+
+// Separable-prefix verbs (e.g. "absagen") are routinely split by German
+// word order into a stem token ("sagt") and a bare prefix token ("ab") at
+// the end of the sentence. Confirmed via direct testing, the AI's own
+// lemma mapping is the least reliable for exactly the prefix half — it
+// sometimes tags it with a USELESS identity lemma ("ab" -> "ab") instead
+// of the compound verb the prompt asks for. That alone wouldn't be fatal
+// (findWordByGermanForm would just fail to match and leave it plain), but
+// several of these prefixes are ALSO real, extremely common standalone
+// dictionary words in their own right (e.g. "ab" itself is a normal A1
+// preposition, "an"/"auf"/"um"/"vor"/"mit"/"zu" too) — so the AI's useless
+// identity lemma resolves anyway, just to the WRONG word. There's no way
+// to tell from the token alone whether a floating "ab" is a genuine
+// preposition or a stranded verb remnant, so this can't be a general
+// prefix+anything guess (that would misfire constantly on ordinary
+// preposition usage). What IS known for certain is which word this
+// exercise is testing — the correction is guaranteed to contain it
+// somewhere — so the repair stays narrow: only override the naive
+// resolution when reconstructing prefix+anotherLemma lands EXACTLY on
+// that target word.
+const SEPARABLE_PREFIXES = [
+  'ab', 'an', 'auf', 'aus', 'bei', 'durch', 'ein', 'her', 'hin', 'los',
+  'mit', 'nach', 'um', 'unter', 'vor', 'weg', 'weiter', 'wieder', 'zu',
+  'zurück', 'zusammen', 'über',
+];
+
+// Resolves a word AS CLICKED in an AI-corrected sentence back to its
+// dictionary entry: the AI's own per-token lemma first (it understands
+// this sentence's grammar far better than any client-side heuristic),
+// falling back to findWordByGermanForm's suffix-stripping for tokens the
+// AI didn't map — except when this token could be a stranded
+// separable-prefix remnant of targetWordDe (the word this exercise is
+// actually testing), in which case that reconstruction wins instead (see
+// SEPARABLE_PREFIXES above for why the naive resolution can't be trusted
+// there).
+export function resolveClickedWord(
+  token: string,
+  lemmas: Record<string, string> | undefined,
+  targetWordDe?: string,
+): Word | undefined {
+  const lower = token.toLowerCase();
+  if (lemmas && targetWordDe && SEPARABLE_PREFIXES.includes(lower) && targetWordDe.toLowerCase().startsWith(lower)) {
+    const targetLower = targetWordDe.toLowerCase();
+    for (const other of Object.values(lemmas)) {
+      if (lower + other.toLowerCase() === targetLower) {
+        const target = findWordByLemma(targetWordDe);
+        if (target) return target;
+      }
+    }
+  }
+  const lemma = lemmas?.[token];
+  return (lemma ? findWordByLemma(lemma) : undefined) ?? findWordByGermanForm(token);
+}
