@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { wordsForLevel, Word } from '../../lib/words';
+import { wordsById } from '../../lib/practice';
 import { getAllProgress, getSettings, WordProgress, MascotStageId, today } from '../../lib/storage';
 import { addDays, daysBetween } from '../../lib/srs';
 import { imageUrlForWord } from '../../lib/wordImage';
@@ -105,11 +106,18 @@ export default function WordsPage() {
   const [showCongrats, setShowCongrats] = useState(false);
   // The vocabulary book itself — follows Settings' CEFR level (a separate
   // concept from the familiarity/date filters below). Browsing an A1 profile
-  // shouldn't surface B2-only words.
-  const words = useMemo(
-    () => [...wordsForLevel(getSettings().level)].sort((a, b) => a.de.localeCompare(b.de, 'de')),
-    [],
-  );
+  // shouldn't surface B2-only words on its own... but a word saved via
+  // WordInfoPanel's "save for review" (see lib/practice.ts's
+  // saveWordForReviewFromOtherLevel) lives in THIS level's progress store
+  // under its own foreign id, so it needs to be unioned back in here too —
+  // recomputed once `progress` itself loads (not just on mount), or a
+  // freshly-saved word wouldn't show up without a reload.
+  const words = useMemo(() => {
+    const native = wordsForLevel(getSettings().level);
+    const nativeIds = new Set(native.map(w => w.id));
+    const extra = wordsById(Object.keys(progress).filter(id => !nativeIds.has(id)));
+    return [...native, ...extra].sort((a, b) => a.de.localeCompare(b.de, 'de'));
+  }, [progress]);
 
   useEffect(() => {
     setProgress(getAllProgress());

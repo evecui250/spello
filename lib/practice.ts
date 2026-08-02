@@ -3,7 +3,7 @@
 import { WORDS, Word, wordsForLevel, Level } from './words';
 import {
   getAllProgress, getSettings, today, Round, WordProgress, MascotStageId,
-  getDailySession, saveDailySession, SessionPhase,
+  getDailySession, saveDailySession, SessionPhase, getWordProgress, saveWordProgress,
 } from './storage';
 import { recordMilestonePass, REVIEW_PLAN, MASTERY_DAYS_AFTER_INTRODUCTION } from './srs';
 
@@ -179,7 +179,14 @@ export function buildReviewWords(
 ): Word[] {
   const allProgress = getAllProgress();
   const t = today();
-  const pool = wordsForLevel(getSettings().level).filter(w => {
+  // The native book, plus any word saved here via
+  // saveWordForReviewFromOtherLevel — its progress lives in this level's
+  // store under its own (foreign) id, so it would otherwise never surface:
+  // wordsForLevel(level) alone doesn't know it exists.
+  const nativeWords = wordsForLevel(getSettings().level);
+  const nativeIds = new Set(nativeWords.map(w => w.id));
+  const extraWords = wordsById(Object.keys(allProgress).filter(id => !nativeIds.has(id)));
+  const pool = [...nativeWords, ...extraWords].filter(w => {
     const p = allProgress[w.id];
     if (!p || !p.mascotStage || p.fullyMastered) return false;
     if (excludeIds.has(w.id)) return false;
@@ -312,6 +319,28 @@ export function applyResult(progress: WordProgress, correct: boolean): WordProgr
     return { ...progress, round: (progress.round + 1) as Round, lastPracticed };
   }
   return recordMilestonePass({ ...progress, lastPracticed }, 'puppy', lastPracticed);
+}
+
+// Lets a learner opt a word from ANOTHER level's book into the CURRENT
+// level's review rotation — e.g. clicking an unfamiliar B1 word inside a
+// B2 sentence correction (see components/WordInfoPanel.tsx). Mirrors
+// applyResult's own round-2-pass branch exactly, so the saved record is
+// indistinguishable from a word that was actually introduced and passed
+// its first milestone here: mascotStage 'puppy', first review tomorrow.
+// Progress is still stored under the CURRENT level's own progress store
+// (getWordProgress/saveWordProgress are both implicitly scoped to
+// whichever level is active) — "native vs. foreign" is never persisted as
+// its own flag, just derived by comparing word.level to settings.level
+// wherever it matters (buildReviewWords below, Word List, Progress page).
+// Returns false (no-op) if this word already has progress here, whether
+// from an earlier call to this same function or — impossible for a
+// genuinely foreign id, but defensive — any other path.
+export function saveWordForReviewFromOtherLevel(word: Word): boolean {
+  const existing = getWordProgress(word.id);
+  if (existing.mascotStage) return false;
+  const t = today();
+  saveWordProgress(recordMilestonePass({ ...existing, lastPracticed: t }, 'puppy', t));
+  return true;
 }
 
 // A learner-requested hint: explicitly demotes one round for more

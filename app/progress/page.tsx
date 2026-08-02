@@ -29,6 +29,13 @@ const STAGE_LABEL: Record<MascotStageId, string> = {
   medium: 'Strong',
   'long-crowned': 'Mastered',
 };
+// A word saved via WordInfoPanel's "save for review" (see
+// lib/practice.ts's saveWordForReviewFromOtherLevel) lives in THIS level's
+// progress store but isn't native to this book — this is the app's
+// existing interactive/accent color (buttons, links), reused here so the
+// "borrowed" stacking segment reads as its own consistent, recognizable
+// color rather than inventing a fifth palette entry.
+const FOREIGN_COLOR = '#4f46e5';
 
 export default function ProgressPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress> | null>(null);
@@ -53,17 +60,30 @@ export default function ProgressPage() {
 
   if (!progress) return null;
 
-  const stageCounts: Record<MascotStageId, number> = { puppy: 0, short: 0, medium: 0, 'long-crowned': 0 };
+  const level = getSettings().level;
+  // Split per stage into words native to this book vs. words "borrowed"
+  // from another level's book (see FOREIGN_COLOR above) — w.level is
+  // already right there on each Word, no extra lookup needed.
+  const stageCounts: Record<MascotStageId, { native: number; foreign: number }> = {
+    puppy: { native: 0, foreign: 0 },
+    short: { native: 0, foreign: 0 },
+    medium: { native: 0, foreign: 0 },
+    'long-crowned': { native: 0, foreign: 0 },
+  };
   let introducedCount = 0;
   for (const w of WORDS) {
     const p = progress[w.id];
     if (!p || p.studiedTimes === 0) continue;
     introducedCount++;
-    stageCounts[p.mascotStage ?? 'puppy'] += 1;
+    const bucket = stageCounts[p.mascotStage ?? 'puppy'];
+    if (w.level === level) bucket.native++;
+    else bucket.foreign++;
   }
-  const bars = STAGE_ORDER.map(id => ({ id, count: stageCounts[id], color: STAGE_COLORS[id] }));
-  const maxStageCount = Math.max(...bars.map(b => b.count), 1);
-  const level = getSettings().level;
+  const bars = STAGE_ORDER.map(id => {
+    const { native, foreign } = stageCounts[id];
+    return { id, native, foreign, total: native + foreign, color: STAGE_COLORS[id] };
+  });
+  const maxStageCount = Math.max(...bars.map(b => b.total), 1);
   const totalWords = wordsForLevel(level).length;
 
   // A1 only: the ~220 curated high-frequency words always come first and
@@ -101,21 +121,40 @@ export default function ProgressPage() {
         <div className="flex items-end justify-around gap-3 h-28">
           {bars.map(b => (
             <div key={b.id} className="flex flex-col items-center justify-end h-full flex-1 gap-1">
-              <span className="text-sm font-semibold text-stone-700">{b.count}</span>
+              <span className="text-sm font-semibold text-stone-700">{b.total}</span>
+              {b.foreign > 0 && (
+                <span className="text-[9px] font-medium text-indigo-600 -mt-1">
+                  {b.foreign} from other levels
+                </span>
+              )}
+              {/* Stacked two-tone column — native (this book) at the
+                  bottom, "borrowed" words from another level's book on top
+                  in FOREIGN_COLOR, so the two are visually distinguishable
+                  at a glance instead of just blending into one count. */}
               <div
-                className="w-full max-w-10 rounded-t-md transition-all"
-                style={{
-                  height: `${b.count > 0 ? Math.max((b.count / maxStageCount) * 100, 6) : 2}%`,
-                  backgroundColor: b.color,
-                }}
-              />
+                className="w-full max-w-10 rounded-t-md overflow-hidden flex flex-col justify-end transition-all"
+                style={{ height: `${b.total > 0 ? Math.max((b.total / maxStageCount) * 100, 6) : 2}%` }}
+              >
+                {b.foreign > 0 && (
+                  <div style={{ height: `${(b.foreign / b.total) * 100}%`, backgroundColor: FOREIGN_COLOR }} />
+                )}
+                <div style={{ height: `${b.total > 0 ? (b.native / b.total) * 100 : 100}%`, backgroundColor: b.color }} />
+              </div>
             </div>
           ))}
         </div>
         <div className="flex justify-around gap-3 mt-2">
           {bars.map(b => (
             <div key={b.id} className="flex flex-col items-center gap-1 flex-1">
-              <DachshundMascot stage={b.id} className="w-10 h-10" />
+              <div className="relative">
+                <DachshundMascot stage={b.id} className="w-10 h-10" />
+                {b.foreign > 0 && (
+                  <span
+                    className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-amber-50"
+                    style={{ backgroundColor: FOREIGN_COLOR }}
+                  />
+                )}
+              </div>
               <span className="text-[10px] font-medium text-stone-500">{STAGE_LABEL[b.id]}</span>
             </div>
           ))}

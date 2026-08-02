@@ -15,7 +15,7 @@ import {
   buildMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
 } from '../lib/practice';
 import { REVIEW_PLAN } from '../lib/srs';
-import { Word, Level } from '../lib/words';
+import { Word, Level, findWordByGermanForm } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
 import SpeakerButton from './SpeakerButton';
@@ -23,6 +23,7 @@ import TranslationChoiceCard from './TranslationChoiceCard';
 import MatchingQuizPage from './MatchingQuizPage';
 import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
+import WordInfoPanel from './WordInfoPanel';
 import { speakWord, speakText } from '../lib/speech';
 import { imageUrlForWord } from '../lib/wordImage';
 import { scheduleSync } from '../lib/sync';
@@ -201,6 +202,11 @@ function SentenceExercise({
   const [promptRetry, setPromptRetry] = useState(0);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'not-used' | 'limit-reached'>('idle');
+  // Which word in the corrected sentence the learner tapped (see the
+  // clickable-word rendering below and WordInfoPanel) — cleared implicitly
+  // on remount (this whole component is keyed by word.id) rather than
+  // needing its own reset effect.
+  const [selectedWord, setSelectedWord] = useState<Word | null>(null);
 
   useEffect(() => {
     if (word.exercisePrompt) return;
@@ -303,13 +309,29 @@ function SentenceExercise({
               <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
                 <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium">Correction</div>
                 <div className="text-lg text-green-800">
-                  {diffCorrectionSegments(input, correction.sentence).map((seg, i) => (
-                    seg.changed
-                      ? <span key={i} className="underline decoration-2 underline-offset-2">{seg.text}</span>
-                      : <span key={i}>{seg.text}</span>
-                  ))}
+                  {diffCorrectionSegments(input, correction.sentence).map((seg, i) => {
+                    // Every segment from diffCorrectionSegments is already
+                    // either a whole word or a whole non-word (punctuation/
+                    // whitespace) run — see tokenize's regex — so there's no
+                    // need to re-split; just check whether THIS one looks
+                    // up to a dictionary word at all.
+                    const match = /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(seg.text) ? findWordByGermanForm(seg.text) : undefined;
+                    const inner = match ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWord(match)}
+                        className="hover:bg-green-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                      >
+                        {seg.text}
+                      </button>
+                    ) : seg.text;
+                    return seg.changed
+                      ? <span key={i} className="underline decoration-2 underline-offset-2">{inner}</span>
+                      : <span key={i}>{inner}</span>;
+                  })}
                 </div>
               </div>
+              {selectedWord && <WordInfoPanel key={selectedWord.id} word={selectedWord} />}
               <button
                 onClick={onNext}
                 className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"

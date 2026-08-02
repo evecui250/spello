@@ -3946,3 +3946,80 @@ export const WORDS: Word[] = [...WORDS_PART_1, ...WORDS_PART_2, ...WORDS_PART_3,
 export function wordsForLevel(level: Level): Word[] {
   return WORDS.filter(w => w.level === level);
 }
+
+// Best-effort lookup from a word AS IT APPEARS IN A SENTENCE (inflected,
+// possibly capitalized) back to its dictionary entry — used to make words
+// in an AI-corrected sentence clickable (see components/WordInfoPanel.tsx).
+// There's no real lemmatizer here: exact-match the lowercased token first,
+// then fall back to stripping a fixed list of common inflectional suffixes
+// (longest first) and re-matching. Two known, deliberately unhandled gaps:
+// separable-prefix verbs split across a sentence (e.g. "sagt ... ab" for
+// "absagen") and strong-verb stem changes (e.g. "ging" for "gehen") won't
+// resolve — a real lemmatizer would be needed for those. A token that
+// matches nothing simply isn't clickable, never a wrong guess.
+let germanFormMap: Map<string, Word[]> | null = null;
+
+function getGermanFormMap(): Map<string, Word[]> {
+  if (!germanFormMap) {
+    germanFormMap = new Map();
+    for (const w of WORDS) {
+      const key = w.de.toLowerCase();
+      const arr = germanFormMap.get(key);
+      if (arr) arr.push(w);
+      else germanFormMap.set(key, [w]);
+    }
+  }
+  return germanFormMap;
+}
+
+// Longest first, so e.g. "-esten" is tried before "-en" strips too little.
+const INFLECTION_SUFFIXES = [
+  'esten', 'erem', 'eren', 'stem', 'sten', 'end', 'ete', 'est', 'em', 'en',
+  'er', 'es', 'et', 'ie', 'st', 'te', 'n', 'e', 't', 's',
+];
+
+// German capitalizes every noun in running text — the one reliable signal
+// available to break a genuine cross-level homograph tie (confirmed real
+// cases exist, e.g. "weg"/"Weg", "recht", "gut", "bar", "fett", "husten"):
+// prefer a noun candidate if the clicked token was capitalized, else prefer
+// a non-noun. Falls back to the first candidate if that doesn't narrow it
+// down (the remaining ambiguity is an accepted limitation, not a crash).
+function pickCandidate(candidates: Word[], wasCapitalized: boolean): Word {
+  if (candidates.length === 1) return candidates[0];
+  const nouns = candidates.filter(w => w.type === 'noun');
+  const nonNouns = candidates.filter(w => w.type !== 'noun');
+  if (wasCapitalized && nouns.length > 0) return nouns[0];
+  if (!wasCapitalized && nonNouns.length > 0) return nonNouns[0];
+  return candidates[0];
+}
+
+export function findWordByGermanForm(rawToken: string): Word | undefined {
+  const cleaned = rawToken.replace(/^[^a-zA-ZäöüÄÖÜß]+|[^a-zA-ZäöüÄÖÜß]+$/g, '');
+  if (!cleaned) return undefined;
+  const wasCapitalized = /^[A-ZÄÖÜ]/.test(cleaned);
+  const map = getGermanFormMap();
+  const lower = cleaned.toLowerCase();
+
+  let candidates = map.get(lower);
+  if (!candidates) {
+    for (const suffix of INFLECTION_SUFFIXES) {
+      if (!lower.endsWith(suffix) || lower.length - suffix.length < 2) continue;
+      const stem = lower.slice(0, -suffix.length);
+      // Pool the bare stem (covers noun/adjective inflection, e.g. "Kinder"
+      // -> "Kind") together with reconstructed verb infinitives (verbs are
+      // dictionary-keyed by their full "-en"/"-n" infinitive, never their
+      // stem, so "ruft" only ever matches via "ruf" + "en" = "rufen") —
+      // pooling rather than taking whichever's found first means the
+      // existing capitalization tiebreak below can still resolve a case
+      // like "kaufst" (stem "kauf" collides with the unrelated noun "Kauf")
+      // in favor of the lowercase-signals-verb reading.
+      const combined = [
+        ...(map.get(stem) ?? []),
+        ...(map.get(`${stem}en`) ?? []),
+        ...(map.get(`${stem}n`) ?? []),
+      ];
+      if (combined.length > 0) { candidates = combined; break; }
+    }
+  }
+  return candidates ? pickCandidate(candidates, wasCapitalized) : undefined;
+}
