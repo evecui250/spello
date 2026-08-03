@@ -1,14 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { wordsForLevel, Word } from '../../lib/words';
-import { wordsById } from '../../lib/practice';
+import { WORDS, wordsForLevel, Word, Level } from '../../lib/words';
 import { getAllProgress, getSettings, WordProgress, MascotStageId, today } from '../../lib/storage';
-import { addDays, daysBetween } from '../../lib/srs';
+import { daysBetween } from '../../lib/srs';
 import { imageUrlForWord } from '../../lib/wordImage';
 import SpeakerButton from '../../components/SpeakerButton';
 import DachshundMascot from '../../components/Mascot';
-import CongratsModal from '../../components/CongratsModal';
 
 // Same wording as Progress page's STAGE_LABEL — "Introduced" rather than
 // "New" for a word that's actually finished Day 1, so this list's badge
@@ -47,6 +45,12 @@ function searchRank(w: Word, q: string): number | null {
   return null;
 }
 
+// The four real, user-selectable vocabulary books (matches Settings' own
+// level picker) — excludes the legacy 'B2_old' and the still-unused
+// 'C1'/'C2' Level values, none of which are a book a learner can pick.
+const BOOK_LEVELS: Level[] = ['A1', 'A2', 'B1', 'B2'];
+type BookFilter = 'all' | Level;
+
 type Familiarity = 'all' | 'new' | 'learning' | 'mastered';
 
 // "New" = hasn't completed its first learning pass yet (round 4 success),
@@ -63,23 +67,16 @@ function matchesFamiliarity(p: WordProgress | undefined, filter: Familiarity): b
   return !!p?.fullyMastered;
 }
 
-// The earliest date any word was touched — used as the date picker's lower
-// bound, so the user can't navigate to before they started using the app.
-function computeFirstUseDate(progress: Record<string, WordProgress>): string {
-  let earliest: string | null = null;
-  for (const id of Object.keys(progress)) {
-    const p = progress[id];
-    for (const d of [p.lastPracticed, p.lastReviewedAt]) {
-      if (d && (!earliest || d < earliest)) earliest = d;
-    }
-  }
-  return earliest ?? today();
-}
+type DateFilter = 'all' | '7days' | '30days';
 
-function formatDateLabel(date: string, isToday: boolean): string {
-  const d = new Date(`${date}T00:00:00`);
-  const label = d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-  return isToday ? `${label} · Today` : label;
+// lastReviewedAt is set on every successful round-4 pass, whether that's
+// the first (learned) or a later one (reviewed) — so this covers "touched
+// at all in the last N days" regardless of which of those it was.
+function matchesDateFilter(p: WordProgress | undefined, filter: DateFilter, t: string): boolean {
+  if (filter === 'all') return true;
+  if (!p?.lastReviewedAt) return false;
+  const windowDays = filter === '7days' ? 7 : 30;
+  return daysBetween(p.lastReviewedAt, t) < windowDays;
 }
 
 // Most words don't have a pre-generated illustration yet — render nothing
@@ -101,64 +98,46 @@ export default function WordsPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress>>({});
   const [search, setSearch] = useState('');
   const [filterFamiliarity, setFilterFamiliarity] = useState<Familiarity>('all');
-  const [dateMode, setDateMode] = useState<'all' | 'specific'>('all');
-  const [date, setDate] = useState(() => today());
-  const [showCongrats, setShowCongrats] = useState(false);
-  // The vocabulary book itself — follows Settings' CEFR level (a separate
-  // concept from the familiarity/date filters below). Browsing an A1 profile
-  // shouldn't surface B2-only words on its own... but a word saved via
-  // WordInfoPanel's "save for review" (see lib/practice.ts's
-  // saveWordForReviewFromOtherLevel) lives in THIS level's progress store
-  // under its own foreign id, so it needs to be unioned back in here too —
-  // recomputed once `progress` itself loads (not just on mount), or a
-  // freshly-saved word wouldn't show up without a reload.
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  // Which vocabulary book to browse — defaults to Settings' own active
+  // level (so the page looks exactly as it always has until the learner
+  // deliberately switches it), but "All books" and any OTHER level can be
+  // browsed too. Progress is still only ever read from the CURRENTLY
+  // ACTIVE level's own store (per-level progress is a fully separate
+  // profile — see lib/storage.ts) — so a word from a level the learner
+  // isn't actively studying shows real progress here only if it was
+  // reached via WordInfoPanel's cross-level "save for review" (see
+  // lib/practice.ts's saveWordForReviewFromOtherLevel), which stores it,
+  // under its own foreign id, inside the CURRENT level's progress store.
+  // Browsing a book the learner studied natively in the past, under a
+  // level that ISN'T active right now, won't show that old history here.
+  const [filterLevel, setFilterLevel] = useState<BookFilter>(() => getSettings().level);
+
   const words = useMemo(() => {
-    const native = wordsForLevel(getSettings().level);
-    const nativeIds = new Set(native.map(w => w.id));
-    const extra = wordsById(Object.keys(progress).filter(id => !nativeIds.has(id)));
-    return [...native, ...extra].sort((a, b) => a.de.localeCompare(b.de, 'de'));
-  }, [progress]);
+    const pool = filterLevel === 'all'
+      ? WORDS.filter(w => (BOOK_LEVELS as string[]).includes(w.level))
+      : wordsForLevel(filterLevel);
+    return [...pool].sort((a, b) => a.de.localeCompare(b.de, 'de'));
+  }, [filterLevel]);
 
   useEffect(() => {
     setProgress(getAllProgress());
   }, []);
 
   const t = today();
-  const minDate = computeFirstUseDate(progress);
-  const canGoBack = date > minDate;
-  const canGoForward = date < t;
 
   const q = search.toLowerCase();
   const filtered = words
     .filter(w => {
       const p = progress[w.id];
       if (!matchesFamiliarity(p, filterFamiliarity)) return false;
-      // A word only counts for a given day if it was actually learned or
-      // reviewed then — lastReviewedAt is set on every successful round-4
-      // pass, whether that's the first (learned) or a later one (reviewed).
-      if (dateMode === 'specific' && p?.lastReviewedAt !== date) return false;
+      if (!matchesDateFilter(p, dateFilter, t)) return false;
       return true;
     })
     .map(w => ({ w, rank: search ? searchRank(w, q) : 0 }))
     .filter((x): x is { w: Word; rank: number } => x.rank !== null)
     .sort((a, b) => a.rank - b.rank)
     .map(x => x.w);
-
-  // The congrats-reopen button reflects the WHOLE day's activity regardless
-  // of the familiarity filter narrowing the visible list — "familiar words
-  // from yesterday" shouldn't hide the card just because none of yesterday's
-  // words happen to be familiar-tier today.
-  let dayLearnedCount = 0;
-  let dayReviewedCount = 0;
-  if (dateMode === 'specific') {
-    for (const w of words) {
-      const p = progress[w.id];
-      if (p?.lastReviewedAt !== date) continue;
-      if (p.successfulReviews === 1) dayLearnedCount++;
-      else if (p.successfulReviews > 1) dayReviewedCount++;
-    }
-  }
-  const goalMet = dayLearnedCount > 0 || dayReviewedCount > 0;
 
   const earned = (p?: WordProgress) => !!p && p.studiedTimes > 0;
 
@@ -172,6 +151,13 @@ export default function WordsPage() {
           </span>
           <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
           {w.plural && <span className="text-stone-500 text-sm ml-2">· {w.plural}</span>}
+          {/* Only shown when browsing "All books" — a mixed-book list
+              needs a way to tell at a glance which one each row is from. */}
+          {filterLevel === 'all' && (
+            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-stone-500 bg-stone-100 rounded-full px-2 py-0.5 align-middle">
+              {w.level}
+            </span>
+          )}
           <div className="text-stone-500 text-sm">{w.en}</div>
           {sentence && (
             <div className="mt-0.5 flex flex-col gap-0.5">
@@ -218,6 +204,15 @@ export default function WordsPage() {
 
       <div className="flex gap-2 flex-wrap">
         <select
+          value={filterLevel}
+          onChange={e => setFilterLevel(e.target.value as BookFilter)}
+          className="bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-3 py-1.5 text-sm text-stone-800 focus:outline-none focus:border-amber-300"
+        >
+          <option value="all">All books</option>
+          {BOOK_LEVELS.map(lvl => <option key={lvl} value={lvl}>{lvl}</option>)}
+        </select>
+
+        <select
           value={filterFamiliarity}
           onChange={e => setFilterFamiliarity(e.target.value as Familiarity)}
           className="bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-3 py-1.5 text-sm text-stone-800 focus:outline-none focus:border-amber-300"
@@ -229,86 +224,20 @@ export default function WordsPage() {
         </select>
 
         <select
-          value={dateMode}
-          onChange={e => setDateMode(e.target.value as 'all' | 'specific')}
+          value={dateFilter}
+          onChange={e => setDateFilter(e.target.value as DateFilter)}
           className="bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-3 py-1.5 text-sm text-stone-800 focus:outline-none focus:border-amber-300"
         >
           <option value="all">All days</option>
-          <option value="specific">Specific day</option>
+          <option value="7days">Past 7 days</option>
+          <option value="30days">Past 30 days</option>
         </select>
       </div>
-
-      {dateMode === 'specific' && (
-        <>
-          <div className="flex items-center justify-between gap-2">
-            <button
-              onClick={() => setDate(d => (d > minDate ? addDays(d, -1) : d))}
-              disabled={!canGoBack}
-              aria-label="Previous day"
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-amber-50/75 border-2 border-white/30 text-stone-800 font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:bg-amber-50"
-            >
-              ←
-            </button>
-
-            <input
-              type="date"
-              value={date}
-              min={minDate}
-              max={t}
-              onChange={e => e.target.value && setDate(e.target.value)}
-              className="bg-amber-50/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-3 py-2 text-stone-800 text-sm focus:outline-none focus:border-amber-300"
-            />
-
-            <button
-              onClick={() => setDate(d => (d < t ? addDays(d, 1) : d))}
-              disabled={!canGoForward}
-              aria-label="Next day"
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-amber-50/75 border-2 border-white/30 text-stone-800 font-bold disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:bg-amber-50"
-            >
-              →
-            </button>
-          </div>
-
-          {date !== t && (
-            <button
-              onClick={() => setDate(t)}
-              className="self-center text-sm font-semibold text-amber-200 hover:text-amber-100 underline"
-            >
-              Back to today
-            </button>
-          )}
-
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-amber-50 font-semibold" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
-              {formatDateLabel(date, date === t)}
-            </span>
-            {goalMet && (
-              <button
-                onClick={() => setShowCongrats(true)}
-                className="text-sm font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-full px-3 py-1.5 transition-colors"
-              >
-                View congrats card
-              </button>
-            )}
-          </div>
-        </>
-      )}
 
       <p className="text-emerald-100/70 text-sm">{filtered.length} words</p>
       <div className="flex flex-col gap-2">
         {filtered.map(w => <WordItem key={w.id} w={w} />)}
       </div>
-
-      {showCongrats && (
-        <CongratsModal
-          studiedCount={dayLearnedCount}
-          reviewedCount={dayReviewedCount}
-          language="German"
-          level={getSettings().level}
-          date={date}
-          onClose={() => setShowCongrats(false)}
-        />
-      )}
     </div>
   );
 }
