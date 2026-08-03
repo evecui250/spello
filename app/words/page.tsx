@@ -88,6 +88,7 @@ function WordThumbnail({ word }: { word: Word }) {
     <img
       src={imageUrlForWord(word)}
       alt=""
+      loading="lazy"
       className="w-12 h-12 object-contain shrink-0"
       onError={() => setFailed(true)}
     />
