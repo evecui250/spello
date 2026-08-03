@@ -41,6 +41,16 @@ export async function getAiUsageStats(): Promise<AiUsageStats | null> {
   };
 }
 
+export interface GeneratedSentence {
+  sentence: string;
+  // Chinese translation of `sentence`, only requested/returned when
+  // nativeLanguage is 'zh' — a pure display-layer addition. The underlying
+  // sentence generation itself always stays in English regardless (built
+  // only from English known-vocabulary, per getKnownVocabulary), so this
+  // never changes what's actually sent to correctSentence below.
+  sentenceZh?: string;
+}
+
 // Generates the English sentence for round 1's translation exercise, built
 // only from vocabulary the learner already knows (see lib/practice.ts's
 // getKnownVocabulary) plus the new word itself. Same key-handling rationale
@@ -52,14 +62,15 @@ export async function generateSentence(
   wordEn: string,
   level: string,
   knownVocabulary: string[],
-): Promise<string> {
+  nativeLanguage: 'en' | 'zh' = 'en',
+): Promise<GeneratedSentence> {
   const { data, error } = await supabase.functions.invoke('generate-sentence', {
-    body: { wordId, wordDe, wordEn, level, knownVocabulary },
+    body: { wordId, wordDe, wordEn, level, knownVocabulary, nativeLanguage },
   });
   if (error) throw error;
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (!data?.sentence) throw new Error('Malformed AI response');
-  return data.sentence;
+  return { sentence: data.sentence, sentenceZh: data.sentenceZh || undefined };
 }
 
 // Sends a learner's translation attempt (of the English sentence from

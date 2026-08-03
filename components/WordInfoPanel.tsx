@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Word } from '../lib/words';
+import { Word, glossFor } from '../lib/words';
 import { getSettings, getWordProgress } from '../lib/storage';
 import { saveWordForReviewFromOtherLevel } from '../lib/practice';
 import { scheduleSync } from '../lib/sync';
@@ -37,7 +37,7 @@ export default function WordInfoPanel({ word }: { word: Word }) {
           from {word.level.replace('_old', '')}
         </span>
       </div>
-      <div className="text-stone-600 text-sm">{word.en}</div>
+      <div className="text-stone-600 text-sm">{glossFor(word, settings.nativeLanguage)}</div>
       {!isNative && (
         saved ? (
           <p className="text-emerald-700 text-xs font-medium mt-1">✓ Saved — first review tomorrow</p>

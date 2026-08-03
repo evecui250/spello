@@ -15,7 +15,7 @@ import {
   buildMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
 } from '../lib/practice';
 import { REVIEW_PLAN } from '../lib/srs';
-import { Word, Level, resolveClickedWord } from '../lib/words';
+import { Word, Level, resolveClickedWord, glossFor } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
 import SpeakerButton from './SpeakerButton';
@@ -203,6 +203,11 @@ function SentenceExercise({
   // batch run). SentenceExercise is remounted (key={word.id}) per word, so
   // these initializers are safe to read directly from the word prop.
   const [promptSentence, setPromptSentence] = useState<string | null>(word.exercisePrompt ?? null);
+  // Chinese translation of promptSentence, for DISPLAY only — the AI calls
+  // below (generateSentence's known-vocabulary constraint, correctSentence's
+  // own understanding) always use the English promptSentence regardless of
+  // nativeLanguage; this is purely what the learner sees on screen.
+  const [promptSentenceZh, setPromptSentenceZh] = useState<string | null>(word.exercisePromptZh ?? null);
   const [promptStatus, setPromptStatus] = useState<'loading' | 'ready' | 'error' | 'limit-reached'>(word.exercisePrompt ? 'ready' : 'loading');
   const [promptRetry, setPromptRetry] = useState(0);
   const [input, setInput] = useState('');
@@ -217,10 +222,11 @@ function SentenceExercise({
     if (word.exercisePrompt) return;
     let cancelled = false;
     setPromptStatus('loading');
-    generateSentence(word.id, word.de, word.en, level, getKnownVocabulary(level))
-      .then(sentence => {
+    generateSentence(word.id, word.de, word.en, level, getKnownVocabulary(level), getSettings().nativeLanguage)
+      .then(({ sentence, sentenceZh }) => {
         if (cancelled) return;
         setPromptSentence(sentence);
+        setPromptSentenceZh(sentenceZh ?? null);
         setPromptStatus('ready');
       })
       .catch((e) => {
@@ -280,7 +286,9 @@ function SentenceExercise({
         <>
           <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
             <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate this sentence into German!</div>
-            <div className="text-stone-700 italic">{promptSentence}</div>
+            <div className="text-stone-700 italic">
+              {getSettings().nativeLanguage === 'zh' && promptSentenceZh ? promptSentenceZh : promptSentence}
+            </div>
           </div>
           <textarea
             value={input}
@@ -1021,11 +1029,13 @@ export default function DailySessionFlow() {
                       Introduced
                     </span>
                   </div>
-                  <div className="text-stone-500 text-sm">{w.en}</div>
+                  <div className="text-stone-500 text-sm">{glossFor(w, getSettings().nativeLanguage)}</div>
                   {sentence && (
                     <div className="mt-1.5 pt-1.5 border-t border-amber-100/60 flex flex-col gap-0.5">
                       {sentence.englishPrompt && (
-                        <div className="text-stone-500 text-xs">{sentence.englishPrompt}</div>
+                        <div className="text-stone-500 text-xs">
+                          {getSettings().nativeLanguage === 'zh' && w.exercisePromptZh ? w.exercisePromptZh : sentence.englishPrompt}
+                        </div>
                       )}
                       <div className="text-stone-700 text-sm italic">{sentence.sentence}</div>
                     </div>
@@ -1072,11 +1082,13 @@ export default function DailySessionFlow() {
                       {w.article ? `${w.article} ` : ''}{w.de}
                     </span>
                     <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
-                    <div className="text-stone-500 text-sm">{w.en}</div>
+                    <div className="text-stone-500 text-sm">{glossFor(w, getSettings().nativeLanguage)}</div>
                     {sentence && (
                       <div className="mt-1.5 pt-1.5 border-t border-amber-100/60 flex flex-col gap-0.5">
                         {sentence.englishPrompt && (
-                          <div className="text-stone-500 text-xs">{sentence.englishPrompt}</div>
+                          <div className="text-stone-500 text-xs">
+                            {getSettings().nativeLanguage === 'zh' && w.exercisePromptZh ? w.exercisePromptZh : sentence.englishPrompt}
+                          </div>
                         )}
                         <div className="text-stone-700 text-sm italic">{sentence.sentence}</div>
                       </div>
@@ -1165,7 +1177,7 @@ export default function DailySessionFlow() {
           </div>
 
           <div className="text-center">
-            <div className="text-2xl font-semibold text-slate-700">{snap.word.en}</div>
+            <div className="text-2xl font-semibold text-slate-700">{glossFor(snap.word, getSettings().nativeLanguage)}</div>
           </div>
 
           {snap.sentence ? (
@@ -1173,7 +1185,9 @@ export default function DailySessionFlow() {
               <SentenceWordHeader word={snap.word} />
               <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
                 <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate this sentence into German!</div>
-                <div className="text-stone-700 italic">{snap.sentence.englishPrompt}</div>
+                <div className="text-stone-700 italic">
+                  {getSettings().nativeLanguage === 'zh' && snap.word.exercisePromptZh ? snap.word.exercisePromptZh : snap.sentence.englishPrompt}
+                </div>
               </div>
               <div className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-500">
                 {snap.sentence.userInput}
@@ -1281,7 +1295,7 @@ export default function DailySessionFlow() {
 
         <div className="text-center">
           <RoundWordImage word={word} />
-          <div className="text-2xl font-semibold text-slate-700">{word.en}</div>
+          <div className="text-2xl font-semibold text-slate-700">{glossFor(word, getSettings().nativeLanguage)}</div>
         </div>
 
         {/* Three reasons the translation exercise is skipped for round 1:

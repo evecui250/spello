@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Word } from '../lib/words';
+import { Word, glossFor } from '../lib/words';
 import { getSettings } from '../lib/storage';
 import { speakWord } from '../lib/speech';
 
@@ -20,7 +20,8 @@ function shuffled<T>(arr: T[]): T[] {
 // become pickable again — keep retrying until every pair on this page is
 // correct, then "Continue" advances to the next page.
 export default function MatchingQuizPage({ words, onComplete }: Props) {
-  const [shuffledEn] = useState(() => shuffled(words.map(w => w.en)));
+  const nativeLanguage = getSettings().nativeLanguage;
+  const [shuffledEn] = useState(() => shuffled(words.map(w => glossFor(w, nativeLanguage))));
   const [correctIds, setCorrectIds] = useState<Set<string>>(new Set());
   const [selectedGerman, setSelectedGerman] = useState<string | null>(null);
   const [selectedEnglish, setSelectedEnglish] = useState<string | null>(null);
@@ -33,7 +34,7 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
     if (!selectedGerman || !selectedEnglish) return;
     const word = words.find(w => w.id === selectedGerman);
     if (!word) return;
-    if (word.en === selectedEnglish) {
+    if (glossFor(word, nativeLanguage) === selectedEnglish) {
       setCorrectIds(prev => new Set(prev).add(selectedGerman));
       setSelectedGerman(null);
       setSelectedEnglish(null);
@@ -57,7 +58,7 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
 
   const pickEnglish = (text: string) => {
     if (wrongFlash) return;
-    const alreadyCorrect = words.some(w => correctIds.has(w.id) && w.en === text);
+    const alreadyCorrect = words.some(w => correctIds.has(w.id) && glossFor(w, nativeLanguage) === text);
     if (alreadyCorrect) return;
     setSelectedEnglish(text);
   };
@@ -90,7 +91,7 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
           </div>
           <div className="flex flex-col gap-2">
             {shuffledEn.map(text => {
-              const isCorrect = words.some(w => correctIds.has(w.id) && w.en === text);
+              const isCorrect = words.some(w => correctIds.has(w.id) && glossFor(w, nativeLanguage) === text);
               const isSelected = selectedEnglish === text;
               const isWrong = wrongFlash?.english === text;
               let cls = 'border-2 border-indigo-100 text-slate-700 hover:border-indigo-300';

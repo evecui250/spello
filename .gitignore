@@ -11,3 +11,5 @@ scripts/.a1-more-nouns-manifest.json
 scripts/.a2-image-manifest.json
 scripts/.b1-image-manifest.json
 scripts/.b2-image-manifest.json
+scripts/.zh-translations-cache.json
+scripts/__pycache__/

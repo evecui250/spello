@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Word } from '../lib/words';
+import { Word, glossFor } from '../lib/words';
+import { getSettings } from '../lib/storage';
 import { speakWord } from '../lib/speech';
 
 interface Props {
@@ -69,7 +70,7 @@ export default function TranslationChoiceCard({ word, correct: correctChoice, ch
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
         <div className="text-sm font-medium text-indigo-600">Which German word means this?</div>
         <div className="text-center">
-          <span className="text-2xl font-semibold text-slate-700">{word.en}</span>
+          <span className="text-2xl font-semibold text-slate-700">{glossFor(word, getSettings().nativeLanguage)}</span>
         </div>
         <div className="flex flex-col gap-2">
           {choices.map(choice => {

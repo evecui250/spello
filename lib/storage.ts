@@ -54,6 +54,10 @@ export interface Settings {
   studyBatchSize: number;
   dailyReview: number;
   language: string;
+  // Which language word meanings/exercise prompts are shown in — a
+  // separate axis from `language` above (which is the language BEING
+  // learned, currently always 'de'). See lib/words.ts's glossFor().
+  nativeLanguage: 'en' | 'zh';
   level: Level;
   autoPlayAudio: boolean;
   requireArticle: boolean;
@@ -94,7 +98,7 @@ const GOAL_DAYS_KEY = 'wb2_goal_days_total';
 const STREAK_KEY = 'wb2_streak_global';
 
 const DEFAULT_SETTINGS: Settings = {
-  studyBatchSize: 5, dailyReview: 15, language: 'de', level: 'A1',
+  studyBatchSize: 5, dailyReview: 15, language: 'de', nativeLanguage: 'en', level: 'A1',
   autoPlayAudio: true, requireArticle: false,
 };
 

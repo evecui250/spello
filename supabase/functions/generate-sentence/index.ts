@@ -49,6 +49,7 @@ interface RequestBody {
   wordEn: string;
   level: string;
   knownVocabulary: string[];
+  nativeLanguage?: 'en' | 'zh';
 }
 
 Deno.serve(async (req: Request) => {
@@ -84,12 +85,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as RequestBody;
-    const { wordId, wordDe, wordEn, level, knownVocabulary } = body;
+    const { wordId, wordDe, wordEn, level, knownVocabulary, nativeLanguage } = body;
     if (!wordId || !wordDe || !wordEn) {
       return json({ error: 'Missing wordId, wordDe, or wordEn' }, 400);
     }
     const vocab = (Array.isArray(knownVocabulary) ? knownVocabulary : []).slice(0, MAX_KNOWN_WORDS);
     const { min: minWords, max: maxWords } = WORD_RANGE[level] ?? { min: 6, max: 14 };
+    const wantsZh = nativeLanguage === 'zh';
 
     const completion = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -114,13 +116,20 @@ Deno.serve(async (req: Request) => {
               `(3) The sentence MUST be between ${minWords} and ${maxWords} words long ` +
               '(inclusive) — count every word, this is a hard requirement, not a suggestion. ' +
               'The sentence should be meaningful and make sense on its own, not a trivial or ' +
-              'random-sounding string of words. Respond with exactly this JSON: ' +
-              '{"sentence": "..."}.',
+              'random-sounding string of words. ' +
+              (wantsZh
+                ? 'Additionally, include a "sentenceZh" field: a natural, fluent Simplified ' +
+                  'Chinese translation of that exact English sentence (meaning-for-meaning, ' +
+                  'not word-for-word) — this is shown to a Chinese-speaking learner instead of ' +
+                  'the English, so it must convey the same thing the English sentence does. '
+                : '') +
+              'Respond with exactly this JSON: ' +
+              (wantsZh ? '{"sentence": "...", "sentenceZh": "..."}.' : '{"sentence": "..."}.'),
           },
           { role: 'user', content: `Write the sentence for the word "${wordEn}".` },
         ],
         temperature: 0.7,
-        max_tokens: 120,
+        max_tokens: wantsZh ? 300 : 120,
       }),
     });
 
@@ -132,7 +141,7 @@ Deno.serve(async (req: Request) => {
 
     const result = await completion.json();
     const raw: string = result.choices?.[0]?.message?.content ?? '{}';
-    let parsed: { sentence?: string } = {};
+    let parsed: { sentence?: string; sentenceZh?: string } = {};
     try {
       parsed = JSON.parse(raw);
     } catch {
@@ -153,7 +162,9 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'AI returned an unexpected format' }, 502);
     }
 
-    return json({ sentence: parsed.sentence });
+    // sentenceZh is a best-effort display-layer addition — never worth
+    // failing the whole generation over if the model omits it.
+    return json({ sentence: parsed.sentence, sentenceZh: parsed.sentenceZh || undefined });
   } catch (err) {
     console.error('generate-sentence error:', err);
     return json({ error: 'Unexpected error' }, 500);

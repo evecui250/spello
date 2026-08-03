@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const router = useRouter();
   const [studyBatchSize, setStudyBatchSize] = useState(5);
   const [dailyReview, setDailyReview] = useState(15);
+  const [nativeLanguage, setNativeLanguage] = useState<'en' | 'zh'>('en');
   const [level, setLevel] = useState<Level>('A1');
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
   const [requireArticle, setRequireArticle] = useState(false);
@@ -24,6 +25,7 @@ export default function SettingsPage() {
   const applySettings = (s: Settings) => {
     setStudyBatchSize(s.studyBatchSize);
     setDailyReview(s.dailyReview);
+    setNativeLanguage(s.nativeLanguage);
     setLevel(s.level);
     setAutoPlayAudio(s.autoPlayAudio);
     setRequireArticle(s.requireArticle);
@@ -71,7 +73,7 @@ export default function SettingsPage() {
   // from current state, which is already up to date by the time this runs.
   const persist = (patch: Partial<Settings>) => {
     const next: Settings = {
-      studyBatchSize, dailyReview, language: 'de', level, autoPlayAudio, requireArticle, ...patch,
+      studyBatchSize, dailyReview, language: 'de', nativeLanguage, level, autoPlayAudio, requireArticle, ...patch,
     };
     saveSettings(next);
     // Review's daily pool is always computed fresh from due words, so a
@@ -135,6 +137,23 @@ export default function SettingsPage() {
             <option value="B2">B2</option>
           </select>
           <p className="text-stone-500 text-sm mt-1">This vocabulary book has {wordsForLevel(level).length} words for {level}.</p>
+        </div>
+
+        <div>
+          <label className="block font-semibold text-stone-800 mb-1">Learn with</label>
+          <select
+            value={nativeLanguage}
+            onChange={e => {
+              const v = e.target.value as 'en' | 'zh';
+              setNativeLanguage(v);
+              persist({ nativeLanguage: v });
+            }}
+            className="w-full border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
+          >
+            <option value="en">English</option>
+            <option value="zh">中文 (Chinese)</option>
+          </select>
+          <p className="text-stone-500 text-sm mt-1">Word meanings and example sentences are shown in this language.</p>
         </div>
 
         <div>

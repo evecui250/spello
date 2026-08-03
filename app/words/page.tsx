@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { WORDS, wordsForLevel, Word, Level } from '../../lib/words';
+import { WORDS, wordsForLevel, Word, Level, glossFor } from '../../lib/words';
 import { getAllProgress, getSettings, WordProgress, MascotStageId, today } from '../../lib/storage';
 import { daysBetween } from '../../lib/srs';
 import { imageUrlForWord } from '../../lib/wordImage';
@@ -31,17 +31,17 @@ function reviewLabel(nextReviewDue?: string): string | null {
 // more useful than a word that merely contains the letters mid-way through
 // (e.g. "Autobahn"), or one that only matches via its English translation.
 // Returns null for no match at all, so it can double as the search filter.
-function searchRank(w: Word, q: string): number | null {
+function searchRank(w: Word, q: string, nativeLanguage: 'en' | 'zh'): number | null {
   const de = w.de.toLowerCase();
   // Also matched with the article included (e.g. "der Start") — searchRank
   // only checked the bare word before, so typing the article along with it
   // (as it's actually displayed/spoken) found nothing.
   const withArticle = w.article ? `${w.article} ${w.de}`.toLowerCase() : de;
-  const en = w.en.toLowerCase();
+  const gloss = glossFor(w, nativeLanguage).toLowerCase();
   if (de.startsWith(q) || withArticle.startsWith(q)) return 0;
   if (de.includes(q) || withArticle.includes(q)) return 1;
-  if (en.startsWith(q)) return 2;
-  if (en.includes(q)) return 3;
+  if (gloss.startsWith(q)) return 2;
+  if (gloss.includes(q)) return 3;
   return null;
 }
 
@@ -113,6 +113,7 @@ export default function WordsPage() {
   // Browsing a book the learner studied natively in the past, under a
   // level that ISN'T active right now, won't show that old history here.
   const [filterLevel, setFilterLevel] = useState<BookFilter>(() => getSettings().level);
+  const nativeLanguage = getSettings().nativeLanguage;
 
   const words = useMemo(() => {
     const pool = filterLevel === 'all'
@@ -135,7 +136,7 @@ export default function WordsPage() {
       if (!matchesDateFilter(p, dateFilter, t)) return false;
       return true;
     })
-    .map(w => ({ w, rank: search ? searchRank(w, q) : 0 }))
+    .map(w => ({ w, rank: search ? searchRank(w, q, nativeLanguage) : 0 }))
     .filter((x): x is { w: Word; rank: number } => x.rank !== null)
     .sort((a, b) => a.rank - b.rank)
     .map(x => x.w);
@@ -159,10 +160,14 @@ export default function WordsPage() {
               {w.level}
             </span>
           )}
-          <div className="text-stone-500 text-sm">{w.en}</div>
+          <div className="text-stone-500 text-sm">{glossFor(w, nativeLanguage)}</div>
           {sentence && (
             <div className="mt-0.5 flex flex-col gap-0.5">
-              {sentence.englishPrompt && <div className="text-stone-400 text-xs">{sentence.englishPrompt}</div>}
+              {sentence.englishPrompt && (
+                <div className="text-stone-400 text-xs">
+                  {nativeLanguage === 'zh' && w.exercisePromptZh ? w.exercisePromptZh : sentence.englishPrompt}
+                </div>
+              )}
               <div className="text-stone-500 text-sm italic">{sentence.sentence}</div>
             </div>
           )}
