@@ -137,8 +137,8 @@ interface CardSnapshot {
 // translation — see correct-sentence's prompt). The corrected translation
 // becomes the word's permanent example sentence (shown on Word List and,
 // blanked out, on later rounds — see BlankedSentence below). Requires
-// sign-in (enforced app-wide by AuthGate, see app/layout.tsx), since the AI
-// calls need a real user to log usage against.
+// sign-in (optional, from Settings), since the AI calls need a real user
+// to log usage against — see this component's own signedIn check below.
 // SentenceWordHeader is shown above both the input step and the result step
 // (see the parent's currentRound === 1 branch) so the word stays visible
 // throughout — the correction lands on the same card instead of swapping to
@@ -415,10 +415,11 @@ export default function DailySessionFlow() {
   const [session, setSession] = useState<DailySession | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [ready, setReady] = useState(false);
-  // Signed-out users (AuthGate now allows skipping sign-in) can't use the AI
-  // translate exercise — the Edge Function needs a real user to attribute
-  // the OpenAI call to and enforce the daily cap against — so every word
-  // falls back to copy-the-word instead (see the round-1 branch below).
+  // Sign-in is entirely optional (from Settings) — signed-out users can't
+  // use the AI translate exercise, since the Edge Function needs a real
+  // user to attribute the OpenAI call to and enforce the daily cap
+  // against, so every word falls back to copy-the-word instead (see the
+  // round-1 branch below).
   const [signedIn, setSignedIn] = useState(false);
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSignedIn(!!s));
@@ -1305,9 +1306,10 @@ export default function DailySessionFlow() {
             isBootstrapCopyWord excludes A1's ~220 curated high-frequency
             words permanently — they always use the old copy-the-word
             mechanic instead, never the AI exercise. !signedIn excludes
-            anyone who skipped sign-in (see AuthGate) — the AI calls need a
-            real user to attribute cost/usage to, so every word falls back
-            to copy-the-word for a signed-out session. All three fall
+            anyone not signed in (sign-in is entirely optional, from
+            Settings) — the AI calls need a real user to attribute
+            cost/usage to, so every word falls back to copy-the-word for a
+            signed-out session. All three fall
             through to the else branch's round-1 handling (copy-the-word
             tiles, with any existing sentence still shown via
             BlankedSentence). */}

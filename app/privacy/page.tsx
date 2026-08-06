@@ -3,9 +3,6 @@
 import Link from 'next/link';
 import Logo from '../../components/Logo';
 
-// Deliberately exempted from the app-wide sign-in gate (see AuthGate) — a
-// privacy policy has to be readable before someone creates an account, not
-// only after.
 export default function PrivacyPage() {
   return (
     <div className="flex flex-col gap-6 max-w-xl mx-auto">

@@ -4,7 +4,6 @@ import '../styles/globals.css';
 import NavBar from '../components/NavBar';
 import ForestBackground from '../components/ForestBackground';
 import SyncGate from '../components/SyncGate';
-import AuthGate from '../components/AuthGate';
 import ChunkErrorRecovery from '../components/ChunkErrorRecovery';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -27,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ForestBackground />
         <NavBar />
         <main className="max-w-2xl mx-auto px-4 py-6">
-          <AuthGate>{children}</AuthGate>
+          {children}
         </main>
       </body>
     </html>

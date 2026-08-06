@@ -3,8 +3,6 @@
 import Link from 'next/link';
 import Logo from '../../components/Logo';
 
-// Deliberately exempted from the app-wide sign-in gate (see AuthGate) — see
-// app/privacy/page.tsx for why.
 export default function TermsPage() {
   return (
     <div className="flex flex-col gap-6 max-w-xl mx-auto">
