@@ -2,9 +2,15 @@
 
 import { supabase } from './supabase';
 
-export type SentenceCorrectionResult =
-  | { used: true; sentence: string; wordForm: string; lemmas: Record<string, string> }
-  | { used: false };
+// Always succeeds now — see correct-sentence's own comment for why: an
+// unusable/absent attempt falls back to a fresh direct translation
+// server-side rather than reporting failure, so there's no more "not
+// used" case for callers to handle.
+export interface SentenceCorrectionResult {
+  sentence: string;
+  wordForm: string;
+  lemmas: Record<string, string>;
+}
 
 // Thrown by generateSentence/correctSentence when the server-side daily cap
 // (see the Edge Functions' own DAILY_AI_CALL_LIMIT) has been hit — a
@@ -79,22 +85,24 @@ export async function generateSentence(
 // server of its own, so a client-embedded key would be extractable by
 // anyone) and logs the call to ai_usage for spend tracking. Corrects THEIR
 // translation rather than substituting an independent one — see the
-// function's own prompt for why. Throws on any failure — callers should
-// catch and let the learner retry.
+// function's own prompt for why. userTranslation is OPTIONAL — omit it
+// entirely for "sentence writing mode" off (Settings), where the learner
+// skips writing anything and this just fetches a correct example sentence
+// directly. Throws on any failure — callers should catch and let the
+// learner retry.
 export async function correctSentence(
   wordId: string,
   wordDe: string,
   level: string,
   englishPrompt: string,
-  userTranslation: string,
+  userTranslation?: string,
 ): Promise<SentenceCorrectionResult> {
   const { data, error } = await supabase.functions.invoke('correct-sentence', {
     body: { wordId, wordDe, level, englishPrompt, userTranslation },
   });
   if (error) throw error;
   if (data?.limitReached) throw new DailyLimitReachedError();
-  if (data?.used === false) return { used: false };
   if (!data?.sentence || !data?.wordForm) throw new Error('Malformed AI response');
   const lemmas = data?.lemmas && typeof data.lemmas === 'object' ? data.lemmas : {};
-  return { used: true, sentence: data.sentence, wordForm: data.wordForm, lemmas };
+  return { sentence: data.sentence, wordForm: data.wordForm, lemmas };
 }

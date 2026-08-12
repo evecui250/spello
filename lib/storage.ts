@@ -61,6 +61,12 @@ export interface Settings {
   level: Level;
   autoPlayAudio: boolean;
   requireArticle: boolean;
+  // When true (default), round 1 of a new word is the AI sentence-writing
+  // exercise as usual. When false, round 1 instead uses the same
+  // copy-the-word mechanic as A1's bootstrap words, with a correct example
+  // sentence fetched and shown alongside purely as reference — no writing
+  // required. See DailySessionFlow's useDirectSentence.
+  sentenceWritingMode: boolean;
 }
 
 // Every one of these is per-level storage: switching level in Settings is a
@@ -99,7 +105,7 @@ const STREAK_KEY = 'wb2_streak_global';
 
 const DEFAULT_SETTINGS: Settings = {
   studyBatchSize: 5, dailyReview: 15, language: 'de', nativeLanguage: 'en', level: 'A1',
-  autoPlayAudio: true, requireArticle: false,
+  autoPlayAudio: true, requireArticle: false, sentenceWritingMode: true,
 };
 
 // One-time move of pre-level-split data (flat keys, always implicitly the
@@ -828,13 +834,17 @@ export function startDailySession(studyWordIds: string[], reviewWordIds: string[
 
   const s: DailySession = {
     date: today(),
-    // 'report' is the universal fallback when there's nothing to study AND
-    // nothing to review — it renders nothing (0 upgrades) and immediately
-    // cascades into 'congrats', so the streak/congrats bookkeeping still
-    // goes through the one code path that owns it.
-    phase: studyWordIds.length > 0 ? 'study-rounds'
-      : reviewMcqQueueIds.length > 0 ? 'review-mcq'
-      : reviewWordIds.length > 0 ? 'review-rounds' : 'report',
+    // Review runs before study — start the day with the easy stuff (a
+    // multiple-choice recall check, then spelling words already learned)
+    // before asking the learner to take on new, harder vocabulary. 'report'
+    // (review's own results screen) is the universal fallback when there's
+    // nothing to study AND nothing to review either — it renders nothing (0
+    // upgrades) and immediately cascades into 'congrats', so the
+    // streak/congrats bookkeeping still goes through the one code path that
+    // owns it.
+    phase: reviewMcqQueueIds.length > 0 ? 'review-mcq'
+      : reviewWordIds.length > 0 ? 'review-rounds'
+      : studyWordIds.length > 0 ? 'study-rounds' : 'report',
     studyWordIds,
     reviewWordIds,
     studyMcqDone: false,

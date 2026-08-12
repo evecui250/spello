@@ -125,7 +125,12 @@ interface CardSnapshot {
   roundRange: [Round, Round];
   wordStatus: 'New' | 'Continuing' | 'Review';
   correct: boolean;
-  sentence?: { sentence: string; wordForm: string; englishPrompt?: string; userInput: string } | null;
+  // isDirect marks a sentence-writing-mode-OFF round (see directSentence) —
+  // there's no real translate-and-correct interaction behind it, just a
+  // fetched reference sentence alongside a copy-the-word pass, so the
+  // history replay below shows it that way instead of as a translate/
+  // correction card.
+  sentence?: { sentence: string; wordForm: string; englishPrompt?: string; userInput: string; isDirect?: boolean } | null;
 }
 
 // Round 1 (translation exercise, all non-bootstrap words — see
@@ -211,7 +216,7 @@ function SentenceExercise({
   const [promptStatus, setPromptStatus] = useState<'loading' | 'ready' | 'error' | 'limit-reached'>(word.exercisePrompt ? 'ready' : 'loading');
   const [promptRetry, setPromptRetry] = useState(0);
   const [input, setInput] = useState('');
-  const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'not-used' | 'limit-reached'>('idle');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached'>('idle');
   // Which word in the corrected sentence the learner tapped (see the
   // clickable-word rendering below and WordInfoPanel) — cleared implicitly
   // on remount (this whole component is keyed by word.id) rather than
@@ -250,10 +255,6 @@ function SentenceExercise({
     setStatus('loading');
     try {
       const result = await correctSentence(word.id, word.de, level, promptSentence, input.trim());
-      if (!result.used) {
-        setStatus('not-used');
-        return;
-      }
       onCorrected({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt: promptSentence, lemmas: result.lemmas }, input.trim());
     } catch (e) {
       setStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
@@ -292,7 +293,7 @@ function SentenceExercise({
           </div>
           <textarea
             value={input}
-            onChange={e => { setInput(e.target.value); if (status === 'not-used') setStatus('idle'); }}
+            onChange={e => setInput(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -304,11 +305,6 @@ function SentenceExercise({
             rows={2}
             className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 resize-none disabled:opacity-60"
           />
-          {status === 'not-used' && (
-            <p className="text-amber-700 text-sm text-center">
-              Try to actually use "{word.de}" somewhere in your translation (any form is fine).
-            </p>
-          )}
           {status === 'error' && (
             <p className="text-red-600 text-sm text-center">Couldn't get a correction — check your connection and try again.</p>
           )}
@@ -377,20 +373,20 @@ function SentenceExercise({
 // inflected substring the AI reported using, so the blank lines up with
 // however the word actually appears in the sentence (which may differ from
 // its dictionary form, e.g. plural/case endings).
-function BlankedSentence({ example, revealed }: { example: { sentence: string; wordForm: string }; revealed: boolean }) {
+function BlankedSentence({ example, revealed, label = 'Your sentence' }: { example: { sentence: string; wordForm: string }; revealed: boolean; label?: string }) {
   const parts = splitOnWordForm(example.sentence, example.wordForm);
   if (!parts) {
     if (!revealed) return null;
     return (
       <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
-        <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Your sentence</div>
+        <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">{label}</div>
         <div className="text-stone-700 italic">{example.sentence}</div>
       </div>
     );
   }
   return (
     <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
-      <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Your sentence</div>
+      <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">{label}</div>
       <div className="text-stone-700 italic">
         {parts.before}
         <span className={revealed ? 'font-bold text-indigo-700 not-italic' : 'inline-block bg-indigo-200 text-transparent rounded select-none'}>
@@ -455,6 +451,14 @@ export default function DailySessionFlow() {
   // sentence exercise (shown in place of the generic "✓ Correct!" banner).
   const [exampleSentence, setExampleSentence] = useState<{ sentence: string; wordForm: string } | null>(null);
   const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; lemmas?: Record<string, string> } | null>(null);
+  // Sentence-writing-mode OFF (Settings): a correct example sentence
+  // fetched directly, with no user attempt involved, shown as reference
+  // alongside the copy-the-word tiles below instead of SentenceExercise's
+  // translate-and-correct flow. Non-blocking — if the fetch fails, the
+  // copy-the-word interaction still proceeds, just without a sentence
+  // saved for this word today (same as any other bootstrap-style word).
+  const [directSentence, setDirectSentence] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; lemmas?: Record<string, string> } | null>(null);
+  const [directSentenceStatus, setDirectSentenceStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   // "Review" = already fully learned, back for spaced repetition. "New" =
   // never touched before today. "Continuing" = mid-ladder from a PREVIOUS
   // day (not brand new, hasn't reached round 4 yet either) — this is the
@@ -484,11 +488,47 @@ export default function DailySessionFlow() {
   const roundMode: RoundMode = session?.phase === 'review-rounds' ? 'review' : 'study';
   const word = queue[0] ?? null;
   const needsArticle = !!(settings?.requireArticle && word?.type === 'noun' && word?.article);
+  // Same three gating reasons as the copy-the-word fallback below (see its
+  // own comment) PLUS sentence writing mode being explicitly off — a word
+  // that's already bootstrap/signed-out/demoted doesn't need a fetched
+  // reference sentence layered on top of its own handling.
+  const useDirectSentence = !!word && currentRound === 1 && roundMode === 'study' && signedIn
+    && !isBootstrapCopyWord(word) && !exampleSentence && settings?.sentenceWritingMode === false;
 
   function persistSession(next: DailySession) {
     setSession(next);
     saveDailySession(next);
   }
+
+  // Fetches a correct example sentence with no user attempt involved (see
+  // directSentence above) — chains generateSentence's live fallback (rare;
+  // most words already have a pre-baked exercisePrompt) into correctSentence
+  // called with no userTranslation, which per its own contract always
+  // succeeds with a natural direct translation. Re-fires whenever a new
+  // word enters this mode (loadCurrent resets directSentenceStatus to
+  // 'idle' below). directSentenceStatus is deliberately NOT a dependency
+  // here, even though the effect reads it — setting it to 'loading' inside
+  // the effect would otherwise immediately re-trigger this same effect,
+  // whose cleanup would cancel the fetch it had just started.
+  useEffect(() => {
+    if (!useDirectSentence || !word || !settings || directSentenceStatus !== 'idle') return;
+    let cancelled = false;
+    setDirectSentenceStatus('loading');
+    (async () => {
+      try {
+        const englishPrompt = word.exercisePrompt
+          ?? (await generateSentence(word.id, word.de, word.en, settings.level, getKnownVocabulary(settings.level), settings.nativeLanguage)).sentence;
+        const result = await correctSentence(word.id, word.de, settings.level, englishPrompt);
+        if (cancelled) return;
+        setDirectSentence({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt, lemmas: result.lemmas });
+        setDirectSentenceStatus('ready');
+      } catch {
+        if (!cancelled) setDirectSentenceStatus('error');
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useDirectSentence, word, settings]);
 
   const loadCurrent = (w: Word, mode: RoundMode) => {
     const progress = getWordProgress(w.id);
@@ -507,6 +547,8 @@ export default function DailySessionFlow() {
     setAttemptKey(k => k + 1);
     setExampleSentence(progress.exampleSentence ?? null);
     setSentenceResult(null);
+    setDirectSentence(null);
+    setDirectSentenceStatus('idle');
     setWordStatus(mode === 'review' ? 'Review' : (progress.lastPracticed && progress.lastPracticed !== today() ? 'Continuing' : 'New'));
     if (round === 1 && getSettings().autoPlayAudio) speakWord(w);
   };
@@ -632,11 +674,13 @@ export default function DailySessionFlow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- report phase: auto-skip straight to congrats when nothing upgraded ---
+  // --- report phase: auto-skip when nothing upgraded (same routing as its
+  // own "Continue" button — onward into study if there's any today, since
+  // review runs first now, otherwise straight to congrats) ---
   useEffect(() => {
     if (!session || session.phase !== 'report') return;
     const total = Object.values(session.earnedUpgrades).reduce((a, b) => a + (b ?? 0), 0);
-    if (total === 0) persistSession({ ...session, phase: 'congrats' });
+    if (total === 0) handleContinueFromReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.phase]);
 
@@ -658,7 +702,7 @@ export default function DailySessionFlow() {
   const submitResult = (
     correct: boolean,
     extra?: Partial<WordProgress>,
-    sentenceForHistory?: { sentence: string; wordForm: string; englishPrompt?: string; userInput: string },
+    sentenceForHistory?: { sentence: string; wordForm: string; englishPrompt?: string; userInput: string; isDirect?: boolean },
   ) => {
     if (!session || !word || !settings || feedback !== null) return;
     const progress = getWordProgress(word.id);
@@ -715,7 +759,15 @@ export default function DailySessionFlow() {
     const wordRight = checkAnswer(word.de, values.join(''));
     const articleGuess = articleValues.join('').toLowerCase();
     const articleRight = !needsArticle || articleGuess === word.article;
-    submitResult(wordRight && articleRight);
+    // A fetched reference sentence (sentence writing mode off) is saved
+    // exactly like a real round-1 correction would be — same shape, same
+    // downstream behavior (Word List, BlankedSentence on later rounds) —
+    // just with no actual user translation attempt behind it.
+    submitResult(
+      wordRight && articleRight,
+      directSentence ? { exampleSentence: directSentence } : undefined,
+      directSentence ? { ...directSentence, userInput: '', isDirect: true } : undefined,
+    );
   };
   // A deliberate "give me more help" request — demotes one round (more
   // scaffolding) instead of retrying the same round the way a wrong typed
@@ -756,23 +808,17 @@ export default function DailySessionFlow() {
 
   // Shared by finishStudyRounds and the matching-quiz recap's own
   // completion — whichever gets there second is what actually continues
-  // past study, so both funnel through here.
+  // past study. Study is always the LAST block of the day now (review runs
+  // first — see startDailySession), so there's nothing left to route to
+  // afterward except the "N words learned" summary itself; its own
+  // "Continue" button (handleFinishStudy) takes it from there to congrats.
   function proceedPastStudy(ds: DailySession) {
-    if (ds.reviewWordIds.length === 0) {
-      // Nothing to review today — skip the "Continue to review" interim
-      // screen entirely and go straight toward the congrats card (via
-      // 'report', which itself auto-skips to 'congrats' if there's
-      // nothing to show there either).
-      markReviewGoalDone(0);
-      persistSession({ ...ds, phase: 'report' });
-    } else {
-      persistSession({ ...ds, phase: 'study-done' });
-    }
+    persistSession({ ...ds, phase: 'study-done' });
   }
 
   // Day 1 truly complete for every word in today's batch (round 2 passed —
   // see isRoundsDone's study branch) — the matching-quiz recap runs once,
-  // here at the actual end, before continuing to review/done.
+  // here at the actual end, before the "N words learned" summary.
   function finishStudyRounds(ds: DailySession) {
     markStudyGoalDone(ds.studyWordIds.length);
     if (!ds.studyMatchingDone) {
@@ -783,8 +829,10 @@ export default function DailySessionFlow() {
   }
 
   // Every review word has reached its own milestone's cap round — same
-  // matching-quiz recap as study, then straight to the report card (no
-  // "continue" interim screen needed on the review side).
+  // matching-quiz recap as study, then straight to the report card. Review
+  // runs FIRST in the day (see startDailySession) — the report card's own
+  // "Continue" button (handleContinueFromReport) is what takes it onward
+  // into study, so no separate interim screen is needed here either.
   function finishReviewRounds(ds: DailySession) {
     markReviewGoalDone(ds.reviewWordIds.length);
     if (!ds.reviewMatchingDone) {
@@ -898,25 +946,26 @@ export default function DailySessionFlow() {
     }
   }
 
-  function handleContinueToReview() {
-    if (!session) return;
-    if (session.reviewMcqQueueIds.length > 0) {
-      const next: DailySession = { ...session, phase: 'review-mcq' };
-      persistSession(next);
-      enterReviewMcqPhase(next);
-    } else if (session.reviewWordIds.length > 0) {
-      const next: DailySession = { ...session, phase: 'review-rounds' };
-      persistSession(next);
-      enterRoundsPhase(next, 'review');
-    } else {
-      markReviewGoalDone(0);
-      persistSession({ ...session, phase: 'report' });
-    }
-  }
-
-  function handleContinueFromReport() {
+  // The "N words learned" summary's own "Continue" button — study is
+  // always the last block of the day now, so there's nothing left to route
+  // to except the congrats card.
+  function handleFinishStudy() {
     if (!session) return;
     persistSession({ ...session, phase: 'congrats' });
+  }
+
+  // The report card's (review's results screen) own "Continue" button —
+  // review runs first in the day, so this is what takes the learner onward
+  // into study, or straight to congrats if there's nothing to study today.
+  function handleContinueFromReport() {
+    if (!session) return;
+    if (session.studyWordIds.length > 0) {
+      const next: DailySession = { ...session, phase: 'study-rounds' };
+      persistSession(next);
+      enterRoundsPhase(next, 'study');
+    } else {
+      persistSession({ ...session, phase: 'congrats' });
+    }
   }
 
   function handleCloseCongrats() {
@@ -1048,10 +1097,10 @@ export default function DailySessionFlow() {
         )}
         <div className="flex flex-col items-center gap-3">
           <button
-            onClick={handleContinueToReview}
+            onClick={handleFinishStudy}
             className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
           >
-            Continue to review →
+            Continue →
           </button>
           <Link href="/" className="text-amber-200 underline text-sm">Back to Home</Link>
         </div>
@@ -1181,7 +1230,20 @@ export default function DailySessionFlow() {
             <div className="text-2xl font-semibold text-slate-700">{glossFor(snap.word, getSettings().nativeLanguage)}</div>
           </div>
 
-          {snap.sentence ? (
+          {snap.sentence && snap.sentence.isDirect ? (
+            <div className="flex flex-col gap-3">
+              <div className="text-center -mt-1">
+                <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
+                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
+                  {snap.word.article ? `${snap.word.article} ` : ''}{snap.word.de}
+                </div>
+              </div>
+              <BlankedSentence example={snap.sentence} revealed label="Example sentence" />
+              <div className={`text-center py-3 rounded-xl font-semibold text-lg ${snap.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {snap.correct ? '✓ Correct!' : '✗ Wrong that time'}
+              </div>
+            </div>
+          ) : snap.sentence ? (
             <div className="flex flex-col gap-3">
               <SentenceWordHeader word={snap.word} />
               <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
@@ -1276,7 +1338,7 @@ export default function DailySessionFlow() {
         <div>
           <div className="flex items-center justify-between mb-1">
             <div className="text-sm font-medium text-indigo-600">
-              {currentRound === 1 && (exampleSentence || isBootstrapCopyWord(word) || !signedIn) ? 'Round 1 — copy the word' : ROUND_LABELS[currentRound]}
+              {currentRound === 1 && (exampleSentence || isBootstrapCopyWord(word) || !signedIn || settings.sentenceWritingMode === false) ? 'Round 1 — copy the word' : ROUND_LABELS[currentRound]}
             </div>
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
               wordStatus === 'Review' ? 'bg-emerald-100 text-emerald-700'
@@ -1299,7 +1361,7 @@ export default function DailySessionFlow() {
           <div className="text-2xl font-semibold text-slate-700">{glossFor(word, getSettings().nativeLanguage)}</div>
         </div>
 
-        {/* Three reasons the translation exercise is skipped for round 1:
+        {/* Four reasons the translation exercise is skipped for round 1:
             !exampleSentence excludes a word demoted BACK to round 1 via Hint
             from round 2 — it already has a saved sentence from its real
             round-1 pass, so it shouldn't be asked to translate another one.
@@ -1309,11 +1371,14 @@ export default function DailySessionFlow() {
             anyone not signed in (sign-in is entirely optional, from
             Settings) — the AI calls need a real user to attribute
             cost/usage to, so every word falls back to copy-the-word for a
-            signed-out session. All three fall
+            signed-out session. sentenceWritingMode === false is a
+            deliberate opt-out (Settings) — same copy-the-word fallback,
+            but with a fetched reference sentence layered on top (see
+            useDirectSentence/directSentence above). All four fall
             through to the else branch's round-1 handling (copy-the-word
             tiles, with any existing sentence still shown via
             BlankedSentence). */}
-        {currentRound === 1 && roundMode === 'study' && signedIn && !isBootstrapCopyWord(word) && !exampleSentence ? (
+        {currentRound === 1 && roundMode === 'study' && signedIn && !isBootstrapCopyWord(word) && !exampleSentence && settings.sentenceWritingMode ? (
           <SentenceExercise
             key={word.id}
             word={word}
@@ -1341,6 +1406,13 @@ export default function DailySessionFlow() {
 
             {exampleSentence && (
               <BlankedSentence example={exampleSentence} revealed={feedback !== null} />
+            )}
+
+            {useDirectSentence && directSentenceStatus === 'loading' && (
+              <p className="text-stone-400 text-xs text-center">Preparing an example sentence…</p>
+            )}
+            {useDirectSentence && directSentenceStatus === 'ready' && directSentence && (
+              <BlankedSentence example={directSentence} revealed label="Example sentence" />
             )}
 
             {word.type === 'noun' && word.article && (

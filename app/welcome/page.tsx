@@ -62,6 +62,7 @@ export default function WelcomePage() {
   const finish = () => {
     const settings: Settings = {
       studyBatchSize, dailyReview, language: 'de', nativeLanguage, level, autoPlayAudio, requireArticle,
+      sentenceWritingMode: true,
     };
     saveSettings(settings);
     scheduleSync();

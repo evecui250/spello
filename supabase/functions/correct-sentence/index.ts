@@ -5,10 +5,16 @@
 // word order) rather than substituting an independent translation of the
 // English sentence — different learners can validly translate the same
 // sentence differently (synonyms, word order), so the correction should
-// track what they actually wrote. The OpenAI key lives only here (a
-// Supabase secret), never in client code, since Spello ships as a public
-// static site with no server of its own. Every call is logged to ai_usage
-// for spend tracking.
+// track what they actually wrote. userTranslation is OPTIONAL — omitted
+// entirely for "sentence writing mode" off (see Settings), where the
+// learner skips writing anything and just gets a correct example sentence
+// directly. Also always succeeds now, even with an unusable attempt (too
+// garbled, unrelated, or not attempting the target word at all) — falls
+// back to a fresh natural translation instead of refusing, so the learner
+// always gets a real correction to move on with (no more retry loop). The
+// OpenAI key lives only here (a Supabase secret), never in client code,
+// since Spello ships as a public static site with no server of its own.
+// Every call is logged to ai_usage for spend tracking.
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -33,7 +39,7 @@ interface RequestBody {
   wordDe: string;
   level: string;
   englishPrompt: string;
-  userTranslation: string;
+  userTranslation?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -70,12 +76,13 @@ Deno.serve(async (req: Request) => {
 
     const body = (await req.json()) as RequestBody;
     const { wordId, wordDe, level, englishPrompt, userTranslation } = body;
-    if (!wordId || !wordDe || !englishPrompt || !userTranslation || userTranslation.trim().length === 0) {
-      return json({ error: 'Missing wordId, wordDe, englishPrompt, or userTranslation' }, 400);
+    if (!wordId || !wordDe || !englishPrompt) {
+      return json({ error: 'Missing wordId, wordDe, or englishPrompt' }, 400);
     }
-    if (userTranslation.length > 300) {
+    if (userTranslation && userTranslation.length > 300) {
       return json({ error: 'Translation too long' }, 400);
     }
+    const hasUserInput = !!userTranslation && userTranslation.trim().length > 0;
 
     const completion = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -90,22 +97,26 @@ Deno.serve(async (req: Request) => {
           {
             role: 'system',
             content:
-              'You are a German tutor. The learner was asked to translate this English ' +
-              `sentence into German: "${englishPrompt}". They attempted a translation ` +
-              '(given in the next message). This exercise specifically tests the word ' +
-              `"${wordDe}" (CEFR ${level || 'A1'}). First, decide whether their attempt tries ` +
-              'to render this word in German at all — in ANY form (any conjugation, ' +
-              'declension, case ending, or plural). If it is a noun, do NOT require the ' +
-              'article (der/die/das) to be present or correct — only the core word matters ' +
-              'for this check. If they did not attempt it at all, respond with exactly this ' +
-              'JSON: {"used": false}. ' +
-              'Otherwise (even with wrong grammar, wrong word order, wrong form, or English ' +
-              'words mixed in), correct THEIR OWN translation attempt — fix grammar, spelling, ' +
-              'and word order — while keeping their own word choices and sentence structure as ' +
-              'much as possible. Different learners can validly translate the same sentence ' +
-              'differently (synonyms, word order); do NOT discard their approach and produce ' +
-              'your own independent translation of the English sentence — only fall back to a ' +
-              'fresh natural translation if their attempt is too garbled or unrelated to fix. ' +
+              'You are a German tutor helping a learner practice new vocabulary. The ' +
+              `exercise sentence, to be translated into German, is: "${englishPrompt}" — ` +
+              `specifically testing the word "${wordDe}" (CEFR ${level || 'A1'}). ` +
+              (hasUserInput
+                ? 'The learner attempted a translation (given in the next message). First, ' +
+                  'decide whether their attempt tries to render the target word in German at ' +
+                  'all — in ANY form (any conjugation, declension, case ending, or plural). If ' +
+                  'it is a noun, do NOT require the article (der/die/das) to be present or ' +
+                  'correct — only the core word matters for this check. If it DOES, correct ' +
+                  'THEIR OWN translation attempt — fix grammar, spelling, and word order while ' +
+                  'keeping their own word choices and sentence structure as much as possible ' +
+                  '(different learners can validly translate the same sentence differently — ' +
+                  'synonyms, word order — so do not discard their approach for your own ' +
+                  'independent translation). If it does NOT attempt the word at all, or their ' +
+                  'attempt is too garbled or unrelated to the English sentence to fix, IGNORE ' +
+                  'their attempt entirely and produce a fresh, natural German translation of ' +
+                  'the English sentence instead. Either way, you must always return a complete, ' +
+                  'correct German sentence that uses the target word — never refuse or report ' +
+                  'failure. '
+                : 'Produce a natural, fluent German translation of that English sentence. ') +
               `Make sure "${wordDe}" is correctly conjugated for its subject and tense in your ` +
               'output (in its correct inflected form, which may differ from the dictionary ' +
               'form). This applies even to modern loanword verbs borrowed from English, which ' +
@@ -113,11 +124,11 @@ Deno.serve(async (req: Request) => {
               '"du chattest"; "googeln" -> "er googelt"; "liken" -> "ich like", "sie liked". ' +
               `Before answering, double-check that "${wordDe}" is not left as a bare, ` +
               'unconjugated infinitive in your output where German grammar requires a ' +
-              'conjugated form — that is a common mistake to avoid. Always end your corrected ' +
+              'conjugated form — that is a common mistake to avoid. Always end your ' +
               'sentence with correct terminal punctuation matching the English sentence\'s own ' +
               'punctuation (a period, question mark, or exclamation mark) — add it even if the ' +
               'learner\'s attempt omitted it. Additionally, include a "lemmas" field: a JSON ' +
-              'object mapping EVERY distinct word in your corrected sentence (as it literally ' +
+              'object mapping EVERY distinct word in your sentence (as it literally ' +
               'appears there, preserving capitalization) to its dictionary/base form — the ' +
               'infinitive for verbs (e.g. "abgesagt" -> "absagen", "ruft" -> "rufen"), the ' +
               'singular nominative for nouns (e.g. "Häuser" -> "Haus", "Kindern" -> "Kind"), and ' +
@@ -126,12 +137,12 @@ Deno.serve(async (req: Request) => {
               'separable-prefix verbs split apart by German word order (e.g. a sentence with ' +
               '"sagt ... ab" for "absagen" should map BOTH "sagt" and "ab" to "absagen"). Skip ' +
               'bare articles (der/die/das/ein/eine/einen/etc.) and punctuation. Respond with ' +
-              'exactly this JSON: {"used": true, "sentence": their corrected translation, ' +
+              'exactly this JSON: {"sentence": "...", ' +
               '"wordForm": the exact inflected form of the word as it literally appears, ' +
               'verbatim, inside "sentence" — this must be an exact substring match so it can be ' +
               'highlighted, "lemmas": {"word1": "lemma1", ...}}.',
           },
-          { role: 'user', content: userTranslation },
+          { role: 'user', content: hasUserInput ? userTranslation! : 'Please translate the sentence.' },
         ],
         temperature: 0.3,
         max_tokens: 350,
@@ -146,7 +157,7 @@ Deno.serve(async (req: Request) => {
 
     const result = await completion.json();
     const raw: string = result.choices?.[0]?.message?.content ?? '{}';
-    let parsed: { used?: boolean; sentence?: string; wordForm?: string; lemmas?: Record<string, string> } = {};
+    let parsed: { sentence?: string; wordForm?: string; lemmas?: Record<string, string> } = {};
     try {
       parsed = JSON.parse(raw);
     } catch {
@@ -162,9 +173,6 @@ Deno.serve(async (req: Request) => {
       output_tokens: usage.completion_tokens ?? 0,
     });
 
-    if (parsed.used === false) {
-      return json({ used: false });
-    }
     if (!parsed.sentence || !parsed.wordForm) {
       console.error('Malformed AI response:', raw);
       return json({ error: 'AI returned an unexpected format' }, 502);
@@ -177,7 +185,7 @@ Deno.serve(async (req: Request) => {
     // own) — never worth failing the whole correction over if the model
     // omits or malforms it.
     const lemmas = parsed.lemmas && typeof parsed.lemmas === 'object' ? parsed.lemmas : {};
-    return json({ used: true, sentence: parsed.sentence, wordForm: parsed.wordForm, lemmas });
+    return json({ sentence: parsed.sentence, wordForm: parsed.wordForm, lemmas });
   } catch (err) {
     console.error('correct-sentence error:', err);
     return json({ error: 'Unexpected error' }, 500);

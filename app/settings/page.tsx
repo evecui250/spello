@@ -17,6 +17,7 @@ export default function SettingsPage() {
   const [level, setLevel] = useState<Level>('A1');
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
   const [requireArticle, setRequireArticle] = useState(false);
+  const [sentenceWritingMode, setSentenceWritingMode] = useState(true);
   const [saved, setSaved] = useState(false);
   const [cleared, setCleared] = useState(false);
   const [showPaceInfo, setShowPaceInfo] = useState(false);
@@ -29,6 +30,7 @@ export default function SettingsPage() {
     setLevel(s.level);
     setAutoPlayAudio(s.autoPlayAudio);
     setRequireArticle(s.requireArticle);
+    setSentenceWritingMode(s.sentenceWritingMode);
   };
 
   const loadFromStorage = () => applySettings(getSettings());
@@ -73,7 +75,8 @@ export default function SettingsPage() {
   // from current state, which is already up to date by the time this runs.
   const persist = (patch: Partial<Settings>) => {
     const next: Settings = {
-      studyBatchSize, dailyReview, language: 'de', nativeLanguage, level, autoPlayAudio, requireArticle, ...patch,
+      studyBatchSize, dailyReview, language: 'de', nativeLanguage, level, autoPlayAudio, requireArticle,
+      sentenceWritingMode, ...patch,
     };
     saveSettings(next);
     // Review's daily pool is always computed fresh from due words, so a
@@ -260,6 +263,23 @@ export default function SettingsPage() {
             checked={requireArticle}
             onChange={e => { setRequireArticle(e.target.checked); persist({ requireArticle: e.target.checked }); }}
             className="w-5 h-5 accent-indigo-600"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="block font-semibold text-stone-800">
+              Sentence writing mode
+            </label>
+            <p className="text-stone-500 text-sm">
+              Off: skip writing a translation — copy the word instead, with a correct example sentence shown alongside for reference.
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={sentenceWritingMode}
+            onChange={e => { setSentenceWritingMode(e.target.checked); persist({ sentenceWritingMode: e.target.checked }); }}
+            className="w-5 h-5 accent-indigo-600 shrink-0 ml-3"
           />
         </div>
       </div>
