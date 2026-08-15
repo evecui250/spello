@@ -31,8 +31,9 @@ import { correctSentence, generateSentence, DailyLimitReachedError } from '../li
 import { supabase } from '../lib/supabase';
 
 // Locates wordForm inside sentence (case-insensitive) so callers can
-// highlight/blank it — used by both BlankedSentence (rounds 2+/review) and
-// the round-1 corrected-sentence display (underlines the target word).
+// highlight it — used by both ReferenceSentence (round 1's copy-mode
+// reference) and the round-1 corrected-sentence display (underlines the
+// target word).
 function splitOnWordForm(sentence: string, wordForm: string): { before: string; match: string; after: string } | null {
   const idx = sentence.toLowerCase().indexOf(wordForm.toLowerCase());
   if (idx === -1) return null;
@@ -97,10 +98,34 @@ function diffCorrectionSegments(userInput: string, corrected: string): { text: s
   return correctedTokens.map((text, idx) => ({ text, changed: changedTokenIdx.has(idx) }));
 }
 
-function roundsInRange([start, end]: [Round, Round]): Round[] {
-  const out: Round[] = [];
-  for (let n = start; n <= end; n++) out.push(n as Round);
-  return out;
+// Always-4-chunk progress bar — one per lifetime milestone (Learn, 1st/
+// 2nd/3rd review), not per round-within-today's-episode like the old dot
+// row (which showed a DIFFERENT NUMBER of dots depending on the word's
+// stage — 2 for a fresh word, 1 for a medium-stage review — the exact
+// inconsistency that made it hard to tell at a glance which stage a word
+// was actually at). Each milestone's own startRound doubles as its chunk
+// index by construction (Learn=[1,2], 1st review=[2,3], 2nd=[3,4], 3rd=
+// [4,4]) — chunks before roundRange[0] are already permanently earned,
+// chunk roundRange[0] itself is today's target, everything after is still
+// to come. A wrong answer/hint never changes roundRange, only where
+// currentRound sits within it, so exactly one chunk is ever "today's
+// target" at a time — never two.
+function MilestoneBar({ roundRange }: { roundRange: [Round, Round] }) {
+  const activeChunk = roundRange[0];
+  return (
+    <div className="flex gap-1.5">
+      {([1, 2, 3, 4] as const).map(chunk => (
+        <div
+          key={chunk}
+          className={`h-2 flex-1 rounded-full transition-colors duration-300 ${
+            chunk < activeChunk ? 'bg-emerald-400'
+              : chunk === activeChunk ? 'bg-amber-400'
+                : 'bg-indigo-100'
+          }`}
+        />
+      ))}
+    </div>
+  );
 }
 
 const ROUND_LABELS: Record<Round, string> = {
@@ -140,9 +165,10 @@ interface CardSnapshot {
 // German, and a second AI call corrects their OWN translation attempt
 // (preserving their word choices/approach, not substituting an independent
 // translation — see correct-sentence's prompt). The corrected translation
-// becomes the word's permanent example sentence (shown on Word List and,
-// blanked out, on later rounds — see BlankedSentence below). Requires
-// sign-in (optional, from Settings), since the AI calls need a real user
+// becomes the word's permanent example sentence (shown on Word List, but
+// not during later spelling rounds — reading it there doesn't actually
+// help recall a word's spelling). Requires sign-in (optional, from
+// Settings), since the AI calls need a real user
 // to log usage against — see this component's own signedIn check below.
 // SentenceWordHeader is shown above both the input step and the result step
 // (see the parent's currentRound === 1 branch) so the word stays visible
@@ -373,10 +399,9 @@ function SentenceExercise({
 // inflected substring the AI reported using, so the blank lines up with
 // however the word actually appears in the sentence (which may differ from
 // its dictionary form, e.g. plural/case endings).
-function BlankedSentence({ example, revealed, label = 'Your sentence' }: { example: { sentence: string; wordForm: string }; revealed: boolean; label?: string }) {
+function ReferenceSentence({ example, label = 'Example sentence' }: { example: { sentence: string; wordForm: string }; label?: string }) {
   const parts = splitOnWordForm(example.sentence, example.wordForm);
   if (!parts) {
-    if (!revealed) return null;
     return (
       <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
         <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">{label}</div>
@@ -389,10 +414,8 @@ function BlankedSentence({ example, revealed, label = 'Your sentence' }: { examp
       <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">{label}</div>
       <div className="text-stone-700 italic">
         {parts.before}
-        <span className={revealed ? 'font-bold text-indigo-700 not-italic' : 'inline-block bg-indigo-200 text-transparent rounded select-none'}>
-          {/* A regular space collapses in HTML, shrinking the blank to a barely-visible
-              sliver instead of a block the width of the hidden word — \u00A0 doesn't collapse. */}
-          {revealed ? parts.match : '\u00A0'.repeat(Math.max(parts.match.length, 3))}
+        <span className="font-bold text-indigo-700 not-italic">
+          {parts.match}
         </span>
         {parts.after}
       </div>
@@ -446,8 +469,10 @@ export default function DailySessionFlow() {
   // remounts fresh for the next page.
   const [matchingPageKey, setMatchingPageKey] = useState(0);
   const [mcqCurrent, setMcqCurrent] = useState<{ word: Word; correct: string; choices: string[] } | null>(null);
-  // The current word's saved example sentence (round 2+/review only — see
-  // BlankedSentence), and the just-produced correction for the round-1
+  // The current word's saved example sentence, if it already has one from
+  // a previous round-1 pass (only used to gate which round-1 UI shows —
+  // no longer displayed during rounds 2+/review, see ReferenceSentence's
+  // own comment for why), and the just-produced correction for the round-1
   // sentence exercise (shown in place of the generic "✓ Correct!" banner).
   const [exampleSentence, setExampleSentence] = useState<{ sentence: string; wordForm: string } | null>(null);
   const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; lemmas?: Record<string, string> } | null>(null);
@@ -761,8 +786,8 @@ export default function DailySessionFlow() {
     const articleRight = !needsArticle || articleGuess === word.article;
     // A fetched reference sentence (sentence writing mode off) is saved
     // exactly like a real round-1 correction would be — same shape, same
-    // downstream behavior (Word List, BlankedSentence on later rounds) —
-    // just with no actual user translation attempt behind it.
+    // downstream behavior (shown on Word List) — just with no actual user
+    // translation attempt behind it.
     submitResult(
       wordRight && articleRight,
       directSentence ? { exampleSentence: directSentence } : undefined,
@@ -1204,7 +1229,7 @@ export default function DailySessionFlow() {
     const snap = cardHistory[historyIndex];
     return (
       <div className="flex flex-col gap-5">
-        <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
+        <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5 min-h-[30rem]">
           <div>
             <div className="flex items-center justify-between mb-1">
               <div className="text-sm font-medium text-indigo-600">
@@ -1219,11 +1244,7 @@ export default function DailySessionFlow() {
                 {snap.wordStatus}
               </span>
             </div>
-            <div className="flex gap-1">
-              {roundsInRange(snap.roundRange).map(n => (
-                <div key={n} className={`h-2 flex-1 rounded-full ${n <= snap.round ? 'bg-indigo-500' : 'bg-indigo-100'}`} />
-              ))}
-            </div>
+            <MilestoneBar roundRange={snap.roundRange} />
           </div>
 
           <div className="text-center">
@@ -1238,7 +1259,7 @@ export default function DailySessionFlow() {
                   {snap.word.article ? `${snap.word.article} ` : ''}{snap.word.de}
                 </div>
               </div>
-              <BlankedSentence example={snap.sentence} revealed label="Example sentence" />
+              <ReferenceSentence example={snap.sentence} />
               <div className={`text-center py-3 rounded-xl font-semibold text-lg ${snap.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                 {snap.correct ? '✓ Correct!' : '✗ Wrong that time'}
               </div>
@@ -1299,14 +1320,6 @@ export default function DailySessionFlow() {
     );
   }
 
-  // A dot fills once its round is actually passed — strictly BEFORE
-  // currentRound (already done in an earlier round), or exactly
-  // currentRound the moment "✓ Correct!" shows (filling right away rather
-  // than waiting for currentRound to actually update on advance). Without
-  // the `=== currentRound` case restricted to a correct answer, the
-  // in-progress round's own dot would show filled before it's even been
-  // attempted.
-  const isRoundDotFilled = (n: Round) => n < currentRound || (n === currentRound && feedback === true);
 
   return (
     <div className="flex flex-col gap-5">
@@ -1334,7 +1347,7 @@ export default function DailySessionFlow() {
         </div>
       </div>
 
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5 min-h-[30rem]">
         <div>
           <div className="flex items-center justify-between mb-1">
             <div className="text-sm font-medium text-indigo-600">
@@ -1349,11 +1362,7 @@ export default function DailySessionFlow() {
               {wordStatus}
             </span>
           </div>
-          <div className="flex gap-1">
-            {roundsInRange(roundRange).map(n => (
-              <div key={n} className={`h-2 flex-1 rounded-full transition-colors duration-300 ${isRoundDotFilled(n) ? 'bg-indigo-500' : 'bg-indigo-100'}`} />
-            ))}
-          </div>
+          <MilestoneBar roundRange={roundRange} />
         </div>
 
         <div className="text-center">
@@ -1376,8 +1385,9 @@ export default function DailySessionFlow() {
             but with a fetched reference sentence layered on top (see
             useDirectSentence/directSentence above). All four fall
             through to the else branch's round-1 handling (copy-the-word
-            tiles, with any existing sentence still shown via
-            BlankedSentence). */}
+            tiles — a word demoted back here from round 2 doesn't get its
+            saved sentence shown again either, same reasoning as
+            ReferenceSentence's own comment). */}
         {currentRound === 1 && roundMode === 'study' && signedIn && !isBootstrapCopyWord(word) && !exampleSentence && settings.sentenceWritingMode ? (
           <SentenceExercise
             key={word.id}
@@ -1404,15 +1414,11 @@ export default function DailySessionFlow() {
               </div>
             )}
 
-            {exampleSentence && (
-              <BlankedSentence example={exampleSentence} revealed={feedback !== null} />
-            )}
-
             {useDirectSentence && directSentenceStatus === 'loading' && (
               <p className="text-stone-400 text-xs text-center">Preparing an example sentence…</p>
             )}
             {useDirectSentence && directSentenceStatus === 'ready' && directSentence && (
-              <BlankedSentence example={directSentence} revealed label="Example sentence" />
+              <ReferenceSentence example={directSentence} />
             )}
 
             {word.type === 'noun' && word.article && (
