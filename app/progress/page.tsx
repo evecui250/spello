@@ -146,15 +146,7 @@ export default function ProgressPage() {
         <div className="flex justify-around gap-3 mt-2">
           {bars.map(b => (
             <div key={b.id} className="flex flex-col items-center gap-1 flex-1">
-              <div className="relative">
-                <DachshundMascot stage={b.id} className="w-10 h-10" />
-                {b.foreign > 0 && (
-                  <span
-                    className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-amber-50"
-                    style={{ backgroundColor: FOREIGN_COLOR }}
-                  />
-                )}
-              </div>
+              <DachshundMascot stage={b.id} className="w-10 h-10" />
               <span className="text-[10px] font-medium text-stone-500">{STAGE_LABEL[b.id]}</span>
             </div>
           ))}

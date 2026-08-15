@@ -108,7 +108,7 @@ function MilestoneBar({ roundRange, wordId }: { roundRange: [Round, Round]; word
 // actually has). roundRange[0] doubles as the chunk index — see
 // MilestoneBar's own comment for why.
 const CHUNK_LABELS: Record<Round, string> = {
-  1: 'Day 1',
+  1: 'New',
   2: '1st review',
   3: '2nd review',
   4: '3rd review',
@@ -1228,18 +1228,8 @@ export default function DailySessionFlow() {
       <div className="flex flex-col gap-5">
         <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5 min-h-[30rem]">
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <div className="text-sm font-medium text-indigo-600">
-                {CHUNK_LABELS[snap.roundRange[0]]}
-              </div>
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                snap.wordStatus === 'Review' ? 'bg-emerald-100 text-emerald-700'
-                  : snap.wordStatus === 'Continuing' ? 'bg-amber-100 text-amber-700'
-                    : 'bg-indigo-100 text-indigo-700'
-              }`}
-              >
-                {snap.wordStatus}
-              </span>
+            <div className="text-sm font-medium text-indigo-600 mb-1">
+              {CHUNK_LABELS[snap.roundRange[0]]}
             </div>
             <MilestoneBar roundRange={snap.roundRange} wordId={snap.word.id} />
           </div>
@@ -1349,32 +1339,22 @@ export default function DailySessionFlow() {
             <div className="text-sm font-medium text-indigo-600">
               {CHUNK_LABELS[roundRange[0]]}
             </div>
-            <div className="flex items-center gap-1.5">
-              {showSentenceModeToggle && settings && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = { ...settings, sentenceWritingMode: !settings.sentenceWritingMode };
-                    saveSettings(next);
-                    setSettings(next);
-                    scheduleSync();
-                  }}
-                  aria-label={settings.sentenceWritingMode ? 'Turn off sentence writing mode (switch to copy mode)' : 'Turn on sentence writing mode'}
-                  title={settings.sentenceWritingMode ? 'Sentence writing: on — tap to switch to copy mode' : 'Sentence writing: off — tap to turn on'}
-                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:scale-95 transition-all shrink-0"
-                >
-                  {settings.sentenceWritingMode ? '✍️ Writing' : '📋 Copy'}
-                </button>
-              )}
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                wordStatus === 'Review' ? 'bg-emerald-100 text-emerald-700'
-                  : wordStatus === 'Continuing' ? 'bg-amber-100 text-amber-700'
-                    : 'bg-indigo-100 text-indigo-700'
-              }`}
+            {showSentenceModeToggle && settings && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = { ...settings, sentenceWritingMode: !settings.sentenceWritingMode };
+                  saveSettings(next);
+                  setSettings(next);
+                  scheduleSync();
+                }}
+                aria-label={settings.sentenceWritingMode ? 'Turn off sentence writing mode (switch to copy mode)' : 'Turn on sentence writing mode'}
+                title={settings.sentenceWritingMode ? 'Sentence writing: on — tap to switch to copy mode' : 'Sentence writing: off — tap to turn on'}
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:scale-95 transition-all shrink-0"
               >
-                {wordStatus}
-              </span>
-            </div>
+                {settings.sentenceWritingMode ? 'Writing' : 'Copy'}
+              </button>
+            )}
           </div>
           <MilestoneBar roundRange={roundRange} wordId={word.id} />
         </div>
