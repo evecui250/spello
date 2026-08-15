@@ -225,10 +225,7 @@ export default function SettingsPage() {
               </button>
             </span>
             <span className="text-right">
-              {forecast.wordsRemaining === 0
-                ? 'All words introduced'
-                : `~${daysToWeeks(forecast.daysToIntroduceAll)} weeks to learn all`}
-              {' · '}~{daysToWeeks(forecast.daysToMasterAfterIntroduced)} more weeks to master all
+              ~{daysToWeeks(forecast.daysToMasterAll)} weeks to master all
             </span>
           </div>
           {showPaceInfo && (

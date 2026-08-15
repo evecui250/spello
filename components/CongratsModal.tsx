@@ -112,30 +112,40 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
 
   useEffect(() => () => { if (imgUrl) URL.revokeObjectURL(imgUrl); }, [imgUrl]);
 
-  const handleSave = () => {
+  // A plain <a download> just drops a .png into Files/Downloads — on
+  // mobile there's no web API to place an image directly into the Photos
+  // album, so the only way to reach that is the OS's own share sheet
+  // (which offers "Save Image"/"Save to Photos" as one of its options
+  // once a file is attached). Both buttons below route through this same
+  // share-first attempt; the raw download is only a fallback for browsers
+  // without Web Share (mainly desktop, where "download the file" already
+  // is the right, expected behavior — no Photos app to save into there).
+  const shareOrDownload = async (opts?: { title: string; text: string }) => {
     if (!imgUrl) return;
+    try {
+      const res = await fetch(imgUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `spello-${date ?? new Date().toISOString().slice(0, 10)}.png`, { type: 'image/png' });
+      const nav = navigator as Navigator & { canShare?: (data: { files: File[] }) => boolean };
+      if (nav.share && nav.canShare?.({ files: [file] })) {
+        await nav.share({ files: [file], ...opts });
+        return;
+      }
+    } catch {
+      // User cancelled the share sheet, or Web Share isn't usable here —
+      // either way, fall through to a plain download.
+    }
     const a = document.createElement('a');
     a.href = imgUrl;
     a.download = `spello-${date ?? new Date().toISOString().slice(0, 10)}.png`;
     a.click();
   };
 
-  const handleShare = async () => {
-    if (!imgUrl) return;
-    try {
-      const res = await fetch(imgUrl);
-      const blob = await res.blob();
-      const file = new File([blob], 'spello.png', { type: 'image/png' });
-      const nav = navigator as Navigator & { canShare?: (data: { files: File[] }) => boolean };
-      if (nav.share && nav.canShare?.({ files: [file] })) {
-        await nav.share({ files: [file], title: 'Spello', text: `I learned ${studiedCount} ${language} words today!` });
-        return;
-      }
-    } catch {
-      // Fall through to a plain download.
-    }
-    handleSave();
-  };
+  // "Save image" omits title/text — a bare file share surfaces "Save
+  // Image"/"Save to Photos" as a prominent option without also implying
+  // this is meant to be sent to someone.
+  const handleSave = () => shareOrDownload();
+  const handleShare = () => shareOrDownload({ title: 'Spello', text: `I learned ${studiedCount} ${language} words today!` });
 
   return (
     <div

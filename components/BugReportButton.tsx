@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 
 // A small icon button in the top-right of NavBar, visible on every page —
@@ -55,18 +56,27 @@ export default function BugReportButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Report a bug or problem"
-        className="ml-auto shrink-0 text-lg leading-none px-2 py-3 text-emerald-100/60 hover:text-emerald-50 transition-colors"
+        className="ml-auto shrink-0 text-xl leading-none px-3 py-2.5 rounded-xl text-emerald-100/60 hover:text-emerald-50 hover:bg-white/5 transition-colors"
       >
         🦴
       </button>
 
-      {open && (
+      {/* Portaled straight to <body> rather than rendered in place: this
+          button lives inside NavBar, which has backdrop-blur-md — and
+          backdrop-filter (like transform/filter) creates a new containing
+          block for position:fixed descendants per spec, so a fixed modal
+          left in place here would size/center itself against NavBar's own
+          small box instead of the true viewport (it did — that's the
+          "clipped near the top" bug this fixes). Escaping to body sidesteps
+          that regardless of whatever styling NavBar or any other ancestor
+          ends up with in the future. */}
+      {open && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-sm bg-amber-50 rounded-2xl shadow-xl p-5 flex flex-col gap-3"
+            className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-amber-50 rounded-2xl shadow-xl p-5 flex flex-col gap-3"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -87,12 +97,18 @@ export default function BugReportButton() {
               </p>
             ) : (
               <>
+                {/* No autoFocus here on purpose: it used to pop the on-
+                    screen keyboard open the instant the modal appeared,
+                    which on iOS shrinks the visual viewport before this
+                    fixed-position overlay finishes laying out — the modal
+                    would render clipped near the top of the screen. Letting
+                    the user tap the textarea themselves keeps layout and
+                    keyboard-open as two separate, sequential events. */}
                 <textarea
                   value={message}
                   onChange={e => setMessage(e.target.value)}
                   rows={4}
                   placeholder="What happened?"
-                  autoFocus
                   className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 resize-none"
                 />
                 {!signedInEmail && (
@@ -118,7 +134,8 @@ export default function BugReportButton() {
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

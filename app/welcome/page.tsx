@@ -164,7 +164,7 @@ export default function WelcomePage() {
             <div className="bg-amber-100/60 rounded-xl px-4 py-3 text-sm text-amber-800 flex items-center justify-between gap-3">
               <span className="font-semibold shrink-0">At this pace</span>
               <span className="text-right">
-                ~{daysToWeeks(forecast.daysToIntroduceAll)} weeks to learn all · ~{daysToWeeks(forecast.daysToMasterAfterIntroduced)} more weeks to master all
+                ~{daysToWeeks(forecast.daysToMasterAll)} weeks to master all
               </span>
             </div>
 

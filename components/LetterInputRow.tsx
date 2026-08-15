@@ -1,29 +1,19 @@
 'use client';
 
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
-// Tile sizing: shrinks just enough to keep a word on one row when only a
-// letter or two would otherwise spill onto a new one — but a bigger overflow
-// (3+ letters) is left to wrap normally rather than squeezing tiles down to
-// the point of being hard to read/tap. Works for any number of wrap levels
-// (a very long word needing 2 rows vs 3), not just the one-row case.
-const GAP_PX = 8;
-const DEFAULT_TILE_PX = 36;
-const MIN_TILE_PX = 24;
-
-function computeTileSize(n: number, containerWidth: number): number {
-  if (containerWidth <= 0 || n === 0) return DEFAULT_TILE_PX;
-  for (let tile = DEFAULT_TILE_PX; tile >= MIN_TILE_PX; tile -= 2) {
-    const perRow = Math.max(1, Math.floor((containerWidth + GAP_PX) / (tile + GAP_PX)));
-    if (n <= perRow) return tile; // fits on one row at this size
-    const lastRowCount = n % perRow === 0 ? perRow : n % perRow;
-    // A dangling last row of just 1-2 tiles is the "spilled a letter or two"
-    // case worth shrinking for; anything bigger is an intentional-looking
-    // wrap, so stop shrinking and accept it at this size.
-    if (lastRowCount > 2) return tile;
-  }
-  return MIN_TILE_PX;
-}
+// A single fixed tile size for every word, on every card, always — a
+// previous version shrank tiles per-word to try to squeeze longer words
+// onto one row, but that meant the tile size (and therefore the whole
+// card's layout) visibly changed from word to word, which read as
+// inconsistent rather than adaptive, and in the worst case (a long,
+// unbroken word the shrinking still couldn't fit) could force the row
+// wider than the viewport and make mobile browsers zoom the whole page out
+// to compensate. Fixed size + flex-wrap below means every card looks the
+// same regardless of word length — a long word simply wraps onto more
+// rows at the exact same tile size, never changes it.
+const TILE_PX = 36;
+const TILE_HEIGHT_PX = Math.round(TILE_PX * (44 / 36));
 
 interface Props {
   chars: string[];
@@ -63,21 +53,7 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
   ref,
 ) {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
   const editableIndices = hint.map((h, i) => (h ? i : -1)).filter(i => i !== -1);
-
-  useLayoutEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const update = () => setContainerWidth(el.offsetWidth);
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  const tileSize = computeTileSize(chars.length, containerWidth);
 
   // requestAnimationFrame instead of an arbitrary setTimeout delay — fires as
   // soon as the DOM is actually ready to be focused (refs attached), which is
@@ -150,12 +126,13 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
     }
   };
 
-  const tileHeight = Math.round(tileSize * (44 / 36));
-  const fontSize = Math.max(14, Math.round(20 * (tileSize / DEFAULT_TILE_PX)));
-  const tileStyle = { width: tileSize, height: tileHeight, fontSize };
+  // 20px, comfortably above the 16px floor that keeps iOS from auto-
+  // zooming on focus (see styles/globals.css) — an inline style here
+  // would otherwise override that global rule.
+  const tileStyle = { width: TILE_PX, height: TILE_HEIGHT_PX, fontSize: 20 };
 
   return (
-    <div ref={containerRef} className="flex flex-wrap gap-2 justify-center">
+    <div className="flex flex-wrap gap-2 justify-center">
       {chars.map((ch, i) =>
         hint[i] ? (
           <input

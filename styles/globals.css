@@ -17,9 +17,18 @@
       which would also block legitimate pinch-zoom for low-vision users. */
 html, body {
   height: 100%;
+  /* Kills the rubber-band bounce past the top/bottom edge and the
+     pull-to-refresh gesture -- without this, a fixed-height PWA still
+     feels like "a website" (elastic overscroll revealing blank space)
+     rather than a native app screen, even though normal in-content
+     scrolling for genuinely tall pages is unaffected. */
+  overscroll-behavior-y: none;
 }
 body {
   overflow-y: auto;
+  overflow-x: hidden; /* a stray too-wide element (e.g. an unbroken long
+    compound word with nowhere to wrap) should clip/scroll internally,
+    never force the whole page to zoom out to fit it. */
   -webkit-overflow-scrolling: touch;
 }
 input, textarea, select {

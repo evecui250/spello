@@ -21,13 +21,23 @@ function getOrCreateDeviceId(): string {
   return id;
 }
 
+// The app's Supabase URL/anon key are hardcoded (lib/supabase.ts), so a
+// local dev/test build talks to the exact same live project production
+// does — there's no separate "test" backend. Skipping real pings from
+// localhost specifically (never true for real visitors, always true for
+// `next dev`/local test builds) keeps development/testing activity from
+// quietly polluting real usage counts, which happened once already.
+function isLocalDev(): boolean {
+  return ['localhost', '127.0.0.1'].includes(window.location.hostname);
+}
+
 // Records at most one row per device per calendar day (checked locally
 // first to avoid a network round-trip on every single page load — the
 // unique (device_id, ping_date) constraint plus ON CONFLICT DO NOTHING is
 // the real source of truth if two tabs race). Best-effort and silent:
 // this is a usage counter, never something a learner should notice fail.
 export async function recordUsagePing(): Promise<void> {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || isLocalDev()) return;
   const today = new Date().toISOString().slice(0, 10);
   if (localStorage.getItem(LAST_PING_KEY) === today) return;
 
@@ -46,6 +56,7 @@ export async function recordUsagePing(): Promise<void> {
       user_id: session?.user.id ?? null,
       signed_in: !!session,
       level: getSettings().level,
+      user_agent: navigator.userAgent,
       ping_date: today,
     });
     if (error && error.code !== '23505') throw error;

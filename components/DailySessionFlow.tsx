@@ -157,7 +157,7 @@ interface CardSnapshot {
 function SentenceWordHeader({ word }: { word: Word }) {
   return (
     <div className="text-center -mt-1">
-      <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
+      <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide break-words">
         {word.article ? `${word.article} ` : ''}{word.de}{' '}
         <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
       </div>
@@ -1242,7 +1242,7 @@ export default function DailySessionFlow() {
             <div className="flex flex-col gap-3">
               <div className="text-center -mt-1">
                 <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
-                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
+                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide break-words">
                   {snap.word.article ? `${snap.word.article} ` : ''}{snap.word.de}
                 </div>
               </div>
@@ -1276,7 +1276,7 @@ export default function DailySessionFlow() {
           ) : (
             <div className="flex flex-col gap-3">
               <div className="text-center -mt-1">
-                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
+                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide break-words">
                   {snap.word.article ? `${snap.word.article} ` : ''}{snap.word.de}
                 </div>
               </div>
@@ -1402,7 +1402,7 @@ export default function DailySessionFlow() {
             {currentRound === 1 && (
               <div className="text-center -mt-1">
                 <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
-                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide">
+                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide break-words">
                   {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
                 </div>
               </div>
@@ -1475,7 +1475,7 @@ export default function DailySessionFlow() {
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                <div className={`text-center py-3 rounded-xl font-semibold text-lg ${feedback ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                <div className={`text-center py-3 px-2 rounded-xl font-semibold text-lg break-words ${feedback ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                   {feedback ? '✓ Correct!' : (
                     <>
                       ✗ The answer is:{' '}

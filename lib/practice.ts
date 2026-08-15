@@ -252,21 +252,20 @@ export function recommendedDailyReview(studyBatchSize: number): number {
 
 export interface ProgressForecast {
   wordsRemaining: number;
-  daysToIntroduceAll: number;
-  daysToMasterAll: number; // total days from today, NOT on top of daysToIntroduceAll — see daysToMasterAfterIntroduced below for the incremental figure the UI actually wants to show
-  daysToMasterAfterIntroduced: number;
+  daysToMasterAll: number; // total days from today until every word is fully mastered — already includes however long introducing the remaining words themselves takes, not on top of it
 }
 
-// Forecast for the Settings page: how many days at the given pace until
-// every word has been studied at least once, and until every word is fully
-// mastered. daysToMasterAll's baseline is the fixed schedule's own runway
-// (MASTERY_DAYS_AFTER_INTRODUCTION — 9 days, on-schedule) — the last word
-// introduced still needs this full runway after it's introduced; earlier
-// words mature in parallel alongside it. Comparing dailyReview against the
-// steady-state load this study pace eventually produces
-// (recommendedDailyReview) stretches that runway proportionally if the
-// review cap is underprovisioned, so moving the review slider actually
-// moves this number instead of assuming unlimited review capacity.
+// Forecast for the Settings/Welcome "at this pace" display: how many days,
+// at the given pace, until every word is fully mastered. Baseline is the
+// fixed schedule's own runway (MASTERY_DAYS_AFTER_INTRODUCTION — 9 days,
+// on-schedule) — the last word introduced still needs this full runway
+// after it's introduced; earlier words mature in parallel alongside it, so
+// this is the last word's finish line, not a sum of everyone's individual
+// runways. Comparing dailyReview against the steady-state load this study
+// pace eventually produces (recommendedDailyReview) stretches that runway
+// proportionally if the review cap is underprovisioned, so moving the
+// review slider actually moves this number instead of assuming unlimited
+// review capacity.
 export function estimateProgressForecast(studyBatchSize: number, dailyReview: number): ProgressForecast {
   const allProgress = getAllProgress();
   const levelWords = wordsForLevel(getSettings().level);
@@ -281,16 +280,8 @@ export function estimateProgressForecast(studyBatchSize: number, dailyReview: nu
   const neededReviewCapacity = recommendedDailyReview(studyBatchSize);
   const bottleneckFactor = dailyReview > 0 ? Math.max(1, neededReviewCapacity / dailyReview) : Infinity;
   const daysToMasterAll = daysToIntroduceAll + MASTERY_DAYS_AFTER_INTRODUCTION * bottleneckFactor;
-  // The UI reads more naturally as "X to learn, Y MORE to master" than as
-  // two totals-from-today that the reader has to subtract themselves — but
-  // when daysToIntroduceAll is already Infinity (batch size 0), the
-  // subtraction would be Infinity - Infinity = NaN, so that case just
-  // carries Infinity through unchanged instead.
-  const daysToMasterAfterIntroduced = Number.isFinite(daysToIntroduceAll)
-    ? daysToMasterAll - daysToIntroduceAll
-    : Infinity;
 
-  return { wordsRemaining, daysToIntroduceAll, daysToMasterAll, daysToMasterAfterIntroduced };
+  return { wordsRemaining, daysToMasterAll };
 }
 
 // Forecasts read more naturally in weeks once they run past a couple of
