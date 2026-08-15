@@ -8,6 +8,7 @@ import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTo
 import { Level, wordsForLevel } from '../../lib/words';
 import { scheduleSync, syncNow } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
+import ShareCard from '../../components/ShareCard';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -125,6 +126,8 @@ export default function SettingsPage() {
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6">
         <AccountPanel onSync={loadFromStorage} />
       </div>
+
+      <ShareCard />
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-6">
         <div>

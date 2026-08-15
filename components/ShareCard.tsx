@@ -1,0 +1,108 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
+// Lets a learner invite friends with as little friction as the platform
+// allows, all tucked into one Settings card rather than an unpromptable
+// floating banner on every page:
+//   - A native Share button (Web Share API) on any browser that supports
+//     it — opens the OS share sheet (Messages, WhatsApp, etc.) with the
+//     app's own URL pre-filled. Falls back to copying the link to the
+//     clipboard where Web Share isn't available (most desktop browsers).
+//   - A real one-tap Install button on Android/Chrome, captured from the
+//     browser's own beforeinstallprompt event — only ever appears when
+//     the browser is actually offering to install (never shown, and never
+//     fakeable, on a browser/OS that doesn't support it).
+//   - Static instructions for iOS Safari, which Apple deliberately does
+//     not allow triggering programmatically (no install-prompt API
+//     exists there) — shown only when actually on iOS and not already
+//     running standalone, so it doesn't confuse Android/desktop visitors.
+export default function ShareCard() {
+  const [shareSupported, setShareSupported] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<{ prompt: () => void; userChoice: Promise<{ outcome: string }> } | null>(null);
+  const [isIosSafariNotStandalone, setIsIosSafariNotStandalone] = useState(false);
+
+  useEffect(() => {
+    setShareSupported(typeof navigator !== 'undefined' && !!navigator.share);
+
+    const standalone = window.matchMedia('(display-mode: standalone)').matches
+      || (navigator as unknown as { standalone?: boolean }).standalone === true;
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    setIsIosSafariNotStandalone(isIos && !standalone);
+
+    const onBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as unknown as { prompt: () => void; userChoice: Promise<{ outcome: string }> });
+    };
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    const onInstalled = () => setDeferredPrompt(null);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  const shareUrl = typeof window !== 'undefined' ? window.location.origin + (process.env.NEXT_PUBLIC_BASE_PATH ?? '') + '/' : '';
+
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Spello', text: 'Learn German vocabulary with Spello', url: shareUrl });
+      } catch {
+        // User cancelled the share sheet — not an error worth surfacing.
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard permission denied or unavailable — nothing more this
+      // button can do; silently no-op rather than throw.
+    }
+  };
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+  };
+
+  return (
+    <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-3">
+      <div>
+        <label className="block font-semibold text-stone-800 mb-1">Share Spello</label>
+        <p className="text-stone-500 text-sm">Studying together helps it stick — send a friend the link.</p>
+      </div>
+
+      <div className="flex gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={handleShare}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold text-sm hover:bg-indigo-700 active:scale-95 transition-all"
+        >
+          {shareSupported ? 'Share' : copied ? '✓ Link copied' : 'Copy link'}
+        </button>
+        {deferredPrompt && (
+          <button
+            type="button"
+            onClick={handleInstall}
+            className="bg-amber-100 text-amber-800 px-4 py-2 rounded-xl font-semibold text-sm hover:bg-amber-200 active:scale-95 transition-all"
+          >
+            📲 Install app
+          </button>
+        )}
+      </div>
+
+      {isIosSafariNotStandalone && (
+        <p className="text-stone-500 text-sm bg-indigo-50 rounded-lg px-3 py-2">
+          On iPhone/iPad: tap the Share icon (□↑) in Safari, then &quot;Add to Home Screen&quot; — it&apos;ll open full-screen like an app from then on.
+        </p>
+      )}
+    </div>
+  );
+}
