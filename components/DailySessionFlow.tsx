@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   getDailySession, saveDailySession, DailySession, SessionPhase,
-  getWordProgress, saveWordProgress, getAllProgress, getSettings, today,
+  getWordProgress, saveWordProgress, getAllProgress, getSettings, saveSettings, today,
   Round, WordProgress, Settings, MascotStageId,
   isStudyGoalDoneToday, isReviewGoalDoneToday, markStudyGoalDone, markReviewGoalDone,
   touchStreak, markCongratsShown, getDailyStats, addEarnedPuppy, addEarnedUpgrade,
@@ -31,10 +31,9 @@ import { scheduleSync } from '../lib/sync';
 import { correctSentence, generateSentence, DailyLimitReachedError } from '../lib/ai';
 import { supabase } from '../lib/supabase';
 
-// Locates wordForm inside sentence (case-insensitive) so callers can
-// highlight it — used by both ReferenceSentence (round 1's copy-mode
-// reference) and the round-1 corrected-sentence display (underlines the
-// target word).
+// Locates wordForm inside sentence (case-insensitive) so callers can bold
+// it — used by ReferenceSentence (round 1's copy-mode reference / the
+// history replay of one of those rounds).
 function splitOnWordForm(sentence: string, wordForm: string): { before: string; match: string; after: string } | null {
   const idx = sentence.toLowerCase().indexOf(wordForm.toLowerCase());
   if (idx === -1) return null;
@@ -51,53 +50,6 @@ function tokenize(s: string): string[] {
   return s.match(/[A-Za-zÀ-ÖØ-öø-ÿß']+|[^A-Za-zÀ-ÖØ-öø-ÿß']+/g) ?? [];
 }
 
-// Diffs the learner's own typed attempt against the AI's corrected version,
-// word by word (case-insensitive, via longest-common-subsequence), so the
-// round-1 "Correction" box can underline specifically what the learner got
-// wrong instead of always underlining the target vocabulary word — those
-// are frequently not the same place (e.g. the correction is a grammar fix
-// elsewhere in the sentence, and the target word itself was already fine).
-function diffCorrectionSegments(userInput: string, corrected: string): { text: string; changed: boolean }[] {
-  const correctedTokens = tokenize(corrected);
-  const isWord = (t: string) => /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(t);
-  const correctedWordPositions: number[] = [];
-  const correctedWords: string[] = [];
-  correctedTokens.forEach((t, i) => {
-    if (isWord(t)) { correctedWordPositions.push(i); correctedWords.push(t.toLowerCase()); }
-  });
-  const originalWords = tokenize(userInput).filter(isWord).map(w => w.toLowerCase());
-
-  const m = originalWords.length;
-  const n = correctedWords.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] = originalWords[i - 1] === correctedWords[j - 1]
-        ? dp[i - 1][j - 1] + 1
-        : Math.max(dp[i - 1][j], dp[i][j - 1]);
-    }
-  }
-  const matchedCorrectedWordIdx = new Set<number>();
-  let i = m, j = n;
-  while (i > 0 && j > 0) {
-    if (originalWords[i - 1] === correctedWords[j - 1]) {
-      matchedCorrectedWordIdx.add(j - 1);
-      i--; j--;
-    } else if (dp[i - 1][j] >= dp[i][j - 1]) {
-      i--;
-    } else {
-      j--;
-    }
-  }
-
-  const wordPosToTokenIdx = new Map(correctedWordPositions.map((tokenIdx, wordPos) => [wordPos, tokenIdx]));
-  const changedTokenIdx = new Set<number>();
-  for (let w = 0; w < n; w++) {
-    if (!matchedCorrectedWordIdx.has(w)) changedTokenIdx.add(wordPosToTokenIdx.get(w)!);
-  }
-
-  return correctedTokens.map((text, idx) => ({ text, changed: changedTokenIdx.has(idx) }));
-}
 
 // How many of the 4 lifetime milestones (Learn, 1st/2nd/3rd review) a word
 // has actually, permanently earned — read straight from its saved
@@ -147,11 +99,19 @@ function MilestoneBar({ roundRange, wordId }: { roundRange: [Round, Round]; word
   );
 }
 
-const ROUND_LABELS: Record<Round, string> = {
-  1: 'Round 1 — use it in a sentence',
-  2: 'Round 2 — half the letters hinted',
-  3: 'Round 3 — first letter hint',
-  4: 'Round 4 — no hints',
+// The card header's own label — one name per chunk of the MilestoneBar
+// below it (see chunksEarned), not per individual round. Round 1 and
+// round 2 both belong to chunk 1 (Day 1) despite being visibly different
+// exercises (write a sentence, then spell it half-hinted); showing
+// "Round 1"/"Round 2" text alongside a bar that only has ONE chunk for
+// both was confusing (looked like there were more stages than the bar
+// actually has). roundRange[0] doubles as the chunk index — see
+// MilestoneBar's own comment for why.
+const CHUNK_LABELS: Record<Round, string> = {
+  1: 'Day 1',
+  2: '1st review',
+  3: '2nd review',
+  4: '3rd review',
 };
 
 type RoundMode = 'study' | 'review';
@@ -370,29 +330,26 @@ function SentenceExercise({
                   <TextSpeakerButton text={correction.sentence} className="text-green-500 hover:text-green-700 transition-colors normal-case" />
                 </div>
                 <div className="text-lg text-green-800">
-                  {diffCorrectionSegments(input, correction.sentence).map((seg, i) => {
-                    // Every segment from diffCorrectionSegments is already
-                    // either a whole word or a whole non-word (punctuation/
-                    // whitespace) run — see tokenize's regex — so there's no
-                    // need to re-split; just check whether THIS one looks
-                    // up to a dictionary word at all. See resolveClickedWord
-                    // for the full resolution chain (AI lemma -> heuristic
-                    // -> separable-prefix repair).
-                    const match = /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(seg.text)
-                      ? resolveClickedWord(seg.text, correction.lemmas, word.de)
+                  {tokenize(correction.sentence).map((text, i) => {
+                    // Every token is already either a whole word or a whole
+                    // non-word (punctuation/whitespace) run — see tokenize's
+                    // regex — so there's no need to re-split; just check
+                    // whether THIS one looks up to a dictionary word at all.
+                    // See resolveClickedWord for the full resolution chain
+                    // (AI lemma -> heuristic -> separable-prefix repair).
+                    const match = /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(text)
+                      ? resolveClickedWord(text, correction.lemmas, word.de)
                       : undefined;
-                    const inner = match ? (
+                    return match ? (
                       <button
+                        key={i}
                         type="button"
                         onClick={() => setSelectedWord(match)}
                         className="hover:bg-green-200/70 rounded px-0.5 -mx-0.5 transition-colors"
                       >
-                        {seg.text}
+                        {text}
                       </button>
-                    ) : seg.text;
-                    return seg.changed
-                      ? <span key={i} className="underline decoration-2 underline-offset-2">{inner}</span>
-                      : <span key={i}>{inner}</span>;
+                    ) : <span key={i}>{text}</span>;
                   })}
                 </div>
               </div>
@@ -419,10 +376,10 @@ function SentenceExercise({
   );
 }
 
-// Extra reinforcement on rounds 2-4 / review (never touches scoring): shows
-// the AI-corrected example sentence from this word's round 1, with the word
-// itself blanked out until the round is answered. wordForm is the exact
-// inflected substring the AI reported using, so the blank lines up with
+// Shows a correct example sentence with the target word called out in bold
+// — used for round 1's copy-mode reference (sentence writing mode off, or
+// the history replay of one of those rounds). wordForm is the exact
+// inflected substring the AI reported using, so the bolding lines up with
 // however the word actually appears in the sentence (which may differ from
 // its dictionary form, e.g. plural/case endings).
 function ReferenceSentence({ example, label = 'Example sentence' }: { example: { sentence: string; wordForm: string }; label?: string }) {
@@ -551,6 +508,14 @@ export default function DailySessionFlow() {
   // reference sentence layered on top of its own handling.
   const useDirectSentence = !!word && currentRound === 1 && roundMode === 'study' && signedIn
     && !isBootstrapCopyWord(word) && !exampleSentence && settings?.sentenceWritingMode === false;
+  // Same gating as useDirectSentence, minus the sentenceWritingMode check
+  // itself — this is the corner toggle that flips that very setting, so it
+  // needs to show on round 1 of a genuine new-word study card regardless of
+  // which side of the setting it's currently on (sentence-writing view or
+  // the copy-mode/reference-sentence view), but nowhere else (not on
+  // rounds 2-4, review rounds, bootstrap-copy words, or signed-out).
+  const showSentenceModeToggle = !!word && currentRound === 1 && roundMode === 'study' && signedIn
+    && !isBootstrapCopyWord(word) && !exampleSentence;
 
   function persistSession(next: DailySession) {
     setSession(next);
@@ -1265,7 +1230,7 @@ export default function DailySessionFlow() {
           <div>
             <div className="flex items-center justify-between mb-1">
               <div className="text-sm font-medium text-indigo-600">
-                {snap.round === 1 && (snap.sentence || isBootstrapCopyWord(snap.word)) ? 'Round 1 — copy the word' : ROUND_LABELS[snap.round]}
+                {CHUNK_LABELS[snap.roundRange[0]]}
               </div>
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                 snap.wordStatus === 'Review' ? 'bg-emerald-100 text-emerald-700'
@@ -1314,11 +1279,7 @@ export default function DailySessionFlow() {
                   <TextSpeakerButton text={snap.sentence.sentence} className="text-green-500 hover:text-green-700 transition-colors normal-case" />
                 </div>
                 <div className="text-lg text-green-800">
-                  {diffCorrectionSegments(snap.sentence.userInput, snap.sentence.sentence).map((seg, i) => (
-                    seg.changed
-                      ? <span key={i} className="underline decoration-2 underline-offset-2">{seg.text}</span>
-                      : <span key={i}>{seg.text}</span>
-                  ))}
+                  {tokenize(snap.sentence.sentence).map((text, i) => <span key={i}>{text}</span>)}
                 </div>
               </div>
             </div>
@@ -1386,16 +1347,34 @@ export default function DailySessionFlow() {
         <div>
           <div className="flex items-center justify-between mb-1">
             <div className="text-sm font-medium text-indigo-600">
-              {currentRound === 1 && (exampleSentence || isBootstrapCopyWord(word) || !signedIn || settings.sentenceWritingMode === false) ? 'Round 1 — copy the word' : ROUND_LABELS[currentRound]}
+              {CHUNK_LABELS[roundRange[0]]}
             </div>
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-              wordStatus === 'Review' ? 'bg-emerald-100 text-emerald-700'
-                : wordStatus === 'Continuing' ? 'bg-amber-100 text-amber-700'
-                  : 'bg-indigo-100 text-indigo-700'
-            }`}
-            >
-              {wordStatus}
-            </span>
+            <div className="flex items-center gap-1.5">
+              {showSentenceModeToggle && settings && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = { ...settings, sentenceWritingMode: !settings.sentenceWritingMode };
+                    saveSettings(next);
+                    setSettings(next);
+                    scheduleSync();
+                  }}
+                  aria-label={settings.sentenceWritingMode ? 'Turn off sentence writing mode (switch to copy mode)' : 'Turn on sentence writing mode'}
+                  title={settings.sentenceWritingMode ? 'Sentence writing: on — tap to switch to copy mode' : 'Sentence writing: off — tap to turn on'}
+                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:scale-95 transition-all shrink-0"
+                >
+                  {settings.sentenceWritingMode ? '✍️ Writing' : '📋 Copy'}
+                </button>
+              )}
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                wordStatus === 'Review' ? 'bg-emerald-100 text-emerald-700'
+                  : wordStatus === 'Continuing' ? 'bg-amber-100 text-amber-700'
+                    : 'bg-indigo-100 text-indigo-700'
+              }`}
+              >
+                {wordStatus}
+              </span>
+            </div>
           </div>
           <MilestoneBar roundRange={roundRange} wordId={word.id} />
         </div>

@@ -271,9 +271,6 @@ export default function SettingsPage() {
             <label className="block font-semibold text-stone-800">
               Sentence writing mode
             </label>
-            <p className="text-stone-500 text-sm">
-              Off: skip writing a translation — copy the word instead, with a correct example sentence shown alongside for reference.
-            </p>
           </div>
           <input
             type="checkbox"
