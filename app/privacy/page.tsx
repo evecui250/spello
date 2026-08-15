@@ -11,7 +11,7 @@ export default function PrivacyPage() {
         <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           Privacy Policy
         </h1>
-        <p className="text-amber-100/70 text-sm">Last updated: 29 July 2026</p>
+        <p className="text-amber-100/70 text-sm">Last updated: 16 August 2026</p>
       </div>
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-5 text-stone-700 text-sm leading-relaxed">
@@ -27,19 +27,29 @@ export default function PrivacyPage() {
             <li><strong>Your email address</strong>, used only to send you a one-time sign-in link and identify your account. We never see or store a password.</li>
             <li><strong>Your learning progress</strong> — which words you've studied, your review schedule, streak, and settings (pace, level, language) — so it can sync across your devices.</li>
             <li><strong>Text you submit for the AI translation exercise</strong> — your attempted German translation of a practice sentence, sent to our AI provider to be corrected.</li>
+            <li>
+              <strong>Basic usage activity</strong>, recorded once a day per device (whether or
+              not you sign in) so we can see roughly how many people actually use Spello: a
+              random identifier for your browser (not tied to your name or email unless you're
+              signed in), your IP address, browser/device type, and which level you're studying.
+              We don't use this to individually track what any one person does in the app — no
+              per-action event log, no cross-site tracking, no ad or analytics network involved.
+            </li>
+            <li>Anything you submit through the bug-report button — your message, the page you were on, and your browser/device type, so we can actually fix what you reported.</li>
           </ul>
           <p>
-            We don't run ads, don't use analytics or tracking cookies, and don't sell or share
-            your data with advertisers.
+            We don't run ads, don't use third-party analytics or advertising trackers, and don't
+            sell or share your data with advertisers.
           </p>
         </section>
 
         <section className="flex flex-col gap-1.5">
           <h2 className="font-semibold text-stone-800">Where it's stored</h2>
           <p>
-            Your account and progress are stored with Supabase (hosted in the EU) under your
-            own user ID. A local copy also lives in your browser's storage so the app keeps
-            working offline; it syncs back up whenever you're signed in and online.
+            Your account and progress, the usage activity described above, and any bug report
+            you send are all stored with Supabase (hosted in the EU). A local copy of your
+            progress also lives in your browser's storage so the app keeps working offline; it
+            syncs back up whenever you're signed in and online.
           </p>
         </section>
 

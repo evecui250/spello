@@ -33,9 +33,14 @@ function isLocalDev(): boolean {
 
 // Records at most one row per device per calendar day (checked locally
 // first to avoid a network round-trip on every single page load — the
-// unique (device_id, ping_date) constraint plus ON CONFLICT DO NOTHING is
-// the real source of truth if two tabs race). Best-effort and silent:
-// this is a usage counter, never something a learner should notice fail.
+// unique (device_id, ping_date) constraint is the real source of truth if
+// two tabs race). Routed through the record-usage-ping Edge Function
+// rather than a direct table insert — that's the only way to honestly
+// capture ip_address, since client JS has no reliable way to read its own
+// public IP and only the server actually observes the true request IP
+// (see privacy/page.tsx for the user-facing disclosure of this). Best-
+// effort and silent either way: this is a usage counter, never something
+// a learner should notice fail.
 export async function recordUsagePing(): Promise<void> {
   if (typeof window === 'undefined' || isLocalDev()) return;
   const today = new Date().toISOString().slice(0, 10);
@@ -44,24 +49,19 @@ export async function recordUsagePing(): Promise<void> {
   try {
     const deviceId = getOrCreateDeviceId();
     const { data: { session } } = await supabase.auth.getSession();
-    // Plain insert, not upsert — under RLS, an upsert's ON CONFLICT clause
-    // (even DO NOTHING) additionally requires SELECT privilege to check
-    // for a conflict, which this table deliberately doesn't grant (see the
-    // migration). A same-day duplicate (another tab on this device racing
-    // this one) just trips the unique constraint (23505), which is exactly
-    // as harmless as the row it would have no-op'd into — silently ignored
-    // either way.
-    const { error } = await supabase.from('usage_pings').insert({
-      device_id: deviceId,
-      user_id: session?.user.id ?? null,
-      signed_in: !!session,
-      level: getSettings().level,
-      user_agent: navigator.userAgent,
-      ping_date: today,
+    const { error } = await supabase.functions.invoke('record-usage-ping', {
+      body: {
+        deviceId,
+        level: getSettings().level,
+        userAgent: navigator.userAgent,
+        pingDate: today,
+      },
+      headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
     });
-    if (error && error.code !== '23505') throw error;
+    if (error) throw error;
     localStorage.setItem(LAST_PING_KEY, today);
   } catch {
-    // Best-effort — network hiccups, RLS surprises, etc. never surface.
+    // Best-effort — network hiccups, function cold-start errors, etc.
+    // never surface.
   }
 }
