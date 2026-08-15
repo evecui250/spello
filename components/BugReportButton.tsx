@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-// A small floating button, mounted once in the root layout so it's visible
-// on every page — lets a learner report a problem the instant they hit one,
-// without navigating away or losing whatever they were mid-way through
-// (the modal is just an overlay; the page underneath is untouched). Works
-// whether signed in or not, same as everything else now that sign-in is
-// entirely optional (see AuthGate's removal) — see the bug_reports
-// migration for the insert-only RLS policy backing this.
+// A small icon button in the top-right of NavBar, visible on every page —
+// lets a learner report a problem the instant they hit one, without
+// navigating away or losing whatever they were mid-way through (the modal
+// is just an overlay; the page underneath is untouched). Works whether
+// signed in or not, same as everything else now that sign-in is entirely
+// optional (see AuthGate's removal) — see the bug_reports migration for the
+// insert-only RLS policy backing this.
 export default function BugReportButton() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -55,9 +55,9 @@ export default function BugReportButton() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Report a bug or problem"
-        className="fixed bottom-4 right-4 z-40 w-11 h-11 rounded-full bg-stone-800/80 hover:bg-stone-800 text-white text-lg shadow-lg flex items-center justify-center backdrop-blur-sm transition-colors"
+        className="ml-auto shrink-0 text-lg leading-none px-2 py-3 text-emerald-100/60 hover:text-emerald-50 transition-colors"
       >
-        🐛
+        🦴
       </button>
 
       {open && (
@@ -87,9 +87,6 @@ export default function BugReportButton() {
               </p>
             ) : (
               <>
-                <p className="text-stone-500 text-sm">
-                  Tell us what went wrong — no need to finish what you&apos;re doing first.
-                </p>
                 <textarea
                   value={message}
                   onChange={e => setMessage(e.target.value)}

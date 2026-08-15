@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+/* Installed as a standalone home-screen PWA (apple-mobile-web-app-capable,
+   see app/layout.tsx), iOS Safari drops the address bar that normally lets
+   a user "un-stick" a zoomed page -- two related quirks that only bite in
+   that mode:
+
+   1. Touch-scrolling a page taller than the viewport can silently fail to
+      scroll at all unless html/body are explicitly given a scrollable
+      region (rather than relying on the implicit default, which standalone
+      mode doesn't always honor the same way a normal browser tab does).
+   2. Focusing any input/textarea/select rendered below 16px triggers iOS's
+      automatic zoom-to-fit, and with no address bar/chrome to tap "zoom
+      out" from, the user is stuck pinch-zooming back out by hand. Fixing
+      every form control to render at >=16px avoids the trigger entirely --
+      deliberately NOT solved via `user-scalable=no` on the viewport meta,
+      which would also block legitimate pinch-zoom for low-vision users. */
+html, body {
+  height: 100%;
+}
+body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+input, textarea, select {
+  font-size: 16px;
+}
+
 /* Home page forest scene */
 
 @keyframes bubble-float {

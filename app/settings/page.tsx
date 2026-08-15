@@ -225,7 +225,7 @@ export default function SettingsPage() {
               {forecast.wordsRemaining === 0
                 ? 'All words introduced'
                 : `~${daysToWeeks(forecast.daysToIntroduceAll)} weeks to learn all`}
-              {' · '}~{daysToWeeks(forecast.daysToMasterAll)} weeks to master all
+              {' · '}~{daysToWeeks(forecast.daysToMasterAfterIntroduced)} more weeks to master all
             </span>
           </div>
           {showPaceInfo && (

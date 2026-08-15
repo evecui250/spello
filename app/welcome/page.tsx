@@ -6,7 +6,6 @@ import { getSettings, saveSettings, markOnboardingDone, Settings, MascotStageId 
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
 import { Level } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
-import Logo from '../../components/Logo';
 import DachshundMascot from '../../components/Mascot';
 
 const STEPS = ['level', 'pace', 'mascots'] as const;
@@ -73,8 +72,7 @@ export default function WelcomePage() {
   return (
     <div className="flex flex-col items-center gap-7 py-2">
       <div className="flex flex-col items-center gap-3 text-center px-4">
-        <Logo variant="icon" size={64} className="ring-2 ring-white/20" />
-        <h1 className="text-xl font-bold text-amber-50 mt-1" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Welcome to Spello</h1>
+        <h1 className="text-xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Welcome to Spello</h1>
         <StepDots step={step} />
       </div>
 
@@ -166,7 +164,7 @@ export default function WelcomePage() {
             <div className="bg-amber-100/60 rounded-xl px-4 py-3 text-sm text-amber-800 flex items-center justify-between gap-3">
               <span className="font-semibold shrink-0">At this pace</span>
               <span className="text-right">
-                ~{daysToWeeks(forecast.daysToIntroduceAll)} weeks to learn all · ~{daysToWeeks(forecast.daysToMasterAll)} weeks to master all
+                ~{daysToWeeks(forecast.daysToIntroduceAll)} weeks to learn all · ~{daysToWeeks(forecast.daysToMasterAfterIntroduced)} more weeks to master all
               </span>
             </div>
 
@@ -234,22 +232,6 @@ export default function WelcomePage() {
                 </div>
               ))}
             </div>
-          </div>
-          <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-1">
-            <div className="font-semibold text-stone-800">Translate to learn new words</div>
-            <p className="text-stone-500 text-sm">
-              For a brand-new word, you'll translate a short English sentence into German. AI
-              corrects your attempt — it becomes that word's example sentence on your Word List.
-            </p>
-          </div>
-          <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-2">
-            <div className="font-semibold text-stone-800">Each day: review first, then new words</div>
-            <p className="text-stone-500 text-sm">
-              A session starts with reviewing words you already know (easiest first — a quick
-              multiple-choice check, then spelling) before moving on to today's new words. Every
-              word's card shows a 4-chunk bar for its 4 milestones above — green is done, the
-              amber chunk is today's target, and the rest are still to come.
-            </p>
           </div>
           <div className="flex gap-3 w-full">
             <button

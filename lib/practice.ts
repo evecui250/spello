@@ -253,7 +253,8 @@ export function recommendedDailyReview(studyBatchSize: number): number {
 export interface ProgressForecast {
   wordsRemaining: number;
   daysToIntroduceAll: number;
-  daysToMasterAll: number;
+  daysToMasterAll: number; // total days from today, NOT on top of daysToIntroduceAll — see daysToMasterAfterIntroduced below for the incremental figure the UI actually wants to show
+  daysToMasterAfterIntroduced: number;
 }
 
 // Forecast for the Settings page: how many days at the given pace until
@@ -280,8 +281,16 @@ export function estimateProgressForecast(studyBatchSize: number, dailyReview: nu
   const neededReviewCapacity = recommendedDailyReview(studyBatchSize);
   const bottleneckFactor = dailyReview > 0 ? Math.max(1, neededReviewCapacity / dailyReview) : Infinity;
   const daysToMasterAll = daysToIntroduceAll + MASTERY_DAYS_AFTER_INTRODUCTION * bottleneckFactor;
+  // The UI reads more naturally as "X to learn, Y MORE to master" than as
+  // two totals-from-today that the reader has to subtract themselves — but
+  // when daysToIntroduceAll is already Infinity (batch size 0), the
+  // subtraction would be Infinity - Infinity = NaN, so that case just
+  // carries Infinity through unchanged instead.
+  const daysToMasterAfterIntroduced = Number.isFinite(daysToIntroduceAll)
+    ? daysToMasterAll - daysToIntroduceAll
+    : Infinity;
 
-  return { wordsRemaining, daysToIntroduceAll, daysToMasterAll };
+  return { wordsRemaining, daysToIntroduceAll, daysToMasterAll, daysToMasterAfterIntroduced };
 }
 
 // Forecasts read more naturally in weeks once they run past a couple of
