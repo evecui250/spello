@@ -7,6 +7,7 @@ import SyncGate from '../components/SyncGate';
 import ChunkErrorRecovery from '../components/ChunkErrorRecovery';
 import BugReportButton from '../components/BugReportButton';
 import SpeechCleanup from '../components/SpeechCleanup';
+import PwaRegister from '../components/PwaRegister';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
@@ -21,11 +22,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="icon" href={`${base}/favicon-16.png`} sizes="16x16" />
         <link rel="icon" href={`${base}/icon-512.png`} sizes="512x512" />
         <link rel="apple-touch-icon" href={`${base}/apple-touch-icon.png`} />
+        <link rel="manifest" href={`${base}/manifest.webmanifest`} />
+        <meta name="theme-color" content="#0f3d3a" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Spello" />
       </head>
       <body className="min-h-screen text-emerald-50">
         <ChunkErrorRecovery />
         <SyncGate />
         <SpeechCleanup />
+        <PwaRegister />
         <ForestBackground />
         <NavBar />
         <main className="max-w-2xl mx-auto px-4 py-6">
