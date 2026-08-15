@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   getDailySession, saveDailySession, DailySession, SessionPhase,
   getWordProgress, saveWordProgress, getAllProgress, getSettings, today,
-  Round, WordProgress, Settings,
+  Round, WordProgress, Settings, MascotStageId,
   isStudyGoalDoneToday, isReviewGoalDoneToday, markStudyGoalDone, markReviewGoalDone,
   touchStreak, markCongratsShown, getDailyStats, addEarnedPuppy, addEarnedUpgrade,
 } from '../lib/storage';
@@ -19,12 +19,13 @@ import { Word, Level, resolveClickedWord, glossFor } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
 import SpeakerButton from './SpeakerButton';
+import TextSpeakerButton from './TextSpeakerButton';
 import TranslationChoiceCard from './TranslationChoiceCard';
 import MatchingQuizPage from './MatchingQuizPage';
 import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
 import WordInfoPanel from './WordInfoPanel';
-import { speakWord, speakText } from '../lib/speech';
+import { speakWord, speakText, stopSpeech } from '../lib/speech';
 import { imageUrlForWord } from '../lib/wordImage';
 import { scheduleSync } from '../lib/sync';
 import { correctSentence, generateSentence, DailyLimitReachedError } from '../lib/ai';
@@ -98,19 +99,37 @@ function diffCorrectionSegments(userInput: string, corrected: string): { text: s
   return correctedTokens.map((text, idx) => ({ text, changed: changedTokenIdx.has(idx) }));
 }
 
+// How many of the 4 lifetime milestones (Learn, 1st/2nd/3rd review) a word
+// has actually, permanently earned — read straight from its saved
+// mascotStage/fullyMastered, so this is always live/accurate (in
+// particular: it flips up the instant a milestone pass is saved, while
+// the "✓ Correct!" banner is still showing, not just once the NEXT word
+// loads).
+function chunksEarned(mascotStage: MascotStageId | undefined, fullyMastered: boolean): 0 | 1 | 2 | 3 | 4 {
+  if (fullyMastered || mascotStage === 'long-crowned') return 4;
+  if (mascotStage === 'medium') return 3;
+  if (mascotStage === 'short') return 2;
+  if (mascotStage === 'puppy') return 1;
+  return 0;
+}
+
 // Always-4-chunk progress bar — one per lifetime milestone (Learn, 1st/
 // 2nd/3rd review), not per round-within-today's-episode like the old dot
 // row (which showed a DIFFERENT NUMBER of dots depending on the word's
 // stage — 2 for a fresh word, 1 for a medium-stage review — the exact
 // inconsistency that made it hard to tell at a glance which stage a word
-// was actually at). Each milestone's own startRound doubles as its chunk
+// was actually at). A milestone's own startRound doubles as its chunk
 // index by construction (Learn=[1,2], 1st review=[2,3], 2nd=[3,4], 3rd=
-// [4,4]) — chunks before roundRange[0] are already permanently earned,
-// chunk roundRange[0] itself is today's target, everything after is still
-// to come. A wrong answer/hint never changes roundRange, only where
-// currentRound sits within it, so exactly one chunk is ever "today's
-// target" at a time — never two.
-function MilestoneBar({ roundRange }: { roundRange: [Round, Round] }) {
+// [4,4]) — that's `roundRange[0]` below, today's target chunk UNLESS it's
+// already been earned (chunksEarned already covers it — reading live
+// progress rather than inferring purely from roundRange is what makes the
+// just-answered chunk actually turn green instead of staying amber until
+// the next word loads). A wrong answer/hint never changes roundRange,
+// only where currentRound sits within it, so exactly one chunk is ever
+// "today's target" at a time — never two.
+function MilestoneBar({ roundRange, wordId }: { roundRange: [Round, Round]; wordId: string }) {
+  const progress = getWordProgress(wordId);
+  const earned = chunksEarned(progress.mascotStage, progress.fullyMastered);
   const activeChunk = roundRange[0];
   return (
     <div className="flex gap-1.5">
@@ -118,7 +137,7 @@ function MilestoneBar({ roundRange }: { roundRange: [Round, Round] }) {
         <div
           key={chunk}
           className={`h-2 flex-1 rounded-full transition-colors duration-300 ${
-            chunk < activeChunk ? 'bg-emerald-400'
+            chunk <= earned ? 'bg-emerald-400'
               : chunk === activeChunk ? 'bg-amber-400'
                 : 'bg-indigo-100'
           }`}
@@ -271,8 +290,12 @@ function SentenceExercise({
   // The corrected sentence has no pre-recorded audio file of its own (unlike
   // single vocabulary words) — always the free on-device browser voice, same
   // as speakWord's own fallback path, so this costs no API/AI usage at all.
+  // Cancelled on cleanup (word change, or this whole exercise unmounting) —
+  // otherwise a still-queued utterance keeps playing after the learner has
+  // already moved on to the next word or left the page entirely.
   useEffect(() => {
     if (correction && getSettings().autoPlayAudio) speakText(correction.sentence);
+    return () => stopSpeech();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [correction]);
 
@@ -342,7 +365,10 @@ function SentenceExercise({
           {correction ? (
             <>
               <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
-                <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium">Correction</div>
+                <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium flex items-center justify-center gap-1.5">
+                  Correction
+                  <TextSpeakerButton text={correction.sentence} className="text-green-500 hover:text-green-700 transition-colors normal-case" />
+                </div>
                 <div className="text-lg text-green-800">
                   {diffCorrectionSegments(input, correction.sentence).map((seg, i) => {
                     // Every segment from diffCorrectionSegments is already
@@ -404,14 +430,20 @@ function ReferenceSentence({ example, label = 'Example sentence' }: { example: {
   if (!parts) {
     return (
       <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
-        <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">{label}</div>
+        <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1 flex items-center justify-center gap-1.5">
+          {label}
+          <TextSpeakerButton text={example.sentence} className="text-indigo-400 hover:text-indigo-600 transition-colors normal-case" />
+        </div>
         <div className="text-stone-700 italic">{example.sentence}</div>
       </div>
     );
   }
   return (
     <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
-      <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1 flex items-center justify-center gap-1.5">
+        {label}
+        <TextSpeakerButton text={example.sentence} className="text-indigo-400 hover:text-indigo-600 transition-colors normal-case" />
+      </div>
       <div className="text-stone-700 italic">
         {parts.before}
         <span className="font-bold text-indigo-700 not-italic">
@@ -1244,7 +1276,7 @@ export default function DailySessionFlow() {
                 {snap.wordStatus}
               </span>
             </div>
-            <MilestoneBar roundRange={snap.roundRange} />
+            <MilestoneBar roundRange={snap.roundRange} wordId={snap.word.id} />
           </div>
 
           <div className="text-center">
@@ -1277,7 +1309,10 @@ export default function DailySessionFlow() {
                 {snap.sentence.userInput}
               </div>
               <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
-                <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium">Correction</div>
+                <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium flex items-center justify-center gap-1.5">
+                  Correction
+                  <TextSpeakerButton text={snap.sentence.sentence} className="text-green-500 hover:text-green-700 transition-colors normal-case" />
+                </div>
                 <div className="text-lg text-green-800">
                   {diffCorrectionSegments(snap.sentence.userInput, snap.sentence.sentence).map((seg, i) => (
                     seg.changed
@@ -1306,13 +1341,13 @@ export default function DailySessionFlow() {
               disabled={historyIndex === 0}
               className="flex-1 bg-white text-indigo-700 border-2 border-indigo-100 py-2.5 rounded-xl font-semibold disabled:opacity-40 hover:enabled:bg-indigo-50 transition-all"
             >
-              ← Older
+              ← Previous
             </button>
             <button
               onClick={() => setHistoryIndex(i => (i !== null && i < newestHistoryIndex ? i + 1 : null))}
               className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
             >
-              {historyIndex < newestHistoryIndex ? 'Newer →' : 'Back to current →'}
+              Next →
             </button>
           </div>
         </div>
@@ -1335,7 +1370,7 @@ export default function DailySessionFlow() {
               onClick={() => setHistoryIndex(newestHistoryIndex)}
               className="text-amber-200 hover:text-amber-100 underline font-medium"
             >
-              ← Back
+              ← Previous
             </button>
           )}
         </div>
@@ -1362,7 +1397,7 @@ export default function DailySessionFlow() {
               {wordStatus}
             </span>
           </div>
-          <MilestoneBar roundRange={roundRange} />
+          <MilestoneBar roundRange={roundRange} wordId={word.id} />
         </div>
 
         <div className="text-center">

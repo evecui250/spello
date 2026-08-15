@@ -13,10 +13,10 @@ const STEPS = ['level', 'pace', 'mascots'] as const;
 type Step = typeof STEPS[number];
 
 const MASCOT_INTRO: { id: MascotStageId; name: string; reviews: string }[] = [
-  { id: 'puppy', name: 'Puppy', reviews: 'after first learning' },
-  { id: 'short', name: 'Young Dachshund', reviews: 'after your 1st review' },
-  { id: 'medium', name: 'Adult Dachshund', reviews: 'after your 2nd review' },
-  { id: 'long-crowned', name: 'Master Dachshund', reviews: 'after your 3rd review — fully mastered' },
+  { id: 'puppy', name: 'Puppy', reviews: 'Day 1 — translate a sentence, then spell it with half the letters hinted' },
+  { id: 'short', name: 'Young Dachshund', reviews: '1st review, 1 day later — half the letters hinted again' },
+  { id: 'medium', name: 'Adult Dachshund', reviews: '2nd review, 3 days after that — just the first letter' },
+  { id: 'long-crowned', name: 'Master Dachshund', reviews: '3rd review, 5 days after that — no hints. Fully mastered!' },
 ];
 
 function StepDots({ step }: { step: Step }) {
@@ -240,6 +240,15 @@ export default function WelcomePage() {
             <p className="text-stone-500 text-sm">
               For a brand-new word, you'll translate a short English sentence into German. AI
               corrects your attempt — it becomes that word's example sentence on your Word List.
+            </p>
+          </div>
+          <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-2">
+            <div className="font-semibold text-stone-800">Each day: review first, then new words</div>
+            <p className="text-stone-500 text-sm">
+              A session starts with reviewing words you already know (easiest first — a quick
+              multiple-choice check, then spelling) before moving on to today's new words. Every
+              word's card shows a 4-chunk bar for its 4 milestones above — green is done, the
+              amber chunk is today's target, and the rest are still to come.
             </p>
           </div>
           <div className="flex gap-3 w-full">

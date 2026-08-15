@@ -106,16 +106,24 @@ Deno.serve(async (req: Request) => {
                   'all — in ANY form (any conjugation, declension, case ending, or plural). If ' +
                   'it is a noun, do NOT require the article (der/die/das) to be present or ' +
                   'correct — only the core word matters for this check. If it DOES, correct ' +
-                  'THEIR OWN translation attempt — fix grammar, spelling, and word order while ' +
-                  'keeping their own word choices and sentence structure as much as possible ' +
-                  '(different learners can validly translate the same sentence differently — ' +
-                  'synonyms, word order — so do not discard their approach for your own ' +
-                  'independent translation). If it does NOT attempt the word at all, or their ' +
-                  'attempt is too garbled or unrelated to the English sentence to fix, IGNORE ' +
-                  'their attempt entirely and produce a fresh, natural German translation of ' +
-                  'the English sentence instead. Either way, you must always return a complete, ' +
-                  'correct German sentence that uses the target word — never refuse or report ' +
-                  'failure. '
+                  'THEIR OWN translation attempt: fix grammar, spelling, and word order, AND fix ' +
+                  'any word whose MEANING does not actually match what the corresponding part of ' +
+                  'the English sentence says — a genuine mistranslation, not just a stylistic ' +
+                  'choice (e.g. if the English says "departure" and they wrote a word that means ' +
+                  '"trip" or "outing" instead, that is wrong and must be corrected to the word ' +
+                  'that actually means "departure" — do not just fix its grammar and leave the ' +
+                  'wrong meaning in place; be equally strict about every other word choice in the ' +
+                  'sentence, not only the target word). You MAY keep a word choice that is a ' +
+                  'genuinely valid synonym correctly conveying the same meaning (different ' +
+                  'learners can validly translate the same sentence differently — real synonyms, ' +
+                  'word order) — but every word in your output must actually mean what the ' +
+                  'corresponding part of the English sentence means; do not preserve their overall ' +
+                  'sentence structure/approach at the expense of accuracy. If it does NOT attempt ' +
+                  'the target word at all, or their attempt is too garbled or unrelated to the ' +
+                  'English sentence to fix, IGNORE their attempt entirely and produce a fresh, ' +
+                  'natural German translation of the English sentence instead. Either way, you ' +
+                  'must always return a complete, correct German sentence that uses the target ' +
+                  'word — never refuse or report failure. '
                 : 'Produce a natural, fluent German translation of that English sentence. ') +
               `Make sure "${wordDe}" is correctly conjugated for its subject and tense in your ` +
               'output (in its correct inflected form, which may differ from the dictionary ' +

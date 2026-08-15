@@ -46,11 +46,11 @@ function speakWithBrowserVoice(text: string): void {
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'de-DE';
   utterance.rate = 0.9;
-  // Explicit max — the Web Speech API caps here regardless (no way to
-  // amplify a quiet system voice beyond this from JS), so this is really
-  // just documenting intent, not the fix for the loudness mismatch itself
-  // (see WORD_AUDIO_VOLUME below).
-  utterance.volume = 1;
+  // See WORD_AUDIO_VOLUME below — on-device testing found the on-device
+  // browser voice used for sentences was actually the LOUDER side of the
+  // two, not the pre-recorded word clips, so this pulls sentences down to
+  // roughly match instead.
+  utterance.volume = SENTENCE_AUDIO_VOLUME;
   const voice = pickGermanVoice();
   if (voice) utterance.voice = voice;
   window.speechSynthesis.cancel();
@@ -65,13 +65,15 @@ export function speakText(text: string): void {
   speakWithBrowserVoice(text);
 }
 
-// The pre-recorded word clips (gpt-4o-mini-tts) are mastered noticeably
-// louder than most on-device browser voices used for sentence playback —
-// there's no way to amplify a quiet system voice from JS, so this pulls the
-// louder side down instead. A rough first pass since actual loudness is
-// very device/voice-dependent; nudge this if words still sound louder (or
-// now too quiet) compared to sentences on your device.
-const WORD_AUDIO_VOLUME = 0.85;
+// Real-world testing found the on-device browser voice (sentences) came
+// out noticeably LOUDER than the pre-recorded word clips at their
+// original, un-adjusted volumes — the opposite of what an earlier pass at
+// this assumed — so it's the sentence side pulled down here instead of
+// the word side. Rough first-pass numbers since actual loudness is very
+// device/voice-dependent; nudge these further if one side still sounds
+// off on your device.
+const WORD_AUDIO_VOLUME = 1;
+const SENTENCE_AUDIO_VOLUME = 0.7;
 
 let currentAudio: HTMLAudioElement | null = null;
 
@@ -98,4 +100,19 @@ export function speakWord(word: Word): void {
   };
   audio.addEventListener('error', fallback);
   audio.play().catch(fallback);
+}
+
+// Cancels whatever's currently playing/queued (word clip or browser TTS
+// sentence) — call this on unmount/navigation so an utterance that was
+// still queued up when the learner moved on doesn't keep playing out of
+// nowhere a few seconds later ("why do I hear 'Ich habe...' when I'm not
+// even on the practice page"). speechSynthesis.cancel() clears BOTH the
+// currently-speaking utterance and anything queued behind it.
+export function stopSpeech(): void {
+  if (typeof window === 'undefined') return;
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 }
