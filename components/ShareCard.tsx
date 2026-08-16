@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 
 // Lets a learner invite friends with as little friction as the platform
 // allows, all tucked into one Settings card rather than an unpromptable
@@ -22,9 +23,20 @@ export default function ShareCard() {
   const [copied, setCopied] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<{ prompt: () => void; userChoice: Promise<{ outcome: string }> } | null>(null);
   const [isIosSafariNotStandalone, setIsIosSafariNotStandalone] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setShareSupported(typeof navigator !== 'undefined' && !!navigator.share);
+
+    // Generated entirely on-device (the `qrcode` package, no network call)
+    // — matters here specifically since this is a PWA meant to work
+    // offline, and because a third-party QR-generation API would mean
+    // sending this app's own URL (and by extension, that someone's about
+    // to install it) to an outside service for no real reason.
+    const url = window.location.origin + (process.env.NEXT_PUBLIC_BASE_PATH ?? '') + '/';
+    QRCode.toDataURL(url, { width: 240, margin: 1, color: { dark: '#1e1b4b', light: '#00000000' } })
+      .then(setQrDataUrl)
+      .catch(() => setQrDataUrl(null));
 
     const standalone = window.matchMedia('(display-mode: standalone)').matches
       || (navigator as unknown as { standalone?: boolean }).standalone === true;
@@ -93,7 +105,7 @@ export default function ShareCard() {
             onClick={handleInstall}
             className="bg-amber-100 text-amber-800 px-4 py-2 rounded-xl font-semibold text-sm hover:bg-amber-200 active:scale-95 transition-all"
           >
-            📲 Install app
+            Install app
           </button>
         )}
       </div>
@@ -102,6 +114,14 @@ export default function ShareCard() {
         <p className="text-stone-500 text-sm bg-indigo-50 rounded-lg px-3 py-2">
           On iPhone/iPad: tap the Share icon (□↑) in Safari, then &quot;Add to Home Screen&quot; — it&apos;ll open full-screen like an app from then on.
         </p>
+      )}
+
+      {qrDataUrl && (
+        <div className="flex flex-col items-center gap-1.5 pt-1">
+          <p className="text-stone-400 text-xs">Or have a friend scan this</p>
+          {/* eslint-disable-next-line @next/next/no-img-element -- on-device generated data: URI, no remote source to optimize */}
+          <img src={qrDataUrl} alt="QR code linking to Spello" className="w-28 h-28 rounded-lg" />
+        </div>
       )}
     </div>
   );

@@ -227,6 +227,7 @@ function SentenceExercise({
   // on remount (this whole component is keyed by word.id) rather than
   // needing its own reset effect.
   const [selectedWord, setSelectedWord] = useState<Word | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (word.exercisePrompt) return;
@@ -301,6 +302,7 @@ function SentenceExercise({
             </div>
           </div>
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => {
@@ -314,6 +316,11 @@ function SentenceExercise({
             rows={2}
             className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 resize-none disabled:opacity-60"
           />
+          {/* No German keyboard on hand? There's no web API to switch the
+              OS's on-screen keyboard layout — this row of ä/ö/ü/ß buttons
+              is the actual, working fix (see SpecialCharButtons). Hidden
+              once corrected, same as the textarea being disabled then. */}
+          {!correction && <SpecialCharButtons inputRef={textareaRef} />}
           {status === 'error' && (
             <p className="text-red-600 text-sm text-center">Couldn't get a correction — check your connection and try again.</p>
           )}

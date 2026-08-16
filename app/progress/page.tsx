@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { WORDS, wordsForLevel } from '../../lib/words';
+import { WORDS, wordsForLevel, Level, LEVEL_ORDER } from '../../lib/words';
 import {
-  getAllProgress, getSettings, getStreak, getTotalGoalDays, MascotStageId, WordProgress,
+  getAllProgress, getAllProgressForLevel, getSettings, getStreak, getTotalGoalDays, MascotStageId, WordProgress,
 } from '../../lib/storage';
 import { SYNCED_EVENT } from '../../lib/sync';
 import DachshundMascot from '../../components/Mascot';
@@ -34,13 +34,32 @@ const STAGE_LABEL: Record<MascotStageId, string> = {
 // progress store but isn't native to this book — this is the app's
 // existing interactive/accent color (buttons, links), reused here so the
 // "borrowed" stacking segment reads as its own consistent, recognizable
-// color rather than inventing a fifth palette entry.
+// color rather than inventing a fifth palette entry. Only meaningful in
+// "This book" scope — see the scope toggle below.
 const FOREIGN_COLOR = '#4f46e5';
+
+// Ranks how far along a word's own milestone track is, for merging the
+// same word id across two different levels' progress stores (see "All
+// books" below) — the more-advanced copy wins rather than picking
+// arbitrarily or double-counting.
+const STAGE_RANK: Record<MascotStageId, number> = { puppy: 0, short: 1, medium: 2, 'long-crowned': 3 };
+function stageRank(p: WordProgress): number {
+  return p.mascotStage ? STAGE_RANK[p.mascotStage] : -1;
+}
+
+type Scope = 'current' | 'all';
 
 export default function ProgressPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress> | null>(null);
   const [totalGoalDays, setTotalGoalDays] = useState(0);
   const [streakCount, setStreakCount] = useState(0);
+  const [scope, setScope] = useState<Scope>('current');
+  // Which levels actually have any progress at all — "All books" only
+  // ever aggregates books the learner has genuinely touched, not every
+  // theoretically available level (C1/C2 have no words yet; B2_old is a
+  // legacy corpus most accounts never touch), so the total never looks
+  // inflated by books nobody opened.
+  const [studiedLevels, setStudiedLevels] = useState<Level[]>([]);
 
   useEffect(() => {
     // Also re-reads on SYNCED_EVENT (matches Home's pattern) — otherwise a
@@ -52,6 +71,7 @@ export default function ProgressPage() {
       setProgress(getAllProgress());
       setTotalGoalDays(getTotalGoalDays());
       setStreakCount(getStreak().count);
+      setStudiedLevels(LEVEL_ORDER.filter(l => Object.keys(getAllProgressForLevel(l)).length > 0));
     };
     load();
     window.addEventListener(SYNCED_EVENT, load);
@@ -61,9 +81,30 @@ export default function ProgressPage() {
   if (!progress) return null;
 
   const level = getSettings().level;
-  // Split per stage into words native to this book vs. words "borrowed"
-  // from another level's book (see FOREIGN_COLOR above) — w.level is
-  // already right there on each Word, no extra lookup needed.
+  const activeLevels = scope === 'all' ? [...new Set([level, ...studiedLevels])] : [level];
+
+  // "All books": merge every active level's own store into one map, keyed
+  // by word id — a word saved cross-level via "save for review" can
+  // appear in more than one store at once, so the more-advanced copy wins
+  // rather than double-counting it or picking whichever happens to be
+  // read last.
+  let effectiveProgress = progress;
+  if (scope === 'all') {
+    const merged: Record<string, WordProgress> = {};
+    for (const l of activeLevels) {
+      const store = l === level ? progress : getAllProgressForLevel(l);
+      for (const [id, p] of Object.entries(store)) {
+        if (!merged[id] || stageRank(p) > stageRank(merged[id])) merged[id] = p;
+      }
+    }
+    effectiveProgress = merged;
+  }
+
+  // Split per stage into words native to the book being counted vs. words
+  // "borrowed" via save-for-review (see FOREIGN_COLOR above) — only a
+  // meaningful distinction in "This book" scope; in "All books" scope
+  // every word is already being counted under some book, so there's
+  // nothing left to call "foreign".
   const stageCounts: Record<MascotStageId, { native: number; foreign: number }> = {
     puppy: { native: 0, foreign: 0 },
     short: { native: 0, foreign: 0 },
@@ -72,11 +113,11 @@ export default function ProgressPage() {
   };
   let introducedCount = 0;
   for (const w of WORDS) {
-    const p = progress[w.id];
+    const p = effectiveProgress[w.id];
     if (!p || p.studiedTimes === 0) continue;
     introducedCount++;
     const bucket = stageCounts[p.mascotStage ?? 'puppy'];
-    if (w.level === level) bucket.native++;
+    if (scope === 'all' || w.level === level) bucket.native++;
     else bucket.foreign++;
   }
   const bars = STAGE_ORDER.map(id => {
@@ -84,13 +125,18 @@ export default function ProgressPage() {
     return { id, native, foreign, total: native + foreign, color: STAGE_COLORS[id] };
   });
   const maxStageCount = Math.max(...bars.map(b => b.total), 1);
-  const totalWords = wordsForLevel(level).length;
+  const totalWords = scope === 'all'
+    ? activeLevels.reduce((sum, l) => sum + wordsForLevel(l).length, 0)
+    : wordsForLevel(level).length;
 
   // A1 only: the ~220 curated high-frequency words always come first and
   // use the copy-the-word round 1 (see isBootstrapCopyWord) — sentence
   // translation only starts once every one of them has at least been
   // started (buildStudyWords stops prioritizing them the moment none are
-  // left untouched, whether or not they're fully learned yet).
+  // left untouched, whether or not they're fully learned yet). Tied to
+  // whichever level is actually active right now, regardless of the scope
+  // toggle below — it's about today's study session, not a retrospective
+  // stat.
   const bootstrapWords = level === 'A1' ? wordsForLevel('A1').filter(w => w.highFrequency) : [];
   const bootstrapRemaining = bootstrapWords.filter(w => !progress[w.id]).length;
 
@@ -102,8 +148,30 @@ export default function ProgressPage() {
       </div>
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
-        <h2 className="font-semibold text-stone-800">Words breakdown</h2>
-        <p className="text-stone-500 text-sm mb-1">{totalWords} words total in this vocabulary book.</p>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <h2 className="font-semibold text-stone-800">Words breakdown</h2>
+          {studiedLevels.length > 1 && (
+            <div className="flex bg-stone-200/60 rounded-full p-0.5 text-xs font-medium shrink-0">
+              {(['current', 'all'] as Scope[]).map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setScope(s)}
+                  className={`px-2.5 py-1 rounded-full transition-colors ${
+                    scope === s ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
+                  }`}
+                >
+                  {s === 'current' ? 'This book' : 'All books'}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <p className="text-stone-500 text-sm mb-1">
+          {scope === 'all'
+            ? `${totalWords} words total across ${activeLevels.length} vocabulary book${activeLevels.length === 1 ? '' : 's'}.`
+            : `${totalWords} words total in this vocabulary book.`}
+        </p>
         {bootstrapWords.length > 0 && (
           <p className="text-stone-500 text-sm mb-4">
             {bootstrapRemaining > 0
