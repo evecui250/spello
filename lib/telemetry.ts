@@ -1,7 +1,7 @@
 'use client';
 
 import { supabase } from './supabase';
-import { getSettings } from './storage';
+import { getSettings, isOnboardingDone } from './storage';
 
 // A random per-browser-profile id, minted once and reused forever — NOT
 // tied to a Spello account or CEFR level (deliberately un-namespaced,
@@ -49,10 +49,19 @@ export async function recordUsagePing(): Promise<void> {
   try {
     const deviceId = getOrCreateDeviceId();
     const { data: { session } } = await supabase.auth.getSession();
+    // Only report a level once onboarding has actually saved one --
+    // getSettings().level otherwise silently falls back to
+    // DEFAULT_SETTINGS.level ('A1'), which used to make every brand-new
+    // visitor's very first ping (fired on first mount, before they've
+    // picked anything) show up as an A1 learner regardless of which level
+    // they went on to choose seconds later -- and since a ping only fires
+    // once per calendar day, that mislabeled first ping was never
+    // corrected same-day. `null` here means "hasn't chosen a level yet",
+    // not "chose A1".
     const { error } = await supabase.functions.invoke('record-usage-ping', {
       body: {
         deviceId,
-        level: getSettings().level,
+        level: isOnboardingDone() ? getSettings().level : null,
         userAgent: navigator.userAgent,
         pingDate: today,
       },
