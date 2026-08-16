@@ -4111,3 +4111,168 @@ export function resolveClickedWord(
   const lemma = lemmas?.[token];
   return (lemma ? findWordByLemma(lemma) : undefined) ?? findWordByGermanForm(token);
 }
+
+// --- Clickable words in the round-1 PROMPT sentence (the English/Chinese
+// sentence being translated FROM, not the German being translated TO) —
+// lets a learner tap an unfamiliar prompt word and see its German
+// dictionary-form translation as a hint. Deliberately always shows the
+// corpus's own base/dictionary-form German (word.de) regardless of the
+// prompt word's actual tense/inflection in context — "reads" and "read"
+// both resolve to the same entry and both show its infinitive "lesen",
+// never a conjugated guess. No explicit stop-word list for either
+// language: a pure grammar word (English "the"/"a", Chinese particles
+// like 的/了/吗) simply isn't anyone's corpus `en`/`zh` field, so it
+// naturally never matches and stays plain, non-clickable text — the same
+// "no match = not clickable, never a wrong guess" contract
+// findWordByGermanForm already uses.
+
+// English: a word's own `en` field can list several comma-separated
+// synonyms (e.g. "to depart, leave") and verbs carry a leading "to " —
+// both stripped/split here so each synonym becomes its own lookup key.
+let englishFormMap: Map<string, Word[]> | null = null;
+
+function getEnglishFormMap(): Map<string, Word[]> {
+  if (!englishFormMap) {
+    englishFormMap = new Map();
+    for (const w of WORDS) {
+      for (const raw of w.en.split(',')) {
+        const key = raw.trim().replace(/^to\s+/i, '').toLowerCase();
+        if (!key) continue;
+        const arr = englishFormMap.get(key);
+        if (arr) arr.push(w); else englishFormMap.set(key, [w]);
+      }
+    }
+  }
+  return englishFormMap;
+}
+
+// A short list of common irregular verbs — covers the handful that show
+// up constantly in generated sentences and wouldn't resolve via simple
+// suffix-stripping. Not remotely exhaustive; an unlisted irregular form
+// just doesn't resolve, same as any other unhandled gap here.
+const ENGLISH_IRREGULARS: Record<string, string> = {
+  is: 'be', are: 'be', was: 'be', were: 'be', am: 'be', been: 'be', being: 'be',
+  has: 'have', had: 'have', having: 'have',
+  does: 'do', did: 'do', doing: 'do', done: 'do',
+  goes: 'go', went: 'go', gone: 'go',
+  says: 'say', said: 'say',
+  gets: 'get', got: 'get', gotten: 'get',
+  makes: 'make', made: 'make',
+  takes: 'take', took: 'take', taken: 'take',
+  sees: 'see', saw: 'see', seen: 'see',
+  writes: 'write', wrote: 'write', written: 'write',
+  comes: 'come', came: 'come',
+  gives: 'give', gave: 'give', given: 'give',
+  knows: 'know', knew: 'know', known: 'know',
+  thinks: 'think', thought: 'think',
+  buys: 'buy', bought: 'buy',
+  brings: 'bring', brought: 'bring',
+  finds: 'find', found: 'find',
+  tells: 'tell', told: 'tell',
+  becomes: 'become', became: 'become',
+  eats: 'eat', ate: 'eat', eaten: 'eat',
+  drinks: 'drink', drank: 'drink', drunk: 'drink',
+  runs: 'run', ran: 'run',
+  sends: 'send', sent: 'send',
+  understands: 'understand', understood: 'understand',
+};
+
+// Longest first, plus "ies" -> "y" (studies -> study) and a doubled-
+// consonant retry (stopping -> stopp doesn't exist, but stop does).
+const ENGLISH_SUFFIXES = ['ies', 'ing', 'ed', 'es', 's'];
+
+export function findWordByEnglishForm(rawToken: string): Word | undefined {
+  const cleaned = rawToken.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
+  if (!cleaned) return undefined;
+  const lower = cleaned.toLowerCase();
+  const map = getEnglishFormMap();
+
+  let candidates = map.get(lower);
+  if (!candidates && ENGLISH_IRREGULARS[lower]) candidates = map.get(ENGLISH_IRREGULARS[lower]);
+  if (!candidates) {
+    for (const suffix of ENGLISH_SUFFIXES) {
+      if (!lower.endsWith(suffix) || lower.length - suffix.length < 2) continue;
+      const stem = suffix === 'ies' ? `${lower.slice(0, -suffix.length)}y` : lower.slice(0, -suffix.length);
+      let combined = map.get(stem) ?? [];
+      if (combined.length === 0 && /([a-z])\1$/.test(stem)) {
+        combined = map.get(stem.slice(0, -1)) ?? [];
+      }
+      if (combined.length > 0) { candidates = combined; break; }
+    }
+  }
+  return candidates?.[0];
+}
+
+// Chinese: no whitespace word boundaries, so this segments a whole prompt
+// string into clickable/plain spans via greedy longest-match against
+// every corpus zh synonym, rather than resolving one token at a time —
+// entirely different shape from the English/German lookups above.
+// Synonyms are separated by "／" (the corpus's actual convention) or a
+// comma; a parenthesized clarifying note (e.g. "出口（高速公路）") also
+// gets a second, paren-stripped key added, since the bare term is what
+// actually shows up in a natural sentence.
+let chineseTermMap: Map<string, Word> | null = null;
+let chineseMaxTermLength = 1;
+
+function getChineseTermMap(): Map<string, Word> {
+  if (!chineseTermMap) {
+    chineseTermMap = new Map();
+    for (const w of WORDS) {
+      if (!w.zh) continue;
+      for (const raw of w.zh.split(/[／，,]/)) {
+        const term = raw.trim();
+        if (!term) continue;
+        if (!chineseTermMap.has(term)) chineseTermMap.set(term, w);
+        chineseMaxTermLength = Math.max(chineseMaxTermLength, [...term].length);
+        const stripped = term.replace(/[（(][^）)]*[）)]/g, '').trim();
+        if (stripped && stripped !== term && !chineseTermMap.has(stripped)) {
+          chineseTermMap.set(stripped, w);
+          chineseMaxTermLength = Math.max(chineseMaxTermLength, [...stripped].length);
+        }
+      }
+    }
+  }
+  return chineseTermMap;
+}
+
+export interface ChineseClickSpan {
+  text: string;
+  word?: Word;
+}
+
+export function segmentChineseForClicks(text: string): ChineseClickSpan[] {
+  const map = getChineseTermMap();
+  const chars = [...text];
+  const spans: ChineseClickSpan[] = [];
+  let i = 0;
+  while (i < chars.length) {
+    let matched: { len: number; word: Word } | null = null;
+    // Longest match wins — checked from the map's own longest known term
+    // down to 2 characters (a single-character match is skipped: with
+    // thousands of common single hanzi otherwise colliding across
+    // unrelated corpus entries, per-character matches produced far too
+    // many misleading hints in practice to be worth keeping).
+    for (let len = Math.min(chineseMaxTermLength, chars.length - i); len >= 2; len--) {
+      const candidate = chars.slice(i, i + len).join('');
+      const word = map.get(candidate);
+      if (word) { matched = { len, word }; break; }
+    }
+    if (matched) {
+      spans.push({ text: chars.slice(i, i + matched.len).join(''), word: matched.word });
+      i += matched.len;
+    } else {
+      spans.push({ text: chars[i] });
+      i += 1;
+    }
+  }
+  // Merge adjacent unmatched single characters back into one plain span,
+  // so punctuation/particles read as normal flowing text rather than one
+  // <span> per character.
+  const merged: ChineseClickSpan[] = [];
+  for (const span of spans) {
+    const prev = merged[merged.length - 1];
+    if (!span.word && prev && !prev.word) prev.text += span.text;
+    else merged.push({ ...span });
+  }
+  return merged;
+}

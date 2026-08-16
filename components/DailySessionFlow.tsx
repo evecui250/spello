@@ -15,7 +15,7 @@ import {
   buildMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
 } from '../lib/practice';
 import { REVIEW_PLAN } from '../lib/srs';
-import { Word, Level, resolveClickedWord, glossFor } from '../lib/words';
+import { Word, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
 import SpeakerButton from './SpeakerButton';
@@ -225,8 +225,12 @@ function SentenceExercise({
   // Which word in the corrected sentence the learner tapped (see the
   // clickable-word rendering below and WordInfoPanel) — cleared implicitly
   // on remount (this whole component is keyed by word.id) rather than
-  // needing its own reset effect.
+  // needing its own reset effect. selectedPromptWord is the same idea but
+  // for the PROMPT sentence (a hint while still attempting the
+  // translation) — kept as its own separate state so tapping a word in
+  // one sentence never disturbs whatever's showing for the other.
   const [selectedWord, setSelectedWord] = useState<Word | null>(null);
+  const [selectedPromptWord, setSelectedPromptWord] = useState<Word | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -304,9 +308,46 @@ function SentenceExercise({
           <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
             <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate this sentence into German!</div>
             <div className="text-stone-700 italic">
-              {getSettings().nativeLanguage === 'zh' && promptSentenceZh ? promptSentenceZh : promptSentence}
+              {/* Tap a word for a hint — its German dictionary-form
+                  translation, regardless of this word's own tense/case
+                  here ("reads" and "read" both just show "lesen"). English
+                  goes through the same tokenize+lookup shape the corrected
+                  sentence's own clickable words already use;
+                  Chinese has no word boundaries to tokenize, so it's
+                  segmented as a whole string instead (see
+                  segmentChineseForClicks) — a pure grammar word in either
+                  language (the/a, 的/了/吗) is simply never anyone's
+                  corpus entry, so it naturally stays plain, non-clickable
+                  text without needing an explicit exclusion list. */}
+              {getSettings().nativeLanguage === 'zh' && promptSentenceZh
+                ? segmentChineseForClicks(promptSentenceZh).map((span, i) => (
+                  span.word ? (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSelectedPromptWord(span.word!)}
+                      className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                    >
+                      {span.text}
+                    </button>
+                  ) : <span key={i}>{span.text}</span>
+                ))
+                : tokenize(promptSentence).map((text, i) => {
+                  const match = /[A-Za-z]/.test(text) ? findWordByEnglishForm(text) : undefined;
+                  return match ? (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSelectedPromptWord(match)}
+                      className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                    >
+                      {text}
+                    </button>
+                  ) : <span key={i}>{text}</span>;
+                })}
             </div>
           </div>
+          {selectedPromptWord && <WordInfoPanel key={`prompt-${selectedPromptWord.id}`} word={selectedPromptWord} />}
           <textarea
             ref={textareaRef}
             value={input}
