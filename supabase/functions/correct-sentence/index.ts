@@ -15,10 +15,18 @@
 // OpenAI key lives only here (a Supabase secret), never in client code,
 // since Spello ships as a public static site with no server of its own.
 // Every call is logged to ai_usage for spend tracking.
+//
+// Works whether signed in or not (this testing phase — see the sign-in-
+// optional comment in DailySessionFlow.tsx): a real Authorization header
+// resolves a userId and rate-limits by that; without one (or an anon-key-
+// only header, which resolves no real user), falls back to rate-limiting
+// by the request's own IP address instead. Reads/writes ai_usage with the
+// service-role key in both cases, since an anonymous caller has no user
+// JWT for RLS to key off of.
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MODEL = 'gpt-4o-mini';
 
 // A safety net against a bug or scripted abuse burning through spend, not a
@@ -27,6 +35,11 @@ const MODEL = 'gpt-4o-mini';
 // testing phase; swap this flat cap for a per-subscription-tier allowance
 // (still counted the same way, from ai_usage) once there's billing.
 const DAILY_AI_CALL_LIMIT = 50;
+// Stricter for anonymous callers specifically — an IP is a coarser,
+// easier-to-abuse identifier than a real account (no signup friction at
+// all stands between a bad actor and this endpoint), so this errs tighter
+// until there's more signal about real anonymous usage patterns.
+const DAILY_AI_CALL_LIMIT_ANONYMOUS = 20;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -48,29 +61,42 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return json({ error: 'Missing Authorization header' }, 401);
-    }
-
     const { createClient } = await import('jsr:@supabase/supabase-js@2');
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData.user) {
-      return json({ error: 'Not authenticated' }, 401);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    let userId: string | null = null;
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader) {
+      const callerClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: userData } = await callerClient.auth.getUser();
+      userId = userData.user?.id ?? null;
     }
-    const userId = userData.user.id;
+    // Supabase Edge Functions sit behind a proxy that sets this to the
+    // real client IP as the first entry (a comma-separated chain if the
+    // request passed through further proxies upstream of that) — same
+    // pattern already used by record-usage-ping/admin-stats.
+    const forwardedFor = req.headers.get('x-forwarded-for');
+    const ip = forwardedFor ? forwardedFor.split(',')[0].trim() : null;
+    // No way to identify the caller at all — reject rather than risk the
+    // rate-limit query below silently matching nothing (a bare .eq() with
+    // a null value isn't a reliable "no identifier" check across every
+    // PostgREST version) and letting an unlimited stream of calls through.
+    if (!userId && !ip) {
+      return json({ error: 'Could not identify caller' }, 400);
+    }
 
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
-    const { count: callsToday, error: countError } = await supabase
+    let usageQuery = supabase
       .from('ai_usage')
       .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
       .gte('created_at', todayStart.toISOString());
-    if (!countError && (callsToday ?? 0) >= DAILY_AI_CALL_LIMIT) {
+    usageQuery = userId ? usageQuery.eq('user_id', userId) : usageQuery.eq('ip_address', ip);
+    const limit = userId ? DAILY_AI_CALL_LIMIT : DAILY_AI_CALL_LIMIT_ANONYMOUS;
+    const { count: callsToday, error: countError } = await usageQuery;
+    if (!countError && (callsToday ?? 0) >= limit) {
       return json({ limitReached: true });
     }
 
@@ -174,6 +200,7 @@ Deno.serve(async (req: Request) => {
     const usage = result.usage ?? {};
     await supabase.from('ai_usage').insert({
       user_id: userId,
+      ip_address: ip,
       word_id: wordId,
       level: level || 'unknown',
       model: MODEL,

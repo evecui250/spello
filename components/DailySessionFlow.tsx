@@ -29,7 +29,6 @@ import { speakWord, speakText, stopSpeech } from '../lib/speech';
 import { imageUrlForWord } from '../lib/wordImage';
 import { scheduleSync } from '../lib/sync';
 import { correctSentence, generateSentence, DailyLimitReachedError } from '../lib/ai';
-import { supabase } from '../lib/supabase';
 
 // Locates wordForm inside sentence (case-insensitive) so callers can bold
 // it — used by ReferenceSentence (round 1's copy-mode reference / the
@@ -146,9 +145,10 @@ interface CardSnapshot {
 // translation — see correct-sentence's prompt). The corrected translation
 // becomes the word's permanent example sentence (shown on Word List, but
 // not during later spelling rounds — reading it there doesn't actually
-// help recall a word's spelling). Requires sign-in (optional, from
-// Settings), since the AI calls need a real user
-// to log usage against — see this component's own signedIn check below.
+// help recall a word's spelling). Available whether signed in or not
+// (during this early testing phase — see correct-sentence/generate-
+// sentence, which rate-limit anonymous callers by IP instead of by
+// user_id when there's no session to log usage against).
 // SentenceWordHeader is shown above both the input step and the result step
 // (see the parent's currentRound === 1 branch) so the word stays visible
 // throughout — the correction lands on the same card instead of swapping to
@@ -489,16 +489,6 @@ export default function DailySessionFlow() {
   const [session, setSession] = useState<DailySession | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [ready, setReady] = useState(false);
-  // Sign-in is entirely optional (from Settings) — signed-out users can't
-  // use the AI translate exercise, since the Edge Function needs a real
-  // user to attribute the OpenAI call to and enforce the daily cap
-  // against, so every word falls back to copy-the-word instead (see the
-  // round-1 branch below).
-  const [signedIn, setSignedIn] = useState(false);
-  useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSignedIn(!!s));
-    return () => sub.subscription.unsubscribe();
-  }, []);
 
   const [queue, setQueue] = useState<Word[]>([]);
   const [totalWords, setTotalWords] = useState(0);
@@ -568,19 +558,19 @@ export default function DailySessionFlow() {
   const roundMode: RoundMode = session?.phase === 'review-rounds' ? 'review' : 'study';
   const word = queue[0] ?? null;
   const needsArticle = !!(settings?.requireArticle && word?.type === 'noun' && word?.article);
-  // Same three gating reasons as the copy-the-word fallback below (see its
-  // own comment) PLUS sentence writing mode being explicitly off — a word
-  // that's already bootstrap/signed-out/demoted doesn't need a fetched
-  // reference sentence layered on top of its own handling.
-  const useDirectSentence = !!word && currentRound === 1 && roundMode === 'study' && signedIn
+  // Same gating reasons as the copy-the-word fallback below (see its own
+  // comment) PLUS sentence writing mode being explicitly off — a word
+  // that's already bootstrap/demoted doesn't need a fetched reference
+  // sentence layered on top of its own handling.
+  const useDirectSentence = !!word && currentRound === 1 && roundMode === 'study'
     && !isBootstrapCopyWord(word) && !exampleSentence && settings?.sentenceWritingMode === false;
   // Same gating as useDirectSentence, minus the sentenceWritingMode check
   // itself — this is the corner toggle that flips that very setting, so it
   // needs to show on round 1 of a genuine new-word study card regardless of
   // which side of the setting it's currently on (sentence-writing view or
   // the copy-mode/reference-sentence view), but nowhere else (not on
-  // rounds 2-4, review rounds, bootstrap-copy words, or signed-out).
-  const showSentenceModeToggle = !!word && currentRound === 1 && roundMode === 'study' && signedIn
+  // rounds 2-4, review rounds, or bootstrap-copy words).
+  const showSentenceModeToggle = !!word && currentRound === 1 && roundMode === 'study'
     && !isBootstrapCopyWord(word) && !exampleSentence;
 
   function persistSession(next: DailySession) {
@@ -1459,25 +1449,23 @@ export default function DailySessionFlow() {
           <div className="text-2xl font-semibold text-slate-700">{glossFor(word, getSettings().nativeLanguage)}</div>
         </div>
 
-        {/* Four reasons the translation exercise is skipped for round 1:
+        {/* Three reasons the translation exercise is skipped for round 1:
             !exampleSentence excludes a word demoted BACK to round 1 via Hint
             from round 2 — it already has a saved sentence from its real
             round-1 pass, so it shouldn't be asked to translate another one.
             isBootstrapCopyWord excludes A1's ~220 curated high-frequency
             words permanently — they always use the old copy-the-word
-            mechanic instead, never the AI exercise. !signedIn excludes
-            anyone not signed in (sign-in is entirely optional, from
-            Settings) — the AI calls need a real user to attribute
-            cost/usage to, so every word falls back to copy-the-word for a
-            signed-out session. sentenceWritingMode === false is a
-            deliberate opt-out (Settings) — same copy-the-word fallback,
-            but with a fetched reference sentence layered on top (see
-            useDirectSentence/directSentence above). All four fall
-            through to the else branch's round-1 handling (copy-the-word
-            tiles — a word demoted back here from round 2 doesn't get its
-            saved sentence shown again either, same reasoning as
-            ReferenceSentence's own comment). */}
-        {currentRound === 1 && roundMode === 'study' && signedIn && !isBootstrapCopyWord(word) && !exampleSentence && settings.sentenceWritingMode ? (
+            mechanic instead, never the AI exercise. sentenceWritingMode
+            === false is a deliberate opt-out (Settings) — same copy-the-
+            word fallback, but with a fetched reference sentence layered
+            on top (see useDirectSentence/directSentence above). Available
+            whether signed in or not (see this file's earlier comment on
+            SentenceWordHeader) — all three still fall through to the else
+            branch's round-1 handling (copy-the-word tiles — a word
+            demoted back here from round 2 doesn't get its saved sentence
+            shown again either, same reasoning as ReferenceSentence's own
+            comment). */}
+        {currentRound === 1 && roundMode === 'study' && !isBootstrapCopyWord(word) && !exampleSentence && settings.sentenceWritingMode ? (
           <SentenceExercise
             key={word.id}
             word={word}

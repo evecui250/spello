@@ -7,10 +7,15 @@
 // here (a Supabase secret), never in client code, since Spello ships as a
 // public static site with no server of its own. Every call is logged to
 // ai_usage for spend tracking.
+//
+// Works whether signed in or not (this testing phase — see the sign-in-
+// optional comment in DailySessionFlow.tsx) — see correct-sentence's own
+// comment for the full rationale of the anonymous-caller rate-limiting
+// this mirrors exactly.
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MODEL = 'gpt-4o-mini';
 
 // Defensive cap only — corpus is ~4000 words total across every level, so
@@ -21,6 +26,7 @@ const MAX_KNOWN_WORDS = 4000;
 // count against the same ai_usage table, so a user can't dodge the cap by
 // alternating between the two endpoints. See that file for the rationale.
 const DAILY_AI_CALL_LIMIT = 50;
+const DAILY_AI_CALL_LIMIT_ANONYMOUS = 20;
 
 // Word-count range per level, by difficulty — kept in sync with the
 // standalone copy in scripts/generate-exercise-prompts.py (which
@@ -58,29 +64,34 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return json({ error: 'Missing Authorization header' }, 401);
-    }
-
     const { createClient } = await import('jsr:@supabase/supabase-js@2');
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData.user) {
-      return json({ error: 'Not authenticated' }, 401);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    let userId: string | null = null;
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader) {
+      const callerClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: userData } = await callerClient.auth.getUser();
+      userId = userData.user?.id ?? null;
     }
-    const userId = userData.user.id;
+    const forwardedFor = req.headers.get('x-forwarded-for');
+    const ip = forwardedFor ? forwardedFor.split(',')[0].trim() : null;
+    if (!userId && !ip) {
+      return json({ error: 'Could not identify caller' }, 400);
+    }
 
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
-    const { count: callsToday, error: countError } = await supabase
+    let usageQuery = supabase
       .from('ai_usage')
       .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
       .gte('created_at', todayStart.toISOString());
-    if (!countError && (callsToday ?? 0) >= DAILY_AI_CALL_LIMIT) {
+    usageQuery = userId ? usageQuery.eq('user_id', userId) : usageQuery.eq('ip_address', ip);
+    const limit = userId ? DAILY_AI_CALL_LIMIT : DAILY_AI_CALL_LIMIT_ANONYMOUS;
+    const { count: callsToday, error: countError } = await usageQuery;
+    if (!countError && (callsToday ?? 0) >= limit) {
       return json({ limitReached: true });
     }
 
@@ -150,6 +161,7 @@ Deno.serve(async (req: Request) => {
     const usage = result.usage ?? {};
     await supabase.from('ai_usage').insert({
       user_id: userId,
+      ip_address: ip,
       word_id: wordId,
       level: level || 'unknown',
       model: MODEL,
