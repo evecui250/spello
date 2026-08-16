@@ -123,7 +123,11 @@ export default function HomePage() {
   const handleClick = isDoneForNow ? startExtraRound : inProgress ? () => router.push('/practice') : startSession;
 
   return (
-    <div className="relative flex flex-col items-center gap-9 py-4">
+    // min-h roughly matches the visible area between <main>'s own top
+    // padding and the fixed bottom NavBar (see layout.tsx) — centers the
+    // logo/button block in the middle of the screen instead of it sitting
+    // pinned near the top with a lot of empty space below on a tall phone.
+    <div className="relative flex flex-col items-center justify-center gap-9 py-4 min-h-[calc(100dvh-11rem)]">
       {FIREFLIES_HOME.map((f, i) => (
         <span
           key={i}

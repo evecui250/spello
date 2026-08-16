@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { WORDS, wordsForLevel, Level, LEVEL_ORDER } from '../../lib/words';
 import {
-  getAllProgress, getAllProgressForLevel, getSettings, getStreak, getTotalGoalDays, MascotStageId, WordProgress,
+  getAllProgress, getAllProgressForLevel, getMergedProgressAcrossLevels,
+  getSettings, getStreak, getTotalGoalDays, MascotStageId, WordProgress,
 } from '../../lib/storage';
 import { SYNCED_EVENT } from '../../lib/sync';
 import DachshundMascot from '../../components/Mascot';
@@ -38,15 +40,6 @@ const STAGE_LABEL: Record<MascotStageId, string> = {
 // "This book" scope — see the scope toggle below.
 const FOREIGN_COLOR = '#4f46e5';
 
-// Ranks how far along a word's own milestone track is, for merging the
-// same word id across two different levels' progress stores (see "All
-// books" below) — the more-advanced copy wins rather than picking
-// arbitrarily or double-counting.
-const STAGE_RANK: Record<MascotStageId, number> = { puppy: 0, short: 1, medium: 2, 'long-crowned': 3 };
-function stageRank(p: WordProgress): number {
-  return p.mascotStage ? STAGE_RANK[p.mascotStage] : -1;
-}
-
 type Scope = 'current' | 'all';
 
 export default function ProgressPage() {
@@ -60,6 +53,9 @@ export default function ProgressPage() {
   // legacy corpus most accounts never touch), so the total never looks
   // inflated by books nobody opened.
   const [studiedLevels, setStudiedLevels] = useState<Level[]>([]);
+  // Which stage's breakdown popup is open (only reachable in "All books"
+  // scope, where "which book did these come from" is actually meaningful).
+  const [openStage, setOpenStage] = useState<MascotStageId | null>(null);
 
   useEffect(() => {
     // Also re-reads on SYNCED_EVENT (matches Home's pattern) — otherwise a
@@ -82,43 +78,40 @@ export default function ProgressPage() {
 
   const level = getSettings().level;
   const activeLevels = scope === 'all' ? [...new Set([level, ...studiedLevels])] : [level];
-
-  // "All books": merge every active level's own store into one map, keyed
-  // by word id — a word saved cross-level via "save for review" can
-  // appear in more than one store at once, so the more-advanced copy wins
-  // rather than double-counting it or picking whichever happens to be
-  // read last.
-  let effectiveProgress = progress;
-  if (scope === 'all') {
-    const merged: Record<string, WordProgress> = {};
-    for (const l of activeLevels) {
-      const store = l === level ? progress : getAllProgressForLevel(l);
-      for (const [id, p] of Object.entries(store)) {
-        if (!merged[id] || stageRank(p) > stageRank(merged[id])) merged[id] = p;
-      }
-    }
-    effectiveProgress = merged;
-  }
+  // Same merge Word List's "All books" filter now uses (see
+  // getMergedProgressAcrossLevels) — keeping both on the shared helper is
+  // what guarantees they agree with each other instead of one under-
+  // reporting relative to the other.
+  const effectiveProgress = scope === 'all' ? getMergedProgressAcrossLevels() : progress;
 
   // Split per stage into words native to the book being counted vs. words
   // "borrowed" via save-for-review (see FOREIGN_COLOR above) — only a
   // meaningful distinction in "This book" scope; in "All books" scope
   // every word is already being counted under some book, so there's
-  // nothing left to call "foreign".
+  // nothing left to call "foreign". stageLevelCounts (all-books only)
+  // tracks the same total split out by each word's own book, for the
+  // click-to-expand breakdown below.
   const stageCounts: Record<MascotStageId, { native: number; foreign: number }> = {
     puppy: { native: 0, foreign: 0 },
     short: { native: 0, foreign: 0 },
     medium: { native: 0, foreign: 0 },
     'long-crowned': { native: 0, foreign: 0 },
   };
+  const stageLevelCounts: Record<MascotStageId, Partial<Record<Level, number>>> = {
+    puppy: {}, short: {}, medium: {}, 'long-crowned': {},
+  };
   let introducedCount = 0;
   for (const w of WORDS) {
     const p = effectiveProgress[w.id];
     if (!p || p.studiedTimes === 0) continue;
     introducedCount++;
-    const bucket = stageCounts[p.mascotStage ?? 'puppy'];
+    const stage = p.mascotStage ?? 'puppy';
+    const bucket = stageCounts[stage];
     if (scope === 'all' || w.level === level) bucket.native++;
     else bucket.foreign++;
+    if (scope === 'all') {
+      stageLevelCounts[stage][w.level] = (stageLevelCounts[stage][w.level] ?? 0) + 1;
+    }
   }
   const bars = STAGE_ORDER.map(id => {
     const { native, foreign } = stageCounts[id];
@@ -156,7 +149,7 @@ export default function ProgressPage() {
                 <button
                   key={s}
                   type="button"
-                  onClick={() => setScope(s)}
+                  onClick={() => { setScope(s); setOpenStage(null); }}
                   className={`px-2.5 py-1 rounded-full transition-colors ${
                     scope === s ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
                   }`}
@@ -212,14 +205,61 @@ export default function ProgressPage() {
           ))}
         </div>
         <div className="flex justify-around gap-3 mt-2">
-          {bars.map(b => (
-            <div key={b.id} className="flex flex-col items-center gap-1 flex-1">
-              <DachshundMascot stage={b.id} className="w-10 h-10" />
-              <span className="text-[10px] font-medium text-stone-500">{STAGE_LABEL[b.id]}</span>
-            </div>
-          ))}
+          {bars.map(b => {
+            const clickable = scope === 'all' && b.total > 0;
+            return (
+              <button
+                key={b.id}
+                type="button"
+                disabled={!clickable}
+                onClick={() => setOpenStage(b.id)}
+                className={`flex flex-col items-center gap-1 flex-1 rounded-lg py-1 transition-colors ${clickable ? 'hover:bg-stone-100 active:scale-95' : ''}`}
+              >
+                <DachshundMascot stage={b.id} className="w-10 h-10" />
+                <span className="text-[10px] font-medium text-stone-500">{STAGE_LABEL[b.id]}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
+
+      {openStage && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setOpenStage(null)}
+        >
+          <div
+            className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-amber-50 rounded-2xl shadow-xl p-5 flex flex-col gap-3"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-stone-800 flex items-center gap-2">
+                <DachshundMascot stage={openStage} className="w-8 h-8" />
+                {stageCounts[openStage].native + stageCounts[openStage].foreign} {STAGE_LABEL[openStage]}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setOpenStage(null)}
+                aria-label="Close"
+                className="text-stone-400 hover:text-stone-600 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {Object.entries(stageLevelCounts[openStage])
+                .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
+                .map(([lvl, count]) => (
+                  <div key={lvl} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2">
+                    <span className="text-stone-700 font-medium">{lvl === 'B2_old' ? 'B2' : lvl}</span>
+                    <span className="text-stone-500 text-sm">{count} word{count === 1 ? '' : 's'}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

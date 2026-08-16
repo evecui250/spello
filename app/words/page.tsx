@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { WORDS, wordsForLevel, Word, Level, glossFor } from '../../lib/words';
-import { getAllProgress, getSettings, WordProgress, MascotStageId, today } from '../../lib/storage';
+import { getMergedProgressAcrossLevels, getSettings, WordProgress, MascotStageId, today } from '../../lib/storage';
 import { daysBetween } from '../../lib/srs';
 import { imageUrlForWord } from '../../lib/wordImage';
 import SpeakerButton from '../../components/SpeakerButton';
@@ -103,15 +103,14 @@ export default function WordsPage() {
   // Which vocabulary book to browse — defaults to Settings' own active
   // level (so the page looks exactly as it always has until the learner
   // deliberately switches it), but "All books" and any OTHER level can be
-  // browsed too. Progress is still only ever read from the CURRENTLY
-  // ACTIVE level's own store (per-level progress is a fully separate
-  // profile — see lib/storage.ts) — so a word from a level the learner
-  // isn't actively studying shows real progress here only if it was
-  // reached via WordInfoPanel's cross-level "save for review" (see
-  // lib/practice.ts's saveWordForReviewFromOtherLevel), which stores it,
-  // under its own foreign id, inside the CURRENT level's progress store.
-  // Browsing a book the learner studied natively in the past, under a
-  // level that ISN'T active right now, won't show that old history here.
+  // browsed too. progress below is the merge of EVERY level's own store
+  // (see getMergedProgressAcrossLevels) rather than just the currently
+  // active one — each level keeps a fully separate local profile (see
+  // lib/storage.ts), so reading only the active one used to silently hide
+  // real progress on a word studied under a different level (e.g.
+  // browsing A1 while B2 is active showed every A1 word as "New" even
+  // with real history). Same helper Progress page's own "All books" view
+  // uses, so the two always agree with each other.
   const [filterLevel, setFilterLevel] = useState<BookFilter>(() => getSettings().level);
   const nativeLanguage = getSettings().nativeLanguage;
 
@@ -123,7 +122,7 @@ export default function WordsPage() {
   }, [filterLevel]);
 
   useEffect(() => {
-    setProgress(getAllProgress());
+    setProgress(getMergedProgressAcrossLevels());
   }, []);
 
   const t = today();

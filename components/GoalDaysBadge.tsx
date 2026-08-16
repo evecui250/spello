@@ -16,13 +16,18 @@ const VARIANTS = {
     image: 'goal_days_badge.png',
     aspectRatio: 766 / 722,
     numberBox: { x0: 33.9, x1: 72.7, y0: 39.2, y1: 63.2 },
-    coverBox: { x0: 30.5, x1: 76.2, y0: 33.9, y1: 64.75 },
+    // Trimmed to roughly half the original margin around numberBox — still
+    // safely covers the baked-in "28" placeholder, but the flat cream
+    // patch (an approximation of the art's actual, subtly-shaded cream
+    // background) was visibly larger than it needed to be, reading as a
+    // faint blocky rectangle sitting on top of the badge.
+    coverBox: { x0: 32.2, x1: 74.5, y0: 36.6, y1: 64 },
   },
   streak: {
     image: 'streak_days_badge.png',
     aspectRatio: 769 / 727,
     numberBox: { x0: 35.1, x1: 69.5, y0: 41, y1: 62.4 },
-    coverBox: { x0: 31.6, x1: 72.9, y0: 37.7, y1: 64.4 },
+    coverBox: { x0: 33.4, x1: 71.2, y0: 39.3, y1: 63.4 },
   },
 } as const;
 

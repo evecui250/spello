@@ -476,6 +476,37 @@ export function saveAllProgressForLevel(level: Level, data: Record<string, WordP
   localStorage.setItem(levelKey(KEYS.progress, level), JSON.stringify(data));
 }
 
+// Ranks how far along a word's own milestone track is — used below to
+// pick a winner when the same word id appears in more than one level's
+// progress store at once (possible via the cross-level "save for review"
+// feature: a word studied natively under its own level can ALSO have a
+// "foreign" copy saved into a different level's store).
+const MASCOT_STAGE_RANK: Record<MascotStageId, number> = { puppy: 0, short: 1, medium: 2, 'long-crowned': 3 };
+function mascotStageRank(p: WordProgress): number {
+  return p.mascotStage ? MASCOT_STAGE_RANK[p.mascotStage] : -1;
+}
+
+// Merges every level's own separate progress store into one map, keyed by
+// word id — the only accurate way to answer "what's my real progress on
+// this word", full stop, regardless of which book you happened to study
+// it under or which book is active right now. Each level keeps a fully
+// isolated local store (see levelKey/namespacedKey above), so naively
+// reading only getAllProgress() (the currently active level's store)
+// silently hides real progress on any word studied under a DIFFERENT
+// level — this is what backs Progress page's "All books" view and Word
+// List's "All books" filter, so both agree with each other rather than
+// one under-reporting relative to the other.
+export function getMergedProgressAcrossLevels(): Record<string, WordProgress> {
+  const merged: Record<string, WordProgress> = {};
+  for (const level of LEVEL_ORDER) {
+    const store = getAllProgressForLevel(level);
+    for (const [id, p] of Object.entries(store)) {
+      if (!merged[id] || mascotStageRank(p) > mascotStageRank(merged[id])) merged[id] = p;
+    }
+  }
+  return merged;
+}
+
 export function getWordProgress(id: string): WordProgress {
   const all = getAllProgress();
   return all[id] ?? normalizeProgress(id, undefined);

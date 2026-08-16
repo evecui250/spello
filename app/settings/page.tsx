@@ -127,8 +127,6 @@ export default function SettingsPage() {
         <AccountPanel onSync={loadFromStorage} />
       </div>
 
-      <ShareCard />
-
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-6">
         <div>
           <label className="block font-semibold text-stone-800 mb-1">Level</label>
@@ -281,12 +279,15 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <Link
-        href="/welcome"
-        className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-4 font-semibold text-stone-700 hover:bg-amber-50 transition-colors"
-      >
-        View welcome guide
-      </Link>
+      <div className="grid grid-cols-2 gap-3">
+        <Link
+          href="/welcome"
+          className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-4 font-semibold text-stone-700 hover:bg-amber-50 transition-colors"
+        >
+          View welcome guide
+        </Link>
+        <ShareCard />
+      </div>
 
       <div className="flex justify-center gap-4 text-sm">
         <Link href="/terms" className="text-amber-200 hover:text-amber-100 underline">Terms of Service</Link>
