@@ -813,6 +813,18 @@ export interface DailySession {
   // whichever one was actually on screen when the learner left.
   studyQueueIds?: string[];
   reviewQueueIds?: string[];
+  // A review word steps through several rounds within its own milestone
+  // (e.g. a "2nd review" word starts at round 3, can climb toward round 4
+  // or get demoted back down on a wrong answer/Hint) — this tracks which
+  // round each in-progress review word is CURRENTLY on, keyed by word id.
+  // Without persisting it here, it only ever lived in an in-memory ref
+  // (DailySessionFlow's reviewRoundsRef), which meant navigating away
+  // mid-review and coming back (even just to change a Settings toggle)
+  // reset every in-progress review word back to its milestone's starting
+  // round — a real, reported "review starts over" bug. Undefined/missing
+  // entries fall back to the word's own milestone startRound, same as a
+  // genuinely fresh review word.
+  reviewRounds?: Record<string, Round>;
   earnedPuppies: number;
   earnedUpgrades: Partial<Record<MascotStageId, number>>;
   isExtra: boolean; // true for a "Study more"/"Review more" bonus round, so
@@ -836,6 +848,7 @@ function normalizeDailySession(raw: Partial<DailySession>): DailySession {
     studyMcqWrongIds: [],
     reviewMatchingDone: false,
     reviewMcqWrongIds: [],
+    reviewRounds: {},
     ...raw,
   } as DailySession;
 }

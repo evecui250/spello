@@ -608,7 +608,12 @@ export default function DailySessionFlow() {
     const words = wordsById(pending);
     setQueue(words);
     setTotalWords(ids.length);
-    reviewRoundsRef.current = {};
+    // Restored from the persisted session (see DailySession.reviewRounds)
+    // rather than reset to {} unconditionally — this function re-runs on
+    // every remount (navigating away and back, e.g. to change a Settings
+    // toggle), and a hard reset here used to silently rewind any
+    // in-progress review word back to its milestone's starting round.
+    reviewRoundsRef.current = { ...(ds.reviewRounds ?? {}) };
     const withQueue: DailySession = mode === 'study'
       ? { ...ds, studyQueueIds: pending }
       : { ...ds, reviewQueueIds: pending };
@@ -750,14 +755,19 @@ export default function DailySessionFlow() {
       setFeedback(correct);
       setJustCompleted(outcome.isFinal);
 
+      // Always persists the ref's new state (see DailySession.reviewRounds)
+      // — folded into one persistSession call together with the earned-
+      // upgrade bump, rather than two separate calls, since a second call
+      // spreading the same (still-stale, pre-rerender) `session` variable
+      // would silently undo whatever the first call had just changed.
       const stage = outcome.progress.mascotStage;
-      if (outcome.isFinal && outcome.scored && correct && stage && beforeStage !== stage) {
-        persistSession({
-          ...session,
-          earnedUpgrades: { ...session.earnedUpgrades, [stage]: (session.earnedUpgrades[stage] ?? 0) + 1 },
-        });
-        addEarnedUpgrade(stage);
-      }
+      const earnedUpgrade = !!(outcome.isFinal && outcome.scored && correct && stage && beforeStage !== stage);
+      persistSession({
+        ...session,
+        reviewRounds: { ...reviewRoundsRef.current },
+        ...(earnedUpgrade ? { earnedUpgrades: { ...session.earnedUpgrades, [stage!]: (session.earnedUpgrades[stage!] ?? 0) + 1 } } : {}),
+      });
+      if (earnedUpgrade) addEarnedUpgrade(stage!);
     } else {
       // Day 1 (introduction) completes on a clean round-2 pass — correct at
       // round 1 just promotes to round 2 (applyResult), it isn't "done" yet.
@@ -810,7 +820,10 @@ export default function DailySessionFlow() {
     const finalProgress = roundMode === 'study' ? { ...updated, round: nextRound } : updated;
     saveWordProgress(finalProgress);
     scheduleSync();
-    if (roundMode === 'review') reviewRoundsRef.current[word.id] = nextRound;
+    if (roundMode === 'review' && session) {
+      reviewRoundsRef.current[word.id] = nextRound;
+      persistSession({ ...session, reviewRounds: { ...reviewRoundsRef.current } });
+    }
 
     setCurrentRound(nextRound);
     const h = generateHint(word.de, nextRound);
@@ -1464,8 +1477,19 @@ export default function DailySessionFlow() {
               } : undefined}
             />
 
+            {/* min-h keeps this action area a consistent height across both
+                states — without it, the "answering" layout (special-char
+                row + Check + Hint) and the "feedback" layout (banner +
+                Next) render at different total heights, so Check/Hint/Next
+                visibly jump position every time the card switches between
+                them. Sized generously enough to cover the taller variant
+                (round 2+ with the Hint button, or a two-line-wrapped
+                feedback message on a long word) — a shorter variant just
+                leaves empty space below it instead of the container
+                shrinking, since flex-col lays children out from the top
+                regardless of the container's own height. */}
             {feedback === null ? (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 min-h-48">
                 <SpecialCharButtons inputRef={activeInputRef} />
                 <button
                   onClick={handleSubmit}
@@ -1481,7 +1505,7 @@ export default function DailySessionFlow() {
                 )}
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 min-h-48">
                 <div className={`text-center py-3 px-2 rounded-xl font-semibold text-lg break-words ${feedback ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                   {feedback ? '✓ Correct!' : (
                     <>
