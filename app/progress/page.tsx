@@ -110,7 +110,12 @@ export default function ProgressPage() {
     if (scope === 'all' || w.level === level) bucket.native++;
     else bucket.foreign++;
     if (scope === 'all') {
-      stageLevelCounts[stage][w.level] = (stageLevelCounts[stage][w.level] ?? 0) + 1;
+      // B2_old is a legacy parallel corpus for the same nominal level as
+      // B2 (see lib/words.ts), not a book a learner ever picks — fold it
+      // into the same "B2" bucket rather than showing it as a second,
+      // duplicate-looking "B2" row.
+      const displayLevel = w.level === 'B2_old' ? 'B2' : w.level;
+      stageLevelCounts[stage][displayLevel] = (stageLevelCounts[stage][displayLevel] ?? 0) + 1;
     }
   }
   const bars = STAGE_ORDER.map(id => {
@@ -248,10 +253,10 @@ export default function ProgressPage() {
             </div>
             <div className="flex flex-col gap-1.5">
               {Object.entries(stageLevelCounts[openStage])
-                .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
+                .sort((a, b) => LEVEL_ORDER.indexOf(a[0] as Level) - LEVEL_ORDER.indexOf(b[0] as Level))
                 .map(([lvl, count]) => (
                   <div key={lvl} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2">
-                    <span className="text-stone-700 font-medium">{lvl === 'B2_old' ? 'B2' : lvl}</span>
+                    <span className="text-stone-700 font-medium">{lvl}</span>
                     <span className="text-stone-500 text-sm">{count} word{count === 1 ? '' : 's'}</span>
                   </div>
                 ))}
