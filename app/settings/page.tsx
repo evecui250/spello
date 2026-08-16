@@ -9,9 +9,17 @@ import { Level, wordsForLevel } from '../../lib/words';
 import { scheduleSync, syncNow } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 import ShareCard from '../../components/ShareCard';
+import { supabase } from '../../lib/supabase';
+
+// Purely cosmetic — just decides whether to show the "Admin" link at all.
+// The real authorization check lives server-side, in admin-stats' own
+// ADMIN_EMAIL comparison; showing this link to the wrong person would at
+// worst send them to a page that immediately says "not authorized".
+const ADMIN_EMAIL = 'evecui250@gmail.com';
 
 export default function SettingsPage() {
   const router = useRouter();
+  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
   const [studyBatchSize, setStudyBatchSize] = useState(5);
   const [dailyReview, setDailyReview] = useState(15);
   const [nativeLanguage, setNativeLanguage] = useState<'en' | 'zh'>('en');
@@ -37,6 +45,13 @@ export default function SettingsPage() {
   const loadFromStorage = () => applySettings(getSettings());
 
   useEffect(loadFromStorage, []);
+
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSignedInEmail(session?.user.email ?? null);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   // Switching level is switching profiles entirely — separate progress,
   // streak, daily stats/session, and pace settings, with no bleed-through
@@ -292,6 +307,9 @@ export default function SettingsPage() {
       <div className="flex justify-center gap-4 text-sm">
         <Link href="/terms" className="text-amber-200 hover:text-amber-100 underline">Terms of Service</Link>
         <Link href="/privacy" className="text-amber-200 hover:text-amber-100 underline">Privacy Policy</Link>
+        {signedInEmail === ADMIN_EMAIL && (
+          <Link href="/admin" className="text-amber-200 hover:text-amber-100 underline">Admin</Link>
+        )}
       </div>
 
       <div className="bg-red-50/70 backdrop-blur-sm rounded-2xl border border-red-200/50 shadow-sm p-6 flex flex-col gap-3">
