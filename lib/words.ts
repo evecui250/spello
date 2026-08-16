@@ -4126,21 +4126,34 @@ export function resolveClickedWord(
 // "no match = not clickable, never a wrong guess" contract
 // findWordByGermanForm already uses.
 
+// A term matched against a candidate's gloss, tagged with whether it was
+// that word's FIRST-listed synonym ("abfahren" -> "to depart, leave" has
+// "leave" only as its secondary sense; "verlassen" -> "to leave" has it
+// as its only/primary sense) — used by pickBestCandidate below to prefer
+// whichever word the term is actually the primary meaning of, when two
+// otherwise-equal content words both happen to list it.
+interface GlossCandidate {
+  word: Word;
+  primary: boolean;
+}
+
 // English: a word's own `en` field can list several comma-separated
 // synonyms (e.g. "to depart, leave") and verbs carry a leading "to " —
 // both stripped/split here so each synonym becomes its own lookup key.
-let englishFormMap: Map<string, Word[]> | null = null;
+let englishFormMap: Map<string, GlossCandidate[]> | null = null;
 
-function getEnglishFormMap(): Map<string, Word[]> {
+function getEnglishFormMap(): Map<string, GlossCandidate[]> {
   if (!englishFormMap) {
     englishFormMap = new Map();
     for (const w of WORDS) {
-      for (const raw of w.en.split(',')) {
+      const synonyms = w.en.split(',');
+      synonyms.forEach((raw, idx) => {
         const key = raw.trim().replace(/^to\s+/i, '').toLowerCase();
-        if (!key) continue;
-        const arr = englishFormMap.get(key);
-        if (arr) arr.push(w); else englishFormMap.set(key, [w]);
-      }
+        if (!key) return;
+        const arr = englishFormMap!.get(key);
+        const entry = { word: w, primary: idx === 0 };
+        if (arr) arr.push(entry); else englishFormMap!.set(key, [entry]);
+      });
     }
   }
   return englishFormMap;
@@ -4181,7 +4194,41 @@ const ENGLISH_IRREGULARS: Record<string, string> = {
 // consonant retry (stopping -> stopp doesn't exist, but stop does).
 const ENGLISH_SUFFIXES = ['ies', 'ing', 'ed', 'es', 's'];
 
-export function findWordByEnglishForm(rawToken: string): Word | undefined {
+// Picks among several corpus words whose en/zh gloss collides on the same
+// clicked term. Three-step preference, applied in every clickable-word
+// resolver below (English and Chinese; findWordByGermanForm's own
+// German-side version would benefit from the same idea but isn't touched
+// here):
+//   1. If the round's own target word is among the candidates, it always
+//      wins outright — clicking the word you're actively learning should
+//      never show you a DIFFERENT word's translation.
+//   2. Otherwise prefer a content word (noun/verb/adjective/adverb) over
+//      a function word (preposition/conjunction) — confirmed real:
+//      "ab" ("from/off") lists "离开" as one loose secondary sense, which
+//      used to win over the actual verb "verlassen" just by being earlier
+//      in the corpus file.
+//   3. Among remaining candidates, prefer whichever one this is the
+//      PRIMARY (first-listed) sense for — confirmed real: "abfahren"
+//      ("to depart, leave") also lists "leave"/"离开" as a secondary
+//      sense, which — being a content word same as "verlassen" — step 2
+//      alone couldn't separate from "verlassen" (whose entire, single
+//      sense IS "to leave"). A word's primary sense is a far more
+//      reliable click-hint than another word's incidental secondary one.
+// Falls back to the first candidate if none of these narrow it down.
+const FUNCTION_WORD_TYPES: WordType[] = ['preposition', 'conjunction'];
+
+function pickBestCandidate(candidates: GlossCandidate[], targetWord?: Word): Word {
+  if (candidates.length === 1) return candidates[0].word;
+  if (targetWord) {
+    const targetMatch = candidates.find(c => c.word.id === targetWord.id);
+    if (targetMatch) return targetMatch.word;
+  }
+  const contentWords = candidates.filter(c => !FUNCTION_WORD_TYPES.includes(c.word.type));
+  const pool = contentWords.length > 0 ? contentWords : candidates;
+  return (pool.find(c => c.primary) ?? pool[0]).word;
+}
+
+export function findWordByEnglishForm(rawToken: string, targetWord?: Word): Word | undefined {
   const cleaned = rawToken.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
   if (!cleaned) return undefined;
   const lower = cleaned.toLowerCase();
@@ -4200,7 +4247,7 @@ export function findWordByEnglishForm(rawToken: string): Word | undefined {
       if (combined.length > 0) { candidates = combined; break; }
     }
   }
-  return candidates?.[0];
+  return candidates ? pickBestCandidate(candidates, targetWord) : undefined;
 }
 
 // Chinese: no whitespace word boundaries, so this segments a whole prompt
@@ -4210,26 +4257,36 @@ export function findWordByEnglishForm(rawToken: string): Word | undefined {
 // Synonyms are separated by "／" (the corpus's actual convention) or a
 // comma; a parenthesized clarifying note (e.g. "出口（高速公路）") also
 // gets a second, paren-stripped key added, since the bare term is what
-// actually shows up in a natural sentence.
-let chineseTermMap: Map<string, Word> | null = null;
+// actually shows up in a natural sentence. Every word whose gloss
+// produces the same term is kept (a Map<string, Word[]>, not a single
+// winner) — see pickBestCandidate above for why: silently dropping every
+// candidate but the first meant a genuine collision (like "ab"/"verlassen"
+// on "离开") could permanently hide the actually-correct word with no way
+// to ever reach it, even as a fallback.
+let chineseTermMap: Map<string, GlossCandidate[]> | null = null;
 let chineseMaxTermLength = 1;
 
-function getChineseTermMap(): Map<string, Word> {
+function getChineseTermMap(): Map<string, GlossCandidate[]> {
   if (!chineseTermMap) {
     chineseTermMap = new Map();
+    const add = (term: string, w: Word, primary: boolean) => {
+      if (!term) return;
+      const arr = chineseTermMap!.get(term);
+      const entry = { word: w, primary };
+      if (arr) arr.push(entry); else chineseTermMap!.set(term, [entry]);
+      chineseMaxTermLength = Math.max(chineseMaxTermLength, [...term].length);
+    };
     for (const w of WORDS) {
       if (!w.zh) continue;
-      for (const raw of w.zh.split(/[／，,]/)) {
+      const synonyms = w.zh.split(/[／，,]/);
+      synonyms.forEach((raw, idx) => {
         const term = raw.trim();
-        if (!term) continue;
-        if (!chineseTermMap.has(term)) chineseTermMap.set(term, w);
-        chineseMaxTermLength = Math.max(chineseMaxTermLength, [...term].length);
+        if (!term) return;
+        const primary = idx === 0;
+        add(term, w, primary);
         const stripped = term.replace(/[（(][^）)]*[）)]/g, '').trim();
-        if (stripped && stripped !== term && !chineseTermMap.has(stripped)) {
-          chineseTermMap.set(stripped, w);
-          chineseMaxTermLength = Math.max(chineseMaxTermLength, [...stripped].length);
-        }
-      }
+        if (stripped && stripped !== term) add(stripped, w, primary);
+      });
     }
   }
   return chineseTermMap;
@@ -4240,7 +4297,7 @@ export interface ChineseClickSpan {
   word?: Word;
 }
 
-export function segmentChineseForClicks(text: string): ChineseClickSpan[] {
+export function segmentChineseForClicks(text: string, targetWord?: Word): ChineseClickSpan[] {
   const map = getChineseTermMap();
   const chars = [...text];
   const spans: ChineseClickSpan[] = [];
@@ -4254,8 +4311,8 @@ export function segmentChineseForClicks(text: string): ChineseClickSpan[] {
     // many misleading hints in practice to be worth keeping).
     for (let len = Math.min(chineseMaxTermLength, chars.length - i); len >= 2; len--) {
       const candidate = chars.slice(i, i + len).join('');
-      const word = map.get(candidate);
-      if (word) { matched = { len, word }; break; }
+      const candidates = map.get(candidate);
+      if (candidates) { matched = { len, word: pickBestCandidate(candidates, targetWord) }; break; }
     }
     if (matched) {
       spans.push({ text: chars.slice(i, i + matched.len).join(''), word: matched.word });

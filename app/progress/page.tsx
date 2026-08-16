@@ -31,14 +31,6 @@ const STAGE_LABEL: Record<MascotStageId, string> = {
   medium: 'Strong',
   'long-crowned': 'Mastered',
 };
-// A word saved via WordInfoPanel's "save for review" (see
-// lib/practice.ts's saveWordForReviewFromOtherLevel) lives in THIS level's
-// progress store but isn't native to this book — this is the app's
-// existing interactive/accent color (buttons, links), reused here so the
-// "borrowed" stacking segment reads as its own consistent, recognizable
-// color rather than inventing a fifth palette entry. Only meaningful in
-// "This book" scope — see the scope toggle below.
-const FOREIGN_COLOR = '#4f46e5';
 
 type Scope = 'current' | 'all';
 
@@ -84,31 +76,22 @@ export default function ProgressPage() {
   // reporting relative to the other.
   const effectiveProgress = scope === 'all' ? getMergedProgressAcrossLevels() : progress;
 
-  // Split per stage into words native to the book being counted vs. words
-  // "borrowed" via save-for-review (see FOREIGN_COLOR above) — only a
-  // meaningful distinction in "This book" scope; in "All books" scope
-  // every word is already being counted under some book, so there's
-  // nothing left to call "foreign". stageLevelCounts (all-books only)
-  // tracks the same total split out by each word's own book, for the
-  // click-to-expand breakdown below.
-  const stageCounts: Record<MascotStageId, { native: number; foreign: number }> = {
-    puppy: { native: 0, foreign: 0 },
-    short: { native: 0, foreign: 0 },
-    medium: { native: 0, foreign: 0 },
-    'long-crowned': { native: 0, foreign: 0 },
+  // "This book" only ever counts words native to the book being viewed;
+  // "All books" counts every word, attributed to its own book below.
+  const stageCounts: Record<MascotStageId, number> = {
+    puppy: 0, short: 0, medium: 0, 'long-crowned': 0,
   };
   const stageLevelCounts: Record<MascotStageId, Partial<Record<Level, number>>> = {
     puppy: {}, short: {}, medium: {}, 'long-crowned': {},
   };
   let introducedCount = 0;
   for (const w of WORDS) {
+    if (scope === 'current' && w.level !== level) continue;
     const p = effectiveProgress[w.id];
     if (!p || p.studiedTimes === 0) continue;
     introducedCount++;
     const stage = p.mascotStage ?? 'puppy';
-    const bucket = stageCounts[stage];
-    if (scope === 'all' || w.level === level) bucket.native++;
-    else bucket.foreign++;
+    stageCounts[stage]++;
     if (scope === 'all') {
       // B2_old is a legacy parallel corpus for the same nominal level as
       // B2 (see lib/words.ts), not a book a learner ever picks — fold it
@@ -118,10 +101,7 @@ export default function ProgressPage() {
       stageLevelCounts[stage][displayLevel] = (stageLevelCounts[stage][displayLevel] ?? 0) + 1;
     }
   }
-  const bars = STAGE_ORDER.map(id => {
-    const { native, foreign } = stageCounts[id];
-    return { id, native, foreign, total: native + foreign, color: STAGE_COLORS[id] };
-  });
+  const bars = STAGE_ORDER.map(id => ({ id, total: stageCounts[id], color: STAGE_COLORS[id] }));
   const maxStageCount = Math.max(...bars.map(b => b.total), 1);
   const totalWords = scope === 'all'
     ? activeLevels.reduce((sum, l) => sum + wordsForLevel(l).length, 0)
@@ -188,24 +168,13 @@ export default function ProgressPage() {
           {bars.map(b => (
             <div key={b.id} className="flex flex-col items-center justify-end h-full flex-1 gap-1">
               <span className="text-sm font-semibold text-stone-700">{b.total}</span>
-              {b.foreign > 0 && (
-                <span className="text-[9px] font-medium text-indigo-600 -mt-1">
-                  {b.foreign} from other levels
-                </span>
-              )}
-              {/* Stacked two-tone column — native (this book) at the
-                  bottom, "borrowed" words from another level's book on top
-                  in FOREIGN_COLOR, so the two are visually distinguishable
-                  at a glance instead of just blending into one count. */}
               <div
-                className="w-full max-w-10 rounded-t-md overflow-hidden flex flex-col justify-end transition-all"
-                style={{ height: `${b.total > 0 ? Math.max((b.total / maxStageCount) * 100, 6) : 2}%` }}
-              >
-                {b.foreign > 0 && (
-                  <div style={{ height: `${(b.foreign / b.total) * 100}%`, backgroundColor: FOREIGN_COLOR }} />
-                )}
-                <div style={{ height: `${b.total > 0 ? (b.native / b.total) * 100 : 100}%`, backgroundColor: b.color }} />
-              </div>
+                className="w-full max-w-10 rounded-t-md overflow-hidden transition-all"
+                style={{
+                  height: `${b.total > 0 ? Math.max((b.total / maxStageCount) * 100, 6) : 2}%`,
+                  backgroundColor: b.color,
+                }}
+              />
             </div>
           ))}
         </div>
@@ -240,7 +209,7 @@ export default function ProgressPage() {
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-stone-800 flex items-center gap-2">
                 <DachshundMascot stage={openStage} className="w-8 h-8" />
-                {stageCounts[openStage].native + stageCounts[openStage].foreign} {STAGE_LABEL[openStage]}
+                {stageCounts[openStage]} {STAGE_LABEL[openStage]}
               </h2>
               <button
                 type="button"

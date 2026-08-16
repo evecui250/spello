@@ -174,14 +174,24 @@ function RoundWordImage({ word }: { word: Word }) {
   // if a previous word in this session had no image) rather than staying
   // permanently hidden from an earlier word's error.
   useEffect(() => setFailed(false), [word.id]);
-  if (failed) return null;
+  // Reserves the same w-24 h-24 footprint regardless of outcome — most
+  // words have no illustration yet (see imageUrlForWord) and 404, and
+  // returning null here on that error used to collapse this space a beat
+  // after the card had already rendered with it reserved, reading as the
+  // whole card visibly resizing right after "Next". An empty placeholder
+  // keeps every card's height consistent whether or not this particular
+  // word has an image.
   return (
-    <img
-      src={imageUrlForWord(word)}
-      alt=""
-      className="w-24 h-24 object-contain mx-auto mb-1"
-      onError={() => setFailed(true)}
-    />
+    <div className="w-24 h-24 mx-auto mb-1">
+      {!failed && (
+        <img
+          src={imageUrlForWord(word)}
+          alt=""
+          className="w-full h-full object-contain"
+          onError={() => setFailed(true)}
+        />
+      )}
+    </div>
   );
 }
 
@@ -320,12 +330,14 @@ function SentenceExercise({
                   corpus entry, so it naturally stays plain, non-clickable
                   text without needing an explicit exclusion list. */}
               {getSettings().nativeLanguage === 'zh' && promptSentenceZh
-                ? segmentChineseForClicks(promptSentenceZh).map((span, i) => (
+                ? segmentChineseForClicks(promptSentenceZh, word).map((span, i) => (
                   span.word ? (
                     <button
                       key={i}
                       type="button"
-                      onClick={() => setSelectedPromptWord(span.word!)}
+                      // Clicking the already-selected word again hides its
+                      // hint instead of just re-showing the same panel.
+                      onClick={() => setSelectedPromptWord(prev => (prev?.id === span.word!.id ? null : span.word!))}
                       className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
                     >
                       {span.text}
@@ -333,12 +345,12 @@ function SentenceExercise({
                   ) : <span key={i}>{span.text}</span>
                 ))
                 : tokenize(promptSentence).map((text, i) => {
-                  const match = /[A-Za-z]/.test(text) ? findWordByEnglishForm(text) : undefined;
+                  const match = /[A-Za-z]/.test(text) ? findWordByEnglishForm(text, word) : undefined;
                   return match ? (
                     <button
                       key={i}
                       type="button"
-                      onClick={() => setSelectedPromptWord(match)}
+                      onClick={() => setSelectedPromptWord(prev => (prev?.id === match.id ? null : match))}
                       className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
                     >
                       {text}
@@ -398,7 +410,7 @@ function SentenceExercise({
                       <button
                         key={i}
                         type="button"
-                        onClick={() => setSelectedWord(match)}
+                        onClick={() => setSelectedWord(prev => (prev?.id === match.id ? null : match))}
                         className="hover:bg-green-200/70 rounded px-0.5 -mx-0.5 transition-colors"
                       >
                         {text}
