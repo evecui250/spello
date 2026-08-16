@@ -1593,7 +1593,7 @@ const WORDS_PART_3: Word[] = [
   { id: 'w1493', de: 'normalerweise', en: 'normally', zh: '通常', type: 'adverb', level: 'B1', exercisePrompt: "I normally eat breakfast at home with my family.", exercisePromptZh: "我通常在家和家人一起吃早餐。" },
   { id: 'w1494', de: 'Notaufnahme', article: 'die', plural: 'Notaufnahmen', en: 'emergency room', zh: '急救室', type: 'noun', level: 'B1', exercisePrompt: "The doctor took the patient to the emergency room.", exercisePromptZh: "医生把病人送到了急救室。" },
   { id: 'w1495', de: 'Notausgang', article: 'der', plural: 'Notausgänge', en: 'emergency exit', zh: '紧急出口', type: 'noun', level: 'B1', exercisePrompt: "The emergency exit is located near the bakery.", exercisePromptZh: "紧急出口位于面包店附近。" },
-  { id: 'w1496', de: 'Note', article: 'die', plural: 'Noten', en: 'school grade', zh: '学校成绩', type: 'noun', level: 'A2', exercisePrompt: "My brother is in third grade.", exercisePromptZh: "我弟弟在三年级。" },
+  { id: 'w1496', de: 'Note', article: 'die', plural: 'Noten', en: 'school grade', zh: '学校成绩', type: 'noun', level: 'A2', exercisePrompt: "My brother got a good grade on his math test.", exercisePromptZh: "我弟弟数学考试得了一个好成绩。" },
   { id: 'w1497', de: 'Notfall', article: 'der', plural: 'Notfälle', en: 'emergency', zh: '紧急情况', type: 'noun', level: 'B2_old', exercisePrompt: "In case of an emergency, call the doctor or police immediately.", exercisePromptZh: "在紧急情况下，请立即拨打医生或警察的电话。" },
   { id: 'w1498', de: 'notieren', en: 'to note down', zh: '记下', type: 'verb', level: 'A2', exercisePrompt: "I need to note down the address.", exercisePromptZh: "我需要记下这个地址。" },
   { id: 'w1499', de: 'Notiz', article: 'die', plural: 'Notizen', en: 'note', zh: '便条', type: 'noun', level: 'A2', exercisePrompt: "I received a note from my friend.", exercisePromptZh: "我收到了朋友的便条。" },
