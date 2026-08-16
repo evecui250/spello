@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import BugReportButton from './BugReportButton';
 
 const links = [
   { href: '/', label: 'Home' },
@@ -42,7 +41,6 @@ export default function NavBar() {
             </Link>
           );
         })}
-        <BugReportButton />
       </div>
     </nav>
   );

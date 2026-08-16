@@ -9,6 +9,7 @@ import { Level, wordsForLevel } from '../../lib/words';
 import { scheduleSync, syncNow } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 import ShareCard from '../../components/ShareCard';
+import BugReportButton from '../../components/BugReportButton';
 import { supabase } from '../../lib/supabase';
 
 // Purely cosmetic — just decides whether to show the "Admin" link at all.
@@ -304,9 +305,10 @@ export default function SettingsPage() {
         <ShareCard />
       </div>
 
-      <div className="flex justify-center gap-4 text-sm">
+      <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm">
         <Link href="/terms" className="text-amber-200 hover:text-amber-100 underline">Terms of Service</Link>
         <Link href="/privacy" className="text-amber-200 hover:text-amber-100 underline">Privacy Policy</Link>
+        <BugReportButton />
         {signedInEmail === ADMIN_EMAIL && (
           <Link href="/admin" className="text-amber-200 hover:text-amber-100 underline">Admin</Link>
         )}

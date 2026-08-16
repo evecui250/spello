@@ -4,13 +4,13 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 
-// A small icon button in the top-right of NavBar, visible on every page —
-// lets a learner report a problem the instant they hit one, without
-// navigating away or losing whatever they were mid-way through (the modal
-// is just an overlay; the page underneath is untouched). Works whether
-// signed in or not, same as everything else now that sign-in is entirely
-// optional (see AuthGate's removal) — see the bug_reports migration for the
-// insert-only RLS policy backing this.
+// A text link on the Settings page (next to Terms of Service/Privacy
+// Policy) — lets a learner report a problem without navigating away or
+// losing whatever they were mid-way through (the modal is just an
+// overlay; the page underneath is untouched). Works whether signed in or
+// not, same as everything else now that sign-in is entirely optional (see
+// AuthGate's removal) — see the bug_reports migration for the insert-only
+// RLS policy backing this.
 export default function BugReportButton() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -55,21 +55,17 @@ export default function BugReportButton() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Report a bug or problem"
-        className="ml-auto shrink-0 text-xl leading-none px-3 py-2.5 rounded-xl text-emerald-100/60 hover:text-emerald-50 hover:bg-white/5 transition-colors"
+        className="text-amber-200 hover:text-amber-100 underline"
       >
-        🦴
+        Report a problem
       </button>
 
-      {/* Portaled straight to <body> rather than rendered in place: this
-          button lives inside NavBar, which has backdrop-blur-md — and
-          backdrop-filter (like transform/filter) creates a new containing
-          block for position:fixed descendants per spec, so a fixed modal
-          left in place here would size/center itself against NavBar's own
-          small box instead of the true viewport (it did — that's the
-          "clipped near the top" bug this fixes). Escaping to body sidesteps
-          that regardless of whatever styling NavBar or any other ancestor
-          ends up with in the future. */}
+      {/* Portaled straight to <body>, same reasoning as ShareCard's modal:
+          any ancestor with backdrop-filter/transform/etc. becomes the
+          containing block for a plain in-place fixed overlay, which once
+          clipped this exact modal against a small container instead of
+          the true viewport. Escaping to body sidesteps that regardless of
+          whatever styling this button ends up wrapped in. */}
       {open && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
