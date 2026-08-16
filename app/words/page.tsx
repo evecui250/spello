@@ -5,6 +5,7 @@ import { WORDS, wordsForLevel, Word, Level, glossFor } from '../../lib/words';
 import { getMergedProgressAcrossLevels, getSettings, WordProgress, MascotStageId, today } from '../../lib/storage';
 import { daysBetween } from '../../lib/srs';
 import { imageUrlForWord } from '../../lib/wordImage';
+import { WORDS_WITH_IMAGES } from '../../lib/wordImageManifest';
 import SpeakerButton from '../../components/SpeakerButton';
 import DachshundMascot from '../../components/Mascot';
 
@@ -83,7 +84,11 @@ function matchesDateFilter(p: WordProgress | undefined, filter: DateFilter, t: s
 // (rather than a broken-image icon) when the file 404s.
 function WordThumbnail({ word }: { word: Word }) {
   const [failed, setFailed] = useState(false);
-  if (failed) return null;
+  // Checked against the build-time manifest first (see
+  // lib/wordImageManifest.ts) so the ~70% of rows with no illustration
+  // never even issue a request for one — `failed` remains only as a
+  // defensive fallback if the manifest and actual files ever drift.
+  if (!WORDS_WITH_IMAGES.has(word.id) || failed) return null;
   return (
     <img
       src={imageUrlForWord(word)}

@@ -27,6 +27,7 @@ import CongratsModal from './CongratsModal';
 import WordInfoPanel from './WordInfoPanel';
 import { speakWord, speakText, stopSpeech } from '../lib/speech';
 import { imageUrlForWord } from '../lib/wordImage';
+import { WORDS_WITH_IMAGES } from '../lib/wordImageManifest';
 import { scheduleSync } from '../lib/sync';
 import { correctSentence, generateSentence, DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
 import { supabase } from '../lib/supabase';
@@ -175,23 +176,24 @@ function RoundWordImage({ word }: { word: Word }) {
   // if a previous word in this session had no image) rather than staying
   // permanently hidden from an earlier word's error.
   useEffect(() => setFailed(false), [word.id]);
-  // Reserves the same w-24 h-24 footprint regardless of outcome — most
-  // words have no illustration yet (see imageUrlForWord) and 404, and
-  // returning null here on that error used to collapse this space a beat
-  // after the card had already rendered with it reserved, reading as the
-  // whole card visibly resizing right after "Next". An empty placeholder
-  // keeps every card's height consistent whether or not this particular
-  // word has an image.
+  // WORDS_WITH_IMAGES (a build-time manifest of what's actually under
+  // public/images/words/) is checked synchronously, before ever rendering
+  // an <img> at all — this used to always reserve a w-24 h-24 box and let
+  // a real 404 collapse it, which fixed an earlier layout-jump bug but
+  // traded it for a permanent blank gap on every one of the (majority of)
+  // words with no illustration. Knowing in advance means a word with no
+  // image renders nothing here at all — no gap, no flash, no jump either
+  // way. `failed` stays as a defensive fallback only, in case the
+  // manifest and the actual files on disk ever drift out of sync.
+  if (!WORDS_WITH_IMAGES.has(word.id) || failed) return null;
   return (
     <div className="w-24 h-24 mx-auto mb-1">
-      {!failed && (
-        <img
-          src={imageUrlForWord(word)}
-          alt=""
-          className="w-full h-full object-contain"
-          onError={() => setFailed(true)}
-        />
-      )}
+      <img
+        src={imageUrlForWord(word)}
+        alt=""
+        className="w-full h-full object-contain"
+        onError={() => setFailed(true)}
+      />
     </div>
   );
 }
