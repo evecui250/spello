@@ -41,8 +41,15 @@ export interface WordProgress {
   // out) on rounds 2-4/review as an extra recall cue — never touches
   // scoring. englishPrompt is the original English sentence they translated
   // (absent for A1 bootstrap words, which skip the sentence exercise
-  // entirely — see isBootstrapCopyWord).
-  exampleSentence?: { sentence: string; wordForm: string; englishPrompt?: string };
+  // entirely — see isBootstrapCopyWord). englishPromptZh is that same
+  // prompt's Chinese translation, captured at save time (either the
+  // corpus's own pre-baked exercisePromptZh, or the AI's live sentenceZh
+  // for a word without one) — without saving this alongside englishPrompt,
+  // any later display of this saved sentence would have to re-derive a
+  // Chinese version from the word's own corpus data, which silently falls
+  // back to English for any word missing that field, mixing languages on
+  // an otherwise all-Chinese summary/list.
+  exampleSentence?: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string };
 }
 
 export interface Streak {

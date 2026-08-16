@@ -164,7 +164,7 @@ export default function WordsPage() {
             <div className="mt-0.5 flex flex-col gap-0.5">
               {sentence.englishPrompt && (
                 <div className="text-stone-400 text-xs">
-                  {nativeLanguage === 'zh' && w.exercisePromptZh ? w.exercisePromptZh : sentence.englishPrompt}
+                  {nativeLanguage === 'zh' ? (sentence.englishPromptZh ?? w.exercisePromptZh ?? sentence.englishPrompt) : sentence.englishPrompt}
                 </div>
               )}
               <div className="text-stone-500 text-sm italic">{sentence.sentence}</div>

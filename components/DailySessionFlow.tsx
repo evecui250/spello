@@ -134,7 +134,7 @@ interface CardSnapshot {
   // fetched reference sentence alongside a copy-the-word pass, so the
   // history replay below shows it that way instead of as a translate/
   // correction card.
-  sentence?: { sentence: string; wordForm: string; englishPrompt?: string; userInput: string; isDirect?: boolean } | null;
+  sentence?: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; userInput: string; isDirect?: boolean } | null;
 }
 
 // Round 1 (translation exercise, all non-bootstrap words — see
@@ -199,11 +199,11 @@ function SentenceExercise({
   // grammatical analysis over findWordByGermanForm's suffix-stripping
   // guesswork — the only way to correctly resolve irregular plurals, past
   // participles, and separable-prefix verbs split across the sentence.
-  correction: { sentence: string; wordForm: string; englishPrompt?: string; lemmas?: Record<string, string> } | null;
+  correction: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; lemmas?: Record<string, string> } | null;
   // userInput (the learner's own typed attempt) rides along only for the
   // Back button's history snapshot — the parent keeps it separate from what
   // actually gets persisted to WordProgress.
-  onCorrected: (correction: { sentence: string; wordForm: string; englishPrompt?: string; lemmas?: Record<string, string> }, userInput: string) => void;
+  onCorrected: (correction: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; lemmas?: Record<string, string> }, userInput: string) => void;
   onNext: () => void;
 }) {
   // Almost every word already has a pre-generated exercisePrompt baked into
@@ -265,7 +265,13 @@ function SentenceExercise({
     setStatus('loading');
     try {
       const result = await correctSentence(word.id, word.de, level, promptSentence, input.trim());
-      onCorrected({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt: promptSentence, lemmas: result.lemmas }, input.trim());
+      // promptSentenceZh pairs with promptSentence here the same way it's
+      // displayed above (corpus exercisePromptZh, or the live generateSentence
+      // call's own sentenceZh) — saving it alongside is what lets a later
+      // display of this exact sentence (Word List, the daily summary) show
+      // Chinese consistently instead of falling back to English for
+      // whichever words the corpus itself has no translation for.
+      onCorrected({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt: promptSentence, englishPromptZh: promptSentenceZh ?? undefined, lemmas: result.lemmas }, input.trim());
     } catch (e) {
       setStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
     }
@@ -471,14 +477,14 @@ export default function DailySessionFlow() {
   // own comment for why), and the just-produced correction for the round-1
   // sentence exercise (shown in place of the generic "✓ Correct!" banner).
   const [exampleSentence, setExampleSentence] = useState<{ sentence: string; wordForm: string } | null>(null);
-  const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; lemmas?: Record<string, string> } | null>(null);
+  const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; lemmas?: Record<string, string> } | null>(null);
   // Sentence-writing-mode OFF (Settings): a correct example sentence
   // fetched directly, with no user attempt involved, shown as reference
   // alongside the copy-the-word tiles below instead of SentenceExercise's
   // translate-and-correct flow. Non-blocking — if the fetch fails, the
   // copy-the-word interaction still proceeds, just without a sentence
   // saved for this word today (same as any other bootstrap-style word).
-  const [directSentence, setDirectSentence] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; lemmas?: Record<string, string> } | null>(null);
+  const [directSentence, setDirectSentence] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; lemmas?: Record<string, string> } | null>(null);
   const [directSentenceStatus, setDirectSentenceStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   // "Review" = already fully learned, back for spaced repetition. "New" =
   // never touched before today. "Continuing" = mid-ladder from a PREVIOUS
@@ -545,11 +551,23 @@ export default function DailySessionFlow() {
     setDirectSentenceStatus('loading');
     (async () => {
       try {
-        const englishPrompt = word.exercisePrompt
-          ?? (await generateSentence(word.id, word.de, word.en, settings.level, getKnownVocabulary(settings.level), settings.nativeLanguage)).sentence;
+        // Chinese pairs with whichever English prompt actually got used —
+        // the corpus's own exercisePromptZh for a pre-baked prompt, or the
+        // AI's own sentenceZh when a word without one falls back to a live
+        // generateSentence call. Capturing it here (not re-derived later
+        // from the word's static corpus fields at display time) is what
+        // keeps a saved sentence's language pairing accurate even for a
+        // word the corpus never got a Chinese translation for.
+        let englishPrompt = word.exercisePrompt;
+        let englishPromptZh = word.exercisePromptZh;
+        if (!englishPrompt) {
+          const generated = await generateSentence(word.id, word.de, word.en, settings.level, getKnownVocabulary(settings.level), settings.nativeLanguage);
+          englishPrompt = generated.sentence;
+          englishPromptZh = generated.sentenceZh;
+        }
         const result = await correctSentence(word.id, word.de, settings.level, englishPrompt);
         if (cancelled) return;
-        setDirectSentence({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt, lemmas: result.lemmas });
+        setDirectSentence({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt, englishPromptZh, lemmas: result.lemmas });
         setDirectSentenceStatus('ready');
       } catch {
         if (!cancelled) setDirectSentenceStatus('error');
@@ -736,7 +754,7 @@ export default function DailySessionFlow() {
   const submitResult = (
     correct: boolean,
     extra?: Partial<WordProgress>,
-    sentenceForHistory?: { sentence: string; wordForm: string; englishPrompt?: string; userInput: string; isDirect?: boolean },
+    sentenceForHistory?: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; userInput: string; isDirect?: boolean },
   ) => {
     if (!session || !word || !settings || feedback !== null) return;
     const progress = getWordProgress(word.id);
@@ -1126,7 +1144,7 @@ export default function DailySessionFlow() {
                     <div className="mt-1.5 pt-1.5 border-t border-amber-100/60 flex flex-col gap-0.5">
                       {sentence.englishPrompt && (
                         <div className="text-stone-500 text-xs">
-                          {getSettings().nativeLanguage === 'zh' && w.exercisePromptZh ? w.exercisePromptZh : sentence.englishPrompt}
+                          {getSettings().nativeLanguage === 'zh' ? (sentence.englishPromptZh ?? w.exercisePromptZh ?? sentence.englishPrompt) : sentence.englishPrompt}
                         </div>
                       )}
                       <div className="text-stone-700 text-sm italic">{sentence.sentence}</div>
@@ -1179,7 +1197,7 @@ export default function DailySessionFlow() {
                       <div className="mt-1.5 pt-1.5 border-t border-amber-100/60 flex flex-col gap-0.5">
                         {sentence.englishPrompt && (
                           <div className="text-stone-500 text-xs">
-                            {getSettings().nativeLanguage === 'zh' && w.exercisePromptZh ? w.exercisePromptZh : sentence.englishPrompt}
+                            {getSettings().nativeLanguage === 'zh' ? (sentence.englishPromptZh ?? w.exercisePromptZh ?? sentence.englishPrompt) : sentence.englishPrompt}
                           </div>
                         )}
                         <div className="text-stone-700 text-sm italic">{sentence.sentence}</div>
@@ -1277,7 +1295,7 @@ export default function DailySessionFlow() {
               <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
                 <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate this sentence into German!</div>
                 <div className="text-stone-700 italic">
-                  {getSettings().nativeLanguage === 'zh' && snap.word.exercisePromptZh ? snap.word.exercisePromptZh : snap.sentence.englishPrompt}
+                  {getSettings().nativeLanguage === 'zh' ? (snap.sentence.englishPromptZh ?? snap.word.exercisePromptZh ?? snap.sentence.englishPrompt) : snap.sentence.englishPrompt}
                 </div>
               </div>
               <div className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-500">
