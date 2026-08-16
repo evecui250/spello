@@ -4148,7 +4148,15 @@ function getEnglishFormMap(): Map<string, GlossCandidate[]> {
     for (const w of WORDS) {
       const synonyms = w.en.split(',');
       synonyms.forEach((raw, idx) => {
-        const key = raw.trim().replace(/^to\s+/i, '').toLowerCase();
+        // The leading "to " strip is only meant to normalize verb
+        // infinitives ("to forget" -> "forget"); gated to actual verbs
+        // because a non-verb gloss can legitimately start with "to " as
+        // real content, not an infinitive marker — confirmed real: "zum"
+        // (type 'other') glosses as "to the", which used to strip down to
+        // the bare stop word "the", making it wrongly clickable (contract
+        // above is that a pure grammar word should never match anything).
+        const stripInfinitive = w.type === 'verb';
+        const key = (stripInfinitive ? raw.trim().replace(/^to\s+/i, '') : raw.trim()).toLowerCase();
         if (!key) return;
         const arr = englishFormMap!.get(key);
         const entry = { word: w, primary: idx === 0 };
@@ -4163,6 +4171,15 @@ function getEnglishFormMap(): Map<string, GlossCandidate[]> {
 // up constantly in generated sentences and wouldn't resolve via simple
 // suffix-stripping. Not remotely exhaustive; an unlisted irregular form
 // just doesn't resolve, same as any other unhandled gap here.
+// The ~90 most common English irregular verbs (past tense/participle
+// forms a regular -s/-ed/-ing suffix-strip can never reconstruct, e.g.
+// "forgot" -> "forget"). Confirmed real gap: "forgot" didn't resolve at
+// all before this — vergessen ("to forget") is in the corpus, but the
+// irregular list simply hadn't gotten around to it yet. Not claimed to be
+// exhaustive (rarer irregulars, and deliberately-ambiguous ones like
+// "lie" — tell an untruth vs. recline, only one of which is irregular —
+// are left out rather than risk a wrong guess); an unlisted form just
+// doesn't resolve, same as any other gap in this file.
 const ENGLISH_IRREGULARS: Record<string, string> = {
   is: 'be', are: 'be', was: 'be', were: 'be', am: 'be', been: 'be', being: 'be',
   has: 'have', had: 'have', having: 'have',
@@ -4188,6 +4205,79 @@ const ENGLISH_IRREGULARS: Record<string, string> = {
   runs: 'run', ran: 'run',
   sends: 'send', sent: 'send',
   understands: 'understand', understood: 'understand',
+  forgets: 'forget', forgot: 'forget', forgotten: 'forget',
+  keeps: 'keep', kept: 'keep',
+  feels: 'feel', felt: 'feel',
+  hears: 'hear', heard: 'hear',
+  loses: 'lose', lost: 'lose',
+  meets: 'meet', met: 'meet',
+  sits: 'sit', sat: 'sit',
+  stands: 'stand', stood: 'stand',
+  teaches: 'teach', taught: 'teach',
+  sleeps: 'sleep', slept: 'sleep',
+  spends: 'spend', spent: 'spend',
+  builds: 'build', built: 'build',
+  catches: 'catch', caught: 'catch',
+  fights: 'fight', fought: 'fight',
+  holds: 'hold', held: 'hold',
+  leaves: 'leave', left: 'leave',
+  lends: 'lend', lent: 'lend',
+  pays: 'pay', paid: 'pay',
+  sells: 'sell', sold: 'sell',
+  wins: 'win', won: 'win',
+  wears: 'wear', wore: 'wear', worn: 'wear',
+  breaks: 'break', broke: 'break', broken: 'break',
+  chooses: 'choose', chose: 'choose', chosen: 'choose',
+  draws: 'draw', drew: 'draw', drawn: 'draw',
+  drives: 'drive', drove: 'drive', driven: 'drive',
+  falls: 'fall', fell: 'fall', fallen: 'fall',
+  flies: 'fly', flew: 'fly', flown: 'fly',
+  grows: 'grow', grew: 'grow', grown: 'grow',
+  hides: 'hide', hid: 'hide', hidden: 'hide',
+  rides: 'ride', rode: 'ride', ridden: 'ride',
+  rises: 'rise', rose: 'rise', risen: 'rise',
+  shows: 'show', shown: 'show',
+  sings: 'sing', sang: 'sing', sung: 'sing',
+  speaks: 'speak', spoke: 'speak', spoken: 'speak',
+  steals: 'steal', stole: 'steal', stolen: 'steal',
+  swims: 'swim', swam: 'swim', swum: 'swim',
+  throws: 'throw', threw: 'throw', thrown: 'throw',
+  wakes: 'wake', woke: 'wake', woken: 'wake',
+  begins: 'begin', began: 'begin', begun: 'begin',
+  bites: 'bite', bit: 'bite', bitten: 'bite',
+  blows: 'blow', blew: 'blow', blown: 'blow',
+  deals: 'deal', dealt: 'deal',
+  digs: 'dig', dug: 'dig',
+  feeds: 'feed', fed: 'feed',
+  flees: 'flee', fled: 'flee',
+  forbids: 'forbid', forbade: 'forbid', forbidden: 'forbid',
+  forgives: 'forgive', forgave: 'forgive', forgiven: 'forgive',
+  freezes: 'freeze', froze: 'freeze', frozen: 'freeze',
+  hangs: 'hang', hung: 'hang',
+  kneels: 'kneel', knelt: 'kneel',
+  lays: 'lay', laid: 'lay',
+  leads: 'lead', led: 'lead',
+  lights: 'light', lit: 'light',
+  means: 'mean', meant: 'mean',
+  overcomes: 'overcome', overcame: 'overcome',
+  proves: 'prove', proven: 'prove',
+  rings: 'ring', rang: 'ring', rung: 'ring',
+  seeks: 'seek', sought: 'seek',
+  shakes: 'shake', shook: 'shake', shaken: 'shake',
+  shines: 'shine', shone: 'shine',
+  shoots: 'shoot', shot: 'shoot',
+  sinks: 'sink', sank: 'sink', sunk: 'sink',
+  slides: 'slide', slid: 'slide',
+  spins: 'spin', spun: 'spin',
+  springs: 'spring', sprang: 'spring', sprung: 'spring',
+  sticks: 'stick', stuck: 'stick',
+  stings: 'sting', stung: 'sting',
+  strikes: 'strike', struck: 'strike',
+  swears: 'swear', swore: 'swear', sworn: 'swear',
+  sweeps: 'sweep', swept: 'sweep',
+  swings: 'swing', swung: 'swing',
+  tears: 'tear', tore: 'tear', torn: 'tear',
+  weeps: 'weep', wept: 'weep',
 };
 
 // Longest first, plus "ies" -> "y" (studies -> study) and a doubled-
