@@ -1417,8 +1417,12 @@ export default function DailySessionFlow() {
           )}
         </div>
         <div className="h-2 w-full bg-white/15 rounded-full overflow-hidden">
+          {/* emerald, matching MilestoneBar's own earned/completed color —
+              this fill represents progress already done, not "still to
+              go" (that's what amber means on MilestoneBar), so it should
+              read the same way here for consistency. */}
           <div
-            className="h-full bg-amber-400 rounded-full transition-[width] duration-500 ease-out"
+            className="h-full bg-emerald-400 rounded-full transition-[width] duration-500 ease-out"
             style={{ width: `${progressPct}%` }}
           />
         </div>

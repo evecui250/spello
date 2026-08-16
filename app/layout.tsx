@@ -44,12 +44,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <UsagePing />
         <ForestBackground />
         <NavBar />
-        {/* Bottom padding clears the fixed bottom NavBar (~56px content +
+        {/* Bottom padding clears the fixed bottom NavBar (~72px content +
             its own safe-area inset) so the last bit of every page's
             content is never rendered underneath it. */}
         <main
           className="max-w-2xl mx-auto px-4 py-6"
-          style={{ paddingBottom: 'calc(4.5rem + env(safe-area-inset-bottom))' }}
+          style={{ paddingBottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}
         >
           {children}
         </main>

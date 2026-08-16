@@ -33,7 +33,7 @@ export default function NavBar() {
             <Link
               key={l.href}
               href={l.href}
-              className={`flex-1 flex items-center justify-center py-3.5 text-sm font-semibold whitespace-nowrap transition-colors ${
+              className={`flex-1 flex items-center justify-center py-5 text-sm font-semibold whitespace-nowrap transition-colors ${
                 active ? 'bg-white/10 text-amber-50' : 'text-emerald-100/55 hover:text-emerald-50'
               }`}
             >

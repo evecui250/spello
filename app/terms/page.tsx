@@ -6,7 +6,17 @@ import Logo from '../../components/Logo';
 export default function TermsPage() {
   return (
     <div className="flex flex-col gap-6 max-w-xl mx-auto">
-      <div className="flex flex-col items-center gap-2 text-center">
+      <div className="relative flex flex-col items-center gap-2 text-center">
+        {/* Only ever reached from Settings — a plain Link back there reads
+            as "close this" without depending on browser history (a
+            bookmarked/direct visit has none to go back to). */}
+        <Link
+          href="/settings"
+          aria-label="Close"
+          className="absolute -top-1 right-0 text-amber-100/70 hover:text-amber-50 text-2xl leading-none w-8 h-8 flex items-center justify-center"
+        >
+          ×
+        </Link>
         <Logo variant="icon" size={56} className="ring-2 ring-white/20" />
         <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           Terms of Service
