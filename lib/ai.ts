@@ -1,5 +1,6 @@
 'use client';
 
+import { FunctionsFetchError } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 
 // Always succeeds now — see correct-sentence's own comment for why: an
@@ -21,6 +22,26 @@ export class DailyLimitReachedError extends Error {
     super('Daily AI usage limit reached');
     this.name = 'DailyLimitReachedError';
   }
+}
+
+// Thrown specifically when the request never reached the Edge Function at
+// all (supabase-js's own FunctionsFetchError — a real network-level
+// failure, distinct from FunctionsHttpError/FunctionsRelayError, which mean
+// the request DID arrive but got an error response). Worth telling apart
+// from a generic failure: this is the signature of "can't reach Supabase
+// from here" (a flaky connection, or a region where it's blocked/
+// unreachable) rather than an ordinary AI/API hiccup — see
+// DailySessionFlow's handleAiUnreachable for what callers do with this.
+export class AIUnreachableError extends Error {
+  constructor() {
+    super('Could not reach the AI service');
+    this.name = 'AIUnreachableError';
+  }
+}
+
+function rethrow(error: unknown): never {
+  if (error instanceof FunctionsFetchError) throw new AIUnreachableError();
+  throw error;
 }
 
 
@@ -73,7 +94,7 @@ export async function generateSentence(
   const { data, error } = await supabase.functions.invoke('generate-sentence', {
     body: { wordId, wordDe, wordEn, level, knownVocabulary, nativeLanguage },
   });
-  if (error) throw error;
+  if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (!data?.sentence) throw new Error('Malformed AI response');
   return { sentence: data.sentence, sentenceZh: data.sentenceZh || undefined };
@@ -100,7 +121,7 @@ export async function correctSentence(
   const { data, error } = await supabase.functions.invoke('correct-sentence', {
     body: { wordId, wordDe, level, englishPrompt, userTranslation },
   });
-  if (error) throw error;
+  if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (!data?.sentence || !data?.wordForm) throw new Error('Malformed AI response');
   const lemmas = data?.lemmas && typeof data.lemmas === 'object' ? data.lemmas : {};

@@ -28,7 +28,8 @@ import WordInfoPanel from './WordInfoPanel';
 import { speakWord, speakText, stopSpeech } from '../lib/speech';
 import { imageUrlForWord } from '../lib/wordImage';
 import { scheduleSync } from '../lib/sync';
-import { correctSentence, generateSentence, DailyLimitReachedError } from '../lib/ai';
+import { correctSentence, generateSentence, DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
+import { supabase } from '../lib/supabase';
 
 // Locates wordForm inside sentence (case-insensitive) so callers can bold
 // it — used by ReferenceSentence (round 1's copy-mode reference / the
@@ -196,7 +197,7 @@ function RoundWordImage({ word }: { word: Word }) {
 }
 
 function SentenceExercise({
-  word, level, correction, onCorrected, onNext,
+  word, level, correction, onCorrected, onNext, onUnreachable,
 }: {
   word: Word;
   level: Level;
@@ -215,6 +216,12 @@ function SentenceExercise({
   // actually gets persisted to WordProgress.
   onCorrected: (correction: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; lemmas?: Record<string, string> }, userInput: string) => void;
   onNext: () => void;
+  // Called when either AI call fails with AIUnreachableError (a genuine
+  // network-level failure to reach the Edge Function, not an ordinary API
+  // error) — see the parent's handleAiUnreachable for what this does
+  // (turns sentence-writing mode off going forward and auto-files a bug
+  // report), so this component itself only needs to report the event up.
+  onUnreachable: () => void;
 }) {
   // Almost every word already has a pre-generated exercisePrompt baked into
   // lib/words.ts (see scripts/generate-exercise-prompts.py) — instant, no
@@ -228,10 +235,10 @@ function SentenceExercise({
   // own understanding) always use the English promptSentence regardless of
   // nativeLanguage; this is purely what the learner sees on screen.
   const [promptSentenceZh, setPromptSentenceZh] = useState<string | null>(word.exercisePromptZh ?? null);
-  const [promptStatus, setPromptStatus] = useState<'loading' | 'ready' | 'error' | 'limit-reached'>(word.exercisePrompt ? 'ready' : 'loading');
+  const [promptStatus, setPromptStatus] = useState<'loading' | 'ready' | 'error' | 'limit-reached' | 'unreachable'>(word.exercisePrompt ? 'ready' : 'loading');
   const [promptRetry, setPromptRetry] = useState(0);
   const [input, setInput] = useState('');
-  const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached'>('idle');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached' | 'unreachable'>('idle');
   // Which word in the corrected sentence the learner tapped (see the
   // clickable-word rendering below and WordInfoPanel) — cleared implicitly
   // on remount (this whole component is keyed by word.id) rather than
@@ -256,6 +263,7 @@ function SentenceExercise({
       })
       .catch((e) => {
         if (cancelled) return;
+        if (e instanceof AIUnreachableError) { setPromptStatus('unreachable'); onUnreachable(); return; }
         setPromptStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
       });
     return () => { cancelled = true; };
@@ -287,6 +295,7 @@ function SentenceExercise({
       // whichever words the corpus itself has no translation for.
       onCorrected({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt: promptSentence, englishPromptZh: promptSentenceZh ?? undefined, lemmas: result.lemmas }, input.trim());
     } catch (e) {
+      if (e instanceof AIUnreachableError) { setStatus('unreachable'); onUnreachable(); return; }
       setStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
     }
   }
@@ -311,6 +320,12 @@ function SentenceExercise({
       {promptStatus === 'limit-reached' && (
         <p className="text-amber-700 text-sm text-center py-4">
           You've used up today's practice limit — come back tomorrow for more!
+        </p>
+      )}
+      {promptStatus === 'unreachable' && (
+        <p className="text-amber-700 text-sm text-center py-4">
+          Can't reach our AI service right now (this can happen depending on your network) —
+          switched off sentence-writing mode. You can turn it back on anytime in Settings.
         </p>
       )}
       {promptStatus === 'ready' && promptSentence && (
@@ -386,6 +401,12 @@ function SentenceExercise({
           {status === 'limit-reached' && (
             <p className="text-amber-700 text-sm text-center">
               You've used up today's practice limit — come back tomorrow for more!
+            </p>
+          )}
+          {status === 'unreachable' && (
+            <p className="text-amber-700 text-sm text-center">
+              Can't reach our AI service right now (this can happen depending on your network) —
+              switched off sentence-writing mode. You can turn it back on anytime in Settings.
             </p>
           )}
           {correction ? (
@@ -528,7 +549,17 @@ export default function DailySessionFlow() {
   // copy-the-word interaction still proceeds, just without a sentence
   // saved for this word today (same as any other bootstrap-style word).
   const [directSentence, setDirectSentence] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; lemmas?: Record<string, string> } | null>(null);
-  const [directSentenceStatus, setDirectSentenceStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [directSentenceStatus, setDirectSentenceStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'unreachable'>('idle');
+  // Set the first time any AI call fails with AIUnreachableError (a real
+  // network-level failure to reach the Edge Function — see lib/ai.ts) —
+  // once true, both useDirectSentence and the round-1 sentence-exercise
+  // branch below stop attempting further AI calls for the rest of this
+  // session (there's no reason to expect the very next one to succeed
+  // when the underlying cause is "can't reach Supabase from here" — that
+  // won't have changed a few seconds later), falling back to the plain
+  // copy-the-word tiles instead. Reset on a fresh page load, since that's
+  // a reasonable point to let it try again.
+  const [aiUnreachable, setAiUnreachable] = useState(false);
   // "Review" = already fully learned, back for spaced repetition. "New" =
   // never touched before today. "Continuing" = mid-ladder from a PREVIOUS
   // day (not brand new, hasn't reached round 4 yet either) — this is the
@@ -563,7 +594,7 @@ export default function DailySessionFlow() {
   // that's already bootstrap/demoted doesn't need a fetched reference
   // sentence layered on top of its own handling.
   const useDirectSentence = !!word && currentRound === 1 && roundMode === 'study'
-    && !isBootstrapCopyWord(word) && !exampleSentence && settings?.sentenceWritingMode === false;
+    && !isBootstrapCopyWord(word) && !exampleSentence && settings?.sentenceWritingMode === false && !aiUnreachable;
   // Same gating as useDirectSentence, minus the sentenceWritingMode check
   // itself — this is the corner toggle that flips that very setting, so it
   // needs to show on round 1 of a genuine new-word study card regardless of
@@ -576,6 +607,38 @@ export default function DailySessionFlow() {
   function persistSession(next: DailySession) {
     setSession(next);
     saveDailySession(next);
+  }
+
+  // Fired the first time any AI call this session fails with
+  // AIUnreachableError. Two things, both best-effort: turns off sentence-
+  // writing mode going forward (persisted, not just for this session — no
+  // reason to keep hitting the same wall on every future word too) and
+  // auto-files a bug report through the same pipeline the manual "Report a
+  // problem" button uses, so this gets flagged without the learner having
+  // to notice and report it themselves. The bug-report insert has an
+  // honest limitation worth naming: if the real cause is "this device
+  // can't reach Supabase at all" (rather than, say, just this one Edge
+  // Function route having an issue), the report itself — also a Supabase
+  // call — may fail silently too. It's still worth attempting, since it
+  // catches every failure mode short of a full domain-level block.
+  const aiUnreachableReportedRef = useRef(false);
+  function handleAiUnreachable() {
+    if (aiUnreachableReportedRef.current) return;
+    aiUnreachableReportedRef.current = true;
+    setAiUnreachable(true);
+    if (settings) {
+      const next = { ...settings, sentenceWritingMode: false };
+      saveSettings(next);
+      setSettings(next);
+      scheduleSync();
+    }
+    supabase.from('bug_reports').insert({
+      user_id: null,
+      email: null,
+      message: 'Auto-detected: could not reach the AI service (correct-sentence/generate-sentence timed out or failed at the network level, not just an API error). Sentence-writing mode was automatically turned off on this device.',
+      page_path: window.location.pathname,
+      user_agent: navigator.userAgent,
+    }).then(() => {}, () => {});
   }
 
   // Fetches a correct example sentence with no user attempt involved (see
@@ -612,8 +675,10 @@ export default function DailySessionFlow() {
         if (cancelled) return;
         setDirectSentence({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt, englishPromptZh, lemmas: result.lemmas });
         setDirectSentenceStatus('ready');
-      } catch {
-        if (!cancelled) setDirectSentenceStatus('error');
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof AIUnreachableError) { setDirectSentenceStatus('unreachable'); handleAiUnreachable(); return; }
+        setDirectSentenceStatus('error');
       }
     })();
     return () => { cancelled = true; };
@@ -1449,7 +1514,7 @@ export default function DailySessionFlow() {
           <div className="text-2xl font-semibold text-slate-700">{glossFor(word, getSettings().nativeLanguage)}</div>
         </div>
 
-        {/* Three reasons the translation exercise is skipped for round 1:
+        {/* Four reasons the translation exercise is skipped for round 1:
             !exampleSentence excludes a word demoted BACK to round 1 via Hint
             from round 2 — it already has a saved sentence from its real
             round-1 pass, so it shouldn't be asked to translate another one.
@@ -1458,14 +1523,17 @@ export default function DailySessionFlow() {
             mechanic instead, never the AI exercise. sentenceWritingMode
             === false is a deliberate opt-out (Settings) — same copy-the-
             word fallback, but with a fetched reference sentence layered
-            on top (see useDirectSentence/directSentence above). Available
-            whether signed in or not (see this file's earlier comment on
-            SentenceWordHeader) — all three still fall through to the else
-            branch's round-1 handling (copy-the-word tiles — a word
-            demoted back here from round 2 doesn't get its saved sentence
-            shown again either, same reasoning as ReferenceSentence's own
-            comment). */}
-        {currentRound === 1 && roundMode === 'study' && !isBootstrapCopyWord(word) && !exampleSentence && settings.sentenceWritingMode ? (
+            on top (see useDirectSentence/directSentence above).
+            !aiUnreachable excludes a session where an AI call has already
+            failed at the network level once (see handleAiUnreachable) —
+            no reason to let the very next word try and fail the same way.
+            Available whether signed in or not (see this file's earlier
+            comment on SentenceWordHeader) — all four still fall through to
+            the else branch's round-1 handling (copy-the-word tiles — a
+            word demoted back here from round 2 doesn't get its saved
+            sentence shown again either, same reasoning as
+            ReferenceSentence's own comment). */}
+        {currentRound === 1 && roundMode === 'study' && !isBootstrapCopyWord(word) && !exampleSentence && settings.sentenceWritingMode && !aiUnreachable ? (
           <SentenceExercise
             key={word.id}
             word={word}
@@ -1476,6 +1544,7 @@ export default function DailySessionFlow() {
               submitResult(true, { exampleSentence: correction }, { ...correction, userInput });
             }}
             onNext={handleNext}
+            onUnreachable={handleAiUnreachable}
           />
         ) : (
           <>
@@ -1496,6 +1565,17 @@ export default function DailySessionFlow() {
             )}
             {useDirectSentence && directSentenceStatus === 'ready' && directSentence && (
               <ReferenceSentence example={directSentence} />
+            )}
+            {/* aiUnreachable, not directSentenceStatus — this needs to show
+                regardless of which of the three AI call sites tripped it
+                (including SentenceExercise's own, which unmounts the
+                instant aiUnreachable flips, before its own local status
+                message ever gets a chance to render). */}
+            {aiUnreachable && (
+              <p className="text-amber-700 text-xs text-center px-2">
+                Can't reach our AI service right now (this can happen depending on your network) —
+                switched off sentence-writing mode. You can turn it back on anytime in Settings.
+              </p>
             )}
 
             {word.type === 'noun' && word.article && (
