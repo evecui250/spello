@@ -24,6 +24,7 @@ import TranslationChoiceCard from './TranslationChoiceCard';
 import MatchingQuizPage from './MatchingQuizPage';
 import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
+import SignInNudge from './SignInNudge';
 import WordInfoPanel from './WordInfoPanel';
 import { speakWord, speakText, stopSpeech } from '../lib/speech';
 import { imageUrlForWord } from '../lib/wordImage';
@@ -579,6 +580,20 @@ export default function DailySessionFlow() {
   // a reload is a harmless cosmetic detail, not a correctness issue).
   const mcqSeenRef = useRef<Record<string, string[]>>({});
   const [showCongrats, setShowCongrats] = useState(false);
+  const [showSignInNudge, setShowSignInNudge] = useState(false);
+
+  // Dev/design preview: /practice/?previewSignInNudge=1 shows SignInNudge
+  // immediately, without needing to actually sign out and finish a real
+  // day's goal to check how it looks. Plain window.location (not Next's
+  // useSearchParams) specifically to avoid the Suspense-boundary
+  // requirement that hook needs under `output: 'export'`, for a debug-only
+  // one-liner that doesn't need it.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('previewSignInNudge') === '1') {
+      setShowSignInNudge(true);
+    }
+  }, []);
 
   // Every answered round card this session (study or review), oldest first
   // — purely a "peek backward" log for the Back button below; never
@@ -1144,9 +1159,25 @@ export default function DailySessionFlow() {
     }
   }
 
-  function handleCloseCongrats() {
+  async function handleCloseCongrats() {
     setShowCongrats(false);
     if (session) persistSession({ ...session, phase: 'done' });
+    // One soft nudge, right after the celebration rather than overlapping
+    // or blocking it — a learner who isn't signed in has just finished
+    // today's goal, the moment they're most likely to actually care about
+    // not losing it. Checked fresh here (not a cached signedIn state) since
+    // sign-in status can change mid-session and this only needs to be
+    // right once, at this exact moment.
+    const { data: { session: authSession } } = await supabase.auth.getSession();
+    if (!authSession) {
+      setShowSignInNudge(true);
+      return;
+    }
+    router.push('/');
+  }
+
+  function handleCloseSignInNudge() {
+    setShowSignInNudge(false);
     router.push('/');
   }
 
@@ -1192,6 +1223,16 @@ export default function DailySessionFlow() {
   const progressPct = totalWords > 0 ? Math.min(100, Math.round((completedCount / totalWords) * 100)) : 0;
 
   if (!ready || !settings) return null;
+
+  // Checked ahead of every phase branch below (not nested inside the
+  // 'done' one) so the ?previewSignInNudge=1 dev-preview effect works
+  // regardless of whatever session/phase state happens to already be on
+  // screen — the real flow only ever sets this true right as phase
+  // becomes 'done' anyway (see handleCloseCongrats), so this is a no-op
+  // reordering for actual users.
+  if (showSignInNudge) {
+    return <SignInNudge onClose={handleCloseSignInNudge} />;
+  }
 
   if (!session) {
     return (
