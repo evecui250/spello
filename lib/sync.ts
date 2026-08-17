@@ -7,6 +7,7 @@ import {
   getStreak, saveStreak, Streak,
   getSettingsForLevel, saveSettingsForLevel, getSettingsUpdatedAtForLevel, Settings,
   getGoalDaysRecordForSync, mergeGoalDaysFromSync,
+  today,
 } from './storage';
 import { Level, LEVEL_ORDER } from './words';
 
@@ -226,6 +227,32 @@ async function pushToRemote(userId: string): Promise<void> {
     if (retry.error) {
       console.error('Spello sync failed:', retry.error.message);
     }
+  }
+
+  // Best-effort, separate from the main sync above and never allowed to
+  // affect it either way — a failure here just means today's row in
+  // /admin's trend/leaderboard is briefly stale, never a lost-progress
+  // bug. See the daily_activity migration for why this can't just be
+  // read off user_progress: that table is a snapshot overwritten on every
+  // sync, so it has no day-by-day history at all — this is the only place
+  // that accumulates one, and only from whenever this shipped forward.
+  // lastPracticed/lastReviewedAt (used below) are per-word "most recent
+  // touch" dates, not a log either — but comparing them against today()
+  // (this device's own local date, same convention telemetry.ts already
+  // uses) is exact for TODAY specifically, since nothing later in the day
+  // can have already overwritten it by the time this runs.
+  try {
+    const t = today();
+    await supabase.from('daily_activity').upsert({
+      user_id: userId,
+      activity_date: t,
+      words_studied: allValues.filter(p => p.lastPracticed === t).length,
+      words_mastered: allValues.filter(p => p.fullyMastered && p.lastReviewedAt === t).length,
+      level: activeLevel,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,activity_date' });
+  } catch {
+    // Silent — see comment above.
   }
 }
 
