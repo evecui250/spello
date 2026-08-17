@@ -20,7 +20,6 @@ export default function AiUnlockCelebration({ onClose }: Props) {
         className="bg-amber-50 rounded-2xl p-5 max-w-sm w-full flex flex-col gap-3 shadow-xl text-center"
         onClick={e => e.stopPropagation()}
       >
-        <p className="text-3xl">🎉</p>
         <h2 className="font-semibold text-stone-800 text-lg">AI sentence writing unlocked!</h2>
         <p className="text-stone-500 text-sm">
           You've learned the first 220 words. New words now come with real sentences to translate.
