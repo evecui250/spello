@@ -3,6 +3,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 
+interface AiUsageSummary {
+  calls: number;
+  distinctCallers: number;
+  estimatedCostUsd: number;
+}
+
 interface AdminStats {
   totalUsers: number;
   syncedProgressCount: number;
@@ -11,6 +17,11 @@ interface AdminStats {
     last7DaysDevices: number;
     last90DaysDevices: number;
     signedInDevices90d: number;
+  };
+  last24h: {
+    newSignedUpUsers: number;
+    newDevices: number;
+    aiUsage: { signedIn: AiUsageSummary; anonymous: AiUsageSummary };
   };
   bugReportCount: number;
   recentBugReports: { id: number; message: string; page_path: string | null; created_at: string }[];
@@ -75,6 +86,18 @@ export default function AdminPage() {
       </div>
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-3">
+        <h2 className="font-semibold text-stone-800">Last 24 hours</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard label="New signed-up accounts" value={stats.last24h.newSignedUpUsers} />
+          <StatCard label="New devices (incl. never signed in)" value={stats.last24h.newDevices} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <AiUsageRow label="AI calls — signed in" summary={stats.last24h.aiUsage.signedIn} />
+          <AiUsageRow label="AI calls — anonymous" summary={stats.last24h.aiUsage.anonymous} />
+        </div>
+      </div>
+
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-3">
         <h2 className="font-semibold text-stone-800">Bug reports ({stats.bugReportCount} total)</h2>
         {stats.recentBugReports.length === 0 ? (
           <p className="text-stone-500 text-sm">None yet.</p>
@@ -100,6 +123,22 @@ function StatCard({ label, value }: { label: string; value: number }) {
     <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-4 flex flex-col gap-0.5">
       <span className="text-2xl font-bold text-stone-800">{value}</span>
       <span className="text-stone-500 text-xs">{label}</span>
+    </div>
+  );
+}
+
+// Anonymous calls are rate-limited/counted by ip_address rather than
+// user_id (see correct-sentence/generate-sentence) — this is the only
+// place in the app that surfaces them broken out from signed-in usage,
+// since the ai_usage_daily_by_user SQL view lumps every anonymous caller
+// into a single user_id-is-null row.
+function AiUsageRow({ label, summary }: { label: string; summary: AiUsageSummary }) {
+  return (
+    <div className="bg-white/60 rounded-lg px-3 py-2 flex items-center justify-between gap-3">
+      <span className="text-stone-700 text-sm">{label}</span>
+      <span className="text-stone-500 text-xs text-right">
+        {summary.calls} call{summary.calls === 1 ? '' : 's'} · {summary.distinctCallers} caller{summary.distinctCallers === 1 ? '' : 's'} · ~${summary.estimatedCostUsd.toFixed(4)}
+      </span>
     </div>
   );
 }
