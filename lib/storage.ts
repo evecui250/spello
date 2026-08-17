@@ -74,6 +74,13 @@ export interface Settings {
   // sentence fetched and shown alongside purely as reference — no writing
   // required. See DailySessionFlow's useDirectSentence.
   sentenceWritingMode: boolean;
+  // One-time flag: has this A1 profile already seen the "you've unlocked
+  // AI sentence writing" celebration (shown the first time a round-1 word
+  // isn't one of the ~220 bootstrap words — see isBootstrapCopyWord)? Lives
+  // in Settings (not a separate storage key) specifically so it syncs like
+  // everything else here — a signed-in learner who's seen it on one device
+  // shouldn't see it again on another.
+  hasSeenAiUnlockCelebration?: boolean;
 }
 
 // Every one of these is per-level storage: switching level in Settings is a

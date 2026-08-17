@@ -31,7 +31,7 @@ export default function SignInNudge({ onClose }: Props) {
         <p className="text-3xl">☁️</p>
         <h2 className="font-semibold text-stone-800 text-lg">Don't lose today's progress</h2>
         <p className="text-stone-500 text-sm">
-          You're not signed in — your streak and words learned only live on this device right now. Sign in with just an email (no password) to back them up and pick up on any device.
+          It only lives on this device. Sign in with just an email to back it up.
         </p>
         <div className="flex flex-col gap-2 mt-1">
           <button

@@ -25,6 +25,7 @@ import MatchingQuizPage from './MatchingQuizPage';
 import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
 import SignInNudge from './SignInNudge';
+import AiUnlockCelebration from './AiUnlockCelebration';
 import WordInfoPanel from './WordInfoPanel';
 import { speakWord, speakText, stopSpeech } from '../lib/speech';
 import { imageUrlForWord } from '../lib/wordImage';
@@ -581,18 +582,20 @@ export default function DailySessionFlow() {
   const mcqSeenRef = useRef<Record<string, string[]>>({});
   const [showCongrats, setShowCongrats] = useState(false);
   const [showSignInNudge, setShowSignInNudge] = useState(false);
+  const [showAiUnlockCelebration, setShowAiUnlockCelebration] = useState(false);
 
-  // Dev/design preview: /practice/?previewSignInNudge=1 shows SignInNudge
-  // immediately, without needing to actually sign out and finish a real
-  // day's goal to check how it looks. Plain window.location (not Next's
-  // useSearchParams) specifically to avoid the Suspense-boundary
-  // requirement that hook needs under `output: 'export'`, for a debug-only
-  // one-liner that doesn't need it.
+  // Dev/design preview: /practice/?previewSignInNudge=1 or
+  // ?previewAiUnlock=1 show the matching one-off card immediately, without
+  // needing to actually reach the real trigger (sign out and finish a
+  // day's goal; or reach A1 word #221) to check how it looks. Plain
+  // window.location (not Next's useSearchParams) specifically to avoid the
+  // Suspense-boundary requirement that hook needs under `output: 'export'`,
+  // for a debug-only one-liner that doesn't need it.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (new URLSearchParams(window.location.search).get('previewSignInNudge') === '1') {
-      setShowSignInNudge(true);
-    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('previewSignInNudge') === '1') setShowSignInNudge(true);
+    if (params.get('previewAiUnlock') === '1') setShowAiUnlockCelebration(true);
   }, []);
 
   // Every answered round card this session (study or review), oldest first
@@ -626,6 +629,31 @@ export default function DailySessionFlow() {
   // rounds 2-4, review rounds, or bootstrap-copy words).
   const showSentenceModeToggle = !!word && currentRound === 1 && roundMode === 'study'
     && !isBootstrapCopyWord(word) && !exampleSentence;
+
+  // Fires once: the first time an A1 learner's round 1 lands on a genuine
+  // new word that ISN'T one of the ~220 bootstrap words — same shape as
+  // showSentenceModeToggle's own gate above, plus the level check and the
+  // hasSeenAiUnlockCelebration flag that keeps this from ever firing again
+  // once it has (set by handleCloseAiUnlockCelebration below). Naturally
+  // won't re-fire while the celebration is already showing (its own
+  // top-level render check takes over first), or after dismissal, since
+  // the flag flips to true immediately on close.
+  useEffect(() => {
+    if (!settings || settings.level !== 'A1' || settings.hasSeenAiUnlockCelebration) return;
+    if (!word || currentRound !== 1 || roundMode !== 'study') return;
+    if (isBootstrapCopyWord(word) || exampleSentence) return;
+    setShowAiUnlockCelebration(true);
+  }, [settings, word, currentRound, roundMode, exampleSentence]);
+
+  function handleCloseAiUnlockCelebration() {
+    setShowAiUnlockCelebration(false);
+    if (settings) {
+      const next = { ...settings, hasSeenAiUnlockCelebration: true };
+      saveSettings(next);
+      setSettings(next);
+      scheduleSync();
+    }
+  }
 
   function persistSession(next: DailySession) {
     setSession(next);
@@ -1232,6 +1260,10 @@ export default function DailySessionFlow() {
   // reordering for actual users.
   if (showSignInNudge) {
     return <SignInNudge onClose={handleCloseSignInNudge} />;
+  }
+
+  if (showAiUnlockCelebration) {
+    return <AiUnlockCelebration onClose={handleCloseAiUnlockCelebration} />;
   }
 
   if (!session) {
