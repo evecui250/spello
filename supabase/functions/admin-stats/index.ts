@@ -108,11 +108,54 @@ Deno.serve(async (req: Request) => {
 
     // Accounts that have actually studied something (a user_progress row
     // only ever exists after a real first sync — see sync.ts), plus each
-    // account's current level, for the level-breakdown chart's signed-in
-    // half.
+    // account's current level (for the level-breakdown chart's signed-in
+    // half) and the full progress blob (for the per-learner stage
+    // breakdown below — mascotStage puppy/short/medium/long-crowned,
+    // labeled Introduced/Familiar/Strong/Mastered same as the app's own
+    // Word List/Progress pages).
     const { data: progressRows, count: accountsStartedLearning } = await admin
       .from('user_progress')
-      .select('user_id, level', { count: 'exact' });
+      .select('user_id, level, progress', { count: 'exact' });
+
+    // progress is nested by level ({A1: {...}, B2: {...}}) for any account
+    // that's synced since the per-level split shipped; a handful of very
+    // old rows can still be one flat {wordId: WordProgress} blob from
+    // before that — same shape sync.ts's own pullAndMerge already has to
+    // handle. Good enough here to just check whether every top-level key
+    // looks like a level code, without sync.ts's fuller migration/rename
+    // handling — this is a read-only admin view, not a data path that
+    // needs to be exactly right for old B2/B2_old key renames.
+    const LEVEL_KEYS = ['A1', 'A2', 'B1', 'B2', 'B2_old', 'C1', 'C2'];
+    const STAGE_KEYS = ['puppy', 'short', 'medium', 'long-crowned'] as const;
+    function stageCounts(progress: unknown): Record<typeof STAGE_KEYS[number], number> {
+      const counts = { puppy: 0, short: 0, medium: 0, 'long-crowned': 0 };
+      if (!progress || typeof progress !== 'object') return counts;
+      const obj = progress as Record<string, unknown>;
+      const isNested = Object.keys(obj).length > 0 && Object.keys(obj).every(k => LEVEL_KEYS.includes(k));
+      const wordMaps = (isNested ? Object.values(obj) : [obj]) as Record<string, unknown>[];
+      for (const wordMap of wordMaps) {
+        if (!wordMap || typeof wordMap !== 'object') continue;
+        for (const wp of Object.values(wordMap)) {
+          const stage = (wp as { mascotStage?: string } | null)?.mascotStage;
+          if (stage && stage in counts) counts[stage as typeof STAGE_KEYS[number]] += 1;
+        }
+      }
+      return counts;
+    }
+    const learnerRows = (progressRows ?? []).map(r => ({
+      email: emailByUserId.get(r.user_id) ?? '(unknown)',
+      level: r.level as string | null,
+      stages: stageCounts(r.progress),
+    }));
+    const stageTotals = learnerRows.reduce((acc, r) => {
+      for (const k of STAGE_KEYS) acc[k] += r.stages[k];
+      return acc;
+    }, { puppy: 0, short: 0, medium: 0, 'long-crowned': 0 });
+    const learnersByStageTotal = [...learnerRows]
+      .sort((a, b) => {
+        const totalOf = (r: typeof a) => STAGE_KEYS.reduce((s, k) => s + r.stages[k], 0);
+        return totalOf(b) - totalOf(a);
+      });
 
     // usage_pings: every ping in the trend window, used for the device
     // trend, today's new-device/new-IP counts, and the anonymous half of
@@ -269,6 +312,13 @@ Deno.serve(async (req: Request) => {
       },
       levelBreakdown,
       leaderboardToday,
+      // Signed-in/synced learners only — see the comment on the query
+      // above for why anonymous learners can't appear here at all (their
+      // word-level progress never reaches the server, full stop).
+      wordStages: {
+        totals: stageTotals,
+        byLearner: learnersByStageTotal,
+      },
       bugReportCount: bugReportCount ?? 0,
       recentBugReports: recentBugReports ?? [],
     });

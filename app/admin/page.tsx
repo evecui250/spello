@@ -10,6 +10,21 @@ interface AiUsageSummary {
   estimatedCostUsd: number;
 }
 
+interface StageCounts {
+  puppy: number;
+  short: number;
+  medium: number;
+  'long-crowned': number;
+}
+
+// Same order/labels as the app's own Word List and Progress pages
+// (STAGE_LABEL in app/words/page.tsx and app/progress/page.tsx) — kept
+// consistent here rather than inventing separate admin-only wording.
+const STAGE_ORDER: (keyof StageCounts)[] = ['puppy', 'short', 'medium', 'long-crowned'];
+const STAGE_LABEL: Record<keyof StageCounts, string> = {
+  puppy: 'Introduced', short: 'Familiar', medium: 'Strong', 'long-crowned': 'Mastered',
+};
+
 interface AdminStats {
   totals: {
     totalAccounts: number;
@@ -32,6 +47,10 @@ interface AdminStats {
   };
   levelBreakdown: { level: string; signedIn: number; anonymous: number }[];
   leaderboardToday: { email: string; wordsStudied: number; wordsMastered: number; level: string | null }[];
+  wordStages: {
+    totals: StageCounts;
+    byLearner: { email: string; level: string | null; stages: StageCounts }[];
+  };
   bugReportCount: number;
   recentBugReports: { id: number; message: string; page_path: string | null; created_at: string }[];
 }
@@ -169,6 +188,41 @@ export default function AdminPage() {
               ],
             }))}
           />
+        )}
+      </div>
+
+      {/* Word stages */}
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-3">
+        <h2 className="font-semibold text-stone-800">Word stages</h2>
+        <p className="text-stone-400 text-xs -mt-1">Signed-in learners only — an anonymous learner's word-by-word progress never reaches the server at all, so there's nothing to show here for them.</p>
+        <div className="grid grid-cols-2 gap-3">
+          {STAGE_ORDER.map(s => (
+            <StatCard key={s} label={STAGE_LABEL[s]} value={stats.wordStages.totals[s]} />
+          ))}
+        </div>
+        {stats.wordStages.byLearner.length === 0 ? (
+          <p className="text-stone-500 text-sm">No signed-in learners yet.</p>
+        ) : (
+          <div className="overflow-x-auto -mx-1 px-1">
+            <table className="w-full text-sm border-collapse min-w-[420px]">
+              <thead>
+                <tr className="text-stone-400 text-xs text-left">
+                  <th className="font-medium pb-1.5 pr-2">Learner</th>
+                  <th className="font-medium pb-1.5 px-2">Level</th>
+                  {STAGE_ORDER.map(s => <th key={s} className="font-medium pb-1.5 px-2 text-right">{STAGE_LABEL[s]}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {stats.wordStages.byLearner.map((row, i) => (
+                  <tr key={row.email + i} className="border-t border-amber-100/60">
+                    <td className="py-1.5 pr-2 text-stone-700 truncate max-w-[140px]">{row.email}</td>
+                    <td className="py-1.5 px-2 text-stone-500">{row.level ?? '—'}</td>
+                    {STAGE_ORDER.map(s => <td key={s} className="py-1.5 px-2 text-stone-600 text-right">{row.stages[s]}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
