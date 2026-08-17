@@ -135,7 +135,7 @@ const WORDS_PART_1: Word[] = [
   // E
   { id: 'w070', de: 'Eingang', article: 'der', plural: 'Eingänge', en: 'entrance', zh: '入口', type: 'noun', category: 'Alltag', level: 'A1', exercisePrompt: "The entrance is near the school.", exercisePromptZh: "入口在学校附近。" },
   { id: 'w071', de: 'Einladung', article: 'die', plural: 'Einladungen', en: 'invitation', zh: '邀请', type: 'noun', category: 'Soziales', level: 'A1', exercisePrompt: "I have an invitation today.", exercisePromptZh: "我今天有一个邀请。" },
-  { id: 'w072', de: 'Eltern', article: 'die', plural: 'Eltern', en: 'parents', zh: '父母', type: 'noun', category: 'Familie', level: 'A1', highFrequency: true },
+  { id: 'w072', de: 'Eltern', article: 'die', plural: 'Eltern', en: 'parents, parent', zh: '父母', type: 'noun', category: 'Familie', level: 'A1', highFrequency: true },
   { id: 'w073', de: 'E-Mail', article: 'die', plural: 'E-Mails', en: 'email', zh: '电子邮件', type: 'noun', category: 'Kommunikation', level: 'A1', exercisePrompt: "I write an email today.", exercisePromptZh: "我今天写了一封电子邮件。" },
   { id: 'w074', de: 'Empfang', article: 'der', plural: 'Empfänge', en: 'reception', zh: '接待处', type: 'noun', category: 'Alltag', level: 'B2_old', exercisePrompt: "The hotel reception is open every evening until midnight for guests.", exercisePromptZh: "酒店接待处每晚开放到午夜，供客人使用。" },
   { id: 'w075', de: 'Energie', article: 'die', plural: 'Energien', en: 'energy', zh: '能量', type: 'noun', category: 'Umwelt', level: 'B1', exercisePrompt: "He needs more energy to complete his tasks.", exercisePromptZh: "他需要更多的能量来完成他的任务。" },
@@ -208,7 +208,7 @@ const WORDS_PART_1: Word[] = [
   { id: 'w130', de: 'Kalender', article: 'der', plural: 'Kalender', en: 'calendar', zh: '日历', type: 'noun', category: 'Zeit', level: 'A2', exercisePrompt: "I need a calendar for work.", exercisePromptZh: "我需要一个工作用的日历。" },
   { id: 'w131', de: 'Kassierer', article: 'der', plural: 'Kassierer', en: 'cashier', zh: '收银员', type: 'noun', category: 'Arbeit', level: 'B2_old', exercisePrompt: "The cashier at the bakery was friendly and very helpful today.", exercisePromptZh: "今天面包店的收银员很友好，也很乐于助人。" },
   { id: 'w132', de: 'Kellner', article: 'der', plural: 'Kellner', en: 'waiter', zh: '服务员', type: 'noun', category: 'Arbeit', level: 'B1', exercisePrompt: "The waiter brought our food and drinks quickly.", exercisePromptZh: "服务员很快就把我们的食物和饮料送来了。" },
-  { id: 'w133', de: 'Kind', article: 'das', plural: 'Kinder', en: 'child', zh: '孩子', type: 'noun', category: 'Familie', level: 'A1', highFrequency: true },
+  { id: 'w133', de: 'Kind', article: 'das', plural: 'Kinder', en: 'child, children', zh: '孩子', type: 'noun', category: 'Familie', level: 'A1', highFrequency: true },
   { id: 'w134', de: 'Kino', article: 'das', plural: 'Kinos', en: 'cinema', zh: '电影院', type: 'noun', category: 'Freizeit', level: 'A1', exercisePrompt: "I go to the cinema.", exercisePromptZh: "我去电影院。" },
   { id: 'w135', de: 'Kleidung', article: 'die', plural: 'Kleidungen', en: 'clothing', zh: '衣服', type: 'noun', category: 'Einkaufen', level: 'A1', exercisePrompt: "I like new clothing today.", exercisePromptZh: "我今天喜欢新衣服。" },
   { id: 'w136', de: 'Klimawandel', article: 'der', plural: '', en: 'climate change', zh: '气候变化', type: 'noun', category: 'Umwelt', level: 'B2', exercisePrompt: "Many people are worried about the effects of climate change.", exercisePromptZh: "许多人担心气候变化的影响。" },
@@ -806,7 +806,7 @@ const WORDS_PART_2: Word[] = [
   { id: 'w709', de: 'erfolgreich', en: 'successful', zh: '成功的', type: 'adjective', level: 'B2', exercisePrompt: "The company was successful in launching a new product this year.", exercisePromptZh: "这家公司今年成功推出了一款新产品。" },
   { id: 'w710', de: 'erfordern', en: 'to require', zh: '要求', type: 'verb', level: 'B1', exercisePrompt: "The job will require special skills and experience.", exercisePromptZh: "这份工作将要求特殊的技能和经验。" },
   { id: 'w711', de: 'erfüllen', en: 'to fulfill', zh: '完成', type: 'verb', level: 'B1', exercisePrompt: "He works hard to fulfill his tasks every day.", exercisePromptZh: "他每天努力工作以完成他的任务。" },
-  { id: 'w712', de: 'ergänzen', en: 'to complete, add to', zh: '完成，添加', type: 'verb', level: 'B1', exercisePrompt: "I need to complete the registration form today.", exercisePromptZh: "我今天需要完成注册表。" },
+  { id: 'w712', de: 'ergänzen', en: 'to complete, to add', zh: '完成，添加', type: 'verb', level: 'B1', exercisePrompt: "I need to complete the registration form today.", exercisePromptZh: "我今天需要完成注册表。" },
   { id: 'w713', de: 'erhalten', en: 'to receive', zh: '接收', type: 'verb', level: 'B1', exercisePrompt: "I hope to receive your letter this evening.", exercisePromptZh: "我希望今晚能收到你的信。" },
   { id: 'w714', de: 'erholen', en: 'to recover, relax (sich erholen)', zh: '恢复，放松', type: 'verb', level: 'B2_old', exercisePrompt: "After a long day at work, I need to recover and relax.", exercisePromptZh: "在工作了一整天后，我需要恢复和放松。" },
   { id: 'w715', de: 'Erholung', article: 'die', en: 'recovery, relaxation', zh: '恢复，放松', type: 'noun', level: 'B1', exercisePrompt: "After work, I enjoy relaxation with my family.", exercisePromptZh: "下班后，我喜欢和家人一起放松。" },
@@ -919,7 +919,7 @@ const WORDS_PART_2: Word[] = [
   { id: 'w822', de: 'fließen', en: 'to flow', zh: '流动', type: 'verb', level: 'B1', exercisePrompt: "The river flows gently past the village in summer.", exercisePromptZh: "河流在夏天轻轻流过村庄。" },
   { id: 'w823', de: 'fließend', en: 'fluent', zh: '流利的', type: 'adjective', level: 'B2_old', exercisePrompt: "She speaks three languages fluently and enjoys learning new ones.", exercisePromptZh: "她流利地说三种语言，并喜欢学习新的语言。" },
   { id: 'w824', de: 'Flug', article: 'der', plural: 'Flüge', en: 'flight', zh: '航班', type: 'noun', level: 'B1', exercisePrompt: "My brother's flight arrives at the airport tonight.", exercisePromptZh: "我哥哥的航班今晚到达机场。" },
-  { id: 'w825', de: 'Flugzeug', article: 'das', plural: 'Flugzeuge', en: 'airplane', zh: '飞机', type: 'noun', level: 'A1', exercisePrompt: "The airplane is big.", exercisePromptZh: "这架飞机很大。" },
+  { id: 'w825', de: 'Flugzeug', article: 'das', plural: 'Flugzeuge', en: 'airplane, plane', zh: '飞机', type: 'noun', level: 'A1', exercisePrompt: "The airplane is big.", exercisePromptZh: "这架飞机很大。" },
   { id: 'w826', de: 'Flur', article: 'der', plural: 'Flure', en: 'hallway', zh: '走廊', type: 'noun', level: 'B1', exercisePrompt: "I walked down the long hallway to my room.", exercisePromptZh: "我走过长长的走廊去我的房间。" },
   { id: 'w827', de: 'Fläche', article: 'die', plural: 'Flächen', en: 'area, surface', zh: '区域／表面', type: 'noun', level: 'B1', exercisePrompt: "The bakery has a large area for customers.", exercisePromptZh: "面包店有一个很大的区域供顾客使用。" },
   { id: 'w828', de: 'Flüssigkeit', article: 'die', plural: 'Flüssigkeiten', en: 'liquid', zh: '液体', type: 'noun', level: 'B1', exercisePrompt: "The doctor said to drink more liquid today.", exercisePromptZh: "医生说今天要多喝液体。" },
@@ -1023,7 +1023,7 @@ const WORDS_PART_2: Word[] = [
   { id: 'w926', de: 'Gerät', article: 'das', plural: 'Geräte', en: 'device', zh: '设备', type: 'noun', level: 'A2', exercisePrompt: "This device helps me at work.", exercisePromptZh: "这个设备在工作中帮了我很多。" },
   { id: 'w927', de: 'geschehen', en: 'to happen', zh: '发生', type: 'verb', level: 'B1', exercisePrompt: "I wonder what will happen at the train station.", exercisePromptZh: "我不知道火车站会发生什么事。" },
   { id: 'w928', de: 'Geschenk', article: 'das', plural: 'Geschenke', en: 'gift', zh: '礼物', type: 'noun', level: 'A1', exercisePrompt: "I have a gift for you.", exercisePromptZh: "我有一份礼物要给你。" },
-  { id: 'w929', de: 'Geschichte', article: 'die', plural: 'Geschichten', en: 'story', zh: '故事', type: 'noun', level: 'A2', exercisePrompt: "My brother tells a funny story.", exercisePromptZh: "我哥哥讲了一个有趣的故事。" },
+  { id: 'w929', de: 'Geschichte', article: 'die', plural: 'Geschichten', en: 'story, history', zh: '故事', type: 'noun', level: 'A2', exercisePrompt: "My brother tells a funny story.", exercisePromptZh: "我哥哥讲了一个有趣的故事。" },
   { id: 'w930', de: 'geschieden', en: 'divorced', zh: '离婚的', type: 'adjective', level: 'B1', exercisePrompt: "My parents are divorced, but we still meet.", exercisePromptZh: "我父母离婚了，但我们仍然会见面。" },
   { id: 'w931', de: 'Geschirr', article: 'das', en: 'dishes, crockery', zh: '餐具／瓷器', type: 'noun', level: 'B1', exercisePrompt: "The kitchen is full of clean dishes and crockery.", exercisePromptZh: "厨房里满是干净的餐具和瓷器。" },
   { id: 'w932', de: 'Geschlecht', article: 'das', plural: 'Geschlechter', en: 'gender', zh: '性别', type: 'noun', level: 'B1', exercisePrompt: "The job advertisement asks for applicants of any gender.", exercisePromptZh: "招聘广告要求任何性别的申请者。" },
@@ -1920,7 +1920,7 @@ const WORDS_PART_4: Word[] = [
   { id: 'w1817', de: 'sein', en: 'to be', zh: '是', type: 'verb', level: 'A1', highFrequency: true },
   { id: 'w1818', de: 'seit', en: 'since', zh: '自从', type: 'preposition', level: 'A1', exercisePrompt: "I have an apple since yesterday.", exercisePromptZh: "我从昨天起就有一个苹果。" },
   { id: 'w1819', de: 'seitdem', en: 'since then', zh: '从那时起', type: 'adverb', level: 'B2_old', exercisePrompt: "I moved to the city, and I have loved it since then.", exercisePromptZh: "我搬到城市后，从那时起我就喜欢这里。" },
-  { id: 'w1820', de: 'Seite', article: 'die', plural: 'Seiten', en: 'page', zh: '页面', type: 'noun', level: 'A2', exercisePrompt: "I read the page of my book.", exercisePromptZh: "我读了我书的页面。" },
+  { id: 'w1820', de: 'Seite', article: 'die', plural: 'Seiten', en: 'page, side', zh: '页面', type: 'noun', level: 'A2', exercisePrompt: "I read the page of my book.", exercisePromptZh: "我读了我书的页面。" },
   { id: 'w1821', de: 'Sekretärin', article: 'die', plural: 'Sekretärinnen', en: 'secretary (female)', zh: '女秘书', type: 'noun', level: 'B2_old', exercisePrompt: "The secretary organized the meeting for her boss on Tuesday.", exercisePromptZh: "女秘书为她的老板在星期二组织了会议。" },
   { id: 'w1822', de: 'selbst', en: 'myself, yourself', zh: '自己', type: 'adverb', level: 'A2', exercisePrompt: "I can help myself with this.", exercisePromptZh: "我可以自己解决这个问题。" },
   { id: 'w1823', de: 'selbstständig', en: 'independent, self-employed', zh: '独立的／自雇的', type: 'adjective', level: 'A1', exercisePrompt: "My brother is independent now.", exercisePromptZh: "我哥哥现在是独立的。" },
@@ -2053,7 +2053,7 @@ const WORDS_PART_4: Word[] = [
   { id: 'w1950', de: 'Strafe', article: 'die', plural: 'Strafen', en: 'punishment, fine', zh: '惩罚', type: 'noun', level: 'B1', exercisePrompt: "The punishment for speeding is a large fine.", exercisePromptZh: "超速的惩罚是一笔巨额罚款。" },
   { id: 'w1951', de: 'Strafzettel', article: 'der', plural: 'Strafzettel', en: 'parking ticket', zh: '停车罚单', type: 'noun', level: 'B1', exercisePrompt: "I received a parking ticket yesterday at the mall.", exercisePromptZh: "我昨天在购物中心收到了停车罚单。" },
   { id: 'w1952', de: 'Strand', article: 'der', plural: 'Strände', en: 'beach', zh: '海滩', type: 'noun', level: 'A2', exercisePrompt: "We go to the beach tomorrow.", exercisePromptZh: "我们明天去海滩。" },
-  { id: 'w1953', de: 'Straße', article: 'die', plural: 'Straßen', en: 'street', zh: '街道', type: 'noun', level: 'A1', highFrequency: true },
+  { id: 'w1953', de: 'Straße', article: 'die', plural: 'Straßen', en: 'street, road', zh: '街道', type: 'noun', level: 'A1', highFrequency: true },
   { id: 'w1954', de: 'Straßenbahn', article: 'die', plural: 'Straßenbahnen', en: 'streetcar, tram', zh: '电车／有轨电车', type: 'noun', level: 'A1', exercisePrompt: "The streetcar goes to work.", exercisePromptZh: "电车去上班。" },
   { id: 'w1955', de: 'Strecke', article: 'die', plural: 'Strecken', en: 'route, distance', zh: '路线／距离', type: 'noun', level: 'B1', exercisePrompt: "The bus will take a long route to the airport.", exercisePromptZh: "公交车将走一条长路线去机场。" },
   { id: 'w1956', de: 'streichen', en: 'to paint (walls)', zh: '涂漆', type: 'verb', level: 'B2_old', exercisePrompt: "We need to paint the walls before the family arrives tomorrow.", exercisePromptZh: "我们需要在家人明天到来之前涂漆。" },
@@ -3702,7 +3702,7 @@ const WORDS_PART_9: Word[] = [
   { id: 'w3586', de: 'greifbar', en: 'tangible', zh: '可触及的', type: 'adjective', level: 'B2', exercisePrompt: "The results of the project were tangible and clearly visible to everyone.", exercisePromptZh: "项目的结果是可触及的，并且对每个人都清晰可见。" },
   { id: 'w3587', de: 'Großkonzern', article: 'der', plural: 'Großkonzerne', en: 'major corporation', zh: '大型企业', type: 'noun', category: 'Arbeit', level: 'B2', exercisePrompt: "Many young people dream of working for a major corporation.", exercisePromptZh: "许多年轻人梦想在大型企业工作。" },
   { id: 'w3588', de: 'Grundlage', article: 'die', plural: 'Grundlagen', en: 'basis, foundation', zh: '基础／根基', type: 'noun', level: 'B2', exercisePrompt: "The basis of our friendship is trust and mutual respect.", exercisePromptZh: "我们友谊的基础是信任和相互尊重。" },
-  { id: 'w3589', de: 'Grundrecht', article: 'das', plural: 'Grundrechte', en: 'basic/constitutional right', zh: '基本权利／宪法权利', type: 'noun', category: 'Politik', level: 'B2', exercisePrompt: "Every citizen should know their basic rights and responsibilities in society.", exercisePromptZh: "每个公民都应该了解自己在社会中的基本权利和责任。" },
+  { id: 'w3589', de: 'Grundrecht', article: 'das', plural: 'Grundrechte', en: 'basic right, constitutional right', zh: '基本权利／宪法权利', type: 'noun', category: 'Politik', level: 'B2', exercisePrompt: "Every citizen should know their basic rights and responsibilities in society.", exercisePromptZh: "每个公民都应该了解自己在社会中的基本权利和责任。" },
   { id: 'w3590', de: 'Handwerk', article: 'das', plural: '', en: 'craft, trade', zh: '手艺／行业', type: 'noun', category: 'Arbeit', level: 'B2', exercisePrompt: "He learned the craft of woodworking from his father in the village.", exercisePromptZh: "他在村里向父亲学习了木工手艺。" },
   { id: 'w3591', de: 'Hürde', article: 'die', plural: 'Hürden', en: 'hurdle', zh: '障碍', type: 'noun', level: 'B2', exercisePrompt: "The young athlete overcame every hurdle during the important race.", exercisePromptZh: "年轻运动员在重要比赛中克服了每一个障碍。" },
   { id: 'w3592', de: 'importieren', en: 'to import', zh: '进口', type: 'verb', category: 'Finanzen', level: 'B2', exercisePrompt: "Many companies aim to import food from foreign countries for variety.", exercisePromptZh: "许多公司旨在从外国进口食品以增加多样性。" },
@@ -4146,7 +4146,17 @@ function getEnglishFormMap(): Map<string, GlossCandidate[]> {
   if (!englishFormMap) {
     englishFormMap = new Map();
     for (const w of WORDS) {
-      const synonyms = w.en.split(',');
+      // Some corpus entries separate senses with "/" instead of "," (e.g.
+      // "man / husband", "office / authority") — mirrors the Chinese side
+      // (getChineseTermMap), which already splits on ／ as well as a
+      // comma; the English side never did, so 21 corpus entries' worth of
+      // real, valid synonyms (husband, wife, authority, prize, happiness,
+      // groceries, job, mail, invoice, law, prescription, calm, security,
+      // and more) were silently unreachable — the whole "man / husband"
+      // string was one unmatchable key, never split at all. Whitespace
+      // around the slash is optional (covers both "man / husband" and
+      // "appointment/date").
+      const synonyms = w.en.split(/\s*\/\s*|,/);
       synonyms.forEach((raw, idx) => {
         // The leading "to " strip is only meant to normalize verb
         // infinitives ("to forget" -> "forget"); gated to actual verbs
@@ -4280,41 +4290,68 @@ const ENGLISH_IRREGULARS: Record<string, string> = {
   weeps: 'weep', wept: 'weep',
 };
 
-// Longest first, plus "ies" -> "y" (studies -> study) and a doubled-
-// consonant retry (stopping -> stopp doesn't exist, but stop does).
-const ENGLISH_SUFFIXES = ['ies', 'ing', 'ed', 'es', 's'];
+// Longest first. "ies"/"ied" both -> "y" (studies/studied -> study, same
+// consonant+y spelling change for present and past tense); a doubled-
+// consonant retry (stopping -> stopp doesn't exist, but stop does); and,
+// for "ed"/"ing" specifically, a silent-e retry (see findWordByEnglishForm)
+// for the very common like/use/move/raise/smile/... class of verbs, whose
+// past tense just adds "d" rather than the full "ed" ("liked" naively
+// strips to "lik", not "like").
+const ENGLISH_SUFFIXES = ['ies', 'ied', 'ing', 'ed', 'es', 's'];
 
 // Picks among several corpus words whose en/zh gloss collides on the same
-// clicked term. Three-step preference, applied in every clickable-word
-// resolver below (English and Chinese; findWordByGermanForm's own
-// German-side version would benefit from the same idea but isn't touched
-// here):
+// clicked term. Applied in every clickable-word resolver below (English
+// and Chinese; findWordByGermanForm's own German-side version would
+// benefit from the same idea but isn't touched here):
 //   1. If the round's own target word is among the candidates, it always
 //      wins outright — clicking the word you're actively learning should
 //      never show you a DIFFERENT word's translation.
-//   2. Otherwise prefer a content word (noun/verb/adjective/adverb) over
+//   2. Chinese only (see precededByNounPhraseMarker below): if the term
+//      sits at the end of a noun run that's itself marked by a preceding
+//      的, prefer a noun candidate over a verb/adjective one — confirmed
+//      real: "选择" (auswählen "to select", Wahl "choice", wählen "to
+//      choose" all gloss to exactly this) picked auswählen — pure file-
+//      order luck, since steps 3/4 below don't distinguish noun from verb
+//      at all — in "健康的饮食选择" ("healthy dietary CHOICES"), 选择 is
+//      plainly the head noun of a 饮食(diet)+选择(choice) compound sitting
+//      inside "健康的[...]" (X的 is Chinese's standard modifier marker),
+//      not "to choose". Deliberately narrower than "any noun immediately
+//      before" — confirmed that naive version breaks auswählen's OWN
+//      example sentence ("从面包店选择一个苹果", "select an apple FROM THE
+//      BAKERY"): 面包店 is a noun too, but it's the location the verb
+//      acts on, not part of a compound with 选择 — the 的-marker check is
+//      what tells these apart. Only narrows the pool when it actually
+//      would (a real mix of noun/non-noun candidates) — never overrides
+//      step 1, and always a no-op for English, which has no 的 concept
+//      and never passes this signal.
+//   3. Otherwise prefer a content word (noun/verb/adjective/adverb) over
 //      a function word (preposition/conjunction) — confirmed real:
 //      "ab" ("from/off") lists "离开" as one loose secondary sense, which
 //      used to win over the actual verb "verlassen" just by being earlier
 //      in the corpus file.
-//   3. Among remaining candidates, prefer whichever one this is the
+//   4. Among remaining candidates, prefer whichever one this is the
 //      PRIMARY (first-listed) sense for — confirmed real: "abfahren"
 //      ("to depart, leave") also lists "leave"/"离开" as a secondary
-//      sense, which — being a content word same as "verlassen" — step 2
+//      sense, which — being a content word same as "verlassen" — step 3
 //      alone couldn't separate from "verlassen" (whose entire, single
 //      sense IS "to leave"). A word's primary sense is a far more
 //      reliable click-hint than another word's incidental secondary one.
 // Falls back to the first candidate if none of these narrow it down.
 const FUNCTION_WORD_TYPES: WordType[] = ['preposition', 'conjunction'];
 
-function pickBestCandidate(candidates: GlossCandidate[], targetWord?: Word): Word {
+function pickBestCandidate(candidates: GlossCandidate[], targetWord?: Word, precededByNounSignal?: boolean): Word {
   if (candidates.length === 1) return candidates[0].word;
   if (targetWord) {
     const targetMatch = candidates.find(c => c.word.id === targetWord.id);
     if (targetMatch) return targetMatch.word;
   }
-  const contentWords = candidates.filter(c => !FUNCTION_WORD_TYPES.includes(c.word.type));
-  const pool = contentWords.length > 0 ? contentWords : candidates;
+  let pool = candidates;
+  if (precededByNounSignal) {
+    const nounCandidates = pool.filter(c => c.word.type === 'noun');
+    if (nounCandidates.length > 0 && nounCandidates.length < pool.length) pool = nounCandidates;
+  }
+  const contentWords = pool.filter(c => !FUNCTION_WORD_TYPES.includes(c.word.type));
+  pool = contentWords.length > 0 ? contentWords : pool;
   return (pool.find(c => c.primary) ?? pool[0]).word;
 }
 
@@ -4329,10 +4366,20 @@ export function findWordByEnglishForm(rawToken: string, targetWord?: Word): Word
   if (!candidates) {
     for (const suffix of ENGLISH_SUFFIXES) {
       if (!lower.endsWith(suffix) || lower.length - suffix.length < 2) continue;
-      const stem = suffix === 'ies' ? `${lower.slice(0, -suffix.length)}y` : lower.slice(0, -suffix.length);
+      const stem = (suffix === 'ies' || suffix === 'ied') ? `${lower.slice(0, -suffix.length)}y` : lower.slice(0, -suffix.length);
       let combined = map.get(stem) ?? [];
       if (combined.length === 0 && /([a-z])\1$/.test(stem)) {
         combined = map.get(stem.slice(0, -1)) ?? [];
+      }
+      // Silent-e verbs (like/liked, use/using, move/moved, raise/raising)
+      // drop the "e" before -ed/-ing in standard spelling, so the plain
+      // strip above leaves a broken stem ("liked" -> "lik", "using" ->
+      // "us") — confirmed real via an audit of common words ("liked",
+      // "used", "moved", "raised", "smiled", "danced" all failed to
+      // resolve before this). Retry with the "e" added back, only for
+      // exactly these two suffixes.
+      if (combined.length === 0 && (suffix === 'ed' || suffix === 'ing')) {
+        combined = map.get(`${stem}e`) ?? [];
       }
       if (combined.length > 0) { candidates = combined; break; }
     }
@@ -4387,6 +4434,20 @@ export interface ChineseClickSpan {
   word?: Word;
 }
 
+// Walks backward through already-resolved spans, skipping any run of
+// consecutive NOUNS, to check whether that whole run sits inside a
+// 的-marked modifier phrase ("X的[noun noun ...]") — see
+// pickBestCandidate's step 2 for why this specific shape (not just "is
+// the very last span a noun") is what's actually reliable here. Checks
+// endsWith('的') rather than requiring a bare "的" span, since a
+// modifier's own corpus gloss can fuse the 的 into one span (e.g.
+// "健康的" -> "fit", an adjective whose zh field is literally "健康的").
+function precededByNounPhraseMarker(spans: ChineseClickSpan[]): boolean {
+  let j = spans.length - 1;
+  while (j >= 0 && spans[j].word?.type === 'noun') j--;
+  return j >= 0 && spans[j].text.endsWith('的');
+}
+
 export function segmentChineseForClicks(text: string, targetWord?: Word): ChineseClickSpan[] {
   const map = getChineseTermMap();
   const chars = [...text];
@@ -4399,10 +4460,11 @@ export function segmentChineseForClicks(text: string, targetWord?: Word): Chines
     // thousands of common single hanzi otherwise colliding across
     // unrelated corpus entries, per-character matches produced far too
     // many misleading hints in practice to be worth keeping).
+    const precededByNounSignal = precededByNounPhraseMarker(spans);
     for (let len = Math.min(chineseMaxTermLength, chars.length - i); len >= 2; len--) {
       const candidate = chars.slice(i, i + len).join('');
       const candidates = map.get(candidate);
-      if (candidates) { matched = { len, word: pickBestCandidate(candidates, targetWord) }; break; }
+      if (candidates) { matched = { len, word: pickBestCandidate(candidates, targetWord, precededByNounSignal) }; break; }
     }
     if (matched) {
       spans.push({ text: chars.slice(i, i + matched.len).join(''), word: matched.word });

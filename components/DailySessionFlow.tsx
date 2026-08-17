@@ -334,6 +334,12 @@ function SentenceExercise({
         <>
           <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
             <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate this sentence into German!</div>
+            {/* No visual affordance otherwise marks which words are
+                clickable (hover alone isn't discoverable on a touch
+                screen, which this PWA mostly runs on) — a persistent,
+                short reminder rather than a one-time tip, since there's
+                nothing else teaching this. */}
+            <p className="text-[11px] text-indigo-400/80 mb-1">Tip: tap a word for a hint</p>
             <div className="text-stone-700 italic">
               {/* Tap a word for a hint — its German dictionary-form
                   translation, regardless of this word's own tense/case
