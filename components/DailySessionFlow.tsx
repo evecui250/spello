@@ -659,19 +659,18 @@ function SentenceExercise({
 // inflected substring the AI reported using, so the bolding lines up with
 // however the word actually appears in the sentence (which may differ from
 // its dictionary form, e.g. plural/case endings).
-function ReferenceSentence({ example, label = 'Example sentence' }: { example: { sentence: string; wordForm: string }; label?: string }) {
+function ReferenceSentence({ example, label = 'Example sentence' }: {
+  example: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string };
+  label?: string;
+}) {
   const parts = splitOnWordForm(example.sentence, example.wordForm);
-  if (!parts) {
-    return (
-      <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
-        <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1 flex items-center justify-center gap-1.5">
-          {label}
-          <TextSpeakerButton text={example.sentence} className="text-indigo-400 hover:text-indigo-600 transition-colors normal-case" />
-        </div>
-        <div className="text-stone-700 italic">{example.sentence}</div>
-      </div>
-    );
-  }
+  // englishPrompt/englishPromptZh is literally what this German sentence
+  // translates (see correctSentence's own contract) — the same meaning,
+  // just not re-fetched as a separate "translate this back" call. Shown
+  // beneath so copy-mode (no writing exercise, so this is the learner's
+  // only look at what the sentence actually means) isn't just an opaque
+  // German string to memorize.
+  const translation = getSettings().nativeLanguage === 'zh' ? example.englishPromptZh : example.englishPrompt;
   return (
     <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
       <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1 flex items-center justify-center gap-1.5">
@@ -679,12 +678,15 @@ function ReferenceSentence({ example, label = 'Example sentence' }: { example: {
         <TextSpeakerButton text={example.sentence} className="text-indigo-400 hover:text-indigo-600 transition-colors normal-case" />
       </div>
       <div className="text-stone-700 italic">
-        {parts.before}
-        <span className="font-bold text-indigo-700 not-italic">
-          {parts.match}
-        </span>
-        {parts.after}
+        {parts ? (
+          <>
+            {parts.before}
+            <span className="font-bold text-indigo-700 not-italic">{parts.match}</span>
+            {parts.after}
+          </>
+        ) : example.sentence}
       </div>
+      {translation && <div className="text-stone-400 text-xs mt-1">{translation}</div>}
     </div>
   );
 }

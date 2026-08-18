@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 // Three small, dependency-free chart primitives for /admin — hand-rolled
 // SVG rather than pulling in a charting library, since this is a single
 // owner-only page and the app currently has no chart dependency at all
@@ -26,6 +28,10 @@ export function DonutChart({ title, slices, emptyNote }: {
   slices: DonutSlice[];
   emptyNote?: string;
 }) {
+  // The legend used to hard-truncate at 8 with a plain "+N more" label
+  // that did nothing when tapped — the rest of the countries were simply
+  // unreachable. Now a real toggle.
+  const [expanded, setExpanded] = useState(false);
   const total = slices.reduce((s, x) => s + x.count, 0);
   const size = 120, r = 50, cx = size / 2, cy = size / 2, strokeWidth = 18;
   const circumference = 2 * Math.PI * r;
@@ -60,7 +66,7 @@ export function DonutChart({ title, slices, emptyNote }: {
             ))}
           </svg>
           <div className="flex flex-col gap-1 min-w-0 flex-1">
-            {arcs.slice(0, 8).map(a => (
+            {(expanded ? arcs : arcs.slice(0, 8)).map(a => (
               <div key={a.label} className="flex items-center gap-1.5 text-xs min-w-0">
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ background: a.color }} />
                 <span className="text-stone-600 truncate flex-1">{a.label}</span>
@@ -68,7 +74,13 @@ export function DonutChart({ title, slices, emptyNote }: {
               </div>
             ))}
             {arcs.length > 8 && (
-              <p className="text-stone-400 text-[11px]">+{arcs.length - 8} more</p>
+              <button
+                type="button"
+                onClick={() => setExpanded(e => !e)}
+                className="text-indigo-500 hover:text-indigo-700 text-[11px] font-medium text-left transition-colors"
+              >
+                {expanded ? 'Show less' : `+${arcs.length - 8} more`}
+              </button>
             )}
           </div>
         </div>
