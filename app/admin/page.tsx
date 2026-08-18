@@ -88,7 +88,17 @@ export default function AdminPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error || !data) { setStatus('unauthorized'); return; }
-      setStats(data);
+      // Defensive fallback for fields the currently-deployed Edge Function
+      // might not return yet (a frontend deploy can land before the
+      // matching function redeploy finishes) — without this, an older
+      // response missing geoBreakdown/debugErrors would crash the whole
+      // page on stats.geoBreakdown.byUser.map(...) rather than just
+      // rendering those sections empty.
+      setStats({
+        ...data,
+        debugErrors: data.debugErrors ?? [],
+        geoBreakdown: data.geoBreakdown ?? { byIp: [], byUser: [] },
+      });
       setStatus('ready');
     })();
   }, []);
