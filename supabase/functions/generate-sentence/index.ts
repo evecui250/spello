@@ -131,7 +131,13 @@ Deno.serve(async (req: Request) => {
                 ? 'Additionally, include a "sentenceZh" field: a natural, fluent Simplified ' +
                   'Chinese translation of that exact English sentence (meaning-for-meaning, ' +
                   'not word-for-word) — this is shown to a Chinese-speaking learner instead of ' +
-                  'the English, so it must convey the same thing the English sentence does. '
+                  'the English, so it must convey the same thing the English sentence does. ' +
+                  "Chinese verbs don't inflect for tense the way English does, so keep the " +
+                  'tense unambiguous: if the English sentence is PAST tense, include a clear ' +
+                  'signal (the completed-action particle 了 on the main verb, or an explicit ' +
+                  'time word like 之前/曾经/上个星期) rather than a bare verb a reader could ' +
+                  'just as easily take as present tense; if the English is PRESENT tense, keep ' +
+                  "the Chinese reading as present/habitual (don't add 了). "
                 : '') +
               'Respond with exactly this JSON: ' +
               (wantsZh ? '{"sentence": "...", "sentenceZh": "..."}.' : '{"sentence": "..."}.'),

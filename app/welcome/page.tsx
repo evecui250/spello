@@ -11,11 +11,16 @@ import DachshundMascot from '../../components/Mascot';
 const STEPS = ['level', 'pace', 'mascots'] as const;
 type Step = typeof STEPS[number];
 
-const MASCOT_INTRO: { id: MascotStageId; name: string; reviews: string }[] = [
-  { id: 'puppy', name: 'Puppy', reviews: 'Day 1 — translate a sentence, then spell it with half the letters hinted' },
-  { id: 'short', name: 'Young Dachshund', reviews: '1st review, 1 day later — half the letters hinted again' },
-  { id: 'medium', name: 'Adult Dachshund', reviews: '2nd review, 3 days after that — just the first letter' },
-  { id: 'long-crowned', name: 'Master Dachshund', reviews: '3rd review, 5 days after that — no hints. Fully mastered!' },
+// day is the cumulative day-count from introduction (see lib/srs.ts's
+// OFFSET_AFTER_STAGE — the 1/3/5-day gaps between successive reviews,
+// added up: 1, then +1=2, then +3=5, then +5=10) — the "Day N" title is
+// what actually answers "when do I see this word again", which is more
+// useful up front than the mascot's own name.
+const MASCOT_INTRO: { id: MascotStageId; day: number; desc: string }[] = [
+  { id: 'puppy', day: 1, desc: 'New word: introduced' },
+  { id: 'short', day: 2, desc: 'First review: familiar' },
+  { id: 'medium', day: 5, desc: 'Second review: strong' },
+  { id: 'long-crowned', day: 10, desc: 'Third review: mastered!' },
 ];
 
 function StepDots({ step }: { step: Step }) {
@@ -226,8 +231,8 @@ export default function WelcomePage() {
                 <div key={m.id} className="flex items-center gap-3">
                   <DachshundMascot stage={m.id} className="w-14 h-14 shrink-0" />
                   <div>
-                    <div className="font-semibold text-stone-800">{m.name}</div>
-                    <div className="text-stone-500 text-sm">{m.reviews}</div>
+                    <div className="font-semibold text-stone-800">Day {m.day}</div>
+                    <div className="text-stone-500 text-sm">{m.desc}</div>
                   </div>
                 </div>
               ))}

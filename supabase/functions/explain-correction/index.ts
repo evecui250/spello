@@ -108,7 +108,14 @@ Deno.serve(async (req: Request) => {
               '"reisen" [to travel] instead of "Reisende" [traveler]). Do NOT mention spelling ' +
               'typos or simply say a word "was wrong" — every point must explain the actual ' +
               'grammar rule behind the fix, briefly, so it is something the learner can apply ' +
-              'next time. Skip anything you are not confident is actually correct — accuracy ' +
+              'next time. Lead with the concrete fact itself, not a restated category label — ' +
+              'say directly what the gender/case/tense/form actually IS and why, rather than a ' +
+              'generic preface like "the noun\'s gender and case need to match" before finally ' +
+              'giving the specific answer. For example, in Chinese, prefer a compact phrasing ' +
+              'like \'"Sozialarbeiter" 是阳性，所以是der而不是die\' over a longer \'名词的性别和格' +
+              '需要正确匹配，例如"der Sozialarbeiter"而不是"die Sozialarbeiter"\' — same ' +
+              'information, without the throat-clearing. Skip anything you are not confident is ' +
+              'actually correct — accuracy ' +
               'matters more than covering exactly 3 points; 1 or 2 solid points beats 3 shaky ' +
               'ones. If the attempt was blank, too garbled, or simply used different (not ' +
               'wrong) vocabulary with no real grammar issue to point out, return a single point ' +

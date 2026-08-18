@@ -77,7 +77,12 @@ SYSTEM_PROMPT = (
     "case the English gloss is ambiguous on its own.\n"
     '- "promptZh": ONLY if a "prompt" field was given — a natural, fluent Simplified '
     "Chinese translation of that exact English sentence (meaning-for-meaning, not "
-    "word-for-word).\n"
+    "word-for-word). Chinese verbs don't inflect for tense the way English does, so "
+    "make sure the tense stays unambiguous in translation: if the English sentence is "
+    "PAST tense, include a clear signal — the completed-action particle 了 on the main "
+    "verb, or an explicit time word (之前/曾经/上个星期/去年/etc.) — rather than a bare "
+    "verb a reader could just as easily take as present tense; if the English is "
+    "PRESENT tense, keep the Chinese reading as present/habitual (don't add 了).\n"
     'Respond with exactly this JSON: {"results": [{"id": "...", "zh": "...", '
     '"promptZh": "..." (omit this key entirely if no prompt was given)}, ...]}, one '
     "result per input entry, same order, every id accounted for."
