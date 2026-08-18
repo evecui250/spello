@@ -26,6 +26,51 @@ export function wordsById(ids: string[]): Word[] {
 const SHORT_WORD_GRACE_COUNT = 100;
 const SHORT_WORD_MAX_LENGTH = 6;
 
+// A handful of small, closed vocabularies where a beginner benefits from
+// meeting them in their real-world order rather than randomly shuffled —
+// confirmed real: "dreizehn" (thirteen) could be served before "eins"
+// (one) purely by shuffle luck, since nothing previously distinguished a
+// sequence word from any other fresh word. Each inner array's own order
+// IS the natural order; a word's German form just needs to appear in it
+// somewhere. Deliberately NOT relying on corpus array order (unlike
+// numbers, which happen to already be listed eins->zehn->...->vierzehn in
+// lib/words.ts, weekdays and months are NOT stored in calendar order
+// there) — matching by the actual German text is correct regardless of
+// how the corpus happens to be authored.
+const NATURAL_SEQUENCES: string[][] = [
+  [
+    'eins', 'zwei', 'drei', 'vier', 'fünf', 'sechs', 'sieben', 'acht', 'neun', 'zehn',
+    'elf', 'zwölf', 'dreizehn', 'vierzehn', 'fünfzehn', 'sechzehn', 'siebzehn', 'achtzehn',
+    'neunzehn', 'zwanzig', 'einundzwanzig', 'dreißig', 'vierzig', 'fünfzig', 'sechzig',
+    'siebzig', 'achtzig', 'neunzig', 'hundert', 'tausend', 'Million', 'Milliarde',
+  ],
+  ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'],
+  ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'],
+];
+
+// Shuffles as usual, then — for each sequence above — finds whichever
+// array POSITIONS happen to land a matching word after the shuffle, and
+// re-fills just those same positions with that sequence's members in
+// their real order. This keeps the overall pacing/randomness of everything
+// else untouched (sequence membership doesn't change WHEN a learner starts
+// seeing numbers/weekdays/months, only what order they see them in once
+// they do) — a full re-sort or clustering them at the front would be a
+// bigger, more disruptive change than this narrow fix calls for.
+function withNaturalSequenceOrder(words: Word[]): Word[] {
+  const result = shuffled(words);
+  for (const seq of NATURAL_SEQUENCES) {
+    const positions: number[] = [];
+    const matches: Word[] = [];
+    result.forEach((w, i) => {
+      if (seq.includes(w.de)) { positions.push(i); matches.push(w); }
+    });
+    if (matches.length < 2) continue;
+    const sorted = [...matches].sort((a, b) => seq.indexOf(a.de) - seq.indexOf(b.de));
+    positions.forEach((pos, idx) => { result[pos] = sorted[idx]; });
+  }
+  return result;
+}
+
 // Study pool: brand-new words, plus words that have started introduction
 // (round 1/2) but haven't finished it yet — i.e. no mascotStage assigned.
 // Once a word passes round 2 for the first time (mascotStage set), it's
@@ -55,16 +100,36 @@ export function buildStudyWords(
     // they use the old copy-the-word round 1 (see isBootstrapCopyWord)
     // rather than the AI translation exercise, so a true beginner learns
     // this core vocabulary before being asked to translate sentences.
-    const freshHighFreq = shuffled(fresh.filter(w => w.highFrequency));
-    const freshOther = shuffled(fresh.filter(w => !w.highFrequency));
+    //
+    // Both the short-word-first grace period AND natural-sequence
+    // ordering apply to EACH pool independently (previously only
+    // freshOther got either treatment at all — confirmed real: "dreizehn"
+    // is itself high-frequency, so it could be served as literally a
+    // learner's first-ever word, 8 letters and out of counting order,
+    // with nothing in the high-frequency pool's pure shuffle to prevent
+    // it).
     const introducedCount = wordsForLevel('A1').filter(w => allProgress[w.id]).length;
-    let otherOrdered = freshOther;
-    if (introducedCount < SHORT_WORD_GRACE_COUNT) {
-      const short = freshOther.filter(w => [...w.de].length <= SHORT_WORD_MAX_LENGTH);
-      const long = freshOther.filter(w => [...w.de].length > SHORT_WORD_MAX_LENGTH);
-      otherOrdered = [...short, ...long];
-    }
-    freshOrdered = [...freshHighFreq, ...otherOrdered];
+    const inNaturalSequence = (w: Word) => NATURAL_SEQUENCES.some(seq => seq.includes(w.de));
+    const orderPool = (pool: Word[]): Word[] => {
+      const ordered = withNaturalSequenceOrder(pool);
+      if (introducedCount >= SHORT_WORD_GRACE_COUNT) return ordered;
+      // Sequence members are exempt from the length split entirely, rather
+      // than just sorted within whichever half they land in — confirmed
+      // real: splitting still put months out of calendar order (Februar
+      // alone is 7 characters, so März..August — all ≤6 — landed BEFORE
+      // it even though sequence-ordering had already sorted Februar
+      // correctly relative to the rest). Staying in recognizable order
+      // matters more for a small curated set like this than strict
+      // shortness, so the whole sequence rides with the short words
+      // regardless of a member's actual length.
+      const short = ordered.filter(w => inNaturalSequence(w) || [...w.de].length <= SHORT_WORD_MAX_LENGTH);
+      const long = ordered.filter(w => !inNaturalSequence(w) && [...w.de].length > SHORT_WORD_MAX_LENGTH);
+      return [...short, ...long];
+    };
+    freshOrdered = [
+      ...orderPool(fresh.filter(w => w.highFrequency)),
+      ...orderPool(fresh.filter(w => !w.highFrequency)),
+    ];
   } else {
     freshOrdered = shuffled(fresh);
   }

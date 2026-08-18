@@ -100,6 +100,24 @@ function WordThumbnail({ word }: { word: Word }) {
   );
 }
 
+// Applies a starting filter value from the URL's own query string (e.g. a
+// link from Progress: /words/?level=A1&familiarity=learning&date=all) —
+// plain window.location rather than Next's useSearchParams, specifically
+// to avoid the Suspense-boundary requirement that hook needs under
+// `output: 'export'`. Called from a useEffect below rather than a lazy
+// useState initializer — confirmed real: reaching this page via a
+// same-origin <Link> (as opposed to a full page load/typed URL) could
+// leave a param like `familiarity` not applied even though `level` and
+// `date` were, which points at Next's client-side navigation/prefetch not
+// guaranteeing window.location is what a mount-time initializer sees;
+// reading it in an effect (which only ever runs after the browser's own
+// URL is definitely settled) sidesteps that entirely. No-op if the param
+// is absent or doesn't match one of the real option values.
+function applyParam<T extends string>(key: string, valid: readonly T[], setter: (v: T) => void): void {
+  const v = new URLSearchParams(window.location.search).get(key);
+  if (v !== null && (valid as readonly string[]).includes(v)) setter(v as T);
+}
+
 export default function WordsPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress>>({});
   const [search, setSearch] = useState('');
@@ -118,6 +136,12 @@ export default function WordsPage() {
   // uses, so the two always agree with each other.
   const [filterLevel, setFilterLevel] = useState<BookFilter>(() => getSettings().level);
   const nativeLanguage = getSettings().nativeLanguage;
+
+  useEffect(() => {
+    applyParam('familiarity', ['all', 'new', 'learning', 'mastered'], setFilterFamiliarity);
+    applyParam('date', ['all', '7days', '30days'], setDateFilter);
+    applyParam('level', ['all', ...BOOK_LEVELS], setFilterLevel);
+  }, []);
 
   const words = useMemo(() => {
     const pool = filterLevel === 'all'
@@ -212,11 +236,19 @@ export default function WordsPage() {
         className="bg-amber-50/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-4 py-2 text-stone-800 placeholder:text-stone-500 focus:outline-none focus:border-amber-300"
       />
 
-      <div className="flex gap-2 flex-wrap">
+      {/* A fixed 3-column grid (not flex-wrap) — each select always takes
+          exactly a third of the row and shrinks to fit, rather than
+          wrapping individually once their combined intrinsic width (which
+          depends on the currently-selected option's text, so it shifts as
+          you change them) happens to exceed the row on a given screen —
+          confirmed real: fine on some phones, "All days" wrapped to its
+          own row on others. min-w-0 lets a grid item actually shrink below
+          its content's natural width instead of overflowing the cell. */}
+      <div className="grid grid-cols-3 gap-1.5">
         <select
           value={filterLevel}
           onChange={e => setFilterLevel(e.target.value as BookFilter)}
-          className="bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-3 py-1.5 text-sm text-stone-800 focus:outline-none focus:border-amber-300"
+          className="min-w-0 bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-stone-800 focus:outline-none focus:border-amber-300"
         >
           <option value="all">All books</option>
           {BOOK_LEVELS.map(lvl => <option key={lvl} value={lvl}>{lvl}</option>)}
@@ -225,7 +257,7 @@ export default function WordsPage() {
         <select
           value={filterFamiliarity}
           onChange={e => setFilterFamiliarity(e.target.value as Familiarity)}
-          className="bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-3 py-1.5 text-sm text-stone-800 focus:outline-none focus:border-amber-300"
+          className="min-w-0 bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-stone-800 focus:outline-none focus:border-amber-300"
         >
           <option value="all">All words</option>
           <option value="new">New</option>
@@ -236,7 +268,7 @@ export default function WordsPage() {
         <select
           value={dateFilter}
           onChange={e => setDateFilter(e.target.value as DateFilter)}
-          className="bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-3 py-1.5 text-sm text-stone-800 focus:outline-none focus:border-amber-300"
+          className="min-w-0 bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-stone-800 focus:outline-none focus:border-amber-300"
         >
           <option value="all">All days</option>
           <option value="7days">Past 7 days</option>

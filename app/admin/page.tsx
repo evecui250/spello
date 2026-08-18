@@ -29,6 +29,8 @@ interface AdminStats {
   totals: {
     totalAccounts: number;
     accountsStartedLearning: number;
+    totalDistinctIps: number;
+    activeIps7d: number;
   };
   today: {
     newSignups: number;
@@ -116,6 +118,8 @@ export default function AdminPage() {
       <div className="grid grid-cols-2 gap-3">
         <StatCard label="Total accounts" value={stats.totals.totalAccounts} />
         <StatCard label="Accounts that started learning" value={stats.totals.accountsStartedLearning} />
+        <StatCard label="Total distinct IPs (all-time)" value={stats.totals.totalDistinctIps} />
+        <StatCard label="Active IPs, past 7 days" value={stats.totals.activeIps7d} />
       </div>
 
       {/* Today */}

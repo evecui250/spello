@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import { WORDS, wordsForLevel, Level, LEVEL_ORDER } from '../../lib/words';
 import {
@@ -196,6 +197,20 @@ export default function ProgressPage() {
           })}
         </div>
       </div>
+
+      {/* Straight to the Word List, pre-filtered to exactly what someone
+          looking at this card would want next: this book, words actually
+          introduced so far, no date restriction — so they can see the
+          actual words behind these counts instead of just the totals.
+          'B2_old' links out as plain 'B2' — that suffix is internal only,
+          and B2_old isn't a selectable book on the Word List's own filter
+          (see BOOK_LEVELS there). */}
+      <Link
+        href={`/words/?level=${level === 'B2_old' ? 'B2' : level}&familiarity=learning&date=all`}
+        className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm py-3 px-4 text-indigo-700 font-semibold hover:bg-amber-50 active:scale-[0.99] transition-all"
+      >
+        View word list →
+      </Link>
 
       {openStage && createPortal(
         <div

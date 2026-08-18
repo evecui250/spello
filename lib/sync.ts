@@ -193,7 +193,19 @@ async function pushToRemote(userId: string): Promise<void> {
     settings[level] = getSettingsForLevel(level);
   }
   const streak = getStreak();
+  const activeLevel = getActiveLevel();
+  const activeSettings = settings[activeLevel];
+  const allValues = Object.values(progress).flatMap(p => Object.values(p));
 
+  // `level` lives in corePayload itself (not just the flat-summary spread
+  // below) specifically so the fallback retry still writes it — confirmed
+  // real: a handful of accounts showed up as "unknown" level in /admin
+  // because a failed first attempt fell back to corePayload alone, which
+  // never included it, silently leaving the column null on that account's
+  // very first (INSERT, not UPDATE) row. streak_count/learning_count/
+  // mastered_count/language stay first-attempt-only below — level is a
+  // plain, always-valid string with none of the "column might not exist
+  // yet" risk those were originally guarding against.
   const corePayload = {
     user_id: userId,
     progress,
@@ -201,11 +213,8 @@ async function pushToRemote(userId: string): Promise<void> {
     settings,
     goal_days: getGoalDaysRecordForSync(),
     updated_at: new Date().toISOString(),
+    level: activeLevel,
   };
-
-  const activeLevel = getActiveLevel();
-  const activeSettings = settings[activeLevel];
-  const allValues = Object.values(progress).flatMap(p => Object.values(p));
 
   // Explicit onConflict: without it, upsert falls back to the table's
   // primary key for conflict detection — if that's ever a separate id
@@ -219,7 +228,6 @@ async function pushToRemote(userId: string): Promise<void> {
     learning_count: allValues.filter(p => !p.fullyMastered && p.studiedTimes >= 1).length,
     mastered_count: allValues.filter(p => p.fullyMastered).length,
     language: activeSettings?.language,
-    level: activeLevel,
   }, { onConflict: 'user_id' });
 
   if (error) {

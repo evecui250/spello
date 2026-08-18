@@ -194,6 +194,21 @@ Deno.serve(async (req: Request) => {
     const allPingRows = (allPingsIdsOnly ?? []) as { device_id: string; ip_address: string | null; created_at: string }[];
     const deviceFirstSeen = firstSeenMap(allPingRows, r => r.device_id);
     const ipFirstSeen = firstSeenMap(allPingRows, r => r.ip_address);
+
+    // "How many people have actually used it, roughly" — a distinct IP is
+    // a coarser, imperfect proxy for a person (shared wifi/NAT undercounts,
+    // a mobile network changing IPs overcounts), but it's the only signal
+    // available for someone who never signs in and isn't device_id (which
+    // undercounts differently — same device, storage cleared, counts as a
+    // new device but the same IP). "Active in the past 7 days" reuses the
+    // exact same unbounded ping data already fetched above, no new query.
+    const sevenDaysAgoTime = Date.now() - 7 * DAY_MS;
+    const totalDistinctIps = new Set(allPingRows.map(r => r.ip_address).filter((ip): ip is string => !!ip)).size;
+    const activeIps7d = new Set(
+      allPingRows
+        .filter(r => r.ip_address && new Date(r.created_at).getTime() >= sevenDaysAgoTime)
+        .map(r => r.ip_address as string),
+    ).size;
     const todayStart = new Date(`${todayStr}T00:00:00.000Z`).getTime();
     const newDevicesToday = [...deviceFirstSeen.values()].filter(t => t >= todayStart).length;
     const newIpsToday = [...ipFirstSeen.entries()].filter(([, t]) => t >= todayStart).map(([ip]) => ip);
@@ -294,6 +309,8 @@ Deno.serve(async (req: Request) => {
       totals: {
         totalAccounts,
         accountsStartedLearning: accountsStartedLearning ?? 0,
+        totalDistinctIps,
+        activeIps7d,
       },
       today: {
         newSignups: newSignupsToday,
