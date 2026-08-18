@@ -12,14 +12,16 @@ interface Props {
 
 export default function Logo({ size = 32, variant = 'icon', className }: Props) {
   if (variant === 'full') {
-    // logo.png (v3) is the background-removed artwork only — it no longer
-    // bakes in the "spello" wordmark, so it's added here as real text
+    // logo.webp (v3, recompressed from the original PNG at the resolution
+    // this is actually ever displayed at) is the background-removed
+    // artwork only — it no longer bakes in the "spello" wordmark, so it's
+    // added here as real text
     // (in the same warm amber the rest of the UI uses on this dark green
     // background) instead of being part of the image.
     return (
       <div className={`flex flex-col items-center ${className ?? ''}`}>
         <Image
-          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/logo.png`}
+          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/logo.webp`}
           alt=""
           width={size}
           height={Math.round(size * 1.14)}
@@ -42,12 +44,12 @@ export default function Logo({ size = 32, variant = 'icon', className }: Props) 
       className={`relative inline-block overflow-hidden rounded-full shrink-0 ${className ?? ''}`}
       style={{ width: size, height: size }}
     >
-      {/* A dedicated square crop (public/logo_icon.png) — framed by hand
+      {/* A dedicated square crop (public/logo_icon.webp) — framed by hand
           around the mascot so ears, paws, and pencil all stay fully in
           frame, instead of a runtime object-fit crop that cut off the
           bottom of the artwork. */}
       <Image
-        src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/logo_icon.png`}
+        src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/logo_icon.webp`}
         alt="Spello"
         fill
         sizes={`${size}px`}

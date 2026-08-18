@@ -119,11 +119,14 @@ function WordThumbnail({ word }: { word: Word }) {
 // `date` were, which points at Next's client-side navigation/prefetch not
 // guaranteeing window.location is what a mount-time initializer sees;
 // reading it in an effect (which only ever runs after the browser's own
-// URL is definitely settled) sidesteps that entirely. No-op if the param
-// is absent or doesn't match one of the real option values.
-function applyParam<T extends string>(key: string, valid: readonly T[], setter: (v: T) => void): void {
+// URL is definitely settled) sidesteps that entirely. No-op (returns
+// false) if the param is absent or doesn't match one of the real option
+// values — the return lets a caller fall back to some other real-settings
+// read of its own only when the URL didn't actually specify anything.
+function applyParam<T extends string>(key: string, valid: readonly T[], setter: (v: T) => void): boolean {
   const v = new URLSearchParams(window.location.search).get(key);
-  if (v !== null && (valid as readonly string[]).includes(v)) setter(v as T);
+  if (v !== null && (valid as readonly string[]).includes(v)) { setter(v as T); return true; }
+  return false;
 }
 
 export default function WordsPage() {
@@ -142,13 +145,25 @@ export default function WordsPage() {
   // browsing A1 while B2 is active showed every A1 word as "New" even
   // with real history). Same helper Progress page's own "All books" view
   // uses, so the two always agree with each other.
-  const [filterLevel, setFilterLevel] = useState<BookFilter>(() => getSettings().level);
-  const nativeLanguage = getSettings().nativeLanguage;
+  //
+  // Both filterLevel and nativeLanguage start at DEFAULT_SETTINGS' own
+  // values (not a lazy getSettings() read) and get corrected in the
+  // effect below instead — confirmed real: reading real localStorage
+  // directly in a useState initializer or the render body renders
+  // DIFFERENT word-list text on this static-export page's build-time
+  // prerender (no window, so DEFAULT_SETTINGS) than on the client's first
+  // real render (real localStorage) whenever a learner's actual settings
+  // differ from the defaults, which is exactly what a React hydration-
+  // mismatch error is — the effect's update happens safely AFTER
+  // hydration instead.
+  const [filterLevel, setFilterLevel] = useState<BookFilter>('A1');
+  const [nativeLanguage, setNativeLanguage] = useState<'en' | 'zh'>('en');
 
   useEffect(() => {
+    setNativeLanguage(getSettings().nativeLanguage);
+    if (!applyParam('level', ['all', ...BOOK_LEVELS], setFilterLevel)) setFilterLevel(getSettings().level);
     applyParam('familiarity', ['all', 'new', 'learning', 'mastered'], setFilterFamiliarity);
     applyParam('date', ['all', '7days', '30days'], setDateFilter);
-    applyParam('level', ['all', ...BOOK_LEVELS], setFilterLevel);
   }, []);
 
   const words = useMemo(() => {
