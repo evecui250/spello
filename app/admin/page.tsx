@@ -40,12 +40,17 @@ interface AdminStats {
     newIpsSignedIn: number;
     wordsStudied: number;
     aiUsage: { signedIn: AiUsageSummary; anonymous: AiUsageSummary };
+    // How many times the "Why?" grammar-explanation button was tapped
+    // today — tracked separately from the correction calls above so we
+    // can see whether the button is actually getting used.
+    explanationClicks: number;
   };
   trends: {
     signups: { date: string; count: number }[];
     devices: { date: string; signedIn: number; anonymous: number }[];
     aiUsage: { date: string; signedInCalls: number; anonymousCalls: number; costUsd: number }[];
     wordsStudied: { date: string; total: number }[];
+    explanationClicks: { date: string; count: number }[];
   };
   levelBreakdown: { level: string; signedIn: number; anonymous: number }[];
   geoBreakdown: {
@@ -98,6 +103,8 @@ export default function AdminPage() {
         ...data,
         debugErrors: data.debugErrors ?? [],
         geoBreakdown: data.geoBreakdown ?? { byIp: [], byUser: [] },
+        today: { ...data.today, explanationClicks: data.today?.explanationClicks ?? 0 },
+        trends: { ...data.trends, explanationClicks: data.trends?.explanationClicks ?? [] },
       });
       setStatus('ready');
     })();
@@ -160,6 +167,7 @@ export default function AdminPage() {
           <StatCard label="New devices — anonymous" value={stats.today.newDevicesAnonymous} />
           <StatCard label="New IPs" value={stats.today.newIpsTotal} />
           <StatCard label="...of which signed in" value={stats.today.newIpsSignedIn} />
+          <StatCard label="'Why?' button clicks" value={stats.today.explanationClicks} />
         </div>
         <div className="flex flex-col gap-2">
           <AiUsageRow label="AI calls — signed in" summary={stats.today.aiUsage.signedIn} />

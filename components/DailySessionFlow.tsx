@@ -31,7 +31,7 @@ import { speakWord, speakText, stopSpeech } from '../lib/speech';
 import { imageUrlForWord } from '../lib/wordImage';
 import { WORDS_WITH_IMAGES } from '../lib/wordImageManifest';
 import { scheduleSync } from '../lib/sync';
-import { correctSentence, generateSentence, DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
+import { correctSentence, generateSentence, explainCorrection, DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
 import { supabase } from '../lib/supabase';
 
 // Locates wordForm inside sentence (case-insensitive) so callers can bold
@@ -262,10 +262,16 @@ function RoundWordImage({ word }: { word: Word }) {
 }
 
 function SentenceExercise({
-  word, level, correction, onCorrected, onNext, onUnreachable,
+  word, level, correction, onCorrected, onNext, onUnreachable, input, onInputChange,
 }: {
   word: Word;
   level: Level;
+  // Also owned by the parent, same as `correction` below (see its own
+  // comment) — specifically so the learner's in-progress typed attempt
+  // survives the sentence-writing-mode toggle, which unmounts this whole
+  // component (see the parent's sentenceInput state for the full reasoning).
+  input: string;
+  onInputChange: (value: string) => void;
   // Owned by the parent (persists across this same render — see the
   // round-1 branch below, which no longer swaps to a separate result view
   // on correction, so the learner's own typed attempt stays visible
@@ -302,8 +308,13 @@ function SentenceExercise({
   const [promptSentenceZh, setPromptSentenceZh] = useState<string | null>(word.exercisePromptZh ?? null);
   const [promptStatus, setPromptStatus] = useState<'loading' | 'ready' | 'error' | 'limit-reached' | 'unreachable'>(word.exercisePrompt ? 'ready' : 'loading');
   const [promptRetry, setPromptRetry] = useState(0);
-  const [input, setInput] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached' | 'unreachable'>('idle');
+  // The "Why?" button's own state — entirely separate from `status`
+  // above (the main check), since asking for an explanation is optional
+  // and happens after a correction already landed, never blocking or
+  // replacing it.
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [explanationStatus, setExplanationStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached'>('idle');
   // Which word in the corrected sentence the learner tapped (see the
   // clickable-word rendering below and WordInfoPanel) — cleared implicitly
   // on remount (this whole component is keyed by word.id) rather than
@@ -372,6 +383,23 @@ function SentenceExercise({
   // correct-sentence) — comparing what came back against what they
   // actually wrote is what tells us that.
   const correctionDiff = correction ? diffAgainstAttempt(input, correction.sentence) : null;
+
+  // Not folded into onUnreachable/the parent's session-wide AI-unreachable
+  // handling — this is a small optional extra on top of a correction that
+  // already succeeded, so losing just this call shouldn't turn off
+  // sentence-writing mode for the rest of the session the way losing an
+  // actual correction does. A plain inline error is enough here.
+  async function handleExplain() {
+    if (!correction) return;
+    setExplanationStatus('loading');
+    try {
+      const result = await explainCorrection(word.id, word.de, level, input, correction.sentence);
+      setExplanation(result);
+      setExplanationStatus('idle');
+    } catch (e) {
+      setExplanationStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
+    }
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -457,7 +485,7 @@ function SentenceExercise({
           <textarea
             ref={textareaRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={e => onInputChange(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -511,7 +539,11 @@ function SentenceExercise({
                     const match = isWordToken(text)
                       ? resolveClickedWord(text, correction.lemmas, word.de)
                       : undefined;
-                    const underline = changed ? ' underline decoration-amber-500 decoration-2 underline-offset-2' : '';
+                    // Purple reads as a calm "this changed" flag against the
+                    // green correction box — amber (and red, tried earlier)
+                    // both looked alarming/urgent here, which isn't the tone
+                    // a correction should have.
+                    const underline = changed ? ' underline decoration-violet-500 decoration-2 underline-offset-2' : '';
                     return match ? (
                       <button
                         key={i}
@@ -525,6 +557,31 @@ function SentenceExercise({
                   })}
                 </div>
               </div>
+              {/* Nothing to explain when there was no correction needed —
+                  only offered when the diff above actually found something
+                  to underline. */}
+              {!correctionDiff.perfect && (
+                <div className="flex flex-col gap-1.5 -mt-2">
+                  {explanation ? (
+                    <div className="bg-indigo-50 rounded-lg px-3 py-2 text-sm text-indigo-800">{explanation}</div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleExplain}
+                      disabled={explanationStatus === 'loading'}
+                      className="self-start text-indigo-500 text-sm font-medium hover:text-indigo-700 transition-colors disabled:opacity-50"
+                    >
+                      {explanationStatus === 'loading' ? 'Thinking…' : 'Why?'}
+                    </button>
+                  )}
+                  {explanationStatus === 'error' && (
+                    <p className="text-red-500 text-xs">Couldn't load an explanation — try again.</p>
+                  )}
+                  {explanationStatus === 'limit-reached' && (
+                    <p className="text-amber-600 text-xs">Used up today's practice limit — come back tomorrow.</p>
+                  )}
+                </div>
+              )}
               {selectedWord && <WordInfoPanel key={selectedWord.id} word={selectedWord} />}
               <button
                 onClick={onNext}
@@ -627,6 +684,14 @@ export default function DailySessionFlow() {
   // sentence exercise (shown in place of the generic "✓ Correct!" banner).
   const [exampleSentence, setExampleSentence] = useState<{ sentence: string; wordForm: string } | null>(null);
   const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; lemmas?: Record<string, string> } | null>(null);
+  // The learner's in-progress typed attempt, lifted up here (rather than
+  // living only as SentenceExercise's own local state) specifically so it
+  // survives the sentence-writing-mode toggle: that switch changes which
+  // branch renders below, unmounting SentenceExercise entirely, and a
+  // component's local state doesn't survive its own unmount. Reset to ''
+  // whenever the word changes (see the effect below) so it doesn't leak
+  // into the next word's exercise.
+  const [sentenceInput, setSentenceInput] = useState('');
   // Sentence-writing-mode OFF (Settings): a correct example sentence
   // fetched directly, with no user attempt involved, shown as reference
   // alongside the copy-the-word tiles below instead of SentenceExercise's
@@ -828,6 +893,7 @@ export default function DailySessionFlow() {
     setAttemptKey(k => k + 1);
     setExampleSentence(progress.exampleSentence ?? null);
     setSentenceResult(null);
+    setSentenceInput('');
     setDirectSentence(null);
     setDirectSentenceStatus('idle');
     setWordStatus(mode === 'review' ? 'Review' : (progress.lastPracticed && progress.lastPracticed !== today() ? 'Continuing' : 'New'));
@@ -1512,11 +1578,14 @@ export default function DailySessionFlow() {
   // Back button: a pure "peek backward" log, never re-editable/re-scored —
   // see CardSnapshot. Viewing history swaps out the whole live card for a
   // read-only one; the one edge case that loses anything is an UNSUBMITTED
-  // in-progress translation (SentenceExercise's own input is local state,
-  // reset on remount) — accepted as a rare, low-stakes tradeoff rather than
-  // keeping every round type's UI permanently mounted-but-hidden just for
-  // this. Every other round type's state (values/hint/articleValues) lives
-  // in this component already, so it's untouched either way.
+  // in-progress translation, since the read-only history view doesn't
+  // render SentenceExercise at all while it's showing — accepted as a
+  // rare, low-stakes tradeoff rather than keeping every round type's UI
+  // permanently mounted-but-hidden just for this (the attempt itself does
+  // survive a plain sentence-writing-mode toggle now, via sentenceInput
+  // above, just not this specific history view). Every other round type's
+  // state (values/hint/articleValues) lives in this component already, so
+  // it's untouched either way.
   // submitResult pushes the live card's own snapshot into cardHistory the
   // moment it's answered (feedback !== null) — so once that's happened,
   // cardHistory's last entry is just a duplicate of what's already on
@@ -1707,6 +1776,8 @@ export default function DailySessionFlow() {
             word={word}
             level={settings.level}
             correction={sentenceResult}
+            input={sentenceInput}
+            onInputChange={setSentenceInput}
             onCorrected={(correction, userInput) => {
               setSentenceResult(correction);
               submitResult(true, { exampleSentence: correction }, { ...correction, userInput });

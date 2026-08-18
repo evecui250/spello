@@ -127,3 +127,25 @@ export async function correctSentence(
   const lemmas = data?.lemmas && typeof data.lemmas === 'object' ? data.lemmas : {};
   return { sentence: data.sentence, wordForm: data.wordForm, lemmas };
 }
+
+// The "Why?" button — a short, on-demand explanation of a single
+// correction, only ever called if the learner taps for it (never part of
+// the main check flow, so it never adds latency there). Shares
+// correct-sentence's daily cap (see explain-correction's own comment) and
+// throws the same way, so callers can reuse the exact same error handling
+// (AIUnreachableError/DailyLimitReachedError) already built for corrections.
+export async function explainCorrection(
+  wordId: string,
+  wordDe: string,
+  level: string,
+  originalAttempt: string,
+  correctedSentence: string,
+): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('explain-correction', {
+    body: { wordId, wordDe, level, originalAttempt, correctedSentence },
+  });
+  if (error) rethrow(error);
+  if (data?.limitReached) throw new DailyLimitReachedError();
+  if (!data?.explanation) throw new Error('Malformed AI response');
+  return data.explanation as string;
+}

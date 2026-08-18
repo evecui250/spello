@@ -340,11 +340,16 @@ Deno.serve(async (req: Request) => {
     // ip_address instead; see correct-sentence/generate-sentence).
     const { data: aiRowsWindow } = await admin
       .from('ai_usage')
-      .select('user_id, ip_address, input_tokens, output_tokens, created_at')
+      .select('user_id, ip_address, input_tokens, output_tokens, created_at, kind')
       .gte('created_at', windowStartIso);
-    const aiRows = aiRowsWindow ?? [];
+    const aiRows = (aiRowsWindow ?? []) as { user_id: string | null; ip_address: string | null; input_tokens: number; output_tokens: number; created_at: string; kind: string | null }[];
+    // kind is null for any row inserted before the column existed —
+    // treated as 'correction' (its only meaning back then), same as the
+    // column's own DB default for new rows.
+    const correctionRows = aiRows.filter(r => (r.kind ?? 'correction') === 'correction');
+    const explanationRows = aiRows.filter(r => r.kind === 'explanation');
     const aiUsageTrend = windowDays.map(date => {
-      const rows = aiRows.filter(r => dateStr(new Date(r.created_at)) === date);
+      const rows = correctionRows.filter(r => dateStr(new Date(r.created_at)) === date);
       const signedIn = rows.filter(r => r.user_id !== null);
       const anon = rows.filter(r => r.user_id === null);
       return {
@@ -354,11 +359,19 @@ Deno.serve(async (req: Request) => {
         costUsd: costUsd(rows.reduce((s, r) => s + (r.input_tokens ?? 0), 0), rows.reduce((s, r) => s + (r.output_tokens ?? 0), 0)),
       };
     });
-    const aiRowsToday = aiRows.filter(r => dateStr(new Date(r.created_at)) === todayStr);
+    const aiRowsToday = correctionRows.filter(r => dateStr(new Date(r.created_at)) === todayStr);
     const aiUsageToday = {
       signedIn: summarizeAiUsage(aiRowsToday.filter(r => r.user_id !== null)),
       anonymous: summarizeAiUsage(aiRowsToday.filter(r => r.user_id === null)),
     };
+    // "Why?" button usage — its own count, not folded into aiUsageToday
+    // above, specifically so this answers "is anyone actually using this"
+    // on its own rather than being invisible inside the correction totals.
+    const explanationClicksToday = explanationRows.filter(r => dateStr(new Date(r.created_at)) === todayStr).length;
+    const explanationClicksTrend = windowDays.map(date => ({
+      date,
+      count: explanationRows.filter(r => dateStr(new Date(r.created_at)) === date).length,
+    }));
 
     // Words studied: only ever known for signed-in, synced accounts (see
     // the daily_activity migration) — an anonymous learner's word-level
@@ -417,12 +430,14 @@ Deno.serve(async (req: Request) => {
         newIpsSignedIn: newIpsSignedInToday,
         wordsStudied: wordsStudiedToday,
         aiUsage: aiUsageToday,
+        explanationClicks: explanationClicksToday,
       },
       trends: {
         signups: signupTrend,
         devices: deviceTrend,
         aiUsage: aiUsageTrend,
         wordsStudied: wordsStudiedTrend,
+        explanationClicks: explanationClicksTrend,
       },
       levelBreakdown,
       geoBreakdown,

@@ -223,29 +223,26 @@ export default function WelcomePage() {
 
       {step === 'mascots' && (
         <div className="w-full flex flex-col gap-6">
-          <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-5">
+          <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-4">
             <p className="text-stone-500 text-sm">
               Every word grows through 4 stages as you review it on schedule:
             </p>
-            <div className="flex items-center justify-center">
+            <div className="flex flex-col items-center">
               {MASCOT_GROWTH.map((m, i) => (
-                <div key={m.id} className="flex items-center">
-                  <div className="flex flex-col items-center gap-1.5">
+                <div key={m.id} className="flex flex-col items-center">
+                  <div className="flex items-center gap-3">
                     <DachshundMascot stage={m.id} className="w-11 h-11 shrink-0" />
-                    <span className="text-[11px] font-semibold text-stone-700 whitespace-nowrap">{m.label}</span>
+                    <span className="text-sm font-semibold text-stone-700">{m.label}</span>
                   </div>
                   {i < MASCOT_GROWTH.length - 1 && (
-                    <div className="flex flex-col items-center px-1 shrink-0">
-                      <span className="text-indigo-400 text-base leading-none">→</span>
-                      <span className="text-stone-400 text-[10px] whitespace-nowrap">+{GROWTH_GAP_DAYS[i]}d</span>
+                    <div className="flex flex-col items-center py-0.5">
+                      <span className="text-indigo-400 text-base leading-none">↓</span>
+                      <span className="text-stone-400 text-[11px] whitespace-nowrap">+{GROWTH_GAP_DAYS[i]} days</span>
                     </div>
                   )}
                 </div>
               ))}
             </div>
-            <p className="text-stone-400 text-sm">
-              Fully grown in about 9 days — as long as you keep up with reviews when they're due.
-            </p>
           </div>
           <div className="flex gap-3 w-full">
             <button
