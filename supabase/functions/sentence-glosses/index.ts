@@ -1,0 +1,157 @@
+// Per-word lemma + short translation for every content word in an
+// AI-corrected sentence — split out from correct-sentence itself (which
+// used to generate this same map inline) specifically so the main
+// correction can render fast: fetching this separately, AFTER the
+// correction is already on screen, means the learner never waits on it —
+// words simply become clickable a moment later. Mirrors correct-sentence's
+// old "lemmas" instruction (dictionary form, separable-prefix verbs split
+// across the sentence both mapping to the same lemma) but also asks for a
+// short gloss in the learner's OWN native language, so every word in the
+// sentence can show a translation on tap — not just words that happen to
+// already be in Spello's corpus (see resolveClickedWord's corpus-only
+// fallback in lib/words.ts, which this complements rather than replaces:
+// a real corpus match still wins, for its richer word-detail panel).
+// Shares ai_usage's daily cap with correct-sentence/explain-correction
+// (same table, counted together) — a bonus lookup on top of a correction
+// that already happened, not a separate allowance.
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const MODEL = 'gpt-4o-mini';
+
+const DAILY_AI_CALL_LIMIT = 50;
+const DAILY_AI_CALL_LIMIT_ANONYMOUS = 20;
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+interface RequestBody {
+  wordId: string;
+  sentence: string;
+  level: string;
+  nativeLanguage?: 'en' | 'zh';
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: CORS_HEADERS });
+  }
+
+  try {
+    const { createClient } = await import('jsr:@supabase/supabase-js@2');
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    let userId: string | null = null;
+    const authHeader = req.headers.get('Authorization');
+    if (authHeader) {
+      const callerClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: userData } = await callerClient.auth.getUser();
+      userId = userData.user?.id ?? null;
+    }
+    const forwardedFor = req.headers.get('x-forwarded-for');
+    const ip = forwardedFor ? forwardedFor.split(',')[0].trim() : null;
+    if (!userId && !ip) {
+      return json({ error: 'Could not identify caller' }, 400);
+    }
+
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    let usageQuery = supabase
+      .from('ai_usage')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', todayStart.toISOString());
+    usageQuery = userId ? usageQuery.eq('user_id', userId) : usageQuery.eq('ip_address', ip);
+    const limit = userId ? DAILY_AI_CALL_LIMIT : DAILY_AI_CALL_LIMIT_ANONYMOUS;
+    const { count: callsToday, error: countError } = await usageQuery;
+    if (!countError && (callsToday ?? 0) >= limit) {
+      return json({ limitReached: true });
+    }
+
+    const body = (await req.json()) as RequestBody;
+    const { wordId, sentence, level, nativeLanguage } = body;
+    if (!wordId || !sentence) {
+      return json({ error: 'Missing wordId or sentence' }, 400);
+    }
+    if (sentence.length > 300) {
+      return json({ error: 'Sentence too long' }, 400);
+    }
+    const lang = nativeLanguage === 'zh' ? 'Chinese' : 'English';
+
+    const completion = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content:
+              `For this German sentence (a CEFR ${level || 'A1'} learner's exercise): ` +
+              `"${sentence}", produce a JSON object mapping EVERY distinct word (as it ` +
+              'literally appears there, preserving capitalization) to its dictionary/base ' +
+              'form — the infinitive for verbs (e.g. "abgesagt" -> "absagen", "ruft" -> ' +
+              '"rufen"), the singular nominative for nouns (e.g. "Häuser" -> "Haus", ' +
+              '"Kindern" -> "Kind"), and the uninflected positive form for adjectives/adverbs ' +
+              '(e.g. "schönen" -> "schön") — plus a short (1-4 word) translation of that base ' +
+              `form into ${lang}. Include separable-prefix verbs split apart by German word ` +
+              'order, each part mapping to the SAME full lemma (e.g. a sentence with "sagt ... ' +
+              'ab" for "absagen" should map BOTH "sagt" and "ab" to lemma "absagen", both with ' +
+              'the same translation). Skip bare articles (der/die/das/ein/eine/einen/etc.) and ' +
+              'punctuation. Respond with exactly this JSON: {"words": {"word1": {"lemma": ' +
+              `"...", "gloss": "..."}, ...}}, each gloss in ${lang}.`,
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: 500,
+      }),
+    });
+
+    if (!completion.ok) {
+      const errText = await completion.text();
+      console.error('OpenAI error (sentence-glosses):', errText);
+      return json({ error: 'Gloss lookup failed' }, 502);
+    }
+
+    const result = await completion.json();
+    const raw: string = result.choices?.[0]?.message?.content ?? '{}';
+    let parsed: { words?: Record<string, { lemma?: string; gloss?: string }> } = {};
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      // leave parsed empty — caught below
+    }
+    const usage = result.usage ?? {};
+    await supabase.from('ai_usage').insert({
+      user_id: userId,
+      ip_address: ip,
+      word_id: wordId,
+      level: level || 'unknown',
+      model: MODEL,
+      input_tokens: usage.prompt_tokens ?? 0,
+      output_tokens: usage.completion_tokens ?? 0,
+      kind: 'gloss',
+    });
+
+    const words = parsed.words && typeof parsed.words === 'object' ? parsed.words : {};
+    return json({ words });
+  } catch (err) {
+    console.error('sentence-glosses error:', err);
+    return json({ error: 'Unexpected error' }, 500);
+  }
+});
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  });
+}

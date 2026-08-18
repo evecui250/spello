@@ -10,7 +10,6 @@ import { supabase } from './supabase';
 export interface SentenceCorrectionResult {
   sentence: string;
   wordForm: string;
-  lemmas: Record<string, string>;
 }
 
 // Thrown by generateSentence/correctSentence when the server-side daily cap
@@ -124,13 +123,15 @@ export async function correctSentence(
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (!data?.sentence || !data?.wordForm) throw new Error('Malformed AI response');
-  const lemmas = data?.lemmas && typeof data.lemmas === 'object' ? data.lemmas : {};
-  return { sentence: data.sentence, wordForm: data.wordForm, lemmas };
+  return { sentence: data.sentence, wordForm: data.wordForm };
 }
 
-// The "Why?" button — a short, on-demand explanation of a single
+// The "Why?" button — a short, on-demand GRAMMAR explanation (article/
+// case, adjective endings, verb tense, preposition choice, word-class
+// mix-ups — not spelling, not a vague "this was wrong") of a single
 // correction, only ever called if the learner taps for it (never part of
-// the main check flow, so it never adds latency there). Shares
+// the main check flow, so it never adds latency there). Returns up to 3
+// short bullet points, in the learner's own nativeLanguage. Shares
 // correct-sentence's daily cap (see explain-correction's own comment) and
 // throws the same way, so callers can reuse the exact same error handling
 // (AIUnreachableError/DailyLimitReachedError) already built for corrections.
@@ -140,12 +141,42 @@ export async function explainCorrection(
   level: string,
   originalAttempt: string,
   correctedSentence: string,
-): Promise<string> {
+  nativeLanguage: 'en' | 'zh' = 'en',
+): Promise<string[]> {
   const { data, error } = await supabase.functions.invoke('explain-correction', {
-    body: { wordId, wordDe, level, originalAttempt, correctedSentence },
+    body: { wordId, wordDe, level, originalAttempt, correctedSentence, nativeLanguage },
   });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
-  if (!data?.explanation) throw new Error('Malformed AI response');
-  return data.explanation as string;
+  if (!Array.isArray(data?.points) || data.points.length === 0) throw new Error('Malformed AI response');
+  return data.points as string[];
+}
+
+export interface WordGloss {
+  lemma: string;
+  gloss: string;
+}
+
+// Per-word lemma + short translation for every content word in an
+// AI-corrected sentence — fetched separately AFTER the correction is
+// already showing (see correct-sentence's own comment on why the lemma
+// map was split out), so this never delays the correction itself.
+// Covers every word in the sentence, not just ones already in Spello's
+// corpus (see resolveClickedWord's corpus-only fallback in lib/words.ts).
+// Best-effort: throws on failure like the other AI calls here, but
+// callers should treat that as "words just aren't clickable yet" rather
+// than a blocking error — nothing else in the exercise depends on it.
+export async function getSentenceGlosses(
+  wordId: string,
+  sentence: string,
+  level: string,
+  nativeLanguage: 'en' | 'zh' = 'en',
+): Promise<Record<string, WordGloss>> {
+  const { data, error } = await supabase.functions.invoke('sentence-glosses', {
+    body: { wordId, sentence, level, nativeLanguage },
+  });
+  if (error) rethrow(error);
+  if (data?.limitReached) throw new DailyLimitReachedError();
+  const words = data?.words && typeof data.words === 'object' ? data.words : {};
+  return words as Record<string, WordGloss>;
 }

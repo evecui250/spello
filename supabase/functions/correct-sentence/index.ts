@@ -161,25 +161,23 @@ Deno.serve(async (req: Request) => {
               'conjugated form — that is a common mistake to avoid. Always end your ' +
               'sentence with correct terminal punctuation matching the English sentence\'s own ' +
               'punctuation (a period, question mark, or exclamation mark) — add it even if the ' +
-              'learner\'s attempt omitted it. Additionally, include a "lemmas" field: a JSON ' +
-              'object mapping EVERY distinct word in your sentence (as it literally ' +
-              'appears there, preserving capitalization) to its dictionary/base form — the ' +
-              'infinitive for verbs (e.g. "abgesagt" -> "absagen", "ruft" -> "rufen"), the ' +
-              'singular nominative for nouns (e.g. "Häuser" -> "Haus", "Kindern" -> "Kind"), and ' +
-              'the uninflected positive form for adjectives/adverbs (e.g. "schönen" -> "schön"). ' +
-              'This lets the learner tap any word in the sentence to look it up, including ' +
-              'separable-prefix verbs split apart by German word order (e.g. a sentence with ' +
-              '"sagt ... ab" for "absagen" should map BOTH "sagt" and "ab" to "absagen"). Skip ' +
-              'bare articles (der/die/das/ein/eine/einen/etc.) and punctuation. Respond with ' +
-              'exactly this JSON: {"sentence": "...", ' +
+              'learner\'s attempt omitted it. Respond with exactly this JSON: {"sentence": "...", ' +
               '"wordForm": the exact inflected form of the word as it literally appears, ' +
               'verbatim, inside "sentence" — this must be an exact substring match so it can be ' +
-              'highlighted, "lemmas": {"word1": "lemma1", ...}}.',
+              'highlighted}.',
           },
           { role: 'user', content: hasUserInput ? userTranslation! : 'Please translate the sentence.' },
         ],
         temperature: 0.3,
-        max_tokens: 350,
+        // Trimmed down from 350 — this response used to also carry a
+        // per-word lemma map for tap-to-look-up, which was by far the
+        // biggest chunk of output and made this call noticeably slow
+        // (output tokens are generated sequentially, so cutting them
+        // cuts wall-clock time almost linearly). That lookup now comes
+        // from a separate sentence-glosses call fired after the
+        // correction already renders (see DailySessionFlow) instead of
+        // blocking the correction itself on it.
+        max_tokens: 120,
       }),
     });
 
@@ -191,7 +189,7 @@ Deno.serve(async (req: Request) => {
 
     const result = await completion.json();
     const raw: string = result.choices?.[0]?.message?.content ?? '{}';
-    let parsed: { sentence?: string; wordForm?: string; lemmas?: Record<string, string> } = {};
+    let parsed: { sentence?: string; wordForm?: string } = {};
     try {
       parsed = JSON.parse(raw);
     } catch {
@@ -213,14 +211,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'AI returned an unexpected format' }, 502);
     }
 
-    // lemmas is a best-effort enhancement (lets the client resolve tricky
-    // forms — irregular plurals, past participles, separable-prefix verbs
-    // split across the sentence — that its own client-side heuristic in
-    // lib/words.ts's findWordByGermanForm can't reliably handle on its
-    // own) — never worth failing the whole correction over if the model
-    // omits or malforms it.
-    const lemmas = parsed.lemmas && typeof parsed.lemmas === 'object' ? parsed.lemmas : {};
-    return json({ sentence: parsed.sentence, wordForm: parsed.wordForm, lemmas });
+    return json({ sentence: parsed.sentence, wordForm: parsed.wordForm });
   } catch (err) {
     console.error('correct-sentence error:', err);
     return json({ error: 'Unexpected error' }, 500);

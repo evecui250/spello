@@ -27,11 +27,12 @@ import CongratsModal from './CongratsModal';
 import SignInNudge from './SignInNudge';
 import AiUnlockCelebration from './AiUnlockCelebration';
 import WordInfoPanel from './WordInfoPanel';
+import GlossPopup from './GlossPopup';
 import { speakWord, speakText, stopSpeech } from '../lib/speech';
 import { imageUrlForWord } from '../lib/wordImage';
 import { WORDS_WITH_IMAGES } from '../lib/wordImageManifest';
 import { scheduleSync } from '../lib/sync';
-import { correctSentence, generateSentence, explainCorrection, DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
+import { correctSentence, generateSentence, explainCorrection, getSentenceGlosses, WordGloss, DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
 import { supabase } from '../lib/supabase';
 
 // Locates wordForm inside sentence (case-insensitive) so callers can bold
@@ -276,16 +277,11 @@ function SentenceExercise({
   // round-1 branch below, which no longer swaps to a separate result view
   // on correction, so the learner's own typed attempt stays visible
   // alongside the correction instead of disappearing).
-  // lemmas (word-as-it-appears -> dictionary form, from correct-sentence's
-  // own AI call) lets word-click resolution below prefer the AI's own
-  // grammatical analysis over findWordByGermanForm's suffix-stripping
-  // guesswork — the only way to correctly resolve irregular plurals, past
-  // participles, and separable-prefix verbs split across the sentence.
-  correction: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; lemmas?: Record<string, string> } | null;
+  correction: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string } | null;
   // userInput (the learner's own typed attempt) rides along only for the
   // Back button's history snapshot — the parent keeps it separate from what
   // actually gets persisted to WordProgress.
-  onCorrected: (correction: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; lemmas?: Record<string, string> }, userInput: string) => void;
+  onCorrected: (correction: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string }, userInput: string) => void;
   onNext: () => void;
   // Called when either AI call fails with AIUnreachableError (a genuine
   // network-level failure to reach the Edge Function, not an ordinary API
@@ -313,8 +309,14 @@ function SentenceExercise({
   // above (the main check), since asking for an explanation is optional
   // and happens after a correction already landed, never blocking or
   // replacing it.
-  const [explanation, setExplanation] = useState<string | null>(null);
+  const [explanation, setExplanation] = useState<string[] | null>(null);
   const [explanationStatus, setExplanationStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached'>('idle');
+  // Per-word lemma+translation for EVERY content word in the correction
+  // (not just ones already in Spello's corpus) — fetched separately once
+  // the correction lands (see the effect below), so it never delays the
+  // correction itself. Keyed by the word exactly as it appears in
+  // correction.sentence, matching resolveClickedWord's own token shape.
+  const [glosses, setGlosses] = useState<Record<string, WordGloss>>({});
   // Which word in the corrected sentence the learner tapped (see the
   // clickable-word rendering below and WordInfoPanel) — cleared implicitly
   // on remount (this whole component is keyed by word.id) rather than
@@ -322,9 +324,26 @@ function SentenceExercise({
   // for the PROMPT sentence (a hint while still attempting the
   // translation) — kept as its own separate state so tapping a word in
   // one sentence never disturbs whatever's showing for the other.
+  // selectedGlossToken is the fallback for a correction word that isn't a
+  // real corpus entry (see GlossPopup below) — mutually exclusive with
+  // selectedWord, since only one detail panel shows at a time.
   const [selectedWord, setSelectedWord] = useState<Word | null>(null);
+  const [selectedGlossToken, setSelectedGlossToken] = useState<string | null>(null);
   const [selectedPromptWord, setSelectedPromptWord] = useState<Word | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!correction) return;
+    let cancelled = false;
+    getSentenceGlosses(word.id, correction.sentence, level, getSettings().nativeLanguage)
+      .then(words => { if (!cancelled) setGlosses(words); })
+      // Best-effort — a failure here just means correction words stay
+      // non-clickable (beyond whatever the corpus/heuristic chain below
+      // already resolves), never a blocking error for the exercise itself.
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [correction]);
 
   useEffect(() => {
     if (word.exercisePrompt) return;
@@ -369,7 +388,7 @@ function SentenceExercise({
       // display of this exact sentence (Word List, the daily summary) show
       // Chinese consistently instead of falling back to English for
       // whichever words the corpus itself has no translation for.
-      onCorrected({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt: promptSentence, englishPromptZh: promptSentenceZh ?? undefined, lemmas: result.lemmas }, input.trim());
+      onCorrected({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt: promptSentence, englishPromptZh: promptSentenceZh ?? undefined }, input.trim());
     } catch (e) {
       if (e instanceof AIUnreachableError) { setStatus('unreachable'); onUnreachable(); return; }
       setStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
@@ -393,7 +412,7 @@ function SentenceExercise({
     if (!correction) return;
     setExplanationStatus('loading');
     try {
-      const result = await explainCorrection(word.id, word.de, level, input, correction.sentence);
+      const result = await explainCorrection(word.id, word.de, level, input, correction.sentence, getSettings().nativeLanguage);
       setExplanation(result);
       setExplanationStatus('idle');
     } catch (e) {
@@ -518,7 +537,23 @@ function SentenceExercise({
           )}
           {correction && correctionDiff ? (
             <>
-              <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
+              <div className="relative text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
+                {/* Upper-right corner of the panel, not inline with the
+                    rest of the content — a grammar explanation is a
+                    secondary, optional action on top of the correction,
+                    not part of reading it. Nothing to explain when there
+                    was no correction needed at all. */}
+                {!correctionDiff.perfect && !explanation && (
+                  <button
+                    type="button"
+                    onClick={handleExplain}
+                    disabled={explanationStatus === 'loading'}
+                    aria-label="Explain the grammar"
+                    className="absolute top-2 right-2 text-indigo-500 text-xs font-semibold bg-white/70 hover:bg-white hover:text-indigo-700 rounded-full px-2 py-0.5 transition-colors disabled:opacity-50"
+                  >
+                    {explanationStatus === 'loading' ? '…' : 'Why?'}
+                  </button>
+                )}
                 <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium flex items-center justify-center gap-1.5">
                   {correctionDiff.perfect ? '✓ Perfect!' : 'Correction'}
                   <TextSpeakerButton text={correction.sentence} className="text-green-500 hover:text-green-700 transition-colors normal-case" />
@@ -531,58 +566,71 @@ function SentenceExercise({
                     // whether THIS one looks up to a dictionary word at all.
                     // See resolveClickedWord for the full resolution chain
                     // (AI lemma -> heuristic -> separable-prefix repair).
+                    // The AI lemma map now comes from `glosses` (fetched
+                    // separately, see the effect above) rather than riding
+                    // along on the correction itself — that's what lets the
+                    // main correction render fast. A word not resolved
+                    // against the corpus at all still gets a gloss fallback
+                    // below, so EVERY content word ends up clickable, not
+                    // just ones already in Spello's own vocabulary.
                     // `changed` (from diffAgainstAttempt, above) underlines
                     // specifically the words that differ from what the
                     // learner actually wrote — independent of whether it's
                     // also clickable, so a wrong word stays both lookup-able
                     // and visibly flagged.
+                    const lemmaMap = Object.fromEntries(Object.entries(glosses).map(([k, v]) => [k, v.lemma]));
                     const match = isWordToken(text)
-                      ? resolveClickedWord(text, correction.lemmas, word.de)
+                      ? resolveClickedWord(text, lemmaMap, word.de)
                       : undefined;
+                    const gloss = !match ? glosses[text] : undefined;
                     // Purple reads as a calm "this changed" flag against the
                     // green correction box — amber (and red, tried earlier)
                     // both looked alarming/urgent here, which isn't the tone
                     // a correction should have.
                     const underline = changed ? ' underline decoration-violet-500 decoration-2 underline-offset-2' : '';
-                    return match ? (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => setSelectedWord(prev => (prev?.id === match.id ? null : match))}
-                        className={`hover:bg-green-200/70 rounded px-0.5 -mx-0.5 transition-colors${underline}`}
-                      >
-                        {text}
-                      </button>
-                    ) : <span key={i} className={underline}>{text}</span>;
+                    if (match) {
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => { setSelectedGlossToken(null); setSelectedWord(prev => (prev?.id === match.id ? null : match)); }}
+                          className={`hover:bg-green-200/70 rounded px-0.5 -mx-0.5 transition-colors${underline}`}
+                        >
+                          {text}
+                        </button>
+                      );
+                    }
+                    if (gloss) {
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => { setSelectedWord(null); setSelectedGlossToken(prev => (prev === text ? null : text)); }}
+                          className={`hover:bg-green-200/70 rounded px-0.5 -mx-0.5 transition-colors${underline}`}
+                        >
+                          {text}
+                        </button>
+                      );
+                    }
+                    return <span key={i} className={underline}>{text}</span>;
                   })}
                 </div>
               </div>
-              {/* Nothing to explain when there was no correction needed —
-                  only offered when the diff above actually found something
-                  to underline. */}
-              {!correctionDiff.perfect && (
-                <div className="flex flex-col gap-1.5 -mt-2">
-                  {explanation ? (
-                    <div className="bg-indigo-50 rounded-lg px-3 py-2 text-sm text-indigo-800">{explanation}</div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleExplain}
-                      disabled={explanationStatus === 'loading'}
-                      className="self-start text-indigo-500 text-sm font-medium hover:text-indigo-700 transition-colors disabled:opacity-50"
-                    >
-                      {explanationStatus === 'loading' ? 'Thinking…' : 'Why?'}
-                    </button>
-                  )}
-                  {explanationStatus === 'error' && (
-                    <p className="text-red-500 text-xs">Couldn't load an explanation — try again.</p>
-                  )}
-                  {explanationStatus === 'limit-reached' && (
-                    <p className="text-amber-600 text-xs">Used up today's practice limit — come back tomorrow.</p>
-                  )}
-                </div>
+              {!correctionDiff.perfect && explanation && (
+                <ul className="list-disc pl-5 flex flex-col gap-1 -mt-2 bg-indigo-50 rounded-lg px-4 py-2 text-sm text-indigo-800">
+                  {explanation.map((point, i) => <li key={i}>{point}</li>)}
+                </ul>
+              )}
+              {!correctionDiff.perfect && explanationStatus === 'error' && (
+                <p className="text-red-500 text-xs -mt-2">Couldn't load an explanation — try again.</p>
+              )}
+              {!correctionDiff.perfect && explanationStatus === 'limit-reached' && (
+                <p className="text-amber-600 text-xs -mt-2">Used up today's practice limit — come back tomorrow.</p>
               )}
               {selectedWord && <WordInfoPanel key={selectedWord.id} word={selectedWord} />}
+              {!selectedWord && selectedGlossToken && glosses[selectedGlossToken] && (
+                <GlossPopup surfaceForm={selectedGlossToken} lemma={glosses[selectedGlossToken].lemma} gloss={glosses[selectedGlossToken].gloss} />
+              )}
               <button
                 onClick={onNext}
                 className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
@@ -683,7 +731,7 @@ export default function DailySessionFlow() {
   // own comment for why), and the just-produced correction for the round-1
   // sentence exercise (shown in place of the generic "✓ Correct!" banner).
   const [exampleSentence, setExampleSentence] = useState<{ sentence: string; wordForm: string } | null>(null);
-  const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; lemmas?: Record<string, string> } | null>(null);
+  const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string } | null>(null);
   // The learner's in-progress typed attempt, lifted up here (rather than
   // living only as SentenceExercise's own local state) specifically so it
   // survives the sentence-writing-mode toggle: that switch changes which
@@ -698,7 +746,7 @@ export default function DailySessionFlow() {
   // translate-and-correct flow. Non-blocking — if the fetch fails, the
   // copy-the-word interaction still proceeds, just without a sentence
   // saved for this word today (same as any other bootstrap-style word).
-  const [directSentence, setDirectSentence] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; lemmas?: Record<string, string> } | null>(null);
+  const [directSentence, setDirectSentence] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string } | null>(null);
   const [directSentenceStatus, setDirectSentenceStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'unreachable'>('idle');
   // Set the first time any AI call fails with AIUnreachableError (a real
   // network-level failure to reach the Edge Function — see lib/ai.ts) —
@@ -864,7 +912,7 @@ export default function DailySessionFlow() {
         }
         const result = await correctSentence(word.id, word.de, settings.level, englishPrompt);
         if (cancelled) return;
-        setDirectSentence({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt, englishPromptZh, lemmas: result.lemmas });
+        setDirectSentence({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt, englishPromptZh });
         setDirectSentenceStatus('ready');
       } catch (e) {
         if (cancelled) return;

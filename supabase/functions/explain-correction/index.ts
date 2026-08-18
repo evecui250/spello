@@ -1,9 +1,12 @@
-// On-demand ("Why?" button) short explanation of a single sentence
-// correction — separate from correct-sentence itself so the main check
-// stays fast; this only ever runs if the learner actually taps to ask.
-// Deliberately a plain-text, tightly-capped response (not response_format
-// json_object, no lemmas map) — the whole point is a short, cheap answer,
-// not a second correction. Shares ai_usage's daily cap with
+// On-demand ("Why?" button) explanation of a single sentence correction —
+// separate from correct-sentence itself so the main check stays fast;
+// this only ever runs if the learner actually taps to ask. Deliberately
+// GRAMMAR-focused (article/case, adjective agreement, verb tense/
+// conjugation, preposition choice, word-class mix-ups like a verb used
+// where a noun was needed) rather than a vague "here's what went wrong"
+// gloss — that's what's actually learnable from a mistake. Answers in the
+// learner's own nativeLanguage (Settings), since a grammar explanation
+// they can't read isn't useful. Shares ai_usage's daily cap with
 // correct-sentence (same table, counted together) rather than a separate
 // budget, so this can't be used to bypass the existing per-caller limit;
 // tagged kind='explanation' so admin-stats can see how much this specific
@@ -32,6 +35,7 @@ interface RequestBody {
   level: string;
   originalAttempt: string;
   correctedSentence: string;
+  nativeLanguage?: 'en' | 'zh';
 }
 
 Deno.serve(async (req: Request) => {
@@ -72,13 +76,14 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as RequestBody;
-    const { wordId, wordDe, level, originalAttempt, correctedSentence } = body;
+    const { wordId, wordDe, level, originalAttempt, correctedSentence, nativeLanguage } = body;
     if (!wordId || !correctedSentence) {
       return json({ error: 'Missing wordId or correctedSentence' }, 400);
     }
     if ((originalAttempt?.length ?? 0) > 300 || correctedSentence.length > 300) {
       return json({ error: 'Sentence too long' }, 400);
     }
+    const lang = nativeLanguage === 'zh' ? 'Chinese' : 'English';
 
     const completion = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -88,6 +93,7 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: MODEL,
+        response_format: { type: 'json_object' },
         messages: [
           {
             role: 'system',
@@ -95,16 +101,25 @@ Deno.serve(async (req: Request) => {
               'You are a German tutor. A beginner learner (CEFR ' + (level || 'A1') + ') tried to ' +
               `translate a sentence, practicing the word "${wordDe}". Their attempt: "${originalAttempt || '(nothing — they left it blank)'}". ` +
               `The correct sentence is: "${correctedSentence}". ` +
-              'In ONE short, simple sentence (max 25 words, plain English, no grammar jargon like ' +
-              '"accusative" or "subjunctive" unless truly unavoidable), explain the ONE main reason ' +
-              'their attempt needed fixing — accuracy matters most, so only state something you are ' +
-              'actually sure is correct; if their attempt was blank or too unrelated to compare, ' +
-              'just briefly say what the correct sentence means instead. Do not repeat the full ' +
-              'corrected sentence back — the learner can already see it.',
+              'Compare the attempt against the correction and identify up to 3 concrete GRAMMAR ' +
+              'points the learner should take away — article/case (der/die/das, den/dem/der ' +
+              'agreement), adjective endings, verb tense/conjugation, preposition choice, or a ' +
+              'word-class mix-up (e.g. using a verb form where a noun was needed, like ' +
+              '"reisen" [to travel] instead of "Reisende" [traveler]). Do NOT mention spelling ' +
+              'typos or simply say a word "was wrong" — every point must explain the actual ' +
+              'grammar rule behind the fix, briefly, so it is something the learner can apply ' +
+              'next time. Skip anything you are not confident is actually correct — accuracy ' +
+              'matters more than covering exactly 3 points; 1 or 2 solid points beats 3 shaky ' +
+              'ones. If the attempt was blank, too garbled, or simply used different (not ' +
+              'wrong) vocabulary with no real grammar issue to point out, return a single point ' +
+              'that briefly says what the correct sentence means instead. Each point must be ' +
+              `ONE short, plain sentence (no more than ~20 words), written in ${lang}, and must ` +
+              'NOT repeat the full corrected sentence back — the learner can already see it. ' +
+              'Respond with exactly this JSON: {"points": ["...", ...]}.',
           },
         ],
         temperature: 0.2,
-        max_tokens: 70,
+        max_tokens: 260,
       }),
     });
 
@@ -115,7 +130,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const result = await completion.json();
-    const explanation: string = (result.choices?.[0]?.message?.content ?? '').trim();
+    const raw: string = result.choices?.[0]?.message?.content ?? '{}';
+    let parsed: { points?: string[] } = {};
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      // leave parsed empty — caught by the check below
+    }
     const usage = result.usage ?? {};
     await supabase.from('ai_usage').insert({
       user_id: userId,
@@ -128,10 +149,12 @@ Deno.serve(async (req: Request) => {
       kind: 'explanation',
     });
 
-    if (!explanation) {
+    const points = Array.isArray(parsed.points) ? parsed.points.filter(p => typeof p === 'string' && p.trim()) : [];
+    if (points.length === 0) {
+      console.error('Malformed AI response (explain-correction):', raw);
       return json({ error: 'AI returned an empty explanation' }, 502);
     }
-    return json({ explanation });
+    return json({ points });
   } catch (err) {
     console.error('explain-correction error:', err);
     return json({ error: 'Unexpected error' }, 500);
