@@ -36,11 +36,11 @@ if not API_KEY:
 # generate-sentence Edge Function's WORD_RANGE — chosen by level difficulty.
 WORD_RANGE = {
     'A1': (3, 6), 'A2': (4, 8), 'B1': (6, 12), 'B2': (8, 14),
-    'B2_old': (8, 14), 'C1': (10, 16), 'C2': (12, 18),
+    'C1': (10, 16), 'C2': (12, 18),
 }
 PREREQUISITE_LEVELS = {
     'A1': [], 'A2': ['A1'], 'B1': ['A1', 'A2'], 'B2': ['A1', 'A2', 'B1'],
-    'B2_old': ['A1', 'A2', 'B1'], 'C1': ['A1', 'A2', 'B1', 'B2'],
+    'C1': ['A1', 'A2', 'B1', 'B2'],
     'C2': ['A1', 'A2', 'B1', 'B2', 'C1'],
 }
 

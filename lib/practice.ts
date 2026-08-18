@@ -147,15 +147,13 @@ export function isBootstrapCopyWord(word: Word): boolean {
 
 // Which levels' full vocabulary counts as "already known" for a given
 // level's translation-exercise sentences — full CEFR progression, not
-// "everything earlier in LEVEL_ORDER" (B2_old is a parallel corpus for the
-// same level as B2, built on the same A1/A2/B1 foundation, not on B2 itself;
-// C1/C2 have no words yet but are listed for completeness).
+// "everything earlier in LEVEL_ORDER" (C1/C2 have no words yet but are
+// listed for completeness).
 const PREREQUISITE_LEVELS: Record<Level, Level[]> = {
   A1: [],
   A2: ['A1'],
   B1: ['A1', 'A2'],
   B2: ['A1', 'A2', 'B1'],
-  B2_old: ['A1', 'A2', 'B1'],
   C1: ['A1', 'A2', 'B1', 'B2'],
   C2: ['A1', 'A2', 'B1', 'B2', 'C1'],
 };

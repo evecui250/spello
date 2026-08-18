@@ -99,10 +99,7 @@ const KEYS = {
 };
 
 const ACTIVE_LEVEL_KEY = 'wb2_active_level';
-const MIGRATION_FLAG = 'wb2_migrated_per_level_v1';
-const B2_RENAME_FLAG = 'wb2_migrated_b2_to_b2_old_v1';
 const ROUND5_REMOVAL_FLAG = 'wb2_migrated_round5_removal_v1';
-const SPURIOUS_B2OLD_FLAG = 'wb2_migrated_spurious_b2old_default_v1';
 // Deliberately NOT level-namespaced — a lifetime count of calendar days on
 // which ANY level's study or review goal was completed. Switching levels
 // doesn't reset or affect it.
@@ -121,71 +118,6 @@ const DEFAULT_SETTINGS: Settings = {
   studyBatchSize: 5, dailyReview: 15, language: 'de', nativeLanguage: 'en', level: 'A1',
   autoPlayAudio: true, requireArticle: false, sentenceWritingMode: true,
 };
-
-// One-time move of pre-level-split data (flat keys, always implicitly the
-// original B2 import) into the 'B2_old' namespace, so existing progress/
-// streak/settings survive the switch to per-level storage instead of
-// silently vanishing. Idempotent — guarded by MIGRATION_FLAG so it only ever
-// runs once per browser.
-function migrateLegacyKeysToB2(): void {
-  if (typeof window === 'undefined') return;
-  if (localStorage.getItem(MIGRATION_FLAG)) return;
-  const legacyToNamespaced: [string, string][] = [
-    ['wb2_progress', namespacedKey(KEYS.progress, 'B2_old')],
-    ['wb2_streak', namespacedKey(KEYS.streak, 'B2_old')],
-    ['wb2_settings', namespacedKey(KEYS.settings, 'B2_old')],
-    ['wb2_settings_updated_at', namespacedKey(KEYS.settingsUpdatedAt, 'B2_old')],
-    ['wb2_daily_stats', namespacedKey(KEYS.dailyStats, 'B2_old')],
-    ['wb2_study_batch', namespacedKey(KEYS.studyBatch, 'B2_old')],
-    ['wb2_daily_session', namespacedKey(KEYS.dailySession, 'B2_old')],
-  ];
-  let migratedAny = false;
-  for (const [oldKey, newKey] of legacyToNamespaced) {
-    const val = localStorage.getItem(oldKey);
-    if (val !== null && localStorage.getItem(newKey) === null) {
-      localStorage.setItem(newKey, val);
-      migratedAny = true;
-    }
-  }
-  // Only a genuine pre-per-level user (who actually had one of the flat
-  // keys above) should land on B2_old by default — a brand-new account has
-  // nothing to migrate, so it must fall through to getActiveLevel()'s own
-  // 'A1' fallback instead. Without this guard, EVERY fresh install silently
-  // defaulted to B2_old (since this function still runs once regardless),
-  // so a new user's Welcome-page level choice raced against this fallback
-  // and could get overwritten back to B2_old.
-  if (migratedAny && !localStorage.getItem(ACTIVE_LEVEL_KEY)) {
-    localStorage.setItem(ACTIVE_LEVEL_KEY, 'B2_old');
-  }
-  localStorage.setItem(MIGRATION_FLAG, '1');
-}
-
-// One-time rename for anyone who already adopted the per-level split back
-// when the original import was still called 'B2' (before its source PDF
-// turned out to be the wrong wordlist and it was set aside as 'B2_old') —
-// renames every `__B2`-suffixed key to `__B2_old` and remaps the active-level
-// pointer, so their real progress on it isn't orphaned under a dead level.
-function migrateB2ToB2Old(): void {
-  if (typeof window === 'undefined') return;
-  if (localStorage.getItem(B2_RENAME_FLAG)) return;
-  const bases = [
-    KEYS.progress, KEYS.streak, KEYS.settings, KEYS.settingsUpdatedAt,
-    KEYS.dailyStats, KEYS.studyBatch, KEYS.dailySession,
-  ];
-  for (const base of bases) {
-    const oldKey = `${base}__B2`;
-    const newKey = `${base}__B2_old`;
-    const val = localStorage.getItem(oldKey);
-    if (val !== null && localStorage.getItem(newKey) === null) {
-      localStorage.setItem(newKey, val);
-      localStorage.removeItem(oldKey);
-    }
-  }
-  if (localStorage.getItem(ACTIVE_LEVEL_KEY) === 'B2') {
-    localStorage.setItem(ACTIVE_LEVEL_KEY, 'B2_old');
-  }
-  localStorage.setItem(B2_RENAME_FLAG, '1');
-}
 
 // One-time fix for a data-migration edge case from removing round 5: a word
 // that was mid-climb at round 4 under the OLD 5-round system (promoted
@@ -223,33 +155,6 @@ function migrateOrphanedRound4(): void {
   localStorage.setItem(ROUND5_REMOVAL_FLAG, '1');
 }
 
-// One-time correction for accounts already stuck on B2_old by
-// migrateLegacyKeysToB2's now-fixed bug, which used to default EVERY
-// brand-new account (not just genuine pre-per-level ones) onto B2_old —
-// and since that migration only ever runs once (guarded by MIGRATION_FLAG),
-// fixing the root cause above doesn't undo it for anyone who already hit
-// it. B2_old has never been a user-selectable choice (Settings' Level
-// dropdown only lists A1/A2/B1/B2), so the only legitimate way to land on
-// it is a genuine pre-per-level user, identifiable by having at least one
-// of the old flat keys migrateLegacyKeysToB2 reads from (it copies, never
-// deletes, those keys). No flat keys + sitting on B2_old means this
-// account was mis-defaulted by the bug, not a deliberate choice — safe to
-// drop back to getActiveLevel()'s own 'A1' fallback. Doesn't touch any
-// actual progress data (per-level storage is untouched either way; this
-// only changes which level is active).
-function migrateSpuriousB2OldDefault(): void {
-  if (typeof window === 'undefined') return;
-  if (localStorage.getItem(SPURIOUS_B2OLD_FLAG)) return;
-  localStorage.setItem(SPURIOUS_B2OLD_FLAG, '1');
-  if (localStorage.getItem(ACTIVE_LEVEL_KEY) !== 'B2_old') return;
-  const legacyFlatKeys = [
-    'wb2_progress', 'wb2_streak', 'wb2_settings', 'wb2_settings_updated_at',
-    'wb2_daily_stats', 'wb2_study_batch', 'wb2_daily_session',
-  ];
-  const hadLegacyData = legacyFlatKeys.some(k => localStorage.getItem(k) !== null);
-  if (!hadLegacyData) localStorage.removeItem(ACTIVE_LEVEL_KEY);
-}
-
 // Raw key name, not a namespaced one — avoids infinite recursion through
 // namespacedKey's own migration call.
 function namespacedKey(base: string, level: Level): string {
@@ -258,10 +163,7 @@ function namespacedKey(base: string, level: Level): string {
 
 export function getActiveLevel(): Level {
   if (typeof window === 'undefined') return 'A1';
-  migrateLegacyKeysToB2();
-  migrateB2ToB2Old();
   migrateOrphanedRound4();
-  migrateSpuriousB2OldDefault();
   return (localStorage.getItem(ACTIVE_LEVEL_KEY) as Level) || 'A1';
 }
 
@@ -269,10 +171,7 @@ export function getActiveLevel(): Level {
 // explicitly — callers like isOnboardingDone() read a specific level's key
 // before anything has called getActiveLevel() yet.
 function levelKey(base: string, level?: Level): string {
-  migrateLegacyKeysToB2();
-  migrateB2ToB2Old();
   migrateOrphanedRound4();
-  migrateSpuriousB2OldDefault();
   return namespacedKey(base, level ?? getActiveLevel());
 }
 
@@ -281,10 +180,7 @@ function levelKey(base: string, level?: Level): string {
 // point for "log into a different level" from the Settings level selector.
 export function switchToLevel(level: Level): Settings {
   if (typeof window === 'undefined') return getSettingsForLevel(level);
-  migrateLegacyKeysToB2();
-  migrateB2ToB2Old();
   migrateOrphanedRound4();
-  migrateSpuriousB2OldDefault();
 
   // A level switched to for the first time ever starts from wherever the
   // learner already had their pace/audio/article preferences dialed in,
@@ -643,16 +539,7 @@ export function getSettingsUpdatedAtForLevel(level: Level): string {
 
 export function isOnboardingDone(): boolean {
   if (typeof window === 'undefined') return true;
-  if (localStorage.getItem(KEYS.onboardingDone) === '1') return true;
-  // Grandfather in anyone who already has settings or progress saved from
-  // before this feature (or the per-level split) existed — don't send
-  // existing users to onboarding just because migration renamed their keys.
-  if (localStorage.getItem(levelKey(KEYS.settings, 'B2_old')) !== null
-    || localStorage.getItem(levelKey(KEYS.progress, 'B2_old')) !== null) {
-    markOnboardingDone();
-    return true;
-  }
-  return false;
+  return localStorage.getItem(KEYS.onboardingDone) === '1';
 }
 
 export function markOnboardingDone(): void {

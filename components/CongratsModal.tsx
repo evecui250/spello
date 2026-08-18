@@ -13,7 +13,7 @@ interface Props {
   date?: string;
   // Which vocabulary book this session was on, e.g. "B1" — shown under the
   // date stamp as "German B1" so a saved/shared card says which book it's
-  // from. 'B2_old' displays as plain "B2" — that suffix is internal only.
+  // from.
   level?: string;
 }
 
@@ -90,12 +90,10 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
       ctx.fillText(dateStr, IMG_SIZE - 70, 90);
 
       // Which vocabulary book this session was on, e.g. "German B1" — a
-      // second, slightly smaller line right under the date. 'B2_old' shows
-      // as plain "B2"; that suffix is an internal detail only.
+      // second, slightly smaller line right under the date.
       if (level) {
-        const levelLabel = level === 'B2_old' ? 'B2' : level;
         ctx.font = '600 20px system-ui, -apple-system, sans-serif';
-        ctx.fillText(`${language} ${levelLabel}`, IMG_SIZE - 70, 118);
+        ctx.fillText(`${language} ${level}`, IMG_SIZE - 70, 118);
       }
 
       canvas.toBlob(blob => {

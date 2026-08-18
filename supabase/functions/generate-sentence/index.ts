@@ -38,7 +38,6 @@ const WORD_RANGE: Record<string, { min: number; max: number }> = {
   A2: { min: 4, max: 8 },
   B1: { min: 6, max: 12 },
   B2: { min: 8, max: 14 },
-  B2_old: { min: 8, max: 14 },
   C1: { min: 10, max: 16 },
   C2: { min: 12, max: 18 },
 };

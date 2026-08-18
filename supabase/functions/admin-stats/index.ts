@@ -142,10 +142,9 @@ Deno.serve(async (req: Request) => {
     // old rows can still be one flat {wordId: WordProgress} blob from
     // before that — same shape sync.ts's own pullAndMerge already has to
     // handle. Good enough here to just check whether every top-level key
-    // looks like a level code, without sync.ts's fuller migration/rename
-    // handling — this is a read-only admin view, not a data path that
-    // needs to be exactly right for old B2/B2_old key renames.
-    const LEVEL_KEYS = ['A1', 'A2', 'B1', 'B2', 'B2_old', 'C1', 'C2'];
+    // looks like a level code, without sync.ts's fuller migration handling
+    // — this is a read-only admin view, not a data-correctness-critical path.
+    const LEVEL_KEYS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
     const STAGE_KEYS = ['puppy', 'short', 'medium', 'long-crowned'] as const;
     function stageCounts(progress: unknown): Record<typeof STAGE_KEYS[number], number> {
       const counts = { puppy: 0, short: 0, medium: 0, 'long-crowned': 0 };
@@ -253,10 +252,10 @@ Deno.serve(async (req: Request) => {
     };
     for (const row of progressLevelRows ?? []) bump(row.level, 'signedIn');
     for (const row of todaysPings.filter(r => !r.signed_in)) bump(row.level, 'anonymous');
-    // A1 -> B2 (real book order), then B2_old, then "unknown" pinned last —
-    // was sorted by count descending before, which reshuffled every time
-    // the numbers changed and made the chart harder to scan at a glance.
-    const LEVEL_DISPLAY_ORDER = ['A1', 'A2', 'B1', 'B2', 'B2_old'];
+    // A1 -> B2 (real book order), then "unknown" pinned last — was sorted
+    // by count descending before, which reshuffled every time the numbers
+    // changed and made the chart harder to scan at a glance.
+    const LEVEL_DISPLAY_ORDER = ['A1', 'A2', 'B1', 'B2'];
     const levelRank = (level: string) => {
       const i = LEVEL_DISPLAY_ORDER.indexOf(level);
       return i === -1 ? LEVEL_DISPLAY_ORDER.length + 1 : i; // unknown/anything else sorts last

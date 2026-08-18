@@ -34,30 +34,14 @@ function isFlatStreak(s: unknown): s is Streak {
   return !!s && typeof s === 'object' && 'lastDate' in s && 'count' in s;
 }
 
-// Old rows (from before the per-level split) stored a single flat blob that
-// was always implicitly the original B2 import. Detect the new shape by
-// checking that every top-level key is a known CEFR level; anything else (a
-// word id, or streak's "lastDate" field, etc.) means it's the legacy flat
-// shape. 'B2' (its own pre-rename key, back when 'B2_old' was still called
-// 'B2') is accepted here too, purely for recognition — renameB2Key fixes it
-// up to 'B2_old' once a row is confirmed nested.
-const KNOWN_LEVEL_KEYS = [...LEVEL_ORDER, 'B2'] as string[];
+// Old rows (from before the per-level split) stored a single flat blob.
+// Detect the new shape by checking that every top-level key is a known
+// CEFR level; anything else (a word id, or streak's "lastDate" field, etc.)
+// means it's the legacy flat shape.
+const KNOWN_LEVEL_KEYS = LEVEL_ORDER as string[];
 function isNestedByLevel(obj: unknown): obj is Record<string, unknown> {
   if (!obj || typeof obj !== 'object') return false;
   return Object.keys(obj).every(k => KNOWN_LEVEL_KEYS.includes(k));
-}
-
-// Remaps a nested-by-level object's old 'B2' key (from before the source PDF
-// was found to be wrong and it was renamed to 'B2_old') to 'B2_old', so a
-// remote row synced before this rename still lands in the right profile.
-function renameB2Key<T>(obj: Partial<Record<string, T>>): Partial<Record<Level, T>> {
-  const out: Partial<Record<Level, T>> = { ...(obj as Partial<Record<Level, T>>) };
-  const legacy = (obj as Record<string, T>)['B2'];
-  if (legacy !== undefined && out.B2_old === undefined) {
-    out.B2_old = legacy;
-  }
-  delete (out as Record<string, T>)['B2'];
-  return out;
 }
 
 // Earlier stage = less mature; no stage at all (still mid-introduction) ranks
@@ -113,15 +97,11 @@ export async function pullAndMerge(userId: string): Promise<void> {
   // "nested" check would misdetect a row with perfectly normal nested
   // progress/settings as legacy-flat the moment streak stopped being nested.
   const nested = isNestedByLevel(data.progress) && isNestedByLevel(data.settings);
-  // Legacy rows (pre-per-level split) stored one flat blob that was always
-  // implicitly the original B2 import — read it as B2_old rather than
-  // dropping it.
-  const remoteProgressByLevel: ProgressByLevel = nested
-    ? renameB2Key(data.progress as ProgressByLevel)
-    : { B2_old: (data.progress as Record<string, WordProgress>) ?? {} };
-  const remoteSettingsByLevel: SettingsByLevel = nested
-    ? renameB2Key((data.settings as SettingsByLevel) ?? {})
-    : { B2_old: data.settings as Settings };
+  // A legacy (pre-per-level-split) flat-blob row has no level of its own to
+  // land on anymore now that B2_old is gone — simply not merged, rather
+  // than force-fit into any current level.
+  const remoteProgressByLevel: ProgressByLevel = nested ? (data.progress as ProgressByLevel) : {};
+  const remoteSettingsByLevel: SettingsByLevel = nested ? ((data.settings as SettingsByLevel) ?? {}) : {};
 
   for (const level of LEVEL_ORDER) {
     const remoteProgress = remoteProgressByLevel[level];

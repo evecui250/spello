@@ -42,9 +42,8 @@ export default function ProgressPage() {
   const [scope, setScope] = useState<Scope>('current');
   // Which levels actually have any progress at all — "All books" only
   // ever aggregates books the learner has genuinely touched, not every
-  // theoretically available level (C1/C2 have no words yet; B2_old is a
-  // legacy corpus most accounts never touch), so the total never looks
-  // inflated by books nobody opened.
+  // theoretically available level (C1/C2 have no words yet), so the total
+  // never looks inflated by books nobody opened.
   const [studiedLevels, setStudiedLevels] = useState<Level[]>([]);
   // Which stage's breakdown popup is open (only reachable in "All books"
   // scope, where "which book did these come from" is actually meaningful).
@@ -94,12 +93,7 @@ export default function ProgressPage() {
     const stage = p.mascotStage ?? 'puppy';
     stageCounts[stage]++;
     if (scope === 'all') {
-      // B2_old is a legacy parallel corpus for the same nominal level as
-      // B2 (see lib/words.ts), not a book a learner ever picks — fold it
-      // into the same "B2" bucket rather than showing it as a second,
-      // duplicate-looking "B2" row.
-      const displayLevel = w.level === 'B2_old' ? 'B2' : w.level;
-      stageLevelCounts[stage][displayLevel] = (stageLevelCounts[stage][displayLevel] ?? 0) + 1;
+      stageLevelCounts[stage][w.level] = (stageLevelCounts[stage][w.level] ?? 0) + 1;
     }
   }
   const bars = STAGE_ORDER.map(id => ({ id, total: stageCounts[id], color: STAGE_COLORS[id] }));
@@ -201,12 +195,9 @@ export default function ProgressPage() {
       {/* Straight to the Word List, pre-filtered to exactly what someone
           looking at this card would want next: this book, words actually
           introduced so far, no date restriction — so they can see the
-          actual words behind these counts instead of just the totals.
-          'B2_old' links out as plain 'B2' — that suffix is internal only,
-          and B2_old isn't a selectable book on the Word List's own filter
-          (see BOOK_LEVELS there). */}
+          actual words behind these counts instead of just the totals. */}
       <Link
-        href={`/words/?level=${level === 'B2_old' ? 'B2' : level}&familiarity=learning&date=all`}
+        href={`/words/?level=${level}&familiarity=learning&date=all`}
         className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm py-3 px-4 font-semibold hover:bg-amber-50 active:scale-[0.99] transition-all"
         style={{ color: '#2f4a2c' }}
       >

@@ -47,8 +47,8 @@ function searchRank(w: Word, q: string, nativeLanguage: 'en' | 'zh'): number | n
 }
 
 // The four real, user-selectable vocabulary books (matches Settings' own
-// level picker) — excludes the legacy 'B2_old' and the still-unused
-// 'C1'/'C2' Level values, none of which are a book a learner can pick.
+// level picker) — excludes the still-unused 'C1'/'C2' Level values, which
+// aren't a book a learner can pick yet.
 const BOOK_LEVELS: Level[] = ['A1', 'A2', 'B1', 'B2'];
 type BookFilter = 'all' | Level;
 
