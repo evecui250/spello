@@ -70,14 +70,22 @@ function matchesFamiliarity(p: WordProgress | undefined, filter: Familiarity): b
 
 type DateFilter = 'all' | '7days' | '30days';
 
-// lastReviewedAt is set on every successful round-4 pass, whether that's
-// the first (learned) or a later one (reviewed) — so this covers "touched
-// at all in the last N days" regardless of which of those it was.
+// lastPracticed (not lastReviewedAt) is what actually means "touched at
+// all in the last N days" — confirmed real bug: lastReviewedAt only
+// updates on a COMPLETED milestone pass (see recordMilestonePass), so a
+// review that's still mid-way through its rounds, got an answer wrong
+// (demoted, not yet re-passed), or was done early via "Review Extra"
+// (which explicitly never touches the schedule at all — see
+// applyReviewResult) left zero trace here even though the learner
+// genuinely practiced that word within the window. lastPracticed is set
+// on every single attempt regardless of outcome, in both applyResult and
+// applyReviewResult, so it's the correct signal for "did I do anything
+// with this word recently."
 function matchesDateFilter(p: WordProgress | undefined, filter: DateFilter, t: string): boolean {
   if (filter === 'all') return true;
-  if (!p?.lastReviewedAt) return false;
+  if (!p?.lastPracticed) return false;
   const windowDays = filter === '7days' ? 7 : 30;
-  return daysBetween(p.lastReviewedAt, t) < windowDays;
+  return daysBetween(p.lastPracticed, t) < windowDays;
 }
 
 // Most words don't have a pre-generated illustration yet — render nothing

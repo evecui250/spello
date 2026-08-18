@@ -207,7 +207,8 @@ export default function ProgressPage() {
           (see BOOK_LEVELS there). */}
       <Link
         href={`/words/?level=${level === 'B2_old' ? 'B2' : level}&familiarity=learning&date=all`}
-        className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm py-3 px-4 text-indigo-700 font-semibold hover:bg-amber-50 active:scale-[0.99] transition-all"
+        className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm py-3 px-4 font-semibold hover:bg-amber-50 active:scale-[0.99] transition-all"
+        style={{ color: '#2f4a2c' }}
       >
         View word list →
       </Link>
