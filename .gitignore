@@ -12,4 +12,5 @@ scripts/.a2-image-manifest.json
 scripts/.b1-image-manifest.json
 scripts/.b2-image-manifest.json
 scripts/.zh-translations-cache.json
+scripts/.vocab-compliance-cache.json
 scripts/__pycache__/
