@@ -82,7 +82,7 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
                   key={w.id}
                   onClick={() => pickGerman(w.id)}
                   disabled={isCorrect || !!wrongFlash}
-                  className={`px-3 py-2.5 rounded-xl font-mono font-semibold text-sm text-left transition-colors ${cls}`}
+                  className={`px-3 py-2.5 rounded-xl font-semibold text-sm text-left transition-colors ${cls}`}
                 >
                   {w.article ? `${w.article} ` : ''}{w.de}
                 </button>

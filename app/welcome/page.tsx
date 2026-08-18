@@ -11,12 +11,18 @@ import DachshundMascot from '../../components/Mascot';
 const STEPS = ['level', 'pace', 'mascots'] as const;
 type Step = typeof STEPS[number];
 
-const MASCOT_INTRO: { id: MascotStageId; name: string; reviews: string }[] = [
-  { id: 'puppy', name: 'Puppy', reviews: 'Day 1 — translate a sentence, then spell it with half the letters hinted' },
-  { id: 'short', name: 'Young Dachshund', reviews: '1st review, 1 day later — half the letters hinted again' },
-  { id: 'medium', name: 'Adult Dachshund', reviews: '2nd review, 3 days after that — just the first letter' },
-  { id: 'long-crowned', name: 'Master Dachshund', reviews: '3rd review, 5 days after that — no hints. Fully mastered!' },
+// Same stage labels as Word List/Progress (STAGE_LABEL there) — avoids
+// "dachshund" (many learners won't recognize the breed name) and skips
+// explaining what actually happens in each round (translate, hints,
+// etc.) in favor of just the rhythm: how many days apart each review is.
+// Gaps mirror lib/srs.ts's OFFSET_AFTER_STAGE (1, 3, 5 days) exactly.
+const MASCOT_GROWTH: { id: MascotStageId; label: string }[] = [
+  { id: 'puppy', label: 'New' },
+  { id: 'short', label: 'Familiar' },
+  { id: 'medium', label: 'Strong' },
+  { id: 'long-crowned', label: 'Mastered' },
 ];
+const GROWTH_GAP_DAYS = [1, 3, 5];
 
 function StepDots({ step }: { step: Step }) {
   const i = STEPS.indexOf(step);
@@ -217,21 +223,29 @@ export default function WelcomePage() {
 
       {step === 'mascots' && (
         <div className="w-full flex flex-col gap-6">
-          <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-4">
+          <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-5">
             <p className="text-stone-500 text-sm">
-              Every word you learn grows its own dachshund as you review it successfully.
+              Every word grows through 4 stages as you review it on schedule:
             </p>
-            <div className="flex flex-col gap-3">
-              {MASCOT_INTRO.map(m => (
-                <div key={m.id} className="flex items-center gap-3">
-                  <DachshundMascot stage={m.id} className="w-14 h-14 shrink-0" />
-                  <div>
-                    <div className="font-semibold text-stone-800">{m.name}</div>
-                    <div className="text-stone-500 text-sm">{m.reviews}</div>
+            <div className="flex items-center justify-center">
+              {MASCOT_GROWTH.map((m, i) => (
+                <div key={m.id} className="flex items-center">
+                  <div className="flex flex-col items-center gap-1.5">
+                    <DachshundMascot stage={m.id} className="w-11 h-11 shrink-0" />
+                    <span className="text-[11px] font-semibold text-stone-700 whitespace-nowrap">{m.label}</span>
                   </div>
+                  {i < MASCOT_GROWTH.length - 1 && (
+                    <div className="flex flex-col items-center px-1 shrink-0">
+                      <span className="text-indigo-400 text-base leading-none">→</span>
+                      <span className="text-stone-400 text-[10px] whitespace-nowrap">+{GROWTH_GAP_DAYS[i]}d</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
+            <p className="text-stone-400 text-sm">
+              Fully grown in about 9 days — as long as you keep up with reviews when they're due.
+            </p>
           </div>
           <div className="flex gap-3 w-full">
             <button

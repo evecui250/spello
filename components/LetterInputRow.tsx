@@ -151,13 +151,13 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
             autoCapitalize="none"
             spellCheck={false}
             style={tileStyle}
-            className="text-center font-mono font-bold border-b-2 border-indigo-500 text-indigo-800 focus:outline-none focus:bg-indigo-50 disabled:bg-transparent"
+            className="text-center font-bold border-b-2 border-indigo-500 text-indigo-800 focus:outline-none focus:bg-indigo-50 disabled:bg-transparent"
           />
         ) : (
           <div
             key={i}
             style={tileStyle}
-            className="flex items-end justify-center pb-1 font-mono font-bold border-b-2 border-slate-300 text-slate-500"
+            className="flex items-end justify-center pb-1 font-bold border-b-2 border-slate-300 text-slate-500"
           >
             {ch}
           </div>

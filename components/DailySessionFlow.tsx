@@ -53,6 +53,67 @@ function tokenize(s: string): string[] {
   return s.match(/[A-Za-zÀ-ÖØ-öø-ÿß']+|[^A-Za-zÀ-ÖØ-öø-ÿß']+/g) ?? [];
 }
 
+function isWordToken(t: string): boolean {
+  return /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(t);
+}
+
+// Word-level LCS diff (order-preserving, allows insertions/substitutions/
+// deletions) — case-sensitive on purpose, since German capitalization is
+// a real grammar rule (every noun, not just sentence starts), not
+// cosmetic. Returns one boolean per correctedWords entry: true = matched
+// something the learner actually wrote, in the same relative order; false
+// = added or changed by the correction. Standard LCS-table + forward
+// backtrack; the dp[i][j] === dp[i+1][j+1]+1 check on a match is what
+// keeps the backtrack from greedily accepting a coincidental equal word
+// that isn't actually part of the optimal alignment.
+function diffWords(originalWords: string[], correctedWords: string[]): boolean[] {
+  const n = originalWords.length, m = correctedWords.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = originalWords[i] === correctedWords[j]
+        ? dp[i + 1][j + 1] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const matched = new Array(m).fill(false);
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (originalWords[i] === correctedWords[j] && dp[i][j] === dp[i + 1][j + 1] + 1) {
+      matched[j] = true;
+      i++; j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return matched;
+}
+
+// Compares a learner's raw attempt against the AI's corrected sentence,
+// word by word — "Perfect" (no correction actually needed) vs. which
+// specific corrected words are new/changed relative to what they wrote,
+// so the UI can underline just those instead of the whole sentence.
+// Trailing terminal punctuation is ignored on the ORIGINAL side only —
+// correct-sentence's own prompt always adds proper end punctuation even
+// when the learner's attempt omitted it (a real instruction, not a bug),
+// so penalizing that here would make "Perfect" nearly unreachable for
+// anyone who doesn't bother typing a period.
+function diffAgainstAttempt(originalAttempt: string, correctedSentence: string): { perfect: boolean; tokens: { text: string; changed: boolean }[] } {
+  const strippedOriginal = originalAttempt.trim().replace(/[.!?]+$/, '').trim();
+  const originalWords = tokenize(strippedOriginal).filter(isWordToken);
+  const correctedTokens = tokenize(correctedSentence);
+  const correctedWordIndices: number[] = [];
+  correctedTokens.forEach((t, idx) => { if (isWordToken(t)) correctedWordIndices.push(idx); });
+  const correctedWords = correctedWordIndices.map(idx => correctedTokens[idx]);
+  const matched = diffWords(originalWords, correctedWords);
+  const perfect = matched.length > 0 && originalWords.length === correctedWords.length && matched.every(Boolean);
+  const changedByTokenIdx = new Set(correctedWordIndices.filter((_, wi) => !matched[wi]));
+  const tokens = correctedTokens.map((text, idx) => ({ text, changed: changedByTokenIdx.has(idx) }));
+  return { perfect, tokens };
+}
+
 
 // How many of the 4 lifetime milestones (Learn, 1st/2nd/3rd review) a word
 // has actually, permanently earned — read straight from its saved
@@ -161,7 +222,7 @@ interface CardSnapshot {
 function SentenceWordHeader({ word }: { word: Word }) {
   return (
     <div className="text-center -mt-1">
-      <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide break-words">
+      <div className="text-2xl font-bold text-indigo-800 tracking-wide break-words">
         {word.article ? `${word.article} ` : ''}{word.de}{' '}
         <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
       </div>
@@ -304,6 +365,14 @@ function SentenceExercise({
     }
   }
 
+  // Diffed against `input` (the learner's own raw attempt, still in local
+  // state even after correction lands — see its own comment) rather than
+  // re-deriving anything from the correction response itself, since the
+  // AI never reports "was this already correct" explicitly (see
+  // correct-sentence) — comparing what came back against what they
+  // actually wrote is what tells us that.
+  const correctionDiff = correction ? diffAgainstAttempt(input, correction.sentence) : null;
+
   return (
     <div className="flex flex-col gap-3">
       <SentenceWordHeader word={word} />
@@ -335,7 +404,7 @@ function SentenceExercise({
       {promptStatus === 'ready' && promptSentence && (
         <>
           <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
-            <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate this sentence into German!</div>
+            <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate to German</div>
             {/* No visual affordance otherwise marks which words are
                 clickable (hover alone isn't discoverable on a touch
                 screen, which this PWA mostly runs on) — a persistent,
@@ -419,34 +488,40 @@ function SentenceExercise({
               switched off sentence-writing mode. You can turn it back on anytime in Settings.
             </p>
           )}
-          {correction ? (
+          {correction && correctionDiff ? (
             <>
               <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
                 <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium flex items-center justify-center gap-1.5">
-                  Correction
+                  {correctionDiff.perfect ? '✓ Perfect!' : 'Correction'}
                   <TextSpeakerButton text={correction.sentence} className="text-green-500 hover:text-green-700 transition-colors normal-case" />
                 </div>
                 <div className="text-lg text-green-800">
-                  {tokenize(correction.sentence).map((text, i) => {
+                  {correctionDiff.tokens.map(({ text, changed }, i) => {
                     // Every token is already either a whole word or a whole
                     // non-word (punctuation/whitespace) run — see tokenize's
                     // regex — so there's no need to re-split; just check
                     // whether THIS one looks up to a dictionary word at all.
                     // See resolveClickedWord for the full resolution chain
                     // (AI lemma -> heuristic -> separable-prefix repair).
-                    const match = /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(text)
+                    // `changed` (from diffAgainstAttempt, above) underlines
+                    // specifically the words that differ from what the
+                    // learner actually wrote — independent of whether it's
+                    // also clickable, so a wrong word stays both lookup-able
+                    // and visibly flagged.
+                    const match = isWordToken(text)
                       ? resolveClickedWord(text, correction.lemmas, word.de)
                       : undefined;
+                    const underline = changed ? ' underline decoration-amber-500 decoration-2 underline-offset-2' : '';
                     return match ? (
                       <button
                         key={i}
                         type="button"
                         onClick={() => setSelectedWord(prev => (prev?.id === match.id ? null : match))}
-                        className="hover:bg-green-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                        className={`hover:bg-green-200/70 rounded px-0.5 -mx-0.5 transition-colors${underline}`}
                       >
                         {text}
                       </button>
-                    ) : <span key={i}>{text}</span>;
+                    ) : <span key={i} className={underline}>{text}</span>;
                   })}
                 </div>
               </div>
@@ -1278,7 +1353,7 @@ export default function DailySessionFlow() {
   if (session.phase === 'study-mcq' || session.phase === 'review-mcq') {
     if (!mcqCurrent) return null;
     const onAnswer = session.phase === 'study-mcq' ? handleStudyMcqAnswer : handleReviewMcqAnswer;
-    return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={onAnswer} />;
+    return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={onAnswer} isReview={session.phase === 'review-mcq'} />;
   }
 
   if (session.phase === 'study-matching' || session.phase === 'review-matching') {
@@ -1469,7 +1544,7 @@ export default function DailySessionFlow() {
             <div className="flex flex-col gap-3">
               <div className="text-center -mt-1">
                 <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
-                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide break-words">
+                <div className="text-2xl font-bold text-indigo-800 tracking-wide break-words">
                   {snap.word.article ? `${snap.word.article} ` : ''}{snap.word.de}
                 </div>
               </div>
@@ -1482,7 +1557,7 @@ export default function DailySessionFlow() {
             <div className="flex flex-col gap-3">
               <SentenceWordHeader word={snap.word} />
               <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
-                <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate this sentence into German!</div>
+                <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate to German</div>
                 <div className="text-stone-700 italic">
                   {getSettings().nativeLanguage === 'zh' ? (snap.sentence.englishPromptZh ?? snap.word.exercisePromptZh ?? snap.sentence.englishPrompt) : snap.sentence.englishPrompt}
                 </div>
@@ -1503,7 +1578,7 @@ export default function DailySessionFlow() {
           ) : (
             <div className="flex flex-col gap-3">
               <div className="text-center -mt-1">
-                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide break-words">
+                <div className="text-2xl font-bold text-indigo-800 tracking-wide break-words">
                   {snap.word.article ? `${snap.word.article} ` : ''}{snap.word.de}
                 </div>
               </div>
@@ -1570,6 +1645,12 @@ export default function DailySessionFlow() {
             <div className="text-sm font-medium text-indigo-600">
               {CHUNK_LABELS[roundRange[0]]}
             </div>
+            {/* A labeled switch, not a pill that just names the current
+                state — confirmed real: "Writing"/"Copy" text alone didn't
+                read as something tappable, just as a status label. The
+                track+knob is the standard on/off affordance; the label
+                stays put either way so it doesn't look like a different
+                control depending on state. */}
             {showSentenceModeToggle && settings && (
               <button
                 type="button"
@@ -1581,9 +1662,15 @@ export default function DailySessionFlow() {
                 }}
                 aria-label={settings.sentenceWritingMode ? 'Turn off sentence writing mode (switch to copy mode)' : 'Turn on sentence writing mode'}
                 title={settings.sentenceWritingMode ? 'Sentence writing: on — tap to switch to copy mode' : 'Sentence writing: off — tap to turn on'}
-                className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:scale-95 transition-all shrink-0"
+                className="flex items-center gap-1.5 shrink-0"
               >
-                {settings.sentenceWritingMode ? 'Writing' : 'Copy'}
+                <span className="text-[10px] font-semibold text-indigo-600">Writing</span>
+                <span className={`relative inline-block w-7 h-4 rounded-full transition-colors ${settings.sentenceWritingMode ? 'bg-indigo-600' : 'bg-stone-300'}`}>
+                  <span
+                    className="absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform"
+                    style={{ transform: settings.sentenceWritingMode ? 'translateX(0.75rem)' : 'translateX(0)' }}
+                  />
+                </span>
               </button>
             )}
           </div>
@@ -1635,7 +1722,7 @@ export default function DailySessionFlow() {
             {currentRound === 1 && (
               <div className="text-center -mt-1">
                 <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
-                <div className="text-2xl font-mono font-bold text-indigo-800 tracking-wide break-words">
+                <div className="text-2xl font-bold text-indigo-800 tracking-wide break-words">
                   {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
                 </div>
               </div>
@@ -1713,7 +1800,7 @@ export default function DailySessionFlow() {
                 shrinking, since flex-col lays children out from the top
                 regardless of the container's own height. */}
             {feedback === null ? (
-              <div className="flex flex-col gap-3 min-h-48">
+              <div className="flex flex-col gap-3 min-h-48 mt-auto">
                 <SpecialCharButtons inputRef={activeInputRef} />
                 <button
                   onClick={handleSubmit}
@@ -1729,12 +1816,12 @@ export default function DailySessionFlow() {
                 )}
               </div>
             ) : (
-              <div className="flex flex-col gap-3 min-h-48">
+              <div className="flex flex-col gap-3 min-h-48 mt-auto">
                 <div className={`text-center py-3 px-2 rounded-xl font-semibold text-lg break-words ${feedback ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                   {feedback ? '✓ Correct!' : (
                     <>
                       ✗ The answer is:{' '}
-                      <span className="font-mono">{word.article ? `${word.article} ` : ''}{word.de}</span>{' '}
+                      <span className="">{word.article ? `${word.article} ` : ''}{word.de}</span>{' '}
                       <SpeakerButton word={word} className="align-middle text-red-600 hover:text-red-800 transition-colors" />
                     </>
                   )}

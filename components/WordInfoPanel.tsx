@@ -14,7 +14,7 @@ export default function WordInfoPanel({ word }: { word: Word }) {
   return (
     <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-lg font-bold text-indigo-800">
+        <span className="text-lg font-bold text-indigo-800">
           {word.article ? `${word.article} ` : ''}{word.de}
           <SpeakerButton word={word} className="ml-1.5 align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-base" />
         </span>

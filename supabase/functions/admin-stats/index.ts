@@ -85,6 +85,14 @@ Deno.serve(async (req: Request) => {
     if (userData.user.email !== ADMIN_EMAIL) return json({ error: 'Not authorized' }, 403);
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    // Collected (not just console.error'd) so /admin can show a real error
+    // banner instead of a wrong-looking "0" if a query keeps failing —
+    // temporary/diagnostic, but console logs weren't reachable to pin
+    // down why accountsStartedLearning read 0 even after splitting that
+    // query out from the heavier one below, so surfacing the actual
+    // Postgres/PostgREST message directly in the response is the fastest
+    // way to actually see it without dashboard log access.
+    const debugErrors: string[] = [];
     const todayStr = dateStr(new Date());
     const windowDays = lastNDays(TREND_DAYS);
     const windowStartIso = new Date(Date.now() - TREND_DAYS * DAY_MS).toISOString();
@@ -96,6 +104,10 @@ Deno.serve(async (req: Request) => {
     // leaderboard's user_id -> email lookup, rather than fetching users
     // multiple times.
     const { data: usersData, error: usersError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (usersError) {
+      console.error('listUsers failed:', usersError.message);
+      debugErrors.push(`listUsers: ${usersError.message}`);
+    }
     const allUsers = usersError ? [] : usersData.users;
     const emailByUserId = new Map(allUsers.map(u => [u.id, u.email ?? '(no email)']));
     const totalAccounts = allUsers.length;
@@ -124,7 +136,10 @@ Deno.serve(async (req: Request) => {
     const { data: progressLevelRows, count: accountsStartedLearning, error: progressLevelError } = await admin
       .from('user_progress')
       .select('user_id, level', { count: 'exact' });
-    if (progressLevelError) console.error('user_progress (level) query failed:', progressLevelError.message);
+    if (progressLevelError) {
+      console.error('user_progress (level) query failed:', progressLevelError.message);
+      debugErrors.push(`user_progress (level): ${progressLevelError.message}`);
+    }
 
     // Full progress blob — only used for the word-stages breakdown, kept
     // separate (see above) so a problem here can't also take out the
@@ -135,7 +150,10 @@ Deno.serve(async (req: Request) => {
     const { data: progressRows, error: progressError } = await admin
       .from('user_progress')
       .select('user_id, level, progress');
-    if (progressError) console.error('user_progress (progress) query failed:', progressError.message);
+    if (progressError) {
+      console.error('user_progress (progress) query failed:', progressError.message);
+      debugErrors.push(`user_progress (progress): ${progressError.message}`);
+    }
 
     // progress is nested by level ({A1: {...}, B2: {...}}) for any account
     // that's synced since the per-level split shipped; a handful of very
@@ -228,6 +246,58 @@ Deno.serve(async (req: Request) => {
         .filter(r => r.ip_address && new Date(r.created_at).getTime() >= sevenDaysAgoTime)
         .map(r => r.ip_address as string),
     ).size;
+    // Country breakdown: ip-api.com's free batch endpoint (no key, HTTP
+    // only — the free tier doesn't offer HTTPS; this is a server-to-
+    // server call from the function's own runtime, not the visitor's
+    // browser, so nothing about their connection is exposed by this).
+    // Looked up fresh on every admin-stats call rather than cached/stored
+    // anywhere — this is an on-demand dashboard view, not a live per-visit
+    // pipeline, and the free tier's ~15 req/min limit (batches of up to
+    // 100 IPs each still count as one request) is comfortably enough for
+    // that. Best-effort: any failure here (network hiccup, rate limit)
+    // just means the geo breakdown reads empty, never breaks the rest of
+    // this dashboard.
+    const allIps = [...new Set(allPingRows.map(r => r.ip_address).filter((ip): ip is string => !!ip))];
+    const countryByIp = new Map<string, string>();
+    try {
+      for (let i = 0; i < allIps.length; i += 100) {
+        const chunk = allIps.slice(i, i + 100);
+        const res = await fetch('http://ip-api.com/batch?fields=query,country,status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(chunk),
+        });
+        if (!res.ok) { console.error('ip-api batch lookup failed:', res.status); break; }
+        const results = await res.json() as { query: string; country?: string; status: string }[];
+        for (const r of results) {
+          countryByIp.set(r.query, r.status === 'success' && r.country ? r.country : 'Unknown');
+        }
+      }
+    } catch (err) {
+      console.error('ip-api batch lookup error:', err instanceof Error ? err.message : err);
+    }
+    // "IPs" — every distinct IP counted once, by its country. "Users" —
+    // every distinct device counted once, by the country of its MOST
+    // RECENT ping's IP (a device seen from two countries, e.g. travel or
+    // a VPN, only ever counts under whichever is most recent).
+    const deviceLatestIp = new Map<string, { ip: string; t: number }>();
+    for (const r of allPingRows) {
+      if (!r.ip_address) continue;
+      const t = new Date(r.created_at).getTime();
+      const prev = deviceLatestIp.get(r.device_id);
+      if (!prev || t > prev.t) deviceLatestIp.set(r.device_id, { ip: r.ip_address, t });
+    }
+    function bumpCountry(map: Map<string, number>, country: string) {
+      map.set(country, (map.get(country) ?? 0) + 1);
+    }
+    const byIpCountry = new Map<string, number>();
+    for (const ip of allIps) bumpCountry(byIpCountry, countryByIp.get(ip) ?? 'Unknown');
+    const byUserCountry = new Map<string, number>();
+    for (const { ip } of deviceLatestIp.values()) bumpCountry(byUserCountry, countryByIp.get(ip) ?? 'Unknown');
+    const toSortedArray = (m: Map<string, number>) =>
+      [...m.entries()].map(([country, count]) => ({ country, count })).sort((a, b) => b.count - a.count);
+    const geoBreakdown = { byIp: toSortedArray(byIpCountry), byUser: toSortedArray(byUserCountry) };
+
     const todayStart = new Date(`${todayStr}T00:00:00.000Z`).getTime();
     const newDevicesToday = [...deviceFirstSeen.values()].filter(t => t >= todayStart).length;
     const newIpsToday = [...ipFirstSeen.entries()].filter(([, t]) => t >= todayStart).map(([ip]) => ip);
@@ -355,6 +425,7 @@ Deno.serve(async (req: Request) => {
         wordsStudied: wordsStudiedTrend,
       },
       levelBreakdown,
+      geoBreakdown,
       leaderboardToday,
       // Signed-in/synced learners only — see the comment on the query
       // above for why anonymous learners can't appear here at all (their
@@ -365,6 +436,10 @@ Deno.serve(async (req: Request) => {
       },
       bugReportCount: bugReportCount ?? 0,
       recentBugReports: recentBugReports ?? [],
+      // Temporary/diagnostic — see the comment where this is built. Empty
+      // array in the normal case; /admin only renders anything for this
+      // when it's actually non-empty.
+      debugErrors,
     });
   } catch (err) {
     console.error('admin-stats error:', err);

@@ -1,11 +1,81 @@
 'use client';
 
-// Two small, dependency-free chart primitives for /admin — hand-rolled SVG
-// rather than pulling in a charting library, since this is a single
+// Three small, dependency-free chart primitives for /admin — hand-rolled
+// SVG rather than pulling in a charting library, since this is a single
 // owner-only page and the app currently has no chart dependency at all
 // (qrcode is the only non-framework dependency in package.json). Keeps
 // this page's bundle weight near zero rather than shipping a charting lib
 // nobody else in the app needs.
+
+// A fixed, repeatable color per slice regardless of how many countries
+// are present or what order they sort in — assigned by iterating this
+// list, not randomized, so the same country reads as the same color if
+// the dashboard is reopened later with slightly different totals.
+const DONUT_PALETTE = ['#4f46e5', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#be185d', '#65a30d', '#a8a29e'];
+
+export interface DonutSlice {
+  label: string;
+  count: number;
+}
+
+// A donut (not a full pie) specifically so a title/total can sit in the
+// empty center — reads at a glance without a separate label. Slices under
+// 1% of the total are still drawn (never fully invisible), just thin.
+export function DonutChart({ title, slices, emptyNote }: {
+  title: string;
+  slices: DonutSlice[];
+  emptyNote?: string;
+}) {
+  const total = slices.reduce((s, x) => s + x.count, 0);
+  const size = 120, r = 50, cx = size / 2, cy = size / 2, strokeWidth = 18;
+  const circumference = 2 * Math.PI * r;
+  let offset = 0;
+  const arcs = slices.map((s, i) => {
+    const fraction = total > 0 ? s.count / total : 0;
+    const dash = fraction * circumference;
+    const arc = { ...s, color: DONUT_PALETTE[i % DONUT_PALETTE.length], dash, offset };
+    offset += dash;
+    return arc;
+  });
+
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-sm font-semibold text-stone-700">{title}</h3>
+      {total === 0 ? (
+        <p className="text-stone-400 text-xs italic">{emptyNote ?? 'No data yet.'}</p>
+      ) : (
+        <div className="flex items-center gap-4">
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0 -rotate-90">
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e7e0d4" strokeWidth={strokeWidth} />
+            {arcs.map(a => (
+              <circle
+                key={a.label}
+                cx={cx} cy={cy} r={r}
+                fill="none"
+                stroke={a.color}
+                strokeWidth={strokeWidth}
+                strokeDasharray={`${a.dash} ${circumference - a.dash}`}
+                strokeDashoffset={-a.offset}
+              />
+            ))}
+          </svg>
+          <div className="flex flex-col gap-1 min-w-0 flex-1">
+            {arcs.slice(0, 8).map(a => (
+              <div key={a.label} className="flex items-center gap-1.5 text-xs min-w-0">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: a.color }} />
+                <span className="text-stone-600 truncate flex-1">{a.label}</span>
+                <span className="text-stone-500 font-mono shrink-0">{a.count}</span>
+              </div>
+            ))}
+            {arcs.length > 8 && (
+              <p className="text-stone-400 text-[11px]">+{arcs.length - 8} more</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export interface ChartSeries {
   label: string;

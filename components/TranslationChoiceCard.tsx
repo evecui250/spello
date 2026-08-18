@@ -10,6 +10,11 @@ interface Props {
   correct: string;
   choices: string[];
   onAnswer: (correct: boolean) => void;
+  // Whether this MCQ round belongs to today's review batch rather than
+  // study — a day that starts with reviews due had no visual cue telling
+  // the two apart, since this card's copy ("Which German word means
+  // this?") reads identically either way.
+  isReview?: boolean;
 }
 
 // Round 1.5 — the English word is shown, the user picks its German meaning
@@ -17,7 +22,7 @@ interface Props {
 // word's own level so every option is something the learner could plausibly
 // recognize. Reinforcement only: never touches masteryScore/growthScore/
 // nextReviewDue, only the word's own round-ladder progress does that.
-export default function TranslationChoiceCard({ word, correct: correctChoice, choices, onAnswer }: Props) {
+export default function TranslationChoiceCard({ word, correct: correctChoice, choices, onAnswer, isReview }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
 
   // Guards against a stuck retry loop: when the same word is the only one
@@ -68,7 +73,14 @@ export default function TranslationChoiceCard({ word, correct: correctChoice, ch
   return (
     <div className="flex flex-col gap-5">
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
-        <div className="text-sm font-medium text-indigo-600">Which German word means this?</div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm font-medium text-indigo-600">Which German word means this?</div>
+          {isReview && (
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 shrink-0">
+              Review
+            </span>
+          )}
+        </div>
         <div className="text-center">
           <span className="text-2xl font-semibold text-slate-700">{glossFor(word, getSettings().nativeLanguage)}</span>
         </div>

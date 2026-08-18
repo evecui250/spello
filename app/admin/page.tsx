@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { TrendChart, LevelBars } from '../../components/AdminCharts';
+import { TrendChart, LevelBars, DonutChart } from '../../components/AdminCharts';
 
 interface AiUsageSummary {
   calls: number;
@@ -48,6 +48,10 @@ interface AdminStats {
     wordsStudied: { date: string; total: number }[];
   };
   levelBreakdown: { level: string; signedIn: number; anonymous: number }[];
+  geoBreakdown: {
+    byIp: { country: string; count: number }[];
+    byUser: { country: string; count: number }[];
+  };
   leaderboardToday: { email: string; wordsStudied: number; wordsMastered: number; level: string | null }[];
   wordStages: {
     totals: StageCounts;
@@ -55,6 +59,7 @@ interface AdminStats {
   };
   bugReportCount: number;
   recentBugReports: { id: number; message: string; page_path: string | null; created_at: string }[];
+  debugErrors: string[];
 }
 
 type Status = 'loading' | 'signed-out' | 'unauthorized' | 'ready' | 'error';
@@ -115,6 +120,19 @@ export default function AdminPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Admin</h1>
 
+      {/* Temporary/diagnostic — a query failing silently used to just
+          read as a wrong-looking "0" with no indication anything broke
+          (see admin-stats's debugErrors). Only ever renders anything
+          when a query actually failed. */}
+      {stats.debugErrors.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex flex-col gap-1">
+          <p className="text-red-700 text-xs font-semibold">Some data below may be wrong — a query failed:</p>
+          {stats.debugErrors.map((e, i) => (
+            <p key={i} className="text-red-600 text-xs font-mono">{e}</p>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <StatCard label="Total accounts" value={stats.totals.totalAccounts} />
         <StatCard label="Accounts that started learning" value={stats.totals.accountsStartedLearning} />
@@ -127,7 +145,7 @@ export default function AdminPage() {
         <h2 className="font-semibold text-stone-800">Today</h2>
         <div className="grid grid-cols-2 gap-3">
           <StatCard label="New signups" value={stats.today.newSignups} />
-          <StatCard label="Words studied (signed-in)" value={stats.today.wordsStudied} />
+          <StatCard label="Words practiced (signed-in)" value={stats.today.wordsStudied} />
           <StatCard label="New devices — signed in" value={stats.today.newDevicesSignedIn} />
           <StatCard label="New devices — anonymous" value={stats.today.newDevicesAnonymous} />
           <StatCard label="New IPs" value={stats.today.newIpsTotal} />
@@ -164,9 +182,9 @@ export default function AdminPage() {
           ]}
         />
         <TrendChart
-          title="Words studied / day (signed-in accounts only)"
+          title="Words practiced / day (signed-in accounts only)"
           dates={dates}
-          series={[{ label: 'Words studied', color: SIGNED_IN_COLOR, values: stats.trends.wordsStudied.map(t => t.total) }]}
+          series={[{ label: 'Words practiced', color: SIGNED_IN_COLOR, values: stats.trends.wordsStudied.map(t => t.total) }]}
           emptyNote="Tracking just started — this fills in day by day from here, it can't show history from before this was added."
         />
       </div>
@@ -193,6 +211,18 @@ export default function AdminPage() {
             }))}
           />
         )}
+      </div>
+
+      {/* Countries */}
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-4">
+        <div>
+          <h2 className="font-semibold text-stone-800">Countries</h2>
+          <p className="text-stone-400 text-xs -mt-0.5">
+            Looked up from IP address (ip-api.com) each time this page loads — a rough signal, not exact (VPNs, shared networks, roaming all skew it).
+          </p>
+        </div>
+        <DonutChart title="By user (device)" slices={stats.geoBreakdown.byUser.map(g => ({ label: g.country, count: g.count }))} />
+        <DonutChart title="By IP" slices={stats.geoBreakdown.byIp.map(g => ({ label: g.country, count: g.count }))} />
       </div>
 
       {/* Word stages */}
@@ -245,7 +275,7 @@ export default function AdminPage() {
                   {row.email}
                 </span>
                 <span className="text-stone-500 text-xs text-right shrink-0">
-                  {row.wordsStudied} studied · {row.wordsMastered} mastered · {row.level ?? '—'}
+                  {row.wordsStudied} practiced · {row.wordsMastered} mastered · {row.level ?? '—'}
                 </span>
               </div>
             ))}
