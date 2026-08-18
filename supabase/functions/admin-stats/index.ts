@@ -109,13 +109,33 @@ Deno.serve(async (req: Request) => {
     // Accounts that have actually studied something (a user_progress row
     // only ever exists after a real first sync — see sync.ts), plus each
     // account's current level (for the level-breakdown chart's signed-in
-    // half) and the full progress blob (for the per-learner stage
-    // breakdown below — mascotStage puppy/short/medium/long-crowned,
-    // labeled Introduced/Familiar/Strong/Mastered same as the app's own
-    // Word List/Progress pages).
-    const { data: progressRows, count: accountsStartedLearning } = await admin
+    // half). Deliberately its OWN lightweight query, separate from the
+    // full progress blob below — confirmed real: these used to be one
+    // combined select, and accountsStartedLearning/levelBreakdown's
+    // signed-in half started silently reading as 0 the moment `progress`
+    // (every account's full learning history, unbounded) got added to
+    // that same select for the word-stages feature. Neither branch here
+    // was ever checked for `error` before, so a failure on the heavy
+    // column silently zeroed out the cheap one riding along with it
+    // instead of surfacing anywhere. Logged now (not just swallowed) so a
+    // future failure shows up in the function's logs instead of just
+    // reading as "0 accounts", which looks like real data rather than a
+    // broken query.
+    const { data: progressLevelRows, count: accountsStartedLearning, error: progressLevelError } = await admin
       .from('user_progress')
-      .select('user_id, level, progress', { count: 'exact' });
+      .select('user_id, level', { count: 'exact' });
+    if (progressLevelError) console.error('user_progress (level) query failed:', progressLevelError.message);
+
+    // Full progress blob — only used for the word-stages breakdown, kept
+    // separate (see above) so a problem here can't also take out the
+    // accounts-started-learning count or the level breakdown. `level`
+    // is included again too (cheap either way, not the risky part) so
+    // the per-learner word-stages table can still show it without a
+    // third query or a join against progressLevelRows.
+    const { data: progressRows, error: progressError } = await admin
+      .from('user_progress')
+      .select('user_id, level, progress');
+    if (progressError) console.error('user_progress (progress) query failed:', progressError.message);
 
     // progress is nested by level ({A1: {...}, B2: {...}}) for any account
     // that's synced since the per-level split shipped; a handful of very
@@ -231,11 +251,19 @@ Deno.serve(async (req: Request) => {
       entry[key] += 1;
       levelCounts.set(l, entry);
     };
-    for (const row of progressRows ?? []) bump(row.level, 'signedIn');
+    for (const row of progressLevelRows ?? []) bump(row.level, 'signedIn');
     for (const row of todaysPings.filter(r => !r.signed_in)) bump(row.level, 'anonymous');
+    // A1 -> B2 (real book order), then B2_old, then "unknown" pinned last —
+    // was sorted by count descending before, which reshuffled every time
+    // the numbers changed and made the chart harder to scan at a glance.
+    const LEVEL_DISPLAY_ORDER = ['A1', 'A2', 'B1', 'B2', 'B2_old'];
+    const levelRank = (level: string) => {
+      const i = LEVEL_DISPLAY_ORDER.indexOf(level);
+      return i === -1 ? LEVEL_DISPLAY_ORDER.length + 1 : i; // unknown/anything else sorts last
+    };
     const levelBreakdown = [...levelCounts.entries()]
       .map(([level, counts]) => ({ level, ...counts }))
-      .sort((a, b) => (b.signedIn + b.anonymous) - (a.signedIn + a.anonymous));
+      .sort((a, b) => levelRank(a.level) - levelRank(b.level));
 
     // AI usage: last-30-days window for the trend, filtered down to today
     // for the "Today" card — one query covers both, split by whether
