@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
 // A single fixed tile size for every word, on every card, always — a
 // previous version shrank tiles per-word to try to squeeze longer words
@@ -90,7 +90,6 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
   ref,
 ) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [focused, setFocused] = useState(false);
   const editableIndices = hint.map((h, i) => (h ? i : -1)).filter(i => i !== -1);
   // The single input's own value is just every editable position's
   // current letter, concatenated in order — locked/revealed positions
@@ -196,8 +195,7 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
         // moment composition actually ends, whenever that happens to be.
         onInput={e => handleChange(e.currentTarget.value)}
         onKeyDown={handleKeyDown}
-        onFocus={e => { activeInputRef.current = e.target; setFocused(true); }}
-        onBlur={() => setFocused(false)}
+        onFocus={e => { activeInputRef.current = e.target; }}
         autoComplete="off"
         autoCapitalize="none"
         // WebKit-specific, not part of the HTML spec — disables iOS's
@@ -243,31 +241,14 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
         }
         const k = editableIndices.indexOf(i);
         const typedChar = flatValue[k] ?? '';
-        let underline: string;
-        if (showCorrectness) {
-          // Checked — per-letter right/wrong instead of the in-progress
-          // fill state below, comparing exactly what landed in this
-          // position against the actual correct letter there. Dark
-          // green/dark blue rather than the app's usual red-for-wrong:
-          // red read as too alarming for "one letter in an otherwise-
-          // fine word" the same way it did for the AI-correction diff
-          // underline earlier (see that one's own comment) — blue still
-          // reads clearly as "not this one" without the alarm.
-          underline = typedChar === ch ? 'border-emerald-700' : 'border-blue-700';
-        } else {
-          // The tile at the same position as the input's current cursor —
-          // i.e. the next one that would receive a keystroke — gets a
-          // highlight so the row still reads as "which box is active"
-          // the way separate real inputs used to convey for free. A
-          // still-blank tile's underline stays a light, quiet indigo;
-          // only a filled one gets the full dark-purple theme color, so
-          // the row shows progress at a glance — distinct from the
-          // locked/given tiles' plain gray above, which never changes
-          // regardless of anything typed here.
-          const isCursor = focused && k === flatValue.length;
-          const filled = !!typedChar;
-          underline = isCursor ? 'border-indigo-700 bg-indigo-50' : filled ? 'border-indigo-700' : 'border-indigo-200';
-        }
+        // A still-blank tile is dark purple (draws the eye to what's
+        // left to fill); a filled one steps back to a quiet light
+        // indigo, since it no longer needs to compete for attention.
+        // After checking, a wrong letter overrides that with dark red —
+        // a correct one just stays whatever it already was (filled
+        // light indigo), no separate "correct" color needed on top.
+        const isWrong = showCorrectness && typedChar !== ch;
+        const underline = isWrong ? 'border-red-700' : typedChar ? 'border-indigo-200' : 'border-indigo-700';
         return (
           <div
             key={i}
