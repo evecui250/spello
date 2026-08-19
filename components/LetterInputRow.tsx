@@ -154,7 +154,18 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
             type="text"
             inputMode="text"
             lang="de"
-            maxLength={1}
+            // No maxLength here on purpose — a hard maxlength on the DOM
+            // input actively blocks IME composition from ever starting
+            // (the composing buffer needs room to build before it commits
+            // down to the final character), which is exactly what caused
+            // this to go from "duplicates a letter" to "can't type
+            // anything at all" once composition handling was added below.
+            // This isn't CJK-specific either: Android's predictive-text
+            // keyboard composes plain English/German input the same way,
+            // which is why it broke there too. Truncation to one
+            // character is still fully enforced, just in JS (handleChange
+            // below already does `raw.slice(-1)`), not via the DOM
+            // attribute.
             value={values[i] ?? ''}
             disabled={disabled}
             onChange={e => { if (!composingRef.current) handleChange(i, e.target.value); }}
