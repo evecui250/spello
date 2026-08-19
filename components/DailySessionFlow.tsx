@@ -1926,20 +1926,29 @@ export default function DailySessionFlow() {
               } : undefined}
             />
 
+            {/* Sits in normal flow right after the blanks (not inside the
+                mt-auto block below) — reported that the middle of the
+                card felt overly empty, since mt-auto was pushing this row
+                all the way down to sit flush with Check/Hint rather than
+                staying close to the letters it's actually for. Pulling it
+                up here doesn't disturb the mt-auto block's own height
+                consistency (see its own comment) since that block's floor
+                is unchanged either way. */}
+            {feedback === null && <SpecialCharButtons inputRef={activeInputRef} />}
+
             {/* min-h keeps this action area a consistent height across both
-                states — without it, the "answering" layout (special-char
-                row + Check + Hint) and the "feedback" layout (banner +
-                Next) render at different total heights, so Check/Hint/Next
-                visibly jump position every time the card switches between
-                them. Sized generously enough to cover the taller variant
-                (round 2+ with the Hint button, or a two-line-wrapped
-                feedback message on a long word) — a shorter variant just
-                leaves empty space below it instead of the container
-                shrinking, since flex-col lays children out from the top
-                regardless of the container's own height. */}
+                states — without it, the "answering" layout (Check + Hint)
+                and the "feedback" layout (banner + Next) render at
+                different total heights, so Check/Hint/Next visibly jump
+                position every time the card switches between them. Sized
+                generously enough to cover the taller variant (round 2+
+                with the Hint button, or a two-line-wrapped feedback
+                message on a long word) — a shorter variant just leaves
+                empty space below it instead of the container shrinking,
+                since flex-col lays children out from the top regardless
+                of the container's own height. */}
             {feedback === null ? (
               <div className="flex flex-col gap-3 min-h-48 mt-auto">
-                <SpecialCharButtons inputRef={activeInputRef} />
                 <button
                   onClick={handleSubmit}
                   disabled={!wordComplete}

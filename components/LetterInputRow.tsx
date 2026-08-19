@@ -12,7 +12,11 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 // to compensate. Fixed size + flex-wrap below means every card looks the
 // same regardless of word length — a long word simply wraps onto more
 // rows at the exact same tile size, never changes it.
-const TILE_PX = 36;
+// Trimmed down from 36px + a gap-2 (8px) gap (reported: a longer word
+// like "konservativ" read as too spaced-out, wrapping more than it
+// needed to) — smaller tile + a tighter gap-1 (4px) gap below, uniformly,
+// so the "same size for every word" property above still holds.
+const TILE_PX = 30;
 const TILE_HEIGHT_PX = Math.round(TILE_PX * (44 / 36));
 
 interface Props {
@@ -168,7 +172,7 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
   const tileStyle = { width: TILE_PX, height: TILE_HEIGHT_PX, fontSize: 20 };
 
   return (
-    <div className="relative flex flex-wrap gap-2 justify-center">
+    <div className="relative flex flex-wrap gap-1 justify-center">
       <input
         ref={inputRef}
         type="text"
@@ -237,11 +241,18 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
         // focus ring so the row still reads as "which box is active" the
         // way separate real inputs used to convey for free.
         const isCursor = focused && k === flatValue.length;
+        const filled = !!flatValue[k];
+        // A still-blank tile's underline stays a light, quiet indigo —
+        // only a filled one gets the full-strength theme color, so the
+        // row itself shows progress at a glance (which letters are
+        // actually done) instead of every blank looking identically
+        // "active" whether typed or not.
+        const underline = isCursor ? 'border-indigo-500 bg-indigo-50' : filled ? 'border-indigo-500' : 'border-indigo-200';
         return (
           <div
             key={i}
             style={tileStyle}
-            className={`pointer-events-none flex items-end justify-center pb-1 font-bold border-b-2 text-indigo-800 ${isCursor ? 'border-indigo-500 bg-indigo-50' : 'border-indigo-500'}`}
+            className={`pointer-events-none flex items-end justify-center pb-1 font-bold border-b-2 text-indigo-800 ${underline}`}
           >
             {flatValue[k] ?? ''}
           </div>

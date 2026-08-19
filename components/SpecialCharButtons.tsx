@@ -30,14 +30,20 @@ export default function SpecialCharButtons({ inputRef, onInsert }: Props) {
     const proto = el instanceof HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
     const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
     nativeSetter?.call(el, newVal);
-    // Dispatch the native input event and let the field's own onChange
-    // (which may auto-advance focus to the next cell) handle what follows —
-    // forcing focus back here would undo that advance.
+    // Dispatch the native input event so the field's own onChange fires
+    // and picks up the new value.
     el.dispatchEvent(new Event('input', { bubbles: true }));
     // Put the cursor right after the inserted character, same as typing
-    // it normally would — matters most for the textarea, where a learner
-    // is likely to keep typing after inserting one of these.
+    // it normally would, and refocus the field — clicking this button
+    // moves focus to the button itself, so without this a learner had to
+    // manually tap back into the blank before they could keep typing
+    // (reported as exactly that). LetterInputRow's spelling rounds are a
+    // single field per row now (not one input per letter), so there's no
+    // longer a separate "next cell" for its own logic to advance into —
+    // refocusing here is what actually resumes typing where it left off,
+    // for both that and the sentence-writing textarea.
     const newCursor = start + ch.length;
+    el.focus();
     el.setSelectionRange?.(newCursor, newCursor);
     onInsert?.(newVal);
   };
