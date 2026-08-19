@@ -1890,12 +1890,13 @@ export default function DailySessionFlow() {
                   <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Article — der / die / das</div>
                   <LetterInputRow
                     ref={articleRowRef}
-                    chars={['_', '_', '_']}
+                    chars={word.article ? [...word.article] : ['_', '_', '_']}
                     hint={[true, true, true]}
                     values={articleValues}
                     onChange={setArticleValues}
                     onSubmit={handleSubmit}
                     disabled={feedback !== null}
+                    showCorrectness={feedback !== null}
                     activeInputRef={activeInputRef}
                     resetFocusKey={`article-${word.id}-${attemptKey}`}
                     autoFocus
@@ -1917,6 +1918,7 @@ export default function DailySessionFlow() {
               onChange={next => setValues(word.type === 'noun' && next[0] ? [next[0].toUpperCase(), ...next.slice(1)] : next)}
               onSubmit={handleSubmit}
               disabled={feedback !== null}
+              showCorrectness={feedback !== null}
               activeInputRef={activeInputRef}
               resetFocusKey={`${word.id}-${attemptKey}`}
               autoFocus={!needsArticle}

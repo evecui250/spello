@@ -26,6 +26,12 @@ interface Props {
   onChange: (values: string[]) => void;
   onSubmit: () => void;
   disabled?: boolean;
+  // True once this round's been checked (right or wrong) — switches each
+  // editable tile's underline from "have I typed this yet" to "was this
+  // specific letter right", comparing what's actually in `values` against
+  // `chars` position by position. Left off shows the plain in-progress
+  // fill state instead (the normal case, while still typing).
+  showCorrectness?: boolean;
   activeInputRef: React.MutableRefObject<HTMLInputElement | null>;
   resetFocusKey: string;
   // When a row after this one needs the initial focus instead (e.g. the
@@ -80,7 +86,7 @@ export interface LetterInputRowHandle {
 // loading, or the other row's cross-field backspace) — see the effect
 // below.
 const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterInputRow(
-  { chars, hint, values, onChange, onSubmit, disabled, activeInputRef, resetFocusKey, autoFocus = true, onFilled, onBackspaceAtStart },
+  { chars, hint, values, onChange, onSubmit, disabled, showCorrectness, activeInputRef, resetFocusKey, autoFocus = true, onFilled, onBackspaceAtStart },
   ref,
 ) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -236,25 +242,39 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
           );
         }
         const k = editableIndices.indexOf(i);
-        // The tile at the same position as the input's current cursor —
-        // i.e. the next one that would receive a keystroke — gets a
-        // focus ring so the row still reads as "which box is active" the
-        // way separate real inputs used to convey for free.
-        const isCursor = focused && k === flatValue.length;
-        const filled = !!flatValue[k];
-        // A still-blank tile's underline stays a light, quiet indigo —
-        // only a filled one gets the full-strength theme color, so the
-        // row itself shows progress at a glance (which letters are
-        // actually done) instead of every blank looking identically
-        // "active" whether typed or not.
-        const underline = isCursor ? 'border-indigo-500 bg-indigo-50' : filled ? 'border-indigo-500' : 'border-indigo-200';
+        const typedChar = flatValue[k] ?? '';
+        let underline: string;
+        if (showCorrectness) {
+          // Checked — per-letter right/wrong instead of the in-progress
+          // fill state below, comparing exactly what landed in this
+          // position against the actual correct letter there. Dark
+          // green/dark blue rather than the app's usual red-for-wrong:
+          // red read as too alarming for "one letter in an otherwise-
+          // fine word" the same way it did for the AI-correction diff
+          // underline earlier (see that one's own comment) — blue still
+          // reads clearly as "not this one" without the alarm.
+          underline = typedChar === ch ? 'border-emerald-700' : 'border-blue-700';
+        } else {
+          // The tile at the same position as the input's current cursor —
+          // i.e. the next one that would receive a keystroke — gets a
+          // highlight so the row still reads as "which box is active"
+          // the way separate real inputs used to convey for free. A
+          // still-blank tile's underline stays a light, quiet indigo;
+          // only a filled one gets the full dark-purple theme color, so
+          // the row shows progress at a glance — distinct from the
+          // locked/given tiles' plain gray above, which never changes
+          // regardless of anything typed here.
+          const isCursor = focused && k === flatValue.length;
+          const filled = !!typedChar;
+          underline = isCursor ? 'border-indigo-700 bg-indigo-50' : filled ? 'border-indigo-700' : 'border-indigo-200';
+        }
         return (
           <div
             key={i}
             style={tileStyle}
             className={`pointer-events-none flex items-end justify-center pb-1 font-bold border-b-2 text-indigo-800 ${underline}`}
           >
-            {flatValue[k] ?? ''}
+            {typedChar}
           </div>
         );
       })}
