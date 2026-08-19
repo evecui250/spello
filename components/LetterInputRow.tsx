@@ -68,6 +68,18 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
 ) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [focused, setFocused] = useState(false);
+  // React re-asserts this input's `value` prop on every render (it's a
+  // controlled input) — while an IME composition is actually in progress,
+  // that fight between React's own reconciliation and the IME's internal
+  // composing-buffer state is what caused the second-round symptoms
+  // (typing "sl" on a Chinese keyboard producing "slslsl"; "überleben"
+  // corrupting to "überber__") even after the single-input rewrite fixed
+  // the original cross-tile duplication. Deferring the state update
+  // (and so the controlled value) until composition actually ends stops
+  // React from touching the DOM value mid-composition at all, which is
+  // the standard fix for controlled-input-vs-IME conflicts — orthogonal
+  // to the single-vs-multi-field question the earlier rewrite solved.
+  const composingRef = useRef(false);
   const editableIndices = hint.map((h, i) => (h ? i : -1)).filter(i => i !== -1);
   // The single input's own value is just every editable position's
   // current letter, concatenated in order — locked/revealed positions
@@ -150,7 +162,9 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
         lang="de"
         value={flatValue}
         disabled={disabled}
-        onChange={e => handleChange(e.target.value)}
+        onChange={e => { if (!composingRef.current) handleChange(e.target.value); }}
+        onCompositionStart={() => { composingRef.current = true; }}
+        onCompositionEnd={e => { composingRef.current = false; handleChange(e.currentTarget.value); }}
         onKeyDown={handleKeyDown}
         onFocus={e => { activeInputRef.current = e.target; setFocused(true); }}
         onBlur={() => setFocused(false)}
@@ -162,9 +176,16 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
         // accepts input, which is the only place a tap here could
         // reasonably mean anyway) so it's tappable on mobile exactly like
         // a normal text field, while being visually invisible — the
-        // tiles beneath are what's actually seen.
-        className="absolute inset-0 w-full h-full opacity-0 cursor-text"
-        style={{ fontSize: 20 }}
+        // tiles beneath are what's actually seen. opacity:0 alone left a
+        // faint blue rectangle visible on some mobile browsers (their
+        // native text-selection highlight painting through regardless of
+        // the element's opacity) — color/background/caret all forced
+        // transparent too, plus disabling the pointer-drag text-selection
+        // gesture that paints that highlight in the first place; none of
+        // that affects the field's ability to receive focus, typing, or
+        // IME composition.
+        className="absolute inset-0 w-full h-full opacity-0 cursor-text select-none"
+        style={{ fontSize: 20, color: 'transparent', background: 'transparent', caretColor: 'transparent' }}
       />
       {chars.map((ch, i) => {
         if (!hint[i]) {
