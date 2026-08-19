@@ -144,7 +144,13 @@ Deno.serve(async (req: Request) => {
                   'learners can validly translate the same sentence differently — real synonyms, ' +
                   'word order) — but every word in your output must actually mean what the ' +
                   'corresponding part of the English sentence means; do not preserve their overall ' +
-                  'sentence structure/approach at the expense of accuracy. If it does NOT attempt ' +
+                  'sentence structure/approach at the expense of accuracy. This applies especially ' +
+                  'to PREPOSITIONS: German often has more than one preposition that correctly ' +
+                  'expresses the same English one in a given context (e.g. "während" and "in" can ' +
+                  'both correctly translate "during" before a noun phrase; "an" can govern several ' +
+                  'different relationships) — only replace the learner\'s preposition if it is ' +
+                  'actually grammatically wrong or changes the meaning for THAT context, never ' +
+                  'just because a different preposition you\'d have picked also works. If it does NOT attempt ' +
                   'the target word at all, or their attempt is too garbled or unrelated to the ' +
                   'English sentence to fix, IGNORE their attempt entirely and produce a fresh, ' +
                   'natural German translation of the English sentence instead. Either way, you ' +

@@ -105,7 +105,14 @@ Deno.serve(async (req: Request) => {
               'points the learner should take away — article/case (der/die/das, den/dem/der ' +
               'agreement), adjective endings, verb tense/conjugation, preposition choice, or a ' +
               'word-class mix-up (e.g. using a verb form where a noun was needed, like ' +
-              '"reisen" [to travel] instead of "Reisende" [traveler]). Do NOT mention spelling ' +
+              '"reisen" [to travel] instead of "Reisende" [traveler]). Before writing each point, ' +
+              "re-read the attempt's actual word order carefully and confirm EXACTLY which word " +
+              "or phrase in the attempt the point is about, and what that word was governing/" +
+              'modifying THERE (not what a similar-looking word would typically govern) — German ' +
+              "word order means a preposition/article near one noun in the attempt can land near " +
+              'a different noun in the correction, or vice versa; do not assume based on position ' +
+              'alone. If you are not sure which specific word changed or what it was attached to, ' +
+              'leave that point out rather than risk mis-describing it. Do NOT mention spelling ' +
               'typos or simply say a word "was wrong" — every point must explain the actual ' +
               'grammar rule behind the fix, briefly, so it is something the learner can apply ' +
               'next time. Lead with the concrete fact itself, not a restated category label — ' +

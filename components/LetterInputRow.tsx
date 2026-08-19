@@ -54,6 +54,19 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
 ) {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const editableIndices = hint.map((h, i) => (h ? i : -1)).filter(i => i !== -1);
+  // A CJK IME (e.g. Chinese Pinyin) intercepts every Latin keystroke into
+  // its own composition buffer, even when the learner just wants the raw
+  // letter — the browser still fires onChange for each intermediate
+  // composition update, not just the final committed text. Combined with
+  // this row's auto-advance-to-next-tile-on-input behavior, that meant a
+  // single keystroke could fire onChange while composition was still
+  // open, advance focus to the NEXT tile mid-composition, and then have
+  // the IME's eventual commit land there too — showing up as the same
+  // letter typed twice across two tiles. Deferring onChange entirely
+  // until composition actually ends (reading the input's final value at
+  // that point) makes a composed keystroke behave exactly like a plain
+  // one, regardless of which keyboard/IME produced it.
+  const composingRef = useRef(false);
 
   // requestAnimationFrame instead of an arbitrary setTimeout delay — fires as
   // soon as the DOM is actually ready to be focused (refs attached), which is
@@ -144,7 +157,9 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
             maxLength={1}
             value={values[i] ?? ''}
             disabled={disabled}
-            onChange={e => handleChange(i, e.target.value)}
+            onChange={e => { if (!composingRef.current) handleChange(i, e.target.value); }}
+            onCompositionStart={() => { composingRef.current = true; }}
+            onCompositionEnd={e => { composingRef.current = false; handleChange(i, e.currentTarget.value); }}
             onKeyDown={e => handleKeyDown(i, e)}
             onFocus={e => { activeInputRef.current = e.target; }}
             autoComplete="off"
