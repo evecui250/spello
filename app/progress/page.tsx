@@ -187,16 +187,25 @@ export default function ProgressPage() {
           {bars.map(b => (
             <div key={b.id} className="flex flex-col items-center justify-end flex-1 gap-1">
               <span className="text-sm font-semibold text-stone-700">{b.total}</span>
-              {/* A genuinely empty stage renders no bar at all, rather than
-                  a near-invisible sliver that's easy to mistake for a bar
-                  cut off at the bottom. Height is a fixed px value (see
-                  BAR_MAX_HEIGHT_PX), not a percentage of this column's own
-                  height — nothing here for the column's own sizing to
-                  disagree with. */}
+              {/* A genuinely empty stage renders no bar at all. The real
+                  cause of the reported "clipped at the bottom" look,
+                  finally pinned down from an actual screenshot: a small
+                  count next to a much larger one (e.g. 4 vs. a 50-word
+                  max) was scaling down to ~7px tall — barely more than
+                  this div's own rounded-t-md corner radius, so instead of
+                  reading as a short bar it read as a squashed, bottom-less
+                  blob. 18px keeps even the smallest nonzero stage clearly
+                  bar-shaped (a real flat body under the rounded top)
+                  regardless of the width ratio the other stages happen
+                  to be scaled by, at the cost of "shortest bar" no longer
+                  being perfectly proportional at extreme ratios — a
+                  trade worth making since the whole point of this chart
+                  is reading as a bar, not as an exact ruler.
+              */}
               {b.total > 0 && <div
                 className="w-full max-w-10 rounded-t-md overflow-hidden transition-all"
                 style={{
-                  height: `${Math.max(Math.round((b.total / maxStageCount) * BAR_MAX_HEIGHT_PX), 6)}px`,
+                  height: `${Math.max(Math.round((b.total / maxStageCount) * BAR_MAX_HEIGHT_PX), 18)}px`,
                   backgroundColor: b.color,
                 }}
               />}
