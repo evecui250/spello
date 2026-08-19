@@ -60,26 +60,27 @@ export interface LetterInputRowHandle {
 // to the next box mid-composition, and then have the real commit land
 // there too (a letter typed twice). A composed keystroke has nowhere else
 // to jump to here, so that whole failure mode doesn't exist by
-// construction, on any keyboard, without needing to get composition-event
-// timing exactly right across every mobile browser.
+// construction, on any keyboard.
+//
+// Deliberately UNCONTROLLED (no `value` prop) rather than gated by
+// composition-event tracking — a first attempt deferred React's state
+// update until compositionend, but that assumes compositionend always
+// fires, and on at least one real mobile IME it apparently doesn't
+// reliably: composingRef got stuck true and blocked every subsequent
+// keystroke, which is worse (typed nothing at all) than the bug it was
+// fixing. Going fully uncontrolled instead means React NEVER writes this
+// field's value while it's focused, under any circumstance — nothing to
+// fight the IME over, and nothing that depends on any particular
+// composition event actually firing. The DOM is only ever imperatively
+// re-synced to match `values` while the field is NOT focused (a new word
+// loading, or the other row's cross-field backspace) — see the effect
+// below.
 const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterInputRow(
   { chars, hint, values, onChange, onSubmit, disabled, activeInputRef, resetFocusKey, autoFocus = true, onFilled, onBackspaceAtStart },
   ref,
 ) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [focused, setFocused] = useState(false);
-  // React re-asserts this input's `value` prop on every render (it's a
-  // controlled input) — while an IME composition is actually in progress,
-  // that fight between React's own reconciliation and the IME's internal
-  // composing-buffer state is what caused the second-round symptoms
-  // (typing "sl" on a Chinese keyboard producing "slslsl"; "überleben"
-  // corrupting to "überber__") even after the single-input rewrite fixed
-  // the original cross-tile duplication. Deferring the state update
-  // (and so the controlled value) until composition actually ends stops
-  // React from touching the DOM value mid-composition at all, which is
-  // the standard fix for controlled-input-vs-IME conflicts — orthogonal
-  // to the single-vs-multi-field question the earlier rewrite solved.
-  const composingRef = useRef(false);
   const editableIndices = hint.map((h, i) => (h ? i : -1)).filter(i => i !== -1);
   // The single input's own value is just every editable position's
   // current letter, concatenated in order — locked/revealed positions
@@ -107,6 +108,19 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
     return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetFocusKey, disabled, autoFocus]);
+
+  // Keeps the uncontrolled field's actual DOM value matching `values`
+  // whenever it changes for a reason OTHER than this field's own typing
+  // (a new word loading, or the other row's cross-field backspace
+  // reaching in and clearing this row's last character from outside) —
+  // skipped while focused specifically so it can never fire in the
+  // middle of the user's own typing/composition, which would recreate
+  // the exact fight this component is built to avoid.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el || document.activeElement === el) return;
+    if (el.value !== flatValue) el.value = flatValue;
+  }, [flatValue]);
 
   const handleChange = (raw: string) => {
     // Some IMEs (reported: a Chinese Pinyin keyboard) need a Space
@@ -160,11 +174,17 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
         type="text"
         inputMode="text"
         lang="de"
-        value={flatValue}
+        defaultValue={flatValue}
         disabled={disabled}
-        onChange={e => { if (!composingRef.current) handleChange(e.target.value); }}
-        onCompositionStart={() => { composingRef.current = true; }}
-        onCompositionEnd={e => { composingRef.current = false; handleChange(e.currentTarget.value); }}
+        // onInput (not onChange) specifically — it fires on every native
+        // DOM input event, mid-composition included, and this is an
+        // uncontrolled field so there's no risk in reading it eagerly:
+        // we're never writing back into it, only reading whatever the
+        // browser/IME has already committed there. Composition-in-
+        // progress text briefly flowing into the tiles is a harmless
+        // cosmetic flicker, not a correctness issue — it settles the
+        // moment composition actually ends, whenever that happens to be.
+        onInput={e => handleChange(e.currentTarget.value)}
         onKeyDown={handleKeyDown}
         onFocus={e => { activeInputRef.current = e.target; setFocused(true); }}
         onBlur={() => setFocused(false)}
@@ -177,15 +197,19 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
         // reasonably mean anyway) so it's tappable on mobile exactly like
         // a normal text field, while being visually invisible — the
         // tiles beneath are what's actually seen. opacity:0 alone left a
-        // faint blue rectangle visible on some mobile browsers (their
-        // native text-selection highlight painting through regardless of
-        // the element's opacity) — color/background/caret all forced
-        // transparent too, plus disabling the pointer-drag text-selection
-        // gesture that paints that highlight in the first place; none of
-        // that affects the field's ability to receive focus, typing, or
-        // IME composition.
+        // visible rectangle on mobile Safari/Chrome — that's WebKit's
+        // default tap-highlight overlay (shown on any tappable element
+        // unless explicitly disabled), not a text-selection artifact, so
+        // -webkit-tap-highlight-color is the actual fix; color/
+        // background/caret forced transparent and the drag-to-select
+        // gesture disabled too, belt-and-braces. None of this affects
+        // the field's ability to receive focus, typing, or IME
+        // composition.
         className="absolute inset-0 w-full h-full opacity-0 cursor-text select-none"
-        style={{ fontSize: 20, color: 'transparent', background: 'transparent', caretColor: 'transparent' }}
+        style={{
+          fontSize: 20, color: 'transparent', background: 'transparent', caretColor: 'transparent',
+          WebkitTapHighlightColor: 'transparent',
+        }}
       />
       {chars.map((ch, i) => {
         if (!hint[i]) {
