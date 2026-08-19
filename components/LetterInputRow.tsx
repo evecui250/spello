@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 // A single fixed tile size for every word, on every card, always — a
 // previous version shrank tiles per-word to try to squeeze longer words
@@ -31,164 +31,157 @@ interface Props {
   // Called once every editable cell in the row has a value — lets a caller
   // chain focus into the next row (article blanks -> word blanks).
   onFilled?: () => void;
-  // Called when Backspace is pressed on the row's first editable cell while
-  // it's already empty — lets a caller chain focus back into a previous row
-  // (word blanks -> article blanks), so deleting can cross the visual gap
-  // between two separate LetterInputRow instances the same way it crosses
-  // revealed/locked letters within a single one.
+  // Called when Backspace is pressed while the row is already fully empty —
+  // lets a caller chain focus back into a previous row (word blanks ->
+  // article blanks), so deleting can cross the visual gap between two
+  // separate LetterInputRow instances the same way it crosses revealed/
+  // locked letters within a single one.
   onBackspaceAtStart?: () => void;
 }
 
 export interface LetterInputRowHandle {
-  // Focuses the first still-empty editable cell (or the first editable cell
-  // if all are full) — used to jump back into typing after picking der/die/das.
+  // Focuses the row with the cursor at the end of whatever's already
+  // typed — used to jump back into typing after picking der/die/das, and
+  // when Backspace crosses back into this row from the next one (both
+  // just mean "resume typing here").
   focusFirstEmpty: () => void;
-  // Focuses the last editable cell — used when Backspace crosses back into
-  // this row from the next one.
   focusLast: () => void;
 }
 
+// Renders each editable position as its own boxed tile the way it always
+// has, but underneath them all is ONE real, invisible <input> — not one
+// real input per letter. Typing, IME composition, and the on-screen
+// keyboard all go through that single field exactly like an ordinary text
+// box; the boxes are a pure display layer sliced from its value. This is
+// the standard pattern verification-code inputs use for the same reason
+// it's needed here: a separate real <input> per character, auto-advancing
+// focus on every keystroke, fights badly with IME composition — a
+// composing keystroke can fire before it's actually committed, jump focus
+// to the next box mid-composition, and then have the real commit land
+// there too (a letter typed twice). A composed keystroke has nowhere else
+// to jump to here, so that whole failure mode doesn't exist by
+// construction, on any keyboard, without needing to get composition-event
+// timing exactly right across every mobile browser.
 const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterInputRow(
   { chars, hint, values, onChange, onSubmit, disabled, activeInputRef, resetFocusKey, autoFocus = true, onFilled, onBackspaceAtStart },
   ref,
 ) {
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [focused, setFocused] = useState(false);
   const editableIndices = hint.map((h, i) => (h ? i : -1)).filter(i => i !== -1);
-  // A CJK IME (e.g. Chinese Pinyin) intercepts every Latin keystroke into
-  // its own composition buffer, even when the learner just wants the raw
-  // letter — the browser still fires onChange for each intermediate
-  // composition update, not just the final committed text. Combined with
-  // this row's auto-advance-to-next-tile-on-input behavior, that meant a
-  // single keystroke could fire onChange while composition was still
-  // open, advance focus to the NEXT tile mid-composition, and then have
-  // the IME's eventual commit land there too — showing up as the same
-  // letter typed twice across two tiles. Deferring onChange entirely
-  // until composition actually ends (reading the input's final value at
-  // that point) makes a composed keystroke behave exactly like a plain
-  // one, regardless of which keyboard/IME produced it.
-  const composingRef = useRef(false);
+  // The single input's own value is just every editable position's
+  // current letter, concatenated in order — locked/revealed positions
+  // never participate. Typed characters are always contiguous from the
+  // start (the UI never lets you skip ahead), so this is a lossless,
+  // reversible view of the same `values` array the rest of the app
+  // already works with.
+  const flatValue = editableIndices.map(i => values[i] ?? '').join('');
 
-  // requestAnimationFrame instead of an arbitrary setTimeout delay — fires as
-  // soon as the DOM is actually ready to be focused (refs attached), which is
-  // the minimum possible gap between the triggering action and the focus()
-  // call. Mobile browsers only reliably pop up the on-screen keyboard for a
-  // focus() that happens essentially immediately after a genuine user
-  // gesture (tap/keystroke) — any longer delay risks it being silently
-  // ignored, so minimizing this gap (rather than the previous fixed 50-80ms)
-  // gives autofocus the best realistic chance of actually opening it.
+  const focusEnd = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  };
+
   useImperativeHandle(ref, () => ({
-    focusFirstEmpty: () => {
-      const target = editableIndices.find(i => !values[i]) ?? editableIndices[0];
-      if (target === undefined) return;
-      requestAnimationFrame(() => inputRefs.current[target]?.focus());
-    },
-    focusLast: () => {
-      const target = editableIndices[editableIndices.length - 1];
-      if (target === undefined) return;
-      requestAnimationFrame(() => focusIndex(target));
-    },
+    focusFirstEmpty: () => requestAnimationFrame(focusEnd),
+    focusLast: () => requestAnimationFrame(focusEnd),
   }));
 
   useEffect(() => {
     if (disabled || !autoFocus) return;
-    const first = editableIndices[0];
-    if (first === undefined) return;
-    const frame = requestAnimationFrame(() => inputRefs.current[first]?.focus());
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
     return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetFocusKey, disabled, autoFocus]);
 
-  const focusIndex = (i: number) => {
-    inputRefs.current[i]?.focus();
-    inputRefs.current[i]?.select();
-  };
-
-  const nextEditable = (i: number) => editableIndices.find(j => j > i);
-  const prevEditable = (i: number) => [...editableIndices].reverse().find(j => j < i);
-
-  const handleChange = (i: number, raw: string) => {
-    const ch = raw.slice(-1);
+  const handleChange = (raw: string) => {
+    // No maxLength on the DOM input itself (see below) — enforced here
+    // instead, same reasoning as the old per-tile version: a hard
+    // maxlength attribute actively blocks IME composition from ever
+    // starting, since the composing buffer needs room to build before it
+    // resolves to committed text.
+    const truncated = raw.slice(0, editableIndices.length);
     const next = [...values];
-    next[i] = ch;
+    editableIndices.forEach((pos, k) => { next[pos] = truncated[k] ?? ''; });
     onChange(next);
-    if (ch) {
-      const n = nextEditable(i);
-      if (n !== undefined) {
-        focusIndex(n);
-      } else if (onFilled && editableIndices.every(j => next[j])) {
-        onFilled();
-      }
-    }
+    if (truncated.length === editableIndices.length && editableIndices.length > 0) onFilled?.();
   };
 
-  const handleKeyDown = (i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       onSubmit();
       return;
     }
-    if (e.key === 'Backspace' && !values[i]) {
-      const p = prevEditable(i);
-      if (p !== undefined) {
-        const next = [...values];
-        next[p] = '';
-        onChange(next);
-        focusIndex(p);
-      } else if (i === editableIndices[0] && onBackspaceAtStart) {
-        onBackspaceAtStart();
-      }
+    // The browser already deletes the last character natively when the
+    // field isn't empty — this only needs to catch the cross-row case,
+    // backspacing from an already-empty row into the previous one.
+    if (e.key === 'Backspace' && flatValue === '' && onBackspaceAtStart) {
+      onBackspaceAtStart();
     }
   };
 
   // 20px, comfortably above the 16px floor that keeps iOS from auto-
   // zooming on focus (see styles/globals.css) — an inline style here
-  // would otherwise override that global rule.
+  // would otherwise override that global rule. The hidden input shares
+  // the same size for the same reason: a focused input's effective font
+  // size (not just visible tile text) is what iOS checks.
   const tileStyle = { width: TILE_PX, height: TILE_HEIGHT_PX, fontSize: 20 };
 
   return (
-    <div className="flex flex-wrap gap-2 justify-center">
-      {chars.map((ch, i) =>
-        hint[i] ? (
-          <input
-            key={i}
-            ref={el => { inputRefs.current[i] = el; }}
-            type="text"
-            inputMode="text"
-            lang="de"
-            // No maxLength here on purpose — a hard maxlength on the DOM
-            // input actively blocks IME composition from ever starting
-            // (the composing buffer needs room to build before it commits
-            // down to the final character), which is exactly what caused
-            // this to go from "duplicates a letter" to "can't type
-            // anything at all" once composition handling was added below.
-            // This isn't CJK-specific either: Android's predictive-text
-            // keyboard composes plain English/German input the same way,
-            // which is why it broke there too. Truncation to one
-            // character is still fully enforced, just in JS (handleChange
-            // below already does `raw.slice(-1)`), not via the DOM
-            // attribute.
-            value={values[i] ?? ''}
-            disabled={disabled}
-            onChange={e => { if (!composingRef.current) handleChange(i, e.target.value); }}
-            onCompositionStart={() => { composingRef.current = true; }}
-            onCompositionEnd={e => { composingRef.current = false; handleChange(i, e.currentTarget.value); }}
-            onKeyDown={e => handleKeyDown(i, e)}
-            onFocus={e => { activeInputRef.current = e.target; }}
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            style={tileStyle}
-            className="text-center font-bold border-b-2 border-indigo-500 text-indigo-800 focus:outline-none focus:bg-indigo-50 disabled:bg-transparent"
-          />
-        ) : (
+    <div className="relative flex flex-wrap gap-2 justify-center">
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="text"
+        lang="de"
+        value={flatValue}
+        disabled={disabled}
+        onChange={e => handleChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onFocus={e => { activeInputRef.current = e.target; setFocused(true); }}
+        onBlur={() => setFocused(false)}
+        autoComplete="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        // Covers the whole tile row (including locked letters — tapping
+        // anywhere in the word focuses the one field that actually
+        // accepts input, which is the only place a tap here could
+        // reasonably mean anyway) so it's tappable on mobile exactly like
+        // a normal text field, while being visually invisible — the
+        // tiles beneath are what's actually seen.
+        className="absolute inset-0 w-full h-full opacity-0 cursor-text"
+        style={{ fontSize: 20 }}
+      />
+      {chars.map((ch, i) => {
+        if (!hint[i]) {
+          return (
+            <div
+              key={i}
+              style={tileStyle}
+              className="flex items-end justify-center pb-1 font-bold border-b-2 border-slate-300 text-slate-500"
+            >
+              {ch}
+            </div>
+          );
+        }
+        const k = editableIndices.indexOf(i);
+        // The tile at the same position as the input's current cursor —
+        // i.e. the next one that would receive a keystroke — gets a
+        // focus ring so the row still reads as "which box is active" the
+        // way separate real inputs used to convey for free.
+        const isCursor = focused && k === flatValue.length;
+        return (
           <div
             key={i}
             style={tileStyle}
-            className="flex items-end justify-center pb-1 font-bold border-b-2 border-slate-300 text-slate-500"
+            className={`pointer-events-none flex items-end justify-center pb-1 font-bold border-b-2 text-indigo-800 ${isCursor ? 'border-indigo-500 bg-indigo-50' : 'border-indigo-500'}`}
           >
-            {ch}
+            {flatValue[k] ?? ''}
           </div>
-        )
-      )}
+        );
+      })}
     </div>
   );
 });
