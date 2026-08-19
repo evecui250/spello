@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 // A single fixed tile size for every word, on every card, always — a
 // previous version shrank tiles per-word to try to squeeze longer words
@@ -90,6 +90,7 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
   ref,
 ) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [focused, setFocused] = useState(false);
   const editableIndices = hint.map((h, i) => (h ? i : -1)).filter(i => i !== -1);
   // The single input's own value is just every editable position's
   // current letter, concatenated in order — locked/revealed positions
@@ -195,7 +196,8 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
         // moment composition actually ends, whenever that happens to be.
         onInput={e => handleChange(e.currentTarget.value)}
         onKeyDown={handleKeyDown}
-        onFocus={e => { activeInputRef.current = e.target; }}
+        onFocus={e => { activeInputRef.current = e.target; setFocused(true); }}
+        onBlur={() => setFocused(false)}
         autoComplete="off"
         autoCapitalize="none"
         // WebKit-specific, not part of the HTML spec — disables iOS's
@@ -233,7 +235,13 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
             <div
               key={i}
               style={tileStyle}
-              className="flex items-end justify-center pb-1 font-bold border-b-2 border-slate-300 text-slate-500"
+              // Warm stone gray (matching this tile's own text color),
+              // not the cooler slate used before — slate reads close
+              // enough to indigo's own hue to be mistaken for the
+              // filled-letter color at a glance, which is exactly the
+              // opposite of what a "this one's already given, not
+              // yours to fill" signal should do.
+              className="flex items-end justify-center pb-1 font-bold border-b-2 border-stone-300 text-stone-500"
             >
               {ch}
             </div>
@@ -249,11 +257,19 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
         // light indigo), no separate "correct" color needed on top.
         const isWrong = showCorrectness && typedChar !== ch;
         const underline = isWrong ? 'border-red-700' : typedChar ? 'border-indigo-200' : 'border-indigo-700';
+        // The tile at the same position as the input's current cursor —
+        // i.e. the next one that would receive a keystroke — gets a
+        // plain white box behind it, so the row still reads at a glance
+        // as "here's exactly where typing continues", the way a real
+        // per-letter input's own focus ring used to convey for free.
+        // Only while actively typing (not once checked — nothing to
+        // resume typing into anymore then).
+        const isCursor = !showCorrectness && focused && k === flatValue.length;
         return (
           <div
             key={i}
             style={tileStyle}
-            className={`pointer-events-none flex items-end justify-center pb-1 font-bold border-b-2 text-indigo-800 ${underline}`}
+            className={`pointer-events-none flex items-end justify-center pb-1 font-bold border-b-2 text-indigo-800 ${underline} ${isCursor ? 'bg-white rounded-t' : ''}`}
           >
             {typedChar}
           </div>
