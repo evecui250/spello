@@ -216,7 +216,7 @@ Deno.serve(async (req: Request) => {
       };
     });
 
-    const { data: allPingsIdsOnly } = await admin.from('usage_pings').select('device_id, ip_address, created_at');
+    const { data: allPingsIdsOnly } = await admin.from('usage_pings').select('device_id, ip_address, created_at, user_id');
     function firstSeenMap<T extends string>(rows: { created_at: string }[], key: (r: { created_at: string }) => T | null): Map<T, number> {
       const out = new Map<T, number>();
       for (const r of rows) {
@@ -228,7 +228,7 @@ Deno.serve(async (req: Request) => {
       }
       return out;
     }
-    const allPingRows = (allPingsIdsOnly ?? []) as { device_id: string; ip_address: string | null; created_at: string }[];
+    const allPingRows = (allPingsIdsOnly ?? []) as { device_id: string; ip_address: string | null; created_at: string; user_id: string | null }[];
     const deviceFirstSeen = firstSeenMap(allPingRows, r => r.device_id);
     const ipFirstSeen = firstSeenMap(allPingRows, r => r.ip_address);
 
@@ -297,6 +297,41 @@ Deno.serve(async (req: Request) => {
     const toSortedArray = (m: Map<string, number>) =>
       [...m.entries()].map(([country, count]) => ({ country, count })).sort((a, b) => b.count - a.count);
     const geoBreakdown = { byIp: toSortedArray(byIpCountry), byUser: toSortedArray(byUserCountry) };
+
+    // Every registered account, most-recently-active first — "who's
+    // actually signed up and who's actually using it" at a glance,
+    // without digging through the Supabase auth dashboard by hand.
+    // "Active" here means a real usage_pings row (fired on every genuine
+    // app visit — see lib/telemetry.ts), which is a better signal than
+    // auth's own last_sign_in_at: a returning learner on a persisted
+    // session doesn't re-authenticate every visit, so last_sign_in_at can
+    // sit stale for weeks while they're actively studying daily. Country
+    // reuses the exact same IP->country lookup already done for the geo
+    // charts above, keyed off each account's own most recent ping's IP —
+    // same "most recent wins" rule deviceLatestIp uses. Falls back to the
+    // account's signup date (never sorts above someone with a real ping,
+    // since a ping can only be at-or-after signup) for an account that's
+    // never actually pinged at all — created but never opened the app.
+    const userLatestPing = new Map<string, { ip: string | null; t: number }>();
+    for (const r of allPingRows) {
+      if (!r.user_id) continue;
+      const t = new Date(r.created_at).getTime();
+      const prev = userLatestPing.get(r.user_id);
+      if (!prev || t > prev.t) userLatestPing.set(r.user_id, { ip: r.ip_address, t });
+    }
+    const registeredLearners = [...allUsers]
+      .map(u => {
+        const latest = userLatestPing.get(u.id);
+        const lastActiveMs = latest?.t ?? new Date(u.created_at).getTime();
+        return {
+          email: u.email ?? '(no email)',
+          country: latest?.ip ? (countryByIp.get(latest.ip) ?? 'Unknown') : 'Unknown',
+          lastActive: new Date(lastActiveMs).toISOString(),
+          everActive: !!latest,
+          createdAt: u.created_at,
+        };
+      })
+      .sort((a, b) => new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime());
 
     const todayStart = new Date(`${todayStr}T00:00:00.000Z`).getTime();
     const newDevicesToday = [...deviceFirstSeen.values()].filter(t => t >= todayStart).length;
@@ -441,6 +476,7 @@ Deno.serve(async (req: Request) => {
       },
       levelBreakdown,
       geoBreakdown,
+      registeredLearners,
       leaderboardToday,
       // Signed-in/synced learners only — see the comment on the query
       // above for why anonymous learners can't appear here at all (their

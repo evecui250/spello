@@ -57,6 +57,9 @@ interface AdminStats {
     byIp: { country: string; count: number }[];
     byUser: { country: string; count: number }[];
   };
+  // Every registered account, most-recently-active first — see
+  // admin-stats' own comment for what "active" means here and why.
+  registeredLearners: { email: string; country: string; lastActive: string; everActive: boolean; createdAt: string }[];
   leaderboardToday: { email: string; wordsStudied: number; wordsMastered: number; level: string | null }[];
   wordStages: {
     totals: StageCounts;
@@ -105,6 +108,7 @@ export default function AdminPage() {
         geoBreakdown: data.geoBreakdown ?? { byIp: [], byUser: [] },
         today: { ...data.today, explanationClicks: data.today?.explanationClicks ?? 0 },
         trends: { ...data.trends, explanationClicks: data.trends?.explanationClicks ?? [] },
+        registeredLearners: data.registeredLearners ?? [],
       });
       setStatus('ready');
     })();
@@ -241,6 +245,45 @@ export default function AdminPage() {
         </div>
         <DonutChart title="By user (device)" slices={stats.geoBreakdown.byUser.map(g => ({ label: g.country, count: g.count }))} />
         <DonutChart title="By IP" slices={stats.geoBreakdown.byIp.map(g => ({ label: g.country, count: g.count }))} />
+      </div>
+
+      {/* Registered learners */}
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-3">
+        <div>
+          <h2 className="font-semibold text-stone-800">Registered learners ({stats.registeredLearners.length})</h2>
+          <p className="text-stone-400 text-xs -mt-0.5">
+            Every signed-up account, most recently active first. &quot;Active&quot; means a real app visit, not just signing in — a returning
+            learner on a saved session doesn&apos;t re-authenticate every time, so this reads truer than the auth system&apos;s own
+            last-sign-in timestamp would.
+          </p>
+        </div>
+        {stats.registeredLearners.length === 0 ? (
+          <p className="text-stone-500 text-sm">No accounts yet.</p>
+        ) : (
+          <div className="overflow-x-auto -mx-1 px-1 max-h-96 overflow-y-auto">
+            <table className="w-full text-sm border-collapse min-w-[420px]">
+              <thead>
+                <tr className="text-stone-400 text-xs text-left sticky top-0 bg-amber-50">
+                  <th className="font-medium pb-1.5 pr-2">Email</th>
+                  <th className="font-medium pb-1.5 px-2">Country</th>
+                  <th className="font-medium pb-1.5 pl-2 text-right">Last active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.registeredLearners.map((row, i) => (
+                  <tr key={row.email + i} className="border-t border-amber-100/60">
+                    <td className="py-1.5 pr-2 text-stone-700 truncate max-w-[180px]">{row.email}</td>
+                    <td className="py-1.5 px-2 text-stone-500">{row.country}</td>
+                    <td className="py-1.5 pl-2 text-stone-600 text-right whitespace-nowrap" title={row.everActive ? undefined : 'Signed up, but never actually opened the app'}>
+                      {new Date(row.lastActive).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                      {!row.everActive && <span className="text-stone-400"> (never)</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Word stages */}
