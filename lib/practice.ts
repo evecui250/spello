@@ -442,10 +442,17 @@ function germanForm(word: Word): string {
 
 // Picks 3 wrong German choices for `word`, always from the SAME LEVEL (a
 // distractor the learner hasn't studied yet would be unrecognizable, not a
-// meaningful test) — preferring words from the same `category` (only ~200
-// noun entries have one); falling back to the same `type` (part of speech)
-// within the level when there's no category or too few members; and
+// meaningful test) — preferring words that share BOTH `category` and
+// `type`; falling back to just the same `type` (part of speech) within the
+// level when there's no category or too few same-type members in it; and
 // finally to any other same-level word if even that pool is too small.
+// Category alone is deliberately never enough on its own: categories are
+// thematic groupings ("Zeit", "Politik", etc.), not grammatical ones — most
+// span nouns, verbs, adjectives, AND adverbs all mixed together, so
+// matching on category without ALSO requiring the same type routinely
+// produced word-class-mismatched choices (a noun distractor next to a verb
+// target), which made the wrong answers trivially easy to spot by shape
+// alone rather than by actually knowing the word's meaning.
 // `seen` (choices already shown to this word this session — tracked
 // in-memory by the caller) is excluded so a retry after a wrong answer gets
 // genuinely different distractors, degrading gracefully to repeats only if
@@ -468,7 +475,7 @@ export function buildMcqChoices(word: Word, seen: string[] = []): { correct: str
 
   const sameLevel = WORDS.filter(w => w.id !== word.id && w.level === word.level);
   if (word.category) {
-    addFrom(sameLevel.filter(w => w.category === word.category));
+    addFrom(sameLevel.filter(w => w.category === word.category && w.type === word.type));
   }
   if (wrongChoices.length < 3) {
     addFrom(sameLevel.filter(w => w.type === word.type));
