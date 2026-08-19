@@ -158,6 +158,9 @@ export default function ProgressPage() {
             ? `${totalWords} words total across ${activeLevels.length} vocabulary book${activeLevels.length === 1 ? '' : 's'}.`
             : `${totalWords} words total in this vocabulary book.`}
         </p>
+        {introducedCount > 0 && (
+          <p className="text-stone-400 text-xs mb-1">Tap a mascot below to see its words.</p>
+        )}
         {bootstrapWords.length > 0 && (
           <p className="text-stone-500 text-sm mb-4">
             {bootstrapRemaining > 0
