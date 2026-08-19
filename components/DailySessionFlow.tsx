@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   getDailySession, saveDailySession, DailySession, SessionPhase,
   getWordProgress, saveWordProgress, getAllProgress, getSettings, saveSettings, today,
-  Round, WordProgress, Settings, MascotStageId,
+  Round, WordProgress, Settings, MascotStageId, DailyStats,
   isStudyGoalDoneToday, isReviewGoalDoneToday, markStudyGoalDone, markReviewGoalDone,
   touchStreak, markCongratsShown, getDailyStats, addEarnedPuppy, addEarnedUpgrade,
 } from '../lib/storage';
@@ -771,6 +771,19 @@ export default function DailySessionFlow() {
   // a reload is a harmless cosmetic detail, not a correctness issue).
   const mcqSeenRef = useRef<Record<string, string[]>>({});
   const [showCongrats, setShowCongrats] = useState(false);
+  // Snapshotted once, the moment the congrats phase is entered (see the
+  // effect below) — NOT re-read fresh on every render. getDailyStats()
+  // resets to zero the instant its own `date` no longer matches today()
+  // (a real, correct reset for a genuinely new calendar day), but the
+  // congrats card can render some time after the session that earned
+  // these numbers actually finished (the user closing/reopening the tab,
+  // or simply still being on screen right as a midnight rollover
+  // happens) — re-fetching at render time meant a late-night session
+  // could finish, and by the time this modal actually painted, the day
+  // had already turned over, showing "0 reviewed" for a session that
+  // very much wasn't zero. Capturing it once at phase-entry means the
+  // card always reflects what was actually just accomplished.
+  const [congratsStats, setCongratsStats] = useState<DailyStats | null>(null);
   const [showSignInNudge, setShowSignInNudge] = useState(false);
   const [showAiUnlockCelebration, setShowAiUnlockCelebration] = useState(false);
 
@@ -1094,6 +1107,11 @@ export default function DailySessionFlow() {
       touchStreak();
       markCongratsShown();
     }
+    // Snapshot BEFORE showing the modal (see congratsStats' own comment) —
+    // markCongratsShown() above doesn't change studiedCount/reviewedCount,
+    // so re-reading here isn't required for correctness, just consistent
+    // with "the numbers this effect just looked at are the ones shown".
+    setCongratsStats(stats);
     setShowCongrats(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.phase]);
@@ -1601,12 +1619,11 @@ export default function DailySessionFlow() {
   }
 
   if (session.phase === 'congrats') {
-    if (!showCongrats) return null;
-    const dailyStats = getDailyStats();
+    if (!showCongrats || !congratsStats) return null;
     return (
       <CongratsModal
-        studiedCount={dailyStats.studiedCount}
-        reviewedCount={dailyStats.reviewedCount}
+        studiedCount={congratsStats.studiedCount}
+        reviewedCount={congratsStats.reviewedCount}
         language="German"
         level={settings?.level}
         onClose={handleCloseCongrats}
