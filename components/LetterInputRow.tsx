@@ -97,12 +97,24 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
   }, [resetFocusKey, disabled, autoFocus]);
 
   const handleChange = (raw: string) => {
+    // Some IMEs (reported: a Chinese Pinyin keyboard) need a Space
+    // keystroke to confirm/commit a batch of raw Latin text before the
+    // learner keeps typing, rather than trying to convert it into a
+    // Chinese candidate — that space lands in the field as a literal
+    // character. Stripped here before anything else, since otherwise
+    // each one silently ate a tile slot a real letter needed
+    // ("überleben" -> "übe r le "), and — critically — filtering has to
+    // happen BEFORE truncating to editableIndices.length, not after, or
+    // those phantom spaces push real letters past the cutoff instead of
+    // just being removed. Keeps hyphens/é too: a handful of corpus words
+    // (E-Mail, Café) genuinely need them typed.
+    const lettersOnly = raw.replace(/[^a-zA-ZäöüßÄÖÜéÉ-]/g, '');
     // No maxLength on the DOM input itself (see below) — enforced here
     // instead, same reasoning as the old per-tile version: a hard
     // maxlength attribute actively blocks IME composition from ever
     // starting, since the composing buffer needs room to build before it
     // resolves to committed text.
-    const truncated = raw.slice(0, editableIndices.length);
+    const truncated = lettersOnly.slice(0, editableIndices.length);
     const next = [...values];
     editableIndices.forEach((pos, k) => { next[pos] = truncated[k] ?? ''; });
     onChange(next);
