@@ -12,6 +12,14 @@ import { SYNCED_EVENT } from '../../lib/sync';
 import DachshundMascot from '../../components/Mascot';
 import GoalDaysBadge from '../../components/GoalDaysBadge';
 
+// A fixed pixel cap for the tallest bar, not a percentage of some
+// surrounding flex container's own height — reported as still clipping
+// at the bottom even after the empty-stage sliver fix, and a percentage
+// height inside nested flex columns (items-end + justify-end + h-full)
+// is a known spot for mobile Safari/Chrome to disagree with desktop
+// about what "100%" actually resolves to. A plain px value has no such
+// ambiguity, on any browser.
+const BAR_MAX_HEIGHT_PX = 84;
 const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
 // A muted, earthy progression (soft bronze -> sage -> moss -> deep plum) —
 // reads as premium against the cream panel instead of the primary-color
@@ -175,19 +183,20 @@ export default function ProgressPage() {
             most words, not to a fixed total — so distribution 2-4-4-8 and
             1-2-2-4 render identically. That means it never "fills up" and
             stays meaningful regardless of how many words are introduced. */}
-        <div className="flex items-end justify-around gap-3 h-28">
+        <div className="flex items-end justify-around gap-3">
           {bars.map(b => (
-            <div key={b.id} className="flex flex-col items-center justify-end h-full flex-1 gap-1">
+            <div key={b.id} className="flex flex-col items-center justify-end flex-1 gap-1">
               <span className="text-sm font-semibold text-stone-700">{b.total}</span>
-              {/* A genuinely empty stage renders no bar at all now, rather
-                  than the ~2px sliver this used to leave sitting right at
-                  the bottom edge — indistinguishable from a bar that just
-                  looked cut off, especially now this whole row sits closer
-                  to the clickable mascots below it. */}
+              {/* A genuinely empty stage renders no bar at all, rather than
+                  a near-invisible sliver that's easy to mistake for a bar
+                  cut off at the bottom. Height is a fixed px value (see
+                  BAR_MAX_HEIGHT_PX), not a percentage of this column's own
+                  height — nothing here for the column's own sizing to
+                  disagree with. */}
               {b.total > 0 && <div
                 className="w-full max-w-10 rounded-t-md overflow-hidden transition-all"
                 style={{
-                  height: `${Math.max((b.total / maxStageCount) * 100, 6)}%`,
+                  height: `${Math.max(Math.round((b.total / maxStageCount) * BAR_MAX_HEIGHT_PX), 6)}px`,
                   backgroundColor: b.color,
                 }}
               />}
