@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
-import { WORDS, wordsForLevel, Level, LEVEL_ORDER } from '../../lib/words';
+import { WORDS, wordsForLevel, glossFor, Level, LEVEL_ORDER, Word } from '../../lib/words';
 import {
   getAllProgress, getAllProgressForLevel, getMergedProgressAcrossLevels,
   getSettings, getStreak, getTotalGoalDays, MascotStageId, WordProgress,
@@ -45,8 +45,10 @@ export default function ProgressPage() {
   // theoretically available level (C1/C2 have no words yet), so the total
   // never looks inflated by books nobody opened.
   const [studiedLevels, setStudiedLevels] = useState<Level[]>([]);
-  // Which stage's breakdown popup is open (only reachable in "All books"
-  // scope, where "which book did these come from" is actually meaningful).
+  // Which stage's breakdown popup is open — in "This book" scope this
+  // shows the actual words in that stage; in "All books" scope (where
+  // "which book did these come from" is the more useful question) it
+  // shows a per-level count breakdown instead (see the popup itself).
   const [openStage, setOpenStage] = useState<MascotStageId | null>(null);
 
   useEffect(() => {
@@ -84,6 +86,15 @@ export default function ProgressPage() {
   const stageLevelCounts: Record<MascotStageId, Partial<Record<Level, number>>> = {
     puppy: {}, short: {}, medium: {}, 'long-crowned': {},
   };
+  // Only actually populated/used in "This book" scope (see the popup
+  // below) — "All books" already has its own per-level count breakdown
+  // above, which is what "which book are these from" actually needs;
+  // listing every individual word across every book in one popup would
+  // be a much longer, less scannable list for the one scope where it's
+  // least likely to be what someone's after.
+  const stageWords: Record<MascotStageId, Word[]> = {
+    puppy: [], short: [], medium: [], 'long-crowned': [],
+  };
   let introducedCount = 0;
   for (const w of WORDS) {
     if (scope === 'current' && w.level !== level) continue;
@@ -94,6 +105,8 @@ export default function ProgressPage() {
     stageCounts[stage]++;
     if (scope === 'all') {
       stageLevelCounts[stage][w.level] = (stageLevelCounts[stage][w.level] ?? 0) + 1;
+    } else {
+      stageWords[stage].push(w);
     }
   }
   const bars = STAGE_ORDER.map(id => ({ id, total: stageCounts[id], color: STAGE_COLORS[id] }));
@@ -175,7 +188,7 @@ export default function ProgressPage() {
         </div>
         <div className="flex justify-around gap-3 mt-2">
           {bars.map(b => {
-            const clickable = scope === 'all' && b.total > 0;
+            const clickable = b.total > 0;
             return (
               <button
                 key={b.id}
@@ -227,16 +240,35 @@ export default function ProgressPage() {
                 ×
               </button>
             </div>
-            <div className="flex flex-col gap-1.5">
-              {Object.entries(stageLevelCounts[openStage])
-                .sort((a, b) => LEVEL_ORDER.indexOf(a[0] as Level) - LEVEL_ORDER.indexOf(b[0] as Level))
-                .map(([lvl, count]) => (
-                  <div key={lvl} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2">
-                    <span className="text-stone-700 font-medium">{lvl}</span>
-                    <span className="text-stone-500 text-sm">{count} word{count === 1 ? '' : 's'}</span>
-                  </div>
-                ))}
-            </div>
+            {scope === 'all' ? (
+              <div className="flex flex-col gap-1.5">
+                {Object.entries(stageLevelCounts[openStage])
+                  .sort((a, b) => LEVEL_ORDER.indexOf(a[0] as Level) - LEVEL_ORDER.indexOf(b[0] as Level))
+                  .map(([lvl, count]) => (
+                    <div key={lvl} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2">
+                      <span className="text-stone-700 font-medium">{lvl}</span>
+                      <span className="text-stone-500 text-sm">{count} word{count === 1 ? '' : 's'}</span>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              // "This book" — one level, so a per-level count wouldn't
+              // say anything a single number on the bar above didn't
+              // already — the actual words themselves are what's
+              // actually useful to see here instead.
+              <div className="flex flex-col gap-1.5">
+                {[...stageWords[openStage]]
+                  .sort((a, b) => a.de.localeCompare(b.de, 'de'))
+                  .map(w => (
+                    <div key={w.id} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2 gap-2">
+                      <span className="text-stone-700 font-medium truncate">
+                        {w.article ? `${w.article} ` : ''}{w.de}
+                      </span>
+                      <span className="text-stone-500 text-sm text-right truncate">{glossFor(w, getSettings().nativeLanguage)}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         </div>,
         document.body,
