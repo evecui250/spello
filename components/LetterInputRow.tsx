@@ -190,6 +190,14 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
         onBlur={() => setFocused(false)}
         autoComplete="off"
         autoCapitalize="none"
+        // WebKit-specific, not part of the HTML spec — disables iOS's
+        // autocorrect/predictive-text suggestion entirely, including the
+        // highlighted rectangle it draws around whatever word it's about
+        // to suggest replacing (reported: "a dark rectangle... perhaps
+        // the keyboard has [ideas] for autofill"). Single letters in a
+        // spelling exercise are never something autocorrect should be
+        // touching in the first place.
+        autoCorrect="off"
         spellCheck={false}
         // Covers the whole tile row (including locked letters — tapping
         // anywhere in the word focuses the one field that actually
