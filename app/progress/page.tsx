@@ -179,17 +179,22 @@ export default function ProgressPage() {
           {bars.map(b => (
             <div key={b.id} className="flex flex-col items-center justify-end h-full flex-1 gap-1">
               <span className="text-sm font-semibold text-stone-700">{b.total}</span>
-              <div
+              {/* A genuinely empty stage renders no bar at all now, rather
+                  than the ~2px sliver this used to leave sitting right at
+                  the bottom edge — indistinguishable from a bar that just
+                  looked cut off, especially now this whole row sits closer
+                  to the clickable mascots below it. */}
+              {b.total > 0 && <div
                 className="w-full max-w-10 rounded-t-md overflow-hidden transition-all"
                 style={{
-                  height: `${b.total > 0 ? Math.max((b.total / maxStageCount) * 100, 6) : 2}%`,
+                  height: `${Math.max((b.total / maxStageCount) * 100, 6)}%`,
                   backgroundColor: b.color,
                 }}
-              />
+              />}
             </div>
           ))}
         </div>
-        <div className="flex justify-around gap-3 mt-2">
+        <div className="flex justify-around gap-3 mt-3">
           {bars.map(b => {
             const clickable = b.total > 0;
             return (

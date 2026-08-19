@@ -68,7 +68,7 @@ function matchesFamiliarity(p: WordProgress | undefined, filter: Familiarity): b
   return !!p?.fullyMastered;
 }
 
-type DateFilter = 'all' | '7days' | '30days';
+type DateFilter = 'all' | 'today' | '7days' | '30days';
 
 // lastPracticed (not lastReviewedAt) is what actually means "touched at
 // all in the last N days" — confirmed real bug: lastReviewedAt only
@@ -84,6 +84,7 @@ type DateFilter = 'all' | '7days' | '30days';
 function matchesDateFilter(p: WordProgress | undefined, filter: DateFilter, t: string): boolean {
   if (filter === 'all') return true;
   if (!p?.lastPracticed) return false;
+  if (filter === 'today') return p.lastPracticed === t;
   const windowDays = filter === '7days' ? 7 : 30;
   return daysBetween(p.lastPracticed, t) < windowDays;
 }
@@ -163,7 +164,7 @@ export default function WordsPage() {
     setNativeLanguage(getSettings().nativeLanguage);
     if (!applyParam('level', ['all', ...BOOK_LEVELS], setFilterLevel)) setFilterLevel(getSettings().level);
     applyParam('familiarity', ['all', 'new', 'learning', 'mastered'], setFilterFamiliarity);
-    applyParam('date', ['all', '7days', '30days'], setDateFilter);
+    applyParam('date', ['all', 'today', '7days', '30days'], setDateFilter);
   }, []);
 
   const words = useMemo(() => {
@@ -294,6 +295,7 @@ export default function WordsPage() {
           className="min-w-0 bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-stone-800 focus:outline-none focus:border-amber-300"
         >
           <option value="all">All days</option>
+          <option value="today">Today</option>
           <option value="7days">Past 7 days</option>
           <option value="30days">Past 30 days</option>
         </select>
