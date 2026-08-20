@@ -227,6 +227,12 @@ function SentenceWordHeader({ word }: { word: Word }) {
         {word.article ? `${word.article} ` : ''}{word.de}{' '}
         <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
       </div>
+      {/* Plural only makes sense for nouns, and only when the corpus
+          actually has one (a handful of nouns — e.g. uncountable ones —
+          are stored with an empty plural on purpose). */}
+      {word.type === 'noun' && word.plural && (
+        <div className="text-xs text-stone-400 mt-0.5">Plural: die {word.plural}</div>
+      )}
     </div>
   );
 }
@@ -412,7 +418,13 @@ function SentenceExercise({
     if (!correction) return;
     setExplanationStatus('loading');
     try {
-      const result = await explainCorrection(word.id, word.de, level, input, correction.sentence, getSettings().nativeLanguage);
+      // Cap how many grammar points come back at how many words actually
+      // changed (see correctionDiff, above) — a correction that only
+      // touched one or two words has at most one or two real grammar
+      // points to make; asking for "up to 3" regardless used to pad out
+      // trivial corrections with generic filler alongside the real point.
+      const maxPoints = correctionDiff ? Math.max(1, correctionDiff.tokens.filter(t => t.changed).length) : undefined;
+      const result = await explainCorrection(word.id, word.de, level, input, correction.sentence, getSettings().nativeLanguage, maxPoints);
       setExplanation(result);
       setExplanationStatus('idle');
     } catch (e) {
@@ -1683,6 +1695,9 @@ export default function DailySessionFlow() {
                 <div className="text-2xl font-bold text-indigo-800 tracking-wide break-words">
                   {snap.word.article ? `${snap.word.article} ` : ''}{snap.word.de}
                 </div>
+                {snap.word.type === 'noun' && snap.word.plural && (
+                  <div className="text-xs text-stone-400 mt-0.5">Plural: die {snap.word.plural}</div>
+                )}
               </div>
               <ReferenceSentence example={snap.sentence} />
               <div className={`text-center py-3 rounded-xl font-semibold text-lg ${snap.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -1863,6 +1878,9 @@ export default function DailySessionFlow() {
                 <div className="text-2xl font-bold text-indigo-800 tracking-wide break-words">
                   {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
                 </div>
+                {word.type === 'noun' && word.plural && (
+                  <div className="text-xs text-stone-400 mt-0.5">Plural: die {word.plural}</div>
+                )}
               </div>
             )}
 

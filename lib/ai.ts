@@ -142,9 +142,10 @@ export async function explainCorrection(
   originalAttempt: string,
   correctedSentence: string,
   nativeLanguage: 'en' | 'zh' = 'en',
+  maxPoints?: number,
 ): Promise<string[]> {
   const { data, error } = await supabase.functions.invoke('explain-correction', {
-    body: { wordId, wordDe, level, originalAttempt, correctedSentence, nativeLanguage },
+    body: { wordId, wordDe, level, originalAttempt, correctedSentence, nativeLanguage, maxPoints },
   });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();

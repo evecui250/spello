@@ -677,7 +677,17 @@ const WORDS_PART_2: Word[] = [
   { id: 'w712', de: 'ergänzen', en: 'to add, to fill in (something missing)', zh: '补充，填写（缺少的内容）', type: 'verb', level: 'B1', exercisePrompt: "I need to add my phone number to the registration form.", exercisePromptZh: "我需要在注册表上填写我的电话号码。" },
   { id: 'w713', de: 'erhalten', en: 'to receive', zh: '接收', type: 'verb', level: 'B1', exercisePrompt: "I hope to receive your letter this evening.", exercisePromptZh: "我希望今晚能收到你的信。" },
   { id: 'w715', de: 'Erholung', article: 'die', en: 'recovery, relaxation', zh: '恢复，放松', type: 'noun', level: 'B1', exercisePrompt: "After work, I enjoy relaxation with my family.", exercisePromptZh: "下班后，我喜欢和家人一起放松。" },
-  { id: 'w716', de: 'erhöhen', en: 'to raise, increase', zh: '提高，增加', type: 'verb', level: 'B2', exercisePrompt: "The company plans to raise the prices of their products soon.", exercisePromptZh: "这家公司计划很快提高他们产品的价格。" },
+  // "raise" dropped as a synonym on purpose (2026-08-20) — it collided
+  // with erziehen's own "to raise, educate" (raise a child) and
+  // thematisieren's "to address, raise" (raise a topic) in the tap-word
+  // English hint lookup (findWordByEnglishForm in this file), and erhöhen
+  // is NEVER the right match for either of those senses — only for
+  // "raise" meaning increase a price/amount/level. A real tester hit
+  // exactly this: an exercise sentence about a farmer "raising" cattle
+  // hinted erhöhen (wrong — pure first-in-file luck among tied
+  // candidates) instead of a rearing-related word. "increase" alone is
+  // unambiguous and was always erhöhen's primary sense anyway.
+  { id: 'w716', de: 'erhöhen', en: 'to increase', zh: '提高，增加', type: 'verb', level: 'B2', exercisePrompt: "The company plans to raise the prices of their products soon.", exercisePromptZh: "这家公司计划很快提高他们产品的价格。" },
   { id: 'w717', de: 'Erhöhung', article: 'die', plural: 'Erhöhungen', en: 'increase', zh: '增加', type: 'noun', level: 'B2', exercisePrompt: "The company announced an increase in the price of bread.", exercisePromptZh: "公司宣布面包价格的上涨。" },
   { id: 'w718', de: 'erinnern', en: 'to remind', zh: '提醒', type: 'verb', level: 'B1', exercisePrompt: "I want to remind my brother about the meeting.", exercisePromptZh: "我想提醒我哥哥关于会议的事。" },
   { id: 'w719', de: 'Erinnerung', article: 'die', plural: 'Erinnerungen', en: 'memory', zh: '记忆', type: 'noun', level: 'B1', exercisePrompt: "My brother has a great memory for names.", exercisePromptZh: "我哥哥对名字有很好的记忆。" },

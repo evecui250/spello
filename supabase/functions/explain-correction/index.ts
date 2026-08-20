@@ -37,6 +37,11 @@ interface RequestBody {
   originalAttempt: string;
   correctedSentence: string;
   nativeLanguage?: 'en' | 'zh';
+  // How many words the correction actually changed (see DailySessionFlow's
+  // correctionDiff) — caller-supplied ceiling on how many points make
+  // sense at all; a correction that touched one word has one real point to
+  // make, not three. Clamped to [1, 3] here regardless of what's sent.
+  maxPoints?: number;
 }
 
 Deno.serve(async (req: Request) => {
@@ -77,7 +82,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as RequestBody;
-    const { wordId, wordDe, level, originalAttempt, correctedSentence, nativeLanguage } = body;
+    const { wordId, wordDe, level, originalAttempt, correctedSentence, nativeLanguage, maxPoints } = body;
     if (!wordId || !correctedSentence) {
       return json({ error: 'Missing wordId or correctedSentence' }, 400);
     }
@@ -85,6 +90,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Sentence too long' }, 400);
     }
     const lang = nativeLanguage === 'zh' ? 'Chinese' : 'English';
+    const pointCap = Math.min(3, Math.max(1, Math.round(maxPoints ?? 3)));
 
     const completion = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -102,8 +108,12 @@ Deno.serve(async (req: Request) => {
               'You are a German tutor. A beginner learner (CEFR ' + (level || 'A1') + ') tried to ' +
               `translate a sentence, practicing the word "${wordDe}". Their attempt: "${originalAttempt || '(nothing — they left it blank)'}". ` +
               `The correct sentence is: "${correctedSentence}". ` +
-              'Compare the attempt against the correction and identify up to 3 concrete GRAMMAR ' +
-              'points the learner should take away — article/case (der/die/das, den/dem/der ' +
+              `Compare the attempt against the correction and identify AT MOST ${pointCap} concrete ` +
+              'GRAMMAR points the learner should take away — but fewer is better than more: only ' +
+              'include a point for a mistake that is actually there, and only their MAJOR mistakes ' +
+              `(never pad the list up to ${pointCap} with a minor or borderline point just to fill ` +
+              'it out). If there is truly only one real grammar issue, return exactly one point. ' +
+              'Article/case (der/die/das, den/dem/der ' +
               'agreement), adjective endings, verb tense/conjugation, preposition choice, or a ' +
               'word-class mix-up (e.g. using a verb form where a noun was needed, like ' +
               '"reisen" [to travel] instead of "Reisende" [traveler]). Before writing each point, ' +
@@ -124,8 +134,8 @@ Deno.serve(async (req: Request) => {
               '需要正确匹配，例如"der Sozialarbeiter"而不是"die Sozialarbeiter"\' — same ' +
               'information, without the throat-clearing. Skip anything you are not confident is ' +
               'actually correct — accuracy ' +
-              'matters more than covering exactly 3 points; 1 or 2 solid points beats 3 shaky ' +
-              'ones. If the attempt was blank, too garbled, or simply used different (not ' +
+              `matters more than reaching ${pointCap}; fewer solid points beats padding out to ` +
+              `${pointCap} with a shaky one. If the attempt was blank, too garbled, or simply used different (not ` +
               'wrong) vocabulary with no real grammar issue to point out, return a single point ' +
               'that briefly says what the correct sentence means instead. Each point must be ' +
               `ONE short, plain sentence (no more than ~20 words), written in ${lang}, and must ` +
