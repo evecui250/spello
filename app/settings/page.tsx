@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSettings, saveSettings, switchToLevel, clearAllProgress, resetEverything, Settings } from '../../lib/storage';
@@ -30,13 +31,12 @@ export default function SettingsPage() {
   const [sentenceWritingMode, setSentenceWritingMode] = useState(true);
   const [saved, setSaved] = useState(false);
   const [cleared, setCleared] = useState(false);
-  // Danger zone starts collapsed behind an explicit tap-to-reveal step —
-  // a tester reported a mis-tap near the destructive buttons landing on
-  // the native confirm() dialog's default button too (a fast accidental
-  // double-tap can hit both in quick succession), so a single stray tap
-  // now can't reach either destructive button at all; window.confirm()
-  // below is a second layer on top of this, not a replacement for it.
-  const [dangerRevealed, setDangerRevealed] = useState(false);
+  // Reset lives behind a text link (same style/place as "Report a
+  // problem") rather than a standing red card, opening a small modal to
+  // pick which kind of reset — a tester reported mis-tapping a prominent
+  // on-page danger-zone button. window.confirm() inside each handler
+  // below is still a second, final confirmation layer on top of this.
+  const [resetModalOpen, setResetModalOpen] = useState(false);
   const [showPaceInfo, setShowPaceInfo] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -123,7 +123,10 @@ export default function SettingsPage() {
     // remote row.
     await syncNow();
     setCleared(true);
-    setTimeout(() => setCleared(false), 2000);
+    setTimeout(() => {
+      setCleared(false);
+      setResetModalOpen(false);
+    }, 2000);
   };
 
   // Every level, plus onboarding — equivalent to a brand-new signed-in
@@ -134,6 +137,7 @@ export default function SettingsPage() {
     if (!window.confirm('This will erase ALL progress, streaks, and settings for EVERY level — your account will start over completely, as if brand new. You\'ll stay signed in. This can\'t be undone. Continue?')) return;
     resetEverything();
     await syncNow();
+    setResetModalOpen(false);
     router.push('/welcome');
   };
 
@@ -316,46 +320,58 @@ export default function SettingsPage() {
         <Link href="/terms" className="text-amber-200 hover:text-amber-100 underline">Terms of Service</Link>
         <Link href="/privacy" className="text-amber-200 hover:text-amber-100 underline">Privacy Policy</Link>
         <BugReportButton />
+        <button
+          type="button"
+          onClick={() => setResetModalOpen(true)}
+          className="text-amber-200 hover:text-amber-100 underline"
+        >
+          Reset
+        </button>
         {signedInEmail === ADMIN_EMAIL && (
           <Link href="/admin" className="text-amber-200 hover:text-amber-100 underline">Admin</Link>
         )}
       </div>
 
-      <div className="bg-red-50/70 backdrop-blur-sm rounded-2xl border border-red-200/50 shadow-sm p-6 flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-red-700">Danger zone</h2>
-          {dangerRevealed && (
-            <button
-              onClick={() => setDangerRevealed(false)}
-              className="text-xs font-semibold text-stone-400 hover:text-stone-600 transition-colors"
-            >
-              Hide
-            </button>
-          )}
-        </div>
-        {!dangerRevealed ? (
-          <button
-            onClick={() => setDangerRevealed(true)}
-            className="w-full bg-white text-red-600 border-2 border-red-100 py-3 rounded-xl font-semibold hover:bg-red-50 active:scale-95 transition-all"
+      {/* Portaled straight to <body>, same reasoning as BugReportButton's
+          modal — escapes any ancestor with backdrop-filter/transform that
+          would otherwise become the containing block for this fixed
+          overlay. window.confirm() inside each handler below is still the
+          final destructive-action gate; this modal is just the picker. */}
+      {resetModalOpen && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setResetModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-amber-50 rounded-2xl shadow-xl p-5 flex flex-col gap-3"
+            onClick={e => e.stopPropagation()}
           >
-            Show reset options
-          </button>
-        ) : (
-          <>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-red-700">Reset</h2>
+              <button
+                type="button"
+                onClick={() => setResetModalOpen(false)}
+                aria-label="Close"
+                className="text-stone-400 hover:text-stone-600 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
             <div>
-              <p className="text-stone-500 text-sm mt-1">
+              <p className="text-stone-500 text-sm mb-2">
                 Erase all word progress for the {level} level to start over from scratch. Other levels, and your account-wide streak/goal days, are untouched.
               </p>
+              <button
+                onClick={handleClearAll}
+                className="w-full bg-red-50 text-red-700 border-2 border-red-100 py-3 rounded-xl font-semibold hover:bg-red-100 active:scale-95 transition-all"
+              >
+                {cleared ? '✓ Cleared!' : `Clear all progress (${level})`}
+              </button>
             </div>
-            <button
-              onClick={handleClearAll}
-              className="w-full bg-red-50 text-red-700 border-2 border-red-100 py-3 rounded-xl font-semibold hover:bg-red-100 active:scale-95 transition-all"
-            >
-              {cleared ? '✓ Cleared!' : `Clear all progress (${level})`}
-            </button>
 
-            <div className="border-t border-red-200/50 pt-3 mt-1">
-              <p className="text-stone-500 text-sm mb-3">
+            <div className="border-t border-red-200/50 pt-3">
+              <p className="text-stone-500 text-sm mb-2">
                 Or start over completely — every level's progress, streaks, and settings, as if you
                 just signed up. You'll stay signed in with the same email.
               </p>
@@ -366,9 +382,10 @@ export default function SettingsPage() {
                 Reset entire account
               </button>
             </div>
-          </>
-        )}
-      </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
