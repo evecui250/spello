@@ -674,7 +674,7 @@ const WORDS_PART_2: Word[] = [
   { id: 'w709', de: 'erfolgreich', en: 'successful', zh: '成功的', type: 'adjective', level: 'B2', exercisePrompt: "The company was successful in launching a new product this year.", exercisePromptZh: "这家公司今年成功推出了一款新产品。" },
   { id: 'w710', de: 'erfordern', en: 'to require', zh: '要求', type: 'verb', level: 'B1', exercisePrompt: "The job will require special training and practice.", exercisePromptZh: "这份工作需要特别的培训和练习。" },
   { id: 'w711', de: 'erfüllen', en: 'to fulfill', zh: '完成', type: 'verb', level: 'B1', exercisePrompt: "He works hard to fulfill his tasks every day.", exercisePromptZh: "他每天努力工作以完成他的任务。" },
-  { id: 'w712', de: 'ergänzen', en: 'to complete, to add', zh: '完成，添加', type: 'verb', level: 'B1', exercisePrompt: "I need to complete the registration form today.", exercisePromptZh: "我今天需要完成注册表。" },
+  { id: 'w712', de: 'ergänzen', en: 'to add, to fill in (something missing)', zh: '补充，填写（缺少的内容）', type: 'verb', level: 'B1', exercisePrompt: "I need to add my phone number to the registration form.", exercisePromptZh: "我需要在注册表上填写我的电话号码。" },
   { id: 'w713', de: 'erhalten', en: 'to receive', zh: '接收', type: 'verb', level: 'B1', exercisePrompt: "I hope to receive your letter this evening.", exercisePromptZh: "我希望今晚能收到你的信。" },
   { id: 'w715', de: 'Erholung', article: 'die', en: 'recovery, relaxation', zh: '恢复，放松', type: 'noun', level: 'B1', exercisePrompt: "After work, I enjoy relaxation with my family.", exercisePromptZh: "下班后，我喜欢和家人一起放松。" },
   { id: 'w716', de: 'erhöhen', en: 'to raise, increase', zh: '提高，增加', type: 'verb', level: 'B2', exercisePrompt: "The company plans to raise the prices of their products soon.", exercisePromptZh: "这家公司计划很快提高他们产品的价格。" },

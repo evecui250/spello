@@ -19,9 +19,10 @@ const MODEL = 'gpt-4o-mini';
 // Same flat daily cap correct-sentence uses, and counted together with it
 // (see the query below, which doesn't filter by kind) — this is a bonus
 // action on top of a correction that already happened, not a separate
-// allowance to budget for independently.
-const DAILY_AI_CALL_LIMIT = 50;
-const DAILY_AI_CALL_LIMIT_ANONYMOUS = 20;
+// allowance to budget for independently. (raised from 50/20 on 2026-08-20 —
+// a real tester hit the old cap.)
+const DAILY_AI_CALL_LIMIT = 1000;
+const DAILY_AI_CALL_LIMIT_ANONYMOUS = 300;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

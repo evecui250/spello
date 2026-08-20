@@ -24,9 +24,10 @@ const MAX_KNOWN_WORDS = 4000;
 
 // Shared with correct-sentence's own copy of this constant — both functions
 // count against the same ai_usage table, so a user can't dodge the cap by
-// alternating between the two endpoints. See that file for the rationale.
-const DAILY_AI_CALL_LIMIT = 50;
-const DAILY_AI_CALL_LIMIT_ANONYMOUS = 20;
+// alternating between the two endpoints. See that file for the rationale
+// (raised from 50/20 on 2026-08-20 — a real tester hit the old cap).
+const DAILY_AI_CALL_LIMIT = 1000;
+const DAILY_AI_CALL_LIMIT_ANONYMOUS = 300;
 
 // Word-count range per level, by difficulty — kept in sync with the
 // standalone copy in scripts/generate-exercise-prompts.py (which

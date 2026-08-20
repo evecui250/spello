@@ -19,8 +19,9 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MODEL = 'gpt-4o-mini';
 
-const DAILY_AI_CALL_LIMIT = 50;
-const DAILY_AI_CALL_LIMIT_ANONYMOUS = 20;
+// (raised from 50/20 on 2026-08-20 — a real tester hit the old cap.)
+const DAILY_AI_CALL_LIMIT = 1000;
+const DAILY_AI_CALL_LIMIT_ANONYMOUS = 300;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

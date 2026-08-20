@@ -31,15 +31,18 @@ const MODEL = 'gpt-4o-mini';
 
 // A safety net against a bug or scripted abuse burning through spend, not a
 // ration on legitimate studying — a full day's batch rarely calls this more
-// than ~15-20 times, so this never binds a real learner. Free during the
-// testing phase; swap this flat cap for a per-subscription-tier allowance
+// than ~15-20 times, so this never binds a real learner. During this testing
+// phase testers should never see a quota message at all (raised from 50 on
+// 2026-08-20 after a real tester got cut off mid-session on their real daily
+// account limit); swap this flat cap for a per-subscription-tier allowance
 // (still counted the same way, from ai_usage) once there's billing.
-const DAILY_AI_CALL_LIMIT = 50;
+const DAILY_AI_CALL_LIMIT = 1000;
 // Stricter for anonymous callers specifically — an IP is a coarser,
 // easier-to-abuse identifier than a real account (no signup friction at
 // all stands between a bad actor and this endpoint), so this errs tighter
-// until there's more signal about real anonymous usage patterns.
-const DAILY_AI_CALL_LIMIT_ANONYMOUS = 20;
+// until there's more signal about real anonymous usage patterns. Still
+// raised well past any real single-IP testing session (see above).
+const DAILY_AI_CALL_LIMIT_ANONYMOUS = 300;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -133,13 +136,14 @@ Deno.serve(async (req: Request) => {
                   'it is a noun, do NOT require the article (der/die/das) to be present or ' +
                   'correct — only the core word matters for this check. If it DOES, correct ' +
                   'THEIR OWN translation attempt: fix grammar, spelling, and word order, AND fix ' +
-                  'any word whose MEANING does not actually match what the corresponding part of ' +
+                  'any OTHER word (i.e. not the target word itself — see the exception below) ' +
+                  'whose MEANING does not actually match what the corresponding part of ' +
                   'the English sentence says — a genuine mistranslation, not just a stylistic ' +
                   'choice (e.g. if the English says "departure" and they wrote a word that means ' +
                   '"trip" or "outing" instead, that is wrong and must be corrected to the word ' +
                   'that actually means "departure" — do not just fix its grammar and leave the ' +
                   'wrong meaning in place; be equally strict about every other word choice in the ' +
-                  'sentence, not only the target word). You MAY keep a word choice that is a ' +
+                  'sentence). You MAY keep a word choice that is a ' +
                   'genuinely valid synonym correctly conveying the same meaning (different ' +
                   'learners can validly translate the same sentence differently — real synonyms, ' +
                   'word order) — but every word in your output must actually mean what the ' +
@@ -150,7 +154,14 @@ Deno.serve(async (req: Request) => {
                   'both correctly translate "during" before a noun phrase; "an" can govern several ' +
                   'different relationships) — only replace the learner\'s preposition if it is ' +
                   'actually grammatically wrong or changes the meaning for THAT context, never ' +
-                  'just because a different preposition you\'d have picked also works. If it does NOT attempt ' +
+                  'just because a different preposition you\'d have picked also works. ' +
+                  `EXCEPTION, and this overrides everything above: never replace the target word ` +
+                  `"${wordDe}" itself with a different German word, even if you think a different ` +
+                  'word fits the English sentence better — the whole point of this exercise is ' +
+                  `practicing "${wordDe}" specifically, and the English sentence was written to ` +
+                  'fit it, so treat their use of it as correct by construction. If they used it, ' +
+                  'keep it and only fix its inflected FORM if that form is wrong (conjugation, ' +
+                  'case, agreement) — never swap in a synonym instead. If it does NOT attempt ' +
                   'the target word at all, or their attempt is too garbled or unrelated to the ' +
                   'English sentence to fix, IGNORE their attempt entirely and produce a fresh, ' +
                   'natural German translation of the English sentence instead. Either way, you ' +

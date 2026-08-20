@@ -30,6 +30,13 @@ export default function SettingsPage() {
   const [sentenceWritingMode, setSentenceWritingMode] = useState(true);
   const [saved, setSaved] = useState(false);
   const [cleared, setCleared] = useState(false);
+  // Danger zone starts collapsed behind an explicit tap-to-reveal step —
+  // a tester reported a mis-tap near the destructive buttons landing on
+  // the native confirm() dialog's default button too (a fast accidental
+  // double-tap can hit both in quick succession), so a single stray tap
+  // now can't reach either destructive button at all; window.confirm()
+  // below is a second layer on top of this, not a replacement for it.
+  const [dangerRevealed, setDangerRevealed] = useState(false);
   const [showPaceInfo, setShowPaceInfo] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -315,31 +322,52 @@ export default function SettingsPage() {
       </div>
 
       <div className="bg-red-50/70 backdrop-blur-sm rounded-2xl border border-red-200/50 shadow-sm p-6 flex flex-col gap-3">
-        <div>
+        <div className="flex items-center justify-between">
           <h2 className="font-semibold text-red-700">Danger zone</h2>
-          <p className="text-stone-500 text-sm mt-1">
-            Erase all word progress for the {level} level to start over from scratch. Other levels, and your account-wide streak/goal days, are untouched.
-          </p>
+          {dangerRevealed && (
+            <button
+              onClick={() => setDangerRevealed(false)}
+              className="text-xs font-semibold text-stone-400 hover:text-stone-600 transition-colors"
+            >
+              Hide
+            </button>
+          )}
         </div>
-        <button
-          onClick={handleClearAll}
-          className="w-full bg-red-50 text-red-700 border-2 border-red-100 py-3 rounded-xl font-semibold hover:bg-red-100 active:scale-95 transition-all"
-        >
-          {cleared ? '✓ Cleared!' : `Clear all progress (${level})`}
-        </button>
-
-        <div className="border-t border-red-200/50 pt-3 mt-1">
-          <p className="text-stone-500 text-sm mb-3">
-            Or start over completely — every level's progress, streaks, and settings, as if you
-            just signed up. You'll stay signed in with the same email.
-          </p>
+        {!dangerRevealed ? (
           <button
-            onClick={handleResetEverything}
-            className="w-full bg-red-100 text-red-800 border-2 border-red-200 py-3 rounded-xl font-semibold hover:bg-red-200 active:scale-95 transition-all"
+            onClick={() => setDangerRevealed(true)}
+            className="w-full bg-white text-red-600 border-2 border-red-100 py-3 rounded-xl font-semibold hover:bg-red-50 active:scale-95 transition-all"
           >
-            Reset entire account
+            Show reset options
           </button>
-        </div>
+        ) : (
+          <>
+            <div>
+              <p className="text-stone-500 text-sm mt-1">
+                Erase all word progress for the {level} level to start over from scratch. Other levels, and your account-wide streak/goal days, are untouched.
+              </p>
+            </div>
+            <button
+              onClick={handleClearAll}
+              className="w-full bg-red-50 text-red-700 border-2 border-red-100 py-3 rounded-xl font-semibold hover:bg-red-100 active:scale-95 transition-all"
+            >
+              {cleared ? '✓ Cleared!' : `Clear all progress (${level})`}
+            </button>
+
+            <div className="border-t border-red-200/50 pt-3 mt-1">
+              <p className="text-stone-500 text-sm mb-3">
+                Or start over completely — every level's progress, streaks, and settings, as if you
+                just signed up. You'll stay signed in with the same email.
+              </p>
+              <button
+                onClick={handleResetEverything}
+                className="w-full bg-red-100 text-red-800 border-2 border-red-200 py-3 rounded-xl font-semibold hover:bg-red-200 active:scale-95 transition-all"
+              >
+                Reset entire account
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
