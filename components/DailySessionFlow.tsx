@@ -990,16 +990,20 @@ export default function DailySessionFlow() {
     // A "Continuing" word (started introduction on a previous day, already
     // past round 1) would otherwise sit wherever buildStudyWords happened to
     // place it — often near the front, since it's prioritized for
-    // *inclusion* in today's batch. That risks it reaching round 2 (and the
-    // MCQ checkpoint never having fired yet, since that only triggers once
-    // every round-1-needing word clears round 1) before a brand-new word
-    // even gets its first look. Sorting round-1-needing words first, just
-    // once at the start of today's session, guarantees the checkpoint
-    // always runs before anyone's first round-2 attempt — carryovers
-    // included — instead of only covering words that are new today.
+    // *inclusion* in today's batch. Sorting round-1-needing words first, just
+    // once at the start of today's session, means the learner meets every
+    // brand-new word before any carryover word's round-2+ continuation —
+    // independent of the MCQ checkpoint below, which is now scoped to just
+    // the round-1-needing words (see studyRound1NeededIds) rather than
+    // studyWordIds as a whole.
+    let studyRound1NeededIds: string[] | undefined;
     if (mode === 'study' && isFirstEntryToday) {
       const progress = getAllProgress();
       pending = [...pending].sort((a, b) => (progress[a]?.round ?? 1) - (progress[b]?.round ?? 1));
+      // Captured once, right here — see DailySession.studyRound1NeededIds
+      // for why the MCQ checkpoint needs this narrower set instead of all
+      // of studyWordIds.
+      studyRound1NeededIds = ids.filter(id => (progress[id]?.round ?? 1) === 1);
     }
     const words = wordsById(pending);
     setQueue(words);
@@ -1011,7 +1015,7 @@ export default function DailySessionFlow() {
     // in-progress review word back to its milestone's starting round.
     reviewRoundsRef.current = { ...(ds.reviewRounds ?? {}) };
     const withQueue: DailySession = mode === 'study'
-      ? { ...ds, studyQueueIds: pending }
+      ? { ...ds, studyQueueIds: pending, ...(studyRound1NeededIds !== undefined ? { studyRound1NeededIds } : {}) }
       : { ...ds, reviewQueueIds: pending };
     persistSession(withQueue);
     if (words.length > 0) {
@@ -1319,16 +1323,23 @@ export default function DailySessionFlow() {
     const restIds = rest.map(w => w.id);
 
     // The round-1.5 "what does this word mean?" checkpoint fires once,
-    // exactly when every word in today's batch has finished round 1 (the
-    // sentence exercise always promotes round 1 -> 2 on submit, so
-    // "round >= 2" is that signal) — before round 2 continues.
+    // exactly when every word that actually NEEDED a round-1 pass today
+    // has finished it (the sentence exercise always promotes round 1 -> 2
+    // on submit, so "round >= 2" is that signal) — before round 2
+    // continues. Scoped to studyRound1NeededIds (see its own comment), NOT
+    // the full studyWordIds — a "Continuing" carryover word already past
+    // round 1 would otherwise satisfy this gate for free, firing the
+    // checkpoint (and quizzing on that carryover word too) the moment a
+    // single genuinely-new word finishes round 1, before the learner has
+    // even reached the carryover words in today's queue.
     if (!session.studyMcqDone) {
       const progress = getAllProgress();
-      const allDoneRound1 = session.studyWordIds.every(id => (progress[id]?.round ?? 1) >= 2);
+      const round1NeededIds = session.studyRound1NeededIds ?? session.studyWordIds;
+      const allDoneRound1 = round1NeededIds.every(id => (progress[id]?.round ?? 1) >= 2);
       if (allDoneRound1) {
         const next: DailySession = {
           ...session, studyQueueIds: restIds, phase: 'study-mcq',
-          studyMcqDone: true, studyMcqQueueIds: [...session.studyWordIds],
+          studyMcqDone: true, studyMcqQueueIds: [...round1NeededIds],
         };
         persistSession(next);
         enterStudyMcqPhase(next);

@@ -726,6 +726,27 @@ export interface DailySession {
   // entries fall back to the word's own milestone startRound, same as a
   // genuinely fresh review word.
   reviewRounds?: Record<string, Round>;
+  // Which of today's studyWordIds actually needed a round-1 pass TODAY —
+  // captured once, at the very first entry into study-rounds, from
+  // whichever ones had round 1 (or no progress at all) at that exact
+  // moment. A "Continuing" word can arrive in today's batch already past
+  // round 1 (started introduction on an earlier day/session, interrupted
+  // before reaching a mascot stage) — it still needs its remaining
+  // rounds today, but it doesn't need ANOTHER round-1 pass, and critically
+  // it should NOT gate/pad the round-1.5 MCQ checkpoint below, which is
+  // specifically a comprehension check right after a word's round-1
+  // introduction. Without this distinction, the checkpoint's own gate
+  // (advanceStudyQueue: every studyWordIds id at round >= 2) could already
+  // be satisfied by pre-existing carryover words the moment a single
+  // genuinely-new word finishes round 1 — firing the checkpoint (and
+  // quizzing on ALL of studyWordIds, carryovers included) before the
+  // learner has even reached those other words in today's queue at all.
+  // Confirmed real via a direct reproduction: a 5-word batch with 4
+  // carryover words + 1 fresh word jumped straight to a 5-word MCQ after
+  // only the fresh word's round-1 sentence. Undefined (a session
+  // persisted before this field existed) falls back to studyWordIds
+  // wholesale — the previous, imperfect behavior — rather than crashing.
+  studyRound1NeededIds?: string[];
   earnedPuppies: number;
   earnedUpgrades: Partial<Record<MascotStageId, number>>;
   isExtra: boolean; // true for a "Study more"/"Review more" bonus round, so
