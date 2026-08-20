@@ -11,12 +11,18 @@ interface Props {
   onSync?: () => void;
 }
 
+// Purely a UI throttle so a tester can't spam the button faster than the
+// email actually arrives — Supabase/Resend enforce their own real rate
+// limit server-side regardless (see handleSendLink's error path below).
+const RESEND_COOLDOWN_SECONDS = 60;
+
 export default function AccountPanel({ onSync }: Props) {
   const [email, setEmail] = useState<string | null>(null);
   const [inputEmail, setInputEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [aiStats, setAiStats] = useState<AiUsageStats | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -38,8 +44,15 @@ export default function AccountPanel({ onSync }: Props) {
     getAiUsageStats().then(setAiStats);
   }, [email]);
 
+  // Ticks the resend cooldown down to 0 once a second while it's active.
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
   const handleSendLink = async () => {
-    if (!inputEmail.trim()) return;
+    if (!inputEmail.trim() || resendCooldown > 0) return;
     setStatus('sending');
     const { error } = await supabase.auth.signInWithOtp({
       email: inputEmail.trim(),
@@ -51,6 +64,7 @@ export default function AccountPanel({ onSync }: Props) {
       setStatus('error');
     } else {
       setStatus('sent');
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
     }
   };
 
@@ -90,9 +104,19 @@ export default function AccountPanel({ onSync }: Props) {
         the AI sentence-writing exercises.
       </p>
       {status === 'sent' ? (
-        <p className="text-green-700 text-sm bg-green-50 border border-green-100 rounded-lg px-3 py-2">
-          ✓ Check {inputEmail} for a sign-in link.
-        </p>
+        <div className="bg-green-50 border border-green-100 rounded-lg px-3 py-2 flex flex-col gap-1.5">
+          <p className="text-green-700 text-sm">✓ Check {inputEmail} for a sign-in link.</p>
+          <p className="text-stone-500 text-xs">
+            Don&apos;t see it? Check your spam/junk folder — it can take a minute to arrive.
+          </p>
+          <button
+            onClick={handleSendLink}
+            disabled={resendCooldown > 0}
+            className="self-start text-xs font-semibold text-indigo-600 hover:text-indigo-800 disabled:text-stone-400 disabled:cursor-default transition-colors"
+          >
+            {resendCooldown > 0 ? `Resend link (${resendCooldown}s)` : 'Resend link'}
+          </button>
+        </div>
       ) : (
         <div className="flex gap-2">
           <input
