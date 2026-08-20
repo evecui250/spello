@@ -233,6 +233,9 @@ function SentenceWordHeader({ word }: { word: Word }) {
       {word.type === 'noun' && word.plural && (
         <div className="text-xs text-stone-400 mt-0.5">Plural: die {word.plural}</div>
       )}
+      {word.type === 'verb' && word.thirdPerson && word.pastTense && (
+        <div className="text-xs text-stone-400 mt-0.5">er/sie/es {word.thirdPerson} · {word.pastTense}</div>
+      )}
     </div>
   );
 }
@@ -1698,6 +1701,9 @@ export default function DailySessionFlow() {
                 {snap.word.type === 'noun' && snap.word.plural && (
                   <div className="text-xs text-stone-400 mt-0.5">Plural: die {snap.word.plural}</div>
                 )}
+                {snap.word.type === 'verb' && snap.word.thirdPerson && snap.word.pastTense && (
+                  <div className="text-xs text-stone-400 mt-0.5">er/sie/es {snap.word.thirdPerson} · {snap.word.pastTense}</div>
+                )}
               </div>
               <ReferenceSentence example={snap.sentence} />
               <div className={`text-center py-3 rounded-xl font-semibold text-lg ${snap.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -1880,6 +1886,9 @@ export default function DailySessionFlow() {
                 </div>
                 {word.type === 'noun' && word.plural && (
                   <div className="text-xs text-stone-400 mt-0.5">Plural: die {word.plural}</div>
+                )}
+                {word.type === 'verb' && word.thirdPerson && word.pastTense && (
+                  <div className="text-xs text-stone-400 mt-0.5">er/sie/es {word.thirdPerson} · {word.pastTense}</div>
                 )}
               </div>
             )}

@@ -13,6 +13,15 @@ export interface Word {
   de: string;
   article?: 'der' | 'die' | 'das';
   plural?: string;
+  // Verbs only, generated via scripts/generate-verb-forms.py (same
+  // "pre-baked, not looked up live" reasoning as exercisePrompt) — the
+  // 3rd-person-singular present ("er/sie/es ___") and simple-past/
+  // Präteritum ("er/sie/es ___") forms, written the way they'd actually
+  // appear in a sentence (separable-prefix verbs with the prefix split
+  // off, e.g. "steht auf" not "aufsteht"). Absent until that script has
+  // been run and applied for a given verb.
+  thirdPerson?: string;
+  pastTense?: string;
   en: string;
   // Simplified Chinese gloss, parallel to `en` — added later via a batch
   // translation pass (scripts/translate-to-chinese.py), so absent for any
