@@ -124,7 +124,9 @@ Deno.serve(async (req: Request) => {
               'a different noun in the correction, or vice versa; do not assume based on position ' +
               'alone. If you are not sure which specific word changed or what it was attached to, ' +
               'leave that point out rather than risk mis-describing it. Do NOT mention spelling ' +
-              'typos or simply say a word "was wrong" — every point must explain the actual ' +
+              'typos, capitalization (German capitalizes every noun — that is a spelling ' +
+              'convention to internalize by habit, not a grammar insight worth a point), or ' +
+              'hyphenation, and do not simply say a word "was wrong" — every point must explain the actual ' +
               'grammar rule behind the fix, briefly, so it is something the learner can apply ' +
               'next time. Lead with the concrete fact itself, not a restated category label — ' +
               'say directly what the gender/case/tense/form actually IS and why, rather than a ' +

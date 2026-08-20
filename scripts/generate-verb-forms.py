@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """One-time (re-runnable) batch generator for verb conjugation forms shown
-during study (see lib/words.ts's `thirdPerson`/`pastTense` fields) — same
-idea as plural for nouns, just generated rather than already present in the
-source data. For every verb: the 3rd-person-singular PRESENT form (er/sie/es
-___) and the 3rd-person-singular simple PAST/Präteritum form (er/sie/es
-___), each as the learner would actually see it in a sentence — including
-separable-prefix verbs written with the prefix split off (e.g. "steht auf",
-not "aufsteht"), since that's the form that's actually grammatical.
+during study (see lib/words.ts's `thirdPerson`/`pastTense`/`perfectTense`
+fields) — same idea as plural for nouns, just generated rather than already
+present in the source data. For every verb: the 3rd-person-singular PRESENT
+form (er/sie/es ___), the 3rd-person-singular simple PAST/Präteritum form
+(er/sie/es ___), and the PERFECT form including its correct auxiliary
+(hat/ist ___) — each as the learner would actually see it in a sentence,
+including separable-prefix verbs written with the prefix split off (e.g.
+"steht auf", not "aufsteht"), since that's the form that's actually
+grammatical. The perfect form is what's shown during study (see
+DailySessionFlow) — Perfekt is the tense actually used in spoken German for
+most verbs, unlike Präteritum, which is mostly a written/narrative tense
+outside of sein/haben/werden/modals; pastTense (Präteritum) is still
+generated and kept in the data even though it isn't currently displayed.
 
 Usage:
     OPENAI_API_KEY=sk-... python3 scripts/generate-verb-forms.py
@@ -43,26 +49,26 @@ if not API_KEY:
 
 # Hand-written ground truth for a spot-check pass — verbs common enough
 # that any wrong answer here means the prompt/model is unreliable, not
-# just that this one verb is obscure.
+# just that this one verb is obscure. (thirdPerson, pastTense, perfectTense)
 KNOWN_ANSWERS = {
-    'sein': ('ist', 'war'),
-    'haben': ('hat', 'hatte'),
-    'werden': ('wird', 'wurde'),
-    'gehen': ('geht', 'ging'),
-    'kommen': ('kommt', 'kam'),
-    'nehmen': ('nimmt', 'nahm'),
-    'essen': ('isst', 'aß'),
-    'fahren': ('fährt', 'fuhr'),
-    'sehen': ('sieht', 'sah'),
-    'sprechen': ('spricht', 'sprach'),
-    'geben': ('gibt', 'gab'),
-    'lesen': ('liest', 'las'),
-    'schlafen': ('schläft', 'schlief'),
-    'wissen': ('weiß', 'wusste'),
-    'können': ('kann', 'konnte'),
-    'müssen': ('muss', 'musste'),
-    'aufstehen': ('steht auf', 'stand auf'),
-    'anfangen': ('fängt an', 'fing an'),
+    'sein': ('ist', 'war', 'ist gewesen'),
+    'haben': ('hat', 'hatte', 'hat gehabt'),
+    'werden': ('wird', 'wurde', 'ist geworden'),
+    'gehen': ('geht', 'ging', 'ist gegangen'),
+    'kommen': ('kommt', 'kam', 'ist gekommen'),
+    'nehmen': ('nimmt', 'nahm', 'hat genommen'),
+    'essen': ('isst', 'aß', 'hat gegessen'),
+    'fahren': ('fährt', 'fuhr', 'ist gefahren'),
+    'sehen': ('sieht', 'sah', 'hat gesehen'),
+    'sprechen': ('spricht', 'sprach', 'hat gesprochen'),
+    'geben': ('gibt', 'gab', 'hat gegeben'),
+    'lesen': ('liest', 'las', 'hat gelesen'),
+    'schlafen': ('schläft', 'schlief', 'hat geschlafen'),
+    'wissen': ('weiß', 'wusste', 'hat gewusst'),
+    'können': ('kann', 'konnte', 'hat gekonnt'),
+    'müssen': ('muss', 'musste', 'hat gemusst'),
+    'aufstehen': ('steht auf', 'stand auf', 'ist aufgestanden'),
+    'anfangen': ('fängt an', 'fing an', 'hat angefangen'),
 }
 
 ENTRY_RE = re.compile(
@@ -86,25 +92,42 @@ def parse_verbs():
 
 def call_openai(verb):
     system_prompt = (
-        "You are a German grammar reference. For the German verb given, provide two "
+        "You are a German grammar reference. For the German verb given, provide three "
         "conjugated forms EXACTLY as they would appear in a real sentence: "
         '(1) "thirdPerson": the 3rd-person-singular PRESENT tense form (as in "er/sie/es ___"). '
         '(2) "pastTense": the 3rd-person-singular simple past/Präteritum form (as in "er/sie/es ___"). '
-        "If the verb has a separable prefix (e.g. aufstehen, anfangen), write the form with the "
-        'prefix SEPARATED and at the end, the way it is actually used (e.g. "steht auf", not '
-        '"aufsteht"). Do not include the pronoun "er/sie/es" itself, only the verb form(s). For a '
-        "reflexive verb, do not include the reflexive pronoun either. Respond with exactly this "
-        'JSON: {"thirdPerson": "...", "pastTense": "..."}.'
+        '(3) "perfectTense": the PERFECT tense form INCLUDING its correct 3rd-person-singular '
+        'auxiliary, "hat ___" or "ist ___". Determining the auxiliary is the single most important '
+        'and most error-prone part of this task — think about it explicitly before answering: use '
+        '"ist" ONLY for (a) sein, werden, bleiben themselves, or (b) a genuinely INTRANSITIVE verb '
+        'of motion or change of state (gehen, kommen, fahren, fliegen, laufen, fallen, aufstehen, '
+        'sterben, wachsen, and their compounds/separable-prefix forms). Use "hat" for EVERY other '
+        'verb, including all transitive verbs, all reflexive verbs, and all modal verbs (können, '
+        'müssen, wollen, ...) — this is the default; only switch to "ist" if the verb clearly '
+        'matches (a) or (b) above. '
+        "If the verb has a separable prefix (e.g. aufstehen, anfangen), write thirdPerson/pastTense "
+        'with the prefix SEPARATED and at the end, the way it is actually used (e.g. "steht auf", '
+        'not "aufsteht") — but perfectTense keeps the prefix ATTACHED to the participle as one word, '
+        'the way German perfect tense actually works (e.g. "ist aufgestanden", not "steht auf '
+        'gestanden" or "ist auf gestanden"). Do not include the pronoun "er/sie/es" itself in any '
+        "field. For a reflexive verb, do not include the reflexive pronoun either. Respond with "
+        'exactly this JSON: {"thirdPerson": "...", "pastTense": "...", "perfectTense": "..."}.'
     )
     messages = [
         {"role": "system", "content": system_prompt},
+        {"role": "user", "content": 'The verb is "sein".'},
+        {"role": "assistant", "content": '{"thirdPerson": "ist", "pastTense": "war", "perfectTense": "ist gewesen"}'},
+        {"role": "user", "content": 'The verb is "aufstehen".'},
+        {"role": "assistant", "content": '{"thirdPerson": "steht auf", "pastTense": "stand auf", "perfectTense": "ist aufgestanden"}'},
+        {"role": "user", "content": 'The verb is "machen".'},
+        {"role": "assistant", "content": '{"thirdPerson": "macht", "pastTense": "machte", "perfectTense": "hat gemacht"}'},
         {"role": "user", "content": f'The verb is "{verb["de"]}".'},
     ]
     rate_limit_retries = 0
     while True:
         body = {
             "model": "gpt-4o-mini", "response_format": {"type": "json_object"},
-            "messages": messages, "temperature": 0, "max_tokens": 60,
+            "messages": messages, "temperature": 0, "max_tokens": 80,
         }
         req = urllib.request.Request(
             "https://api.openai.com/v1/chat/completions",
@@ -118,9 +141,10 @@ def call_openai(verb):
             parsed = json.loads(raw)
             third = parsed.get('thirdPerson', '').strip()
             past = parsed.get('pastTense', '').strip()
-            if not third or not past:
+            perfect = parsed.get('perfectTense', '').strip()
+            if not third or not past or not perfect:
                 return verb['id'], None, 'empty response'
-            return verb['id'], {'thirdPerson': third, 'pastTense': past}, None
+            return verb['id'], {'thirdPerson': third, 'pastTense': past, 'perfectTense': perfect}, None
         except urllib.error.HTTPError as e:
             if e.code == 429 and rate_limit_retries < 8:
                 rate_limit_retries += 1
@@ -139,20 +163,22 @@ def spot_check(verbs, results):
     by_de = {v['de']: v['id'] for v in verbs}
     print("\n--- Spot-check against known-correct forms ---", file=sys.stderr)
     ok, bad = 0, 0
-    for de, (expected_third, expected_past) in KNOWN_ANSWERS.items():
+    for de, (expected_third, expected_past, expected_perfect) in KNOWN_ANSWERS.items():
         wid = by_de.get(de)
         if not wid or wid not in results:
             print(f"  SKIP {de}: not in corpus/results", file=sys.stderr)
             continue
         got = results[wid]
-        match = got['thirdPerson'] == expected_third and got['pastTense'] == expected_past
+        match = (got['thirdPerson'] == expected_third and got['pastTense'] == expected_past
+                  and got.get('perfectTense') == expected_perfect)
         status = 'OK ' if match else 'MISMATCH'
         if match:
             ok += 1
         else:
             bad += 1
         print(f"  {status} {de}: got thirdPerson={got['thirdPerson']!r} pastTense={got['pastTense']!r}"
-              f" (expected {expected_third!r}/{expected_past!r})", file=sys.stderr)
+              f" perfectTense={got.get('perfectTense')!r}"
+              f" (expected {expected_third!r}/{expected_past!r}/{expected_perfect!r})", file=sys.stderr)
     print(f"--- {ok} matched, {bad} mismatched out of {ok+bad} known verbs checked ---\n", file=sys.stderr)
     return bad == 0
 
@@ -163,7 +189,10 @@ def main():
     if os.path.exists(CACHE_PATH):
         with open(CACHE_PATH, encoding='utf-8') as f:
             results = json.load(f)
-    targets = [v for v in verbs if v['id'] not in results]
+    # Requires perfectTense specifically (not just presence in the cache) —
+    # an earlier run of this script only generated thirdPerson/pastTense,
+    # so those entries need a real re-request, not a skip.
+    targets = [v for v in verbs if not results.get(v['id'], {}).get('perfectTense')]
     print(f"{len(targets)} verbs need forms (resuming {len(results)} already done, {len(verbs)} total)", file=sys.stderr)
 
     start = time.time()

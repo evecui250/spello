@@ -233,8 +233,8 @@ function SentenceWordHeader({ word }: { word: Word }) {
       {word.type === 'noun' && word.plural && (
         <div className="text-xs text-stone-400 mt-0.5">Plural: die {word.plural}</div>
       )}
-      {word.type === 'verb' && word.thirdPerson && word.pastTense && (
-        <div className="text-xs text-stone-400 mt-0.5">er/sie/es {word.thirdPerson} · {word.pastTense}</div>
+      {word.type === 'verb' && word.thirdPerson && word.pastTense && word.perfectTense && (
+        <div className="text-xs text-stone-400 mt-0.5">Verb | {word.thirdPerson}, {word.pastTense}, {word.perfectTense}</div>
       )}
     </div>
   );
@@ -1701,8 +1701,8 @@ export default function DailySessionFlow() {
                 {snap.word.type === 'noun' && snap.word.plural && (
                   <div className="text-xs text-stone-400 mt-0.5">Plural: die {snap.word.plural}</div>
                 )}
-                {snap.word.type === 'verb' && snap.word.thirdPerson && snap.word.pastTense && (
-                  <div className="text-xs text-stone-400 mt-0.5">er/sie/es {snap.word.thirdPerson} · {snap.word.pastTense}</div>
+                {snap.word.type === 'verb' && snap.word.thirdPerson && snap.word.pastTense && snap.word.perfectTense && (
+                  <div className="text-xs text-stone-400 mt-0.5">Verb | {snap.word.thirdPerson}, {snap.word.pastTense}, {snap.word.perfectTense}</div>
                 )}
               </div>
               <ReferenceSentence example={snap.sentence} />
@@ -1887,8 +1887,8 @@ export default function DailySessionFlow() {
                 {word.type === 'noun' && word.plural && (
                   <div className="text-xs text-stone-400 mt-0.5">Plural: die {word.plural}</div>
                 )}
-                {word.type === 'verb' && word.thirdPerson && word.pastTense && (
-                  <div className="text-xs text-stone-400 mt-0.5">er/sie/es {word.thirdPerson} · {word.pastTense}</div>
+                {word.type === 'verb' && word.thirdPerson && word.pastTense && word.perfectTense && (
+                  <div className="text-xs text-stone-400 mt-0.5">Verb | {word.thirdPerson}, {word.pastTense}, {word.perfectTense}</div>
                 )}
               </div>
             )}
