@@ -17,10 +17,18 @@ interface ThemeConfig {
   particleColor: string; // dot fill
   particleGlow: string; // dot box-shadow (its glow halo)
   particleAnimation: 'animate-firefly' | 'animate-bubble-float';
+  // Home's big "Start" button — a full CSS linear-gradient() string, same
+  // hue family as the background but a couple of shades richer/deeper so
+  // it still reads as a distinct, clickable object sitting ON the
+  // background rather than blending into it. Dark enough at every stop
+  // for the button's own light cream/amber text, same contrast reasoning
+  // as the background needs for its overlaid header text.
+  buttonGradient: string;
 }
 
 export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   forest: {
+    buttonGradient: 'linear-gradient(135deg, #a9835e 0%, #8a6440 50%, #6b4a2c 100%)',
     gradient: 'from-[#0f3d3a] via-[#155c4a] to-[#0c2e25]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,244,200,0.16),transparent_65%)', className: '-top-10 left-[10%] w-1/2 h-2/3' },
@@ -32,6 +40,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   stellar: {
+    buttonGradient: 'linear-gradient(135deg, #8b7ec8 0%, #6a5aa8 50%, #443a78 100%)',
     gradient: 'from-[#0a0a2e] via-[#171344] to-[#050512]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(167,139,250,0.18),transparent_65%)', className: '-top-10 left-[8%] w-1/2 h-2/3' },
@@ -43,6 +52,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   ocean: {
+    buttonGradient: 'linear-gradient(135deg, #4a9bab 0%, #327b8c 50%, #1d5266 100%)',
     gradient: 'from-[#062736] via-[#0b5266] to-[#031a24]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(165,243,252,0.16),transparent_65%)', className: '-top-10 left-[12%] w-1/2 h-2/3' },
@@ -54,6 +64,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-bubble-float',
   },
   lavender: {
+    buttonGradient: 'linear-gradient(135deg, #9b7bb8 0%, #7a5a96 50%, #543a70 100%)',
     gradient: 'from-[#382a52] via-[#5b3f78] to-[#241a38]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(253,224,196,0.16),transparent_65%)', className: '-top-10 left-[10%] w-1/2 h-2/3' },
@@ -65,6 +76,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   sunset: {
+    buttonGradient: 'linear-gradient(135deg, #d9773f 0%, #b8542a 50%, #832e14 100%)',
     gradient: 'from-[#2b1750] via-[#c2542e] to-[#3a0e1a]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,214,153,0.22),transparent_65%)', className: '-top-6 left-[15%] w-3/5 h-2/3' },
@@ -76,6 +88,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   blossom: {
+    buttonGradient: 'linear-gradient(135deg, #b5698c 0%, #96496e 50%, #6b3050 100%)',
     gradient: 'from-[#4a1f3d] via-[#9a4a72] to-[#2e1228]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,214,231,0.20),transparent_65%)', className: '-top-10 left-[10%] w-1/2 h-2/3' },
@@ -87,6 +100,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-bubble-float',
   },
   ember: {
+    buttonGradient: 'linear-gradient(135deg, #c17a3d 0%, #a35a24 50%, #74390f 100%)',
     gradient: 'from-[#1f1410] via-[#7a3f1a] to-[#160d09]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,178,102,0.20),transparent_65%)', className: '-top-8 left-[12%] w-3/5 h-2/3' },
@@ -104,6 +118,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   // background would wash that text out. Kept saturated enough at every
   // stop to still read as "bright and cheerful" without breaking that.
   citrus: {
+    buttonGradient: 'linear-gradient(135deg, #d9622a 0%, #b8431a 50%, #8a2f10 100%)',
     gradient: 'from-[#ffb347] via-[#ff7043] to-[#b8390f]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.22),transparent_65%)', className: '-top-6 left-[15%] w-3/5 h-2/3' },
@@ -115,6 +130,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   meadow: {
+    buttonGradient: 'linear-gradient(135deg, #4a9b5e 0%, #2f7a45 50%, #1d5c30 100%)',
     gradient: 'from-[#5ec8e8] via-[#8bd450] to-[#1f6b3a]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.22),transparent_65%)', className: '-top-6 left-[12%] w-3/5 h-2/3' },

@@ -165,7 +165,7 @@ export default function HomePage() {
           <button
             onClick={handleClick}
             className="group relative w-full max-w-[260px] rounded-full px-5 py-4 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_16px_rgba(90,58,26,0.35)] hover:shadow-[0_8px_24px_rgba(90,58,26,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
-            style={{ backgroundImage: 'linear-gradient(135deg, #a9835e 0%, #8a6440 50%, #6b4a2c 100%)' }}
+            style={{ backgroundImage: THEME_CONFIG[theme].buttonGradient }}
           >
             <span className="text-lg font-extrabold text-amber-50 tracking-wide">
               {label}
