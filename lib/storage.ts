@@ -673,14 +673,15 @@ export function saveStreak(s: Streak): void {
 // levels shouldn't change what the app looks like) and NOT synced (unlike
 // settings/progress, there's no real expectation that two devices signed
 // into the same account share the same background choice). ---
-export type Theme = 'forest' | 'stellar' | 'ocean' | 'lavender';
+export type Theme = 'forest' | 'stellar' | 'ocean' | 'lavender' | 'sunset' | 'blossom' | 'ember';
 const THEME_KEY = 'wb2_theme';
 export const THEME_CHANGED_EVENT = 'wb2-theme-changed';
+const VALID_THEMES: Theme[] = ['forest', 'stellar', 'ocean', 'lavender', 'sunset', 'blossom', 'ember'];
 
 export function getTheme(): Theme {
   if (typeof window === 'undefined') return 'forest';
   const raw = localStorage.getItem(THEME_KEY);
-  return raw === 'stellar' || raw === 'ocean' || raw === 'lavender' ? raw : 'forest';
+  return (VALID_THEMES as string[]).includes(raw ?? '') ? (raw as Theme) : 'forest';
 }
 
 // Dispatches THEME_CHANGED_EVENT so the background (mounted once, high up

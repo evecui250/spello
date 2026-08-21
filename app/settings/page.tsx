@@ -317,7 +317,7 @@ export default function SettingsPage() {
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6">
         <label className="block font-semibold text-stone-800 mb-1">Theme</label>
         <p className="text-stone-500 text-sm mb-3">Changes the app's background.</p>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="flex flex-wrap gap-x-4 gap-y-3">
           {(Object.keys(THEME_CONFIG) as Theme[]).map(t => {
             const cfg = THEME_CONFIG[t];
             const isSelected = theme === t;
@@ -326,14 +326,14 @@ export default function SettingsPage() {
                 key={t}
                 type="button"
                 onClick={() => handleThemeChange(t)}
-                className="flex flex-col items-center gap-1.5"
+                className="flex flex-col items-center gap-1"
               >
                 <span
-                  className={`w-full aspect-square rounded-full bg-gradient-to-b ${cfg.gradient} transition-all ${
-                    isSelected ? 'ring-2 ring-offset-2 ring-offset-amber-50 ring-indigo-500 scale-105' : 'ring-1 ring-black/10'
+                  className={`w-9 h-9 rounded-full bg-gradient-to-b ${cfg.gradient} transition-all ${
+                    isSelected ? 'ring-2 ring-offset-2 ring-offset-amber-50 ring-indigo-500 scale-110' : 'ring-1 ring-black/10'
                   }`}
                 />
-                <span className={`text-xs font-medium capitalize ${isSelected ? 'text-indigo-700' : 'text-stone-500'}`}>
+                <span className={`text-[11px] font-medium capitalize ${isSelected ? 'text-indigo-700' : 'text-stone-500'}`}>
                   {t}
                 </span>
               </button>

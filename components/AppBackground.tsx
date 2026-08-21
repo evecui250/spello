@@ -64,6 +64,39 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleGlow: 'shadow-[0_0_8px_3px_rgba(253,224,255,0.6)]',
     particleAnimation: 'animate-firefly',
   },
+  sunset: {
+    gradient: 'from-[#2b1750] via-[#c2542e] to-[#3a0e1a]',
+    glows: [
+      { style: 'radial-gradient(ellipse_at_top,rgba(255,214,153,0.22),transparent_65%)', className: '-top-6 left-[15%] w-3/5 h-2/3' },
+      { style: 'radial-gradient(ellipse_at_top,rgba(255,150,180,0.14),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
+    ],
+    mistColor: 'bg-orange-100/5',
+    particleColor: 'bg-amber-100',
+    particleGlow: 'shadow-[0_0_8px_3px_rgba(255,214,153,0.7)]',
+    particleAnimation: 'animate-firefly',
+  },
+  blossom: {
+    gradient: 'from-[#4a1f3d] via-[#9a4a72] to-[#2e1228]',
+    glows: [
+      { style: 'radial-gradient(ellipse_at_top,rgba(255,214,231,0.20),transparent_65%)', className: '-top-10 left-[10%] w-1/2 h-2/3' },
+      { style: 'radial-gradient(ellipse_at_top,rgba(255,196,168,0.12),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
+    ],
+    mistColor: 'bg-pink-100/5',
+    particleColor: 'bg-pink-50',
+    particleGlow: 'shadow-[0_0_8px_3px_rgba(255,228,240,0.7)]',
+    particleAnimation: 'animate-bubble-float',
+  },
+  ember: {
+    gradient: 'from-[#1f1410] via-[#7a3f1a] to-[#160d09]',
+    glows: [
+      { style: 'radial-gradient(ellipse_at_top,rgba(255,178,102,0.20),transparent_65%)', className: '-top-8 left-[12%] w-3/5 h-2/3' },
+      { style: 'radial-gradient(ellipse_at_top,rgba(255,120,80,0.12),transparent_65%)', className: '-top-4 right-[8%] w-2/5 h-1/2' },
+    ],
+    mistColor: 'bg-orange-200/5',
+    particleColor: 'bg-orange-200',
+    particleGlow: 'shadow-[0_0_8px_3px_rgba(255,170,102,0.75)]',
+    particleAnimation: 'animate-bubble-float',
+  },
 };
 
 const PARTICLE_SPOTS = [
