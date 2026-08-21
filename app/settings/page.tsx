@@ -352,6 +352,15 @@ export default function SettingsPage() {
         <ShareCard />
       </div>
 
+      {/* Preview-only entry point — not yet part of the main daily flow,
+          see app/game/page.tsx's own top comment. */}
+      <Link
+        href="/game"
+        className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm py-3 px-4 font-semibold text-stone-700 hover:bg-amber-50 active:scale-[0.99] transition-all"
+      >
+        🎮 Try the new word-match game (preview)
+      </Link>
+
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm">
         <Link href="/terms" className="text-amber-200 hover:text-amber-100 underline">Terms of Service</Link>
         <Link href="/privacy" className="text-amber-200 hover:text-amber-100 underline">Privacy Policy</Link>
