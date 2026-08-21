@@ -97,6 +97,34 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleGlow: 'shadow-[0_0_8px_3px_rgba(255,170,102,0.75)]',
     particleAnimation: 'animate-bubble-float',
   },
+  // These two stay noticeably brighter/more vivid than the other 7 (which
+  // all lean dark/moody) — but not pastel-light. The app's header text
+  // (e.g. Home's "spello" title/subtitle) is hardcoded light cream/amber,
+  // relying on the background being darker than it — a truly pale
+  // background would wash that text out. Kept saturated enough at every
+  // stop to still read as "bright and cheerful" without breaking that.
+  citrus: {
+    gradient: 'from-[#ffb347] via-[#ff7043] to-[#b8390f]',
+    glows: [
+      { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.22),transparent_65%)', className: '-top-6 left-[15%] w-3/5 h-2/3' },
+      { style: 'radial-gradient(ellipse_at_top,rgba(255,214,102,0.18),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
+    ],
+    mistColor: 'bg-yellow-100/10',
+    particleColor: 'bg-yellow-50',
+    particleGlow: 'shadow-[0_0_8px_3px_rgba(255,255,255,0.75)]',
+    particleAnimation: 'animate-firefly',
+  },
+  meadow: {
+    gradient: 'from-[#5ec8e8] via-[#8bd450] to-[#1f6b3a]',
+    glows: [
+      { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.22),transparent_65%)', className: '-top-6 left-[12%] w-3/5 h-2/3' },
+      { style: 'radial-gradient(ellipse_at_top,rgba(255,244,168,0.16),transparent_65%)', className: '-top-4 right-[8%] w-2/5 h-1/2' },
+    ],
+    mistColor: 'bg-white/10',
+    particleColor: 'bg-yellow-50',
+    particleGlow: 'shadow-[0_0_8px_3px_rgba(255,255,255,0.75)]',
+    particleAnimation: 'animate-bubble-float',
+  },
 };
 
 const PARTICLE_SPOTS = [
