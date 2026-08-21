@@ -103,19 +103,6 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleGlow: 'shadow-[0_0_8px_3px_rgba(253,224,255,0.6)]',
     particleAnimation: 'animate-firefly',
   },
-  blossom: {
-    stageColors: ['#e0a8bd', '#c97a97', '#9a4a72', '#5e2f4a'],
-    buttonGradient: 'linear-gradient(135deg, #b5698c 0%, #96496e 50%, #6b3050 100%)',
-    gradient: 'from-[#4a1f3d] via-[#9a4a72] to-[#2e1228]',
-    glows: [
-      { style: 'radial-gradient(ellipse_at_top,rgba(255,214,231,0.20),transparent_65%)', className: '-top-10 left-[10%] w-1/2 h-2/3' },
-      { style: 'radial-gradient(ellipse_at_top,rgba(255,196,168,0.12),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
-    ],
-    mistColor: 'bg-pink-100/5',
-    particleColor: 'bg-pink-50',
-    particleGlow: 'shadow-[0_0_8px_3px_rgba(255,228,240,0.7)]',
-    particleAnimation: 'animate-bubble-float',
-  },
   sunset: {
     stageColors: ['#e0a86a', '#d97b4a', '#b8542e', '#6b2e3a'],
     buttonGradient: 'linear-gradient(135deg, #d9773f 0%, #b8542a 50%, #832e14 100%)',
@@ -173,6 +160,24 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleColor: 'bg-white',
     particleGlow: 'shadow-[0_0_8px_3px_rgba(255,255,255,0.75)]',
     particleAnimation: 'animate-bubble-float',
+  },
+  // The palest of the 10 (replaces the old "blossom", which read too
+  // close to Lavender/Sunset) — a warm vanilla-custard gradient rather
+  // than literal white/eggshell, since the app's header text (e.g. Home's
+  // subtitle) is hardcoded light cream and needs a background darker than
+  // itself somewhere in the mix to stay legible.
+  vanilla: {
+    stageColors: ['#f5e6b8', '#e0c078', '#c19648', '#8a6a2e'],
+    buttonGradient: 'linear-gradient(135deg, #d9a860 0%, #b8823a 50%, #8a5f22 100%)',
+    gradient: 'from-[#f2d38a] via-[#e8b855] to-[#c48f3a]',
+    glows: [
+      { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.18),transparent_65%)', className: '-top-6 left-[15%] w-3/5 h-2/3' },
+      { style: 'radial-gradient(ellipse_at_top,rgba(255,244,214,0.12),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
+    ],
+    mistColor: 'bg-white/10',
+    particleColor: 'bg-white',
+    particleGlow: 'shadow-[0_0_8px_3px_rgba(255,255,255,0.8)]',
+    particleAnimation: 'animate-firefly',
   },
 };
 

@@ -79,7 +79,7 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
               const isCorrect = correctIds.has(w.id);
               const isSelected = selectedGerman === w.id;
               const isWrong = wrongFlash?.german === w.id;
-              let cls = 'border-2 border-indigo-100 text-slate-700 hover:border-indigo-300';
+              let cls = 'border-2 border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400 hover:bg-white';
               if (isCorrect) cls = 'border-2 border-green-400 bg-green-100 text-green-700';
               else if (isWrong) cls = 'border-2 border-red-400 bg-red-100 text-red-700';
               else if (isSelected) cls = 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700';
@@ -100,7 +100,7 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
               const isCorrect = words.some(w => correctIds.has(w.id) && glossFor(w, nativeLanguage) === text);
               const isSelected = selectedEnglish === text;
               const isWrong = wrongFlash?.english === text;
-              let cls = 'border-2 border-indigo-100 text-slate-700 hover:border-indigo-300';
+              let cls = 'border-2 border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400 hover:bg-white';
               if (isCorrect) cls = 'border-2 border-green-400 bg-green-100 text-green-700';
               else if (isWrong) cls = 'border-2 border-red-400 bg-red-100 text-red-700';
               else if (isSelected) cls = 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700';

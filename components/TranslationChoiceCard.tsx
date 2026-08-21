@@ -88,11 +88,17 @@ export default function TranslationChoiceCard({ word, correct: correctChoice, ch
           {choices.map(choice => {
             const isCorrectChoice = choice === correctChoice;
             const isPicked = choice === selected;
-            let cls = 'border-2 border-indigo-100 text-slate-700 hover:border-indigo-300';
+            // A real bg-white fill (not just a faint border on the card's
+            // own translucent background) — confirmed real: against a
+            // bright theme, the card's bg-amber-50/75 lets enough of a
+            // vivid backdrop bleed through that a border-only button all
+            // but disappeared. The fill keeps it visible regardless of
+            // theme.
+            let cls = 'border-2 border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400 hover:bg-white';
             if (selected !== null) {
               if (isCorrectChoice) cls = 'border-2 border-green-400 bg-green-100 text-green-700';
               else if (isPicked) cls = 'border-2 border-red-400 bg-red-100 text-red-700';
-              else cls = 'border-2 border-indigo-100 text-slate-400 opacity-60';
+              else cls = 'border-2 border-indigo-200 bg-white/60 text-slate-400 opacity-60';
             }
             return (
               <button
