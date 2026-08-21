@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { WORDS, glossFor, Word } from '../../lib/words';
-import { getMergedProgressAcrossLevels, getSettings, getTheme, Theme, THEME_CHANGED_EVENT } from '../../lib/storage';
+import { getMergedProgressAcrossLevels, getSettings, getTheme, Theme, THEME_CHANGED_EVENT, getDailyWordLog, today } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { speakWord } from '../../lib/speech';
 
@@ -24,16 +24,54 @@ function getLearnedWords(): Word[] {
   return WORDS.filter(w => !!progress[w.id]?.mascotStage);
 }
 
-const GAME_DURATION = 30;
+const GAME_DURATION = 60;
 // Below this many learned words, there simply isn't enough vocabulary to
 // fill even one round's board — the game stays locked with an explanatory
 // message instead of a Start button.
-const MIN_WORDS_REQUIRED = 6;
-const MAX_PAIRS_PER_ROUND = 6;
-const POINTS_PER_MATCH = 10;
+const MIN_WORDS_REQUIRED = 5;
+const PAIRS_PER_ROUND = 5;
+// Reserved out of each round's 5 slots for "mastered" (long-crowned) words
+// specifically, whenever any exist — see pickRoundWords below for why.
+const MASTERED_SLOTS = 2;
+const POINTS_PER_MATCH = 1;
 
 function shuffled<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
+}
+
+// Which words fill a round's board, in priority order:
+//   1. Up to MASTERED_SLOTS words already at the final (long-crowned)
+//      stage — the SRS schedule never brings these back for review once
+//      mastered, so this game is genuinely the only remaining chance to
+//      see them again. Reserved unconditionally (not just a fallback), so
+//      a learner who touched >= PAIRS_PER_ROUND words today doesn't
+//      accidentally crowd mastered words out of every single round.
+//   2. Words touched (learned or reviewed) TODAY specifically — the
+//      game's actual purpose is reinforcing what's fresh, so these fill
+//      the rest of the board first.
+//   3. Anything else already learned, as a fallback so a round is never
+//      short a pair just because today's/mastered pools ran dry.
+function pickRoundWords(pool: Word[], todayIds: Set<string>, masteredIds: Set<string>): Word[] {
+  const masteredPool = shuffled(pool.filter(w => masteredIds.has(w.id)));
+  const picked: Word[] = masteredPool.slice(0, Math.min(MASTERED_SLOTS, PAIRS_PER_ROUND));
+  const pickedIds = new Set(picked.map(w => w.id));
+
+  const todayPool = shuffled(pool.filter(w => todayIds.has(w.id) && !pickedIds.has(w.id)));
+  for (const w of todayPool) {
+    if (picked.length >= PAIRS_PER_ROUND) break;
+    picked.push(w);
+    pickedIds.add(w.id);
+  }
+
+  if (picked.length < PAIRS_PER_ROUND) {
+    const restPool = shuffled(pool.filter(w => !pickedIds.has(w.id)));
+    for (const w of restPool) {
+      if (picked.length >= PAIRS_PER_ROUND) break;
+      picked.push(w);
+      pickedIds.add(w.id);
+    }
+  }
+  return shuffled(picked.slice(0, Math.min(PAIRS_PER_ROUND, pool.length)));
 }
 
 type Phase = 'intro' | 'playing' | 'over';
@@ -43,8 +81,7 @@ export default function GamePage() {
   const [learnedWords, setLearnedWords] = useState<Word[]>([]);
   const [phase, setPhase] = useState<Phase>('intro');
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
-  const [score, setScore] = useState(0);
-  const [roundsCleared, setRoundsCleared] = useState(0);
+  const [matchedCount, setMatchedCount] = useState(0);
 
   const [roundWords, setRoundWords] = useState<Word[]>([]);
   const [shuffledEn, setShuffledEn] = useState<string[]>([]);
@@ -68,11 +105,16 @@ export default function GamePage() {
     setLearnedWords(getLearnedWords());
   }, []);
 
-  const pairsPerRound = Math.min(MAX_PAIRS_PER_ROUND, learnedWords.length);
   const canPlay = learnedWords.length >= MIN_WORDS_REQUIRED;
 
   function drawRound() {
-    const pool = shuffled(learnedWords).slice(0, pairsPerRound);
+    const log = getDailyWordLog()[today()];
+    const todayIds = new Set([...(log?.learned ?? []), ...(log?.reviewed ?? [])]);
+    const masteredProgress = getMergedProgressAcrossLevels();
+    const masteredIds = new Set(
+      learnedWords.filter(w => masteredProgress[w.id]?.mascotStage === 'long-crowned').map(w => w.id),
+    );
+    const pool = pickRoundWords(learnedWords, todayIds, masteredIds);
     setRoundWords(pool);
     setShuffledEn(shuffled(pool.map(w => glossFor(w, nativeLanguage))));
     setMatchedIds(new Set());
@@ -81,8 +123,7 @@ export default function GamePage() {
   }
 
   function startGame() {
-    setScore(0);
-    setRoundsCleared(0);
+    setMatchedCount(0);
     setTimeLeft(GAME_DURATION);
     drawRound();
     setPhase('playing');
@@ -110,7 +151,7 @@ export default function GamePage() {
       setMatchedIds(prev => new Set(prev).add(selectedGerman));
       setSelectedGerman(null);
       setSelectedEnglish(null);
-      setScore(s => s + POINTS_PER_MATCH);
+      setMatchedCount(c => c + POINTS_PER_MATCH);
       setJustScored(true);
       setTimeout(() => setJustScored(false), 400);
       speakWord(word);
@@ -130,7 +171,6 @@ export default function GamePage() {
   useEffect(() => {
     if (phase !== 'playing' || roundWords.length === 0) return;
     if (matchedIds.size === roundWords.length) {
-      setRoundsCleared(r => r + 1);
       const t = setTimeout(() => drawRound(), 350);
       return () => clearTimeout(t);
     }
@@ -149,7 +189,6 @@ export default function GamePage() {
   };
 
   const timerFraction = Math.max(0, timeLeft / GAME_DURATION);
-  const timerUrgent = timeLeft <= 10;
 
   return (
     <div className="flex flex-col gap-5">
@@ -164,14 +203,9 @@ export default function GamePage() {
         <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-4 items-center text-center">
           <div className="text-5xl">🎮</div>
           <h2 className="text-lg font-bold text-stone-800">Match words against the clock</h2>
-          <p className="text-stone-500 text-sm max-w-xs">
-            Tap a German word, then its meaning, to clear a pair. Clear the
-            board before time runs out to earn points — and if you clear it
-            early, a fresh board appears so you can keep going.
-          </p>
           {canPlay ? (
             <>
-              <p className="text-stone-400 text-xs">{GAME_DURATION}s per game · {pairsPerRound} pairs per board</p>
+              <p className="text-stone-400 text-xs">{GAME_DURATION}s per game · {PAIRS_PER_ROUND} pairs per board</p>
               <button
                 type="button"
                 onClick={startGame}
@@ -194,16 +228,19 @@ export default function GamePage() {
         <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div className={`font-bold text-lg text-stone-800 transition-transform ${justScored ? 'scale-125' : ''}`}>
-              {score} pts
+              {matchedCount} matched
             </div>
-            <div className={`font-semibold text-sm ${timerUrgent ? 'text-red-600' : 'text-stone-500'}`}>
+            <div className="font-semibold text-sm text-stone-500">
               {timeLeft}s
             </div>
           </div>
+          {/* Same color throughout the countdown, however little time is
+              left — no red/urgent recoloring, which read as stressful
+              rather than motivating. */}
           <div className="w-full h-2.5 rounded-full bg-stone-200/70 overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-1000 ease-linear ${timerUrgent ? 'bg-red-500' : ''}`}
-              style={{ width: `${timerFraction * 100}%`, backgroundImage: timerUrgent ? undefined : cfg.buttonGradient }}
+              className="h-full rounded-full transition-all duration-1000 ease-linear"
+              style={{ width: `${timerFraction * 100}%`, backgroundImage: cfg.buttonGradient }}
             />
           </div>
 
@@ -251,9 +288,6 @@ export default function GamePage() {
               })}
             </div>
           </div>
-          {roundsCleared > 0 && (
-            <p className="text-center text-stone-400 text-xs">{roundsCleared} board{roundsCleared === 1 ? '' : 's'} cleared this game</p>
-          )}
         </div>
       )}
 
@@ -261,10 +295,7 @@ export default function GamePage() {
         <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-3 items-center text-center">
           <div className="text-5xl">⏱️</div>
           <h2 className="text-lg font-bold text-stone-800">Time&apos;s up!</h2>
-          <div className="text-3xl font-extrabold text-indigo-700">{score} pts</div>
-          <p className="text-stone-500 text-sm">
-            {roundsCleared} board{roundsCleared === 1 ? '' : 's'} fully cleared.
-          </p>
+          <div className="text-3xl font-extrabold text-indigo-700">{matchedCount} pairs matched</div>
           <button
             type="button"
             onClick={startGame}
