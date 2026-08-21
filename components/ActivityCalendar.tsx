@@ -154,7 +154,7 @@ export default function ActivityCalendar() {
           </div>
           <div className="flex items-center gap-4 justify-center text-[11px] text-stone-500 pt-1">
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full border-2 border-green-600 bg-green-50 inline-block" />Goal met</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-200/70 inline-block" />Partly done</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-200/70 inline-block" />Finished review</span>
           </div>
         </div>
       )}
