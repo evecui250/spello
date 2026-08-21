@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { WORDS, glossFor, Word } from '../../lib/words';
-import { getMergedProgressAcrossLevels, getSettings, getTheme, Theme, THEME_CHANGED_EVENT, getDailyWordLog, today } from '../../lib/storage';
+import { getMergedProgressAcrossLevels, getSettings, getTheme, Theme, THEME_CHANGED_EVENT, getDailyWordLog, today, WordProgress } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { speakWord } from '../../lib/speech';
 
@@ -39,6 +39,13 @@ function shuffled<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
 }
 
+function mostRecentDate(p?: WordProgress): string {
+  if (!p) return '';
+  const a = p.lastPracticed ?? '';
+  const b = p.lastReviewedAt ?? '';
+  return a > b ? a : b;
+}
+
 // Which words fill a round's board, in priority order:
 //   1. Up to MASTERED_SLOTS words already at the final (long-crowned)
 //      stage — the SRS schedule never brings these back for review once
@@ -49,14 +56,27 @@ function shuffled<T>(arr: T[]): T[] {
 //   2. Words touched (learned or reviewed) TODAY specifically — the
 //      game's actual purpose is reinforcing what's fresh, so these fill
 //      the rest of the board first.
-//   3. Anything else already learned, as a fallback so a round is never
-//      short a pair just because today's/mastered pools ran dry.
-function pickRoundWords(pool: Word[], todayIds: Set<string>, masteredIds: Set<string>): Word[] {
-  const masteredPool = shuffled(pool.filter(w => masteredIds.has(w.id)));
+//   3. Anything else already learned, sorted by MOST RECENT activity
+//      first (not random) — confirmed real: a small today's-words pool
+//      meant every round redrew the exact same 5 words. `usedIds` (see
+//      the caller) already excludes words seen earlier this game
+//      session, and recency ordering here means once that's spent,
+//      yesterday's words come up before older ones, maximizing how much
+//      vocabulary gets touched over a full game rather than looping a
+//      handful of words.
+function pickRoundWords(
+  pool: Word[],
+  todayIds: Set<string>,
+  masteredIds: Set<string>,
+  usedIds: Set<string>,
+  progress: Record<string, WordProgress>,
+): Word[] {
+  const source = pool.filter(w => !usedIds.has(w.id));
+  const masteredPool = shuffled(source.filter(w => masteredIds.has(w.id)));
   const picked: Word[] = masteredPool.slice(0, Math.min(MASTERED_SLOTS, PAIRS_PER_ROUND));
   const pickedIds = new Set(picked.map(w => w.id));
 
-  const todayPool = shuffled(pool.filter(w => todayIds.has(w.id) && !pickedIds.has(w.id)));
+  const todayPool = shuffled(source.filter(w => todayIds.has(w.id) && !pickedIds.has(w.id)));
   for (const w of todayPool) {
     if (picked.length >= PAIRS_PER_ROUND) break;
     picked.push(w);
@@ -64,7 +84,8 @@ function pickRoundWords(pool: Word[], todayIds: Set<string>, masteredIds: Set<st
   }
 
   if (picked.length < PAIRS_PER_ROUND) {
-    const restPool = shuffled(pool.filter(w => !pickedIds.has(w.id)));
+    const restPool = [...source.filter(w => !pickedIds.has(w.id))]
+      .sort((a, b) => mostRecentDate(progress[b.id]).localeCompare(mostRecentDate(progress[a.id])));
     for (const w of restPool) {
       if (picked.length >= PAIRS_PER_ROUND) break;
       picked.push(w);
@@ -90,6 +111,13 @@ export default function GamePage() {
   const [selectedEnglish, setSelectedEnglish] = useState<string | null>(null);
   const [wrongFlash, setWrongFlash] = useState<{ german: string; english: string } | null>(null);
   const [justScored, setJustScored] = useState(false);
+  // Words already seen THIS game session — a ref, not state, since it's
+  // only ever read/written inside drawRound and never needs to trigger a
+  // render on its own. Reset on startGame; also reset mid-game once it's
+  // grown to cover (almost) the whole pool, so the game keeps cycling
+  // through everything rather than getting stuck unable to find fresh
+  // words for the rest of the session.
+  const usedIdsRef = useRef<Set<string>>(new Set());
 
   const nativeLanguage = getSettings().nativeLanguage;
   const cfg = THEME_CONFIG[theme];
@@ -110,11 +138,21 @@ export default function GamePage() {
   function drawRound() {
     const log = getDailyWordLog()[today()];
     const todayIds = new Set([...(log?.learned ?? []), ...(log?.reviewed ?? [])]);
-    const masteredProgress = getMergedProgressAcrossLevels();
+    const progress = getMergedProgressAcrossLevels();
     const masteredIds = new Set(
-      learnedWords.filter(w => masteredProgress[w.id]?.mascotStage === 'long-crowned').map(w => w.id),
+      learnedWords.filter(w => progress[w.id]?.mascotStage === 'long-crowned').map(w => w.id),
     );
-    const pool = pickRoundWords(learnedWords, todayIds, masteredIds);
+
+    // Not enough not-yet-seen words left to fill a round -> the game has
+    // cycled through everything available; start a fresh cycle instead
+    // of drawing from an ever-shrinking (or empty) "fresh" pool.
+    const freshCount = learnedWords.filter(w => !usedIdsRef.current.has(w.id)).length;
+    if (freshCount < Math.min(PAIRS_PER_ROUND, learnedWords.length)) {
+      usedIdsRef.current = new Set();
+    }
+
+    const pool = pickRoundWords(learnedWords, todayIds, masteredIds, usedIdsRef.current, progress);
+    pool.forEach(w => usedIdsRef.current.add(w.id));
     setRoundWords(pool);
     setShuffledEn(shuffled(pool.map(w => glossFor(w, nativeLanguage))));
     setMatchedIds(new Set());
@@ -125,6 +163,7 @@ export default function GamePage() {
   function startGame() {
     setMatchedCount(0);
     setTimeLeft(GAME_DURATION);
+    usedIdsRef.current = new Set();
     drawRound();
     setPhase('playing');
   }

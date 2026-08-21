@@ -600,10 +600,23 @@ export function getWordProgress(id: string): WordProgress {
   return all[id] ?? normalizeProgress(id, undefined);
 }
 
+// Fires on every word-progress or daily-session write — lets a component
+// mounted OUTSIDE DailySessionFlow (which owns and re-renders its own
+// session state internally) react to live progress without any direct
+// coupling to it, e.g. a roadmap sidebar recomputing "how far through
+// today" from scratch each time. Same cross-component-update pattern as
+// SYNCED_EVENT/THEME_CHANGED_EVENT elsewhere in this app.
+export const PROGRESS_CHANGED_EVENT = 'wb2-progress-changed';
+function notifyProgressChanged(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(PROGRESS_CHANGED_EVENT));
+}
+
 export function saveWordProgress(p: WordProgress): void {
   const all = getAllProgress();
   all[p.id] = p;
   saveAllProgress(all);
+  notifyProgressChanged();
 }
 
 // --- Streak (global — see STREAK_KEY) ---
@@ -999,6 +1012,7 @@ export function getDailySession(): DailySession | null {
 export function saveDailySession(s: DailySession): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(levelKey(KEYS.dailySession), JSON.stringify(s));
+  notifyProgressChanged();
 }
 
 export function startDailySession(studyWordIds: string[], reviewWordIds: string[], isExtra = false): DailySession {

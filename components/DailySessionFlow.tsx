@@ -180,7 +180,7 @@ const CHUNK_LABELS: Record<Round, string> = {
   4: '3rd review',
 };
 
-type RoundMode = 'study' | 'review';
+export type RoundMode = 'study' | 'review';
 
 // A read-only snapshot of one just-answered round card, kept purely so the
 // learner can page back and glance at what they just did (e.g. re-read a
@@ -717,7 +717,7 @@ function ReferenceSentence({ example, label = 'Example sentence' }: {
   );
 }
 
-function isRoundsDone(id: string, mode: RoundMode): boolean {
+export function isRoundsDone(id: string, mode: RoundMode): boolean {
   const p = getWordProgress(id);
   if (mode === 'study') return !!p.mascotStage;
   return p.fullyMastered || !!(p.nextReviewDue && p.nextReviewDue > today());
@@ -1168,7 +1168,13 @@ export default function DailySessionFlow() {
 
       saveWordProgress(outcome.progress);
       scheduleSync();
-      logWordActivity(word.id, 'reviewed');
+      // Only once this word's review is actually DONE for today
+      // (isFinal) — confirmed real: logging on every submission counted
+      // a word the learner started but hadn't finished (still mid-retry
+      // after a wrong answer, still sitting in the queue) as "reviewed"
+      // on the Progress page calendar, which didn't match reality (their
+      // own daily-goal counts still showed it as not-yet-done).
+      if (outcome.isFinal) logWordActivity(word.id, 'reviewed');
       setFeedback(correct);
       setJustCompleted(outcome.isFinal);
 
@@ -1196,10 +1202,13 @@ export default function DailySessionFlow() {
       scheduleSync();
       // earnedBadge is the exact submission that completes round-1
       // introduction (mascotStage reaches 'puppy' for the first time) — the
-      // Progress page calendar's "learned" bucket; any other study attempt
-      // on this word today (round 1 in progress, a wrong-answer demotion)
-      // is "reviewed" instead, same as review-mode's own submissions above.
-      logWordActivity(word.id, earnedBadge ? 'learned' : 'reviewed');
+      // Progress page calendar's "learned" bucket; any other CORRECT study
+      // attempt on this word today (e.g. round 1 -> round 2, not yet
+      // earning the badge) is "reviewed" instead, same as review-mode's
+      // own submissions above. A wrong answer doesn't log anything —
+      // same reasoning as the review branch: it didn't actually finish
+      // anything for this word today.
+      if (correct) logWordActivity(word.id, earnedBadge ? 'learned' : 'reviewed');
       setFeedback(correct);
       setJustCompleted(completed);
 
