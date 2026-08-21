@@ -152,7 +152,7 @@ export default function HomePage() {
 
       <div className="flex flex-col items-center gap-1">
         <Logo variant="full" size={140} />
-        <p className="text-emerald-100/70 text-sm tracking-wide mt-1" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.25)' }}>Master spelling, one word at a time.</p>
+        <p className={`${THEME_CONFIG[theme].subtitleClass} text-sm tracking-wide mt-1`} style={{ textShadow: THEME_CONFIG[theme].subtitleShadow }}>Master spelling, one word at a time.</p>
       </div>
 
       <div className="w-full flex flex-col items-center gap-3">

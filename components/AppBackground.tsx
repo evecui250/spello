@@ -31,6 +31,20 @@ interface ThemeConfig {
   // as garish against the cream panel), just re-hued per theme so this
   // chart doesn't stay green-toned regardless of what background is active.
   stageColors: [string, string, string, string];
+  // Home's "Master spelling, one word at a time." subtitle — a full
+  // Tailwind text-color+opacity class, tuned per theme so it stays
+  // readable without being loud. For the dark/moody themes this is a
+  // soft, low-opacity LIGHT tint matching the theme's own hue (same
+  // spirit as Forest's original text-emerald-100/70). Vanilla is the one
+  // exception: it's pale enough that light-on-light stops working
+  // regardless of hue, so it gets a soft dark tint instead — same
+  // "muted, not bold" intent, just inverted.
+  subtitleClass: string;
+  // Paired with subtitleClass — a dark drop-shadow lifts light text off a
+  // dark/moody background, but does nothing (or looks faintly muddy) once
+  // the text itself is dark (Vanilla), where a soft light halo is what
+  // actually helps instead.
+  subtitleShadow: string;
 }
 
 // Ordered darkest -> brightest (object key order = Settings' picker order,
@@ -39,6 +53,8 @@ interface ThemeConfig {
 // Citrus/Meadow/Bubblegum are the deliberately vivid/bright trio at the end.
 export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   stellar: {
+    subtitleClass: 'text-indigo-100/70',
+    subtitleShadow: '0 1px 2px rgba(0,0,0,0.25)',
     stageColors: ['#a89bd6', '#7b7ec2', '#5457a0', '#332f6b'],
     buttonGradient: 'linear-gradient(135deg, #8b7ec8 0%, #6a5aa8 50%, #443a78 100%)',
     gradient: 'from-[#0a0a2e] via-[#171344] to-[#050512]',
@@ -52,6 +68,8 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   ocean: {
+    subtitleClass: 'text-cyan-100/70',
+    subtitleShadow: '0 1px 2px rgba(0,0,0,0.25)',
     stageColors: ['#8fc9c9', '#5fa8ad', '#3d7f8c', '#1f4d5c'],
     buttonGradient: 'linear-gradient(135deg, #4a9bab 0%, #327b8c 50%, #1d5266 100%)',
     gradient: 'from-[#062736] via-[#0b5266] to-[#031a24]',
@@ -65,6 +83,8 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-bubble-float',
   },
   ember: {
+    subtitleClass: 'text-orange-100/60',
+    subtitleShadow: '0 1px 2px rgba(0,0,0,0.25)',
     stageColors: ['#d9a066', '#c17a3d', '#8a5423', '#4a2e14'],
     buttonGradient: 'linear-gradient(135deg, #c17a3d 0%, #a35a24 50%, #74390f 100%)',
     gradient: 'from-[#1f1410] via-[#7a3f1a] to-[#160d09]',
@@ -78,6 +98,8 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-bubble-float',
   },
   forest: {
+    subtitleClass: 'text-emerald-100/70',
+    subtitleShadow: '0 1px 2px rgba(0,0,0,0.25)',
     stageColors: ['#c9a86a', '#a3b18a', '#588157', '#5b3a5e'],
     buttonGradient: 'linear-gradient(135deg, #a9835e 0%, #8a6440 50%, #6b4a2c 100%)',
     gradient: 'from-[#0f3d3a] via-[#155c4a] to-[#0c2e25]',
@@ -91,6 +113,8 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   lavender: {
+    subtitleClass: 'text-purple-100/70',
+    subtitleShadow: '0 1px 2px rgba(0,0,0,0.25)',
     stageColors: ['#c9a8d6', '#a37eb8', '#7a5691', '#4a3060'],
     buttonGradient: 'linear-gradient(135deg, #9b7bb8 0%, #7a5a96 50%, #543a70 100%)',
     gradient: 'from-[#382a52] via-[#5b3f78] to-[#241a38]',
@@ -104,6 +128,8 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   sunset: {
+    subtitleClass: 'text-orange-100/70',
+    subtitleShadow: '0 1px 2px rgba(0,0,0,0.25)',
     stageColors: ['#e0a86a', '#d97b4a', '#b8542e', '#6b2e3a'],
     buttonGradient: 'linear-gradient(135deg, #d9773f 0%, #b8542a 50%, #832e14 100%)',
     gradient: 'from-[#2b1750] via-[#c2542e] to-[#3a0e1a]',
@@ -123,6 +149,8 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   // background would wash that text out. Kept saturated enough at every
   // stop to still read as "bright and cheerful" without breaking that.
   citrus: {
+    subtitleClass: 'text-amber-50/80',
+    subtitleShadow: '0 1px 2px rgba(0,0,0,0.25)',
     stageColors: ['#ffd699', '#f2a35c', '#d9773f', '#8a3d1a'],
     buttonGradient: 'linear-gradient(135deg, #d9622a 0%, #b8431a 50%, #8a2f10 100%)',
     gradient: 'from-[#ffb347] via-[#ff7043] to-[#b8390f]',
@@ -136,6 +164,8 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   meadow: {
+    subtitleClass: 'text-emerald-50/80',
+    subtitleShadow: '0 1px 2px rgba(0,0,0,0.25)',
     stageColors: ['#a8d6a0', '#7ab86a', '#4a8f45', '#2a5c30'],
     buttonGradient: 'linear-gradient(135deg, #4a9b5e 0%, #2f7a45 50%, #1d5c30 100%)',
     gradient: 'from-[#5ec8e8] via-[#8bd450] to-[#1f6b3a]',
@@ -149,6 +179,8 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-bubble-float',
   },
   bubblegum: {
+    subtitleClass: 'text-pink-50/80',
+    subtitleShadow: '0 1px 2px rgba(0,0,0,0.25)',
     stageColors: ['#f0a8d9', '#d975b8', '#b8489a', '#6e2a5c'],
     buttonGradient: 'linear-gradient(135deg, #d94fb0 0%, #b8318f 50%, #862368 100%)',
     gradient: 'from-[#ff8fd6] via-[#e85fc2] to-[#9c2f8a]',
@@ -167,6 +199,11 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   // subtitle) is hardcoded light cream and needs a background darker than
   // itself somewhere in the mix to stay legible.
   vanilla: {
+    // Dark, not light — see the interface comment above. A soft warm
+    // brown at moderate opacity, muted rather than the near-black a
+    // full-opacity dark color would read as.
+    subtitleClass: 'text-amber-900/55',
+    subtitleShadow: '0 1px 2px rgba(255,255,255,0.4)',
     stageColors: ['#f5e6b8', '#e0c078', '#c19648', '#8a6a2e'],
     buttonGradient: 'linear-gradient(135deg, #d9a860 0%, #b8823a 50%, #8a5f22 100%)',
     gradient: 'from-[#f2d38a] via-[#e8b855] to-[#c48f3a]',
