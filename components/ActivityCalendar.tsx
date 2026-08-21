@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState, TouchEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { getActivityCalendarDays, getMergedProgressAcrossLevels, getSettings, localDateString, today } from '../lib/storage';
+import { getActivityCalendarDays, getDailyWordLog, getSettings, localDateString, today } from '../lib/storage';
 import { SYNCED_EVENT } from '../lib/sync';
-import { WORDS, glossFor, Word } from '../lib/words';
+import { glossFor, Word } from '../lib/words';
+import { wordsById } from '../lib/practice';
 
 // Same soft, earthy palette as Progress page's mascot-stage bars (see
 // STAGE_COLORS there) rather than a bright primary green/yellow — full days
@@ -54,28 +55,27 @@ function DayCircle({ date, state, isToday, dim, onClick }: { date: number; state
   );
 }
 
-// A word counts as "learned" on a date if it reached its very first
-// mascot stage (puppy — see recordMilestonePass) that day, i.e. round-1
-// introduction actually finished then; everything else touched that day
-// (lastPracticed, without a fresh puppy stage) reads as ordinary practice/
-// review instead. Not a perfect "which exact round happened" log — that
-// was never tracked per-day — but it's a real, direct read of existing
-// progress fields, not a guess. Looks across every level (getMerged...)
-// since the calendar itself is level-independent.
+// Reads straight from the real per-day log (see logWordActivity) rather
+// than reconstructing from WordProgress's own fields — those only ever
+// hold each word's single latest date/stage, so an earlier attempt at
+// this (comparing lastPracticed/lastReviewedAt/mascotStage against the
+// clicked date) silently lost words the moment they were touched again on
+// a LATER day. A day from before this log existed just has nothing
+// recorded — same limitation every other backfilled record in this app
+// has, and honestly reported as "no activity" rather than guessed at.
 function wordsForDate(dateStr: string): { learned: Word[]; reviewed: Word[] } {
-  const progress = getMergedProgressAcrossLevels();
-  const learned: Word[] = [];
-  const reviewed: Word[] = [];
-  for (const w of WORDS) {
-    const p = progress[w.id];
-    if (!p) continue;
-    if (p.lastReviewedAt === dateStr && p.mascotStage === 'puppy') {
-      learned.push(w);
-    } else if (p.lastPracticed === dateStr || p.lastReviewedAt === dateStr) {
-      reviewed.push(w);
-    }
-  }
-  return { learned, reviewed };
+  const entry = getDailyWordLog()[dateStr];
+  if (!entry) return { learned: [], reviewed: [] };
+  // A word's round-1 attempt (logged 'reviewed') and its round-2 completion
+  // (logged 'learned') can both happen the same day — dedupe in favor of
+  // 'learned' rather than showing the same word under both headings, since
+  // the round-1 attempt was really just the first half of learning it, not
+  // a separate review event.
+  const learnedIds = new Set(entry.learned);
+  return {
+    learned: wordsById(entry.learned),
+    reviewed: wordsById(entry.reviewed.filter(id => !learnedIds.has(id))),
+  };
 }
 
 // Below this, a horizontal drag reads as a week-swipe rather than a

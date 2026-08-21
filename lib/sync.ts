@@ -8,6 +8,7 @@ import {
   getSettingsForLevel, saveSettingsForLevel, getSettingsUpdatedAtForLevel, Settings,
   getGoalDaysRecordForSync, mergeGoalDaysFromSync,
   getPartialDaysRecordForSync, mergePartialDaysFromSync,
+  getDailyWordLogForSync, mergeDailyWordLogFromSync, DailyWordLog,
   today,
 } from './storage';
 import { Level, LEVEL_ORDER } from './words';
@@ -29,6 +30,7 @@ interface RemoteRow {
   settings: SettingsByLevel | Settings | null;
   goal_days: string[] | null;
   partial_days: string[] | null;
+  word_log: DailyWordLog | null;
   updated_at: string | null;
 }
 
@@ -84,7 +86,7 @@ function mergeProgress(
 export async function pullAndMerge(userId: string): Promise<void> {
   const { data, error } = await supabase
     .from('user_progress')
-    .select('progress, streak, settings, goal_days, partial_days, updated_at')
+    .select('progress, streak, settings, goal_days, partial_days, word_log, updated_at')
     .eq('user_id', userId)
     .maybeSingle<RemoteRow>();
 
@@ -155,6 +157,9 @@ export async function pullAndMerge(userId: string): Promise<void> {
   if (Array.isArray(data.partial_days) && data.partial_days.length > 0) {
     mergePartialDaysFromSync(data.partial_days);
   }
+  if (data.word_log && typeof data.word_log === 'object' && Object.keys(data.word_log).length > 0) {
+    mergeDailyWordLogFromSync(data.word_log);
+  }
 }
 
 // Pushes every level's local state up as this user's remote snapshot —
@@ -198,6 +203,7 @@ async function pushToRemote(userId: string): Promise<void> {
     settings,
     goal_days: getGoalDaysRecordForSync(),
     partial_days: getPartialDaysRecordForSync(),
+    word_log: getDailyWordLogForSync(),
     updated_at: new Date().toISOString(),
     level: activeLevel,
   };

@@ -116,6 +116,26 @@ const GOAL_DAYS_KEY = 'wb2_goal_days_total';
 // so being in both never downgrades a genuinely full day.
 const PARTIAL_DAYS_KEY = 'wb2_partial_days_total';
 
+// Per-day word-activity log, for the Progress page calendar's tap-a-date
+// popup — deliberately a real log (date -> word ids touched that day),
+// NOT derived from WordProgress's own lastPracticed/lastReviewedAt/
+// mascotStage fields the way an earlier version of this feature tried to.
+// Those fields only ever hold each word's SINGLE latest date/stage, so
+// looking back at an OLD date after a word has since been touched AGAIN
+// silently loses it from that day entirely (the earlier date gets
+// overwritten, not appended to) — confirmed real: a genuinely full
+// (goal-met) day showed as "no activity" once its words were reviewed
+// again later. This log is append-only per day instead, so it stays
+// accurate for every day going forward regardless of what happens to a
+// word afterward. Can't retroactively fix history from before this
+// shipped, same limitation every other backfilled record here has.
+const DAILY_WORD_LOG_KEY = 'wb2_daily_word_log';
+// Caps how long entries are kept, purely to keep this from growing
+// forever across years of daily use — 2 years of history is far more
+// than the calendar UI (which only ever shows one month at a time) has
+// any real use for.
+const WORD_LOG_RETENTION_DAYS = 730;
+
 // Also deliberately NOT level-namespaced, for the same reason — completing
 // either level's daily goal extends the one shared streak, the same as it
 // counts toward the one shared goal-days total above. Used to be per-level
@@ -395,6 +415,76 @@ export function getActivityCalendarDays(): { full: string[]; partial: string[] }
   const full = new Set(getGoalDaysRecordForSync());
   const partial = getPartialDaysRecordForSync().filter(d => !full.has(d));
   return { full: [...full], partial };
+}
+
+// date -> word ids touched that day. See DAILY_WORD_LOG_KEY's own comment
+// for why this is a real log rather than derived from WordProgress.
+export type DailyWordLog = Record<string, { learned: string[]; reviewed: string[] }>;
+
+export function getDailyWordLog(): DailyWordLog {
+  if (typeof window === 'undefined') return {};
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DAILY_WORD_LOG_KEY) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function pruneWordLog(log: DailyWordLog): DailyWordLog {
+  const cutoff = localDateString(addDaysToDate(new Date(), -WORD_LOG_RETENTION_DAYS));
+  const pruned: DailyWordLog = {};
+  for (const [date, entry] of Object.entries(log)) {
+    if (date >= cutoff) pruned[date] = entry;
+  }
+  return pruned;
+}
+
+function addDaysToDate(d: Date, n: number): Date {
+  const copy = new Date(d);
+  copy.setDate(copy.getDate() + n);
+  return copy;
+}
+
+function saveDailyWordLog(log: DailyWordLog): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(DAILY_WORD_LOG_KEY, JSON.stringify(pruneWordLog(log)));
+}
+
+// Called right at the moment a word is actually touched (see
+// DailySessionFlow's submitResult) — 'learned' for the exact submission
+// that completes round-1 introduction (reaches the puppy stage for the
+// first time ever), 'reviewed' for every other study/review submission
+// that day. Deduped per word per day per kind — answering the same word
+// wrong twice today only logs it once.
+export function logWordActivity(wordId: string, kind: 'learned' | 'reviewed'): void {
+  if (typeof window === 'undefined') return;
+  const log = getDailyWordLog();
+  const t = today();
+  const entry = log[t] ?? { learned: [], reviewed: [] };
+  if (!entry[kind].includes(wordId)) entry[kind] = [...entry[kind], wordId];
+  saveDailyWordLog({ ...log, [t]: entry });
+}
+
+export function getDailyWordLogForSync(): DailyWordLog {
+  return getDailyWordLog();
+}
+
+// Per-date, per-kind union — same "merge, never let one side's history
+// erase the other's" reasoning as mergeGoalDaysFromSync, just one level
+// deeper (each date holds two arrays, not a single flag).
+export function mergeDailyWordLogFromSync(remote: DailyWordLog): void {
+  if (!remote || typeof remote !== 'object') return;
+  const local = getDailyWordLog();
+  const merged: DailyWordLog = { ...local };
+  for (const [date, remoteEntry] of Object.entries(remote)) {
+    const localEntry = merged[date] ?? { learned: [], reviewed: [] };
+    merged[date] = {
+      learned: [...new Set([...localEntry.learned, ...(remoteEntry.learned ?? [])])],
+      reviewed: [...new Set([...localEntry.reviewed, ...(remoteEntry.reviewed ?? [])])],
+    };
+  }
+  saveDailyWordLog(merged);
 }
 
 // --- Progress ---
@@ -956,6 +1046,7 @@ export function resetEverything(): void {
   }
   localStorage.removeItem(GOAL_DAYS_KEY);
   localStorage.removeItem(PARTIAL_DAYS_KEY);
+  localStorage.removeItem(DAILY_WORD_LOG_KEY);
   localStorage.removeItem(STREAK_KEY);
   localStorage.removeItem(ACTIVE_LEVEL_KEY);
   localStorage.removeItem(KEYS.onboardingDone);

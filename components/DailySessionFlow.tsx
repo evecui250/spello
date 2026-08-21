@@ -9,6 +9,7 @@ import {
   Round, WordProgress, Settings, MascotStageId, DailyStats,
   isStudyGoalDoneToday, isReviewGoalDoneToday, markStudyGoalDone, markReviewGoalDone,
   touchStreak, markCongratsShown, getDailyStats, addEarnedPuppy, addEarnedUpgrade,
+  logWordActivity,
 } from '../lib/storage';
 import {
   wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint,
@@ -1167,6 +1168,7 @@ export default function DailySessionFlow() {
 
       saveWordProgress(outcome.progress);
       scheduleSync();
+      logWordActivity(word.id, 'reviewed');
       setFeedback(correct);
       setJustCompleted(outcome.isFinal);
 
@@ -1192,6 +1194,12 @@ export default function DailySessionFlow() {
 
       saveWordProgress(updated);
       scheduleSync();
+      // earnedBadge is the exact submission that completes round-1
+      // introduction (mascotStage reaches 'puppy' for the first time) — the
+      // Progress page calendar's "learned" bucket; any other study attempt
+      // on this word today (round 1 in progress, a wrong-answer demotion)
+      // is "reviewed" instead, same as review-mode's own submissions above.
+      logWordActivity(word.id, earnedBadge ? 'learned' : 'reviewed');
       setFeedback(correct);
       setJustCompleted(completed);
 
