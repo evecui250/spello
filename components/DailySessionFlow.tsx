@@ -261,7 +261,17 @@ function RoundWordImage({ word }: { word: Word }) {
   if (!WORDS_WITH_IMAGES.has(word.id) || failed) return null;
   return (
     <div className="w-24 h-24 mx-auto mb-1">
+      {/* key={word.id} forces a fresh <img> element per word instead of
+          just updating `src` on the same one — without it, a slow-loading
+          new image left the PREVIOUS word's picture visibly on screen
+          until the new one finished decoding (a real reported mix-up: the
+          picture briefly didn't match the word/text already showing).
+          Safe to just go blank in the meantime rather than keep the old
+          one — the surrounding box is a fixed w-24 h-24 regardless of
+          whether the image inside has loaded yet, so this never causes
+          the word/spelling-tiles layout below to jump either way. */}
       <img
+        key={word.id}
         src={imageUrlForWord(word)}
         alt=""
         className="w-full h-full object-contain"
