@@ -323,10 +323,40 @@ export function mergeGoalDaysFromSync(remoteDays: string[]): void {
 // See PARTIAL_DAYS_KEY's own comment — same {days: string[]} shape and
 // sync-merge treatment as goal days, just tracking "at least one of
 // study/review done" instead of "both done".
+// One-time backfill, same spirit and same imperfection as
+// backfillGoalDaysFromHistory (see its own comment) — this field didn't
+// exist before 2026-08-21, so anyone with practice history older than that
+// would otherwise see a blank calendar for every one of those days, even
+// ones where they demonstrably did something (confirmed real: a genuine
+// review-only day from the day before this shipped showed nothing).
+// Approximates "some activity happened" as any calendar day (across every
+// level) with a lastPracticed/lastReviewedAt date, then excludes whatever's
+// already a full goal_days day — not a perfect record of "exactly one of
+// study/review, not both" (that distinction was never tracked per-day
+// before this), but a reasonable stand-in.
+function backfillPartialDaysFromHistory(fullDays: Set<string>): GoalDaysRecord {
+  const days = new Set<string>();
+  for (const level of LEVEL_ORDER) {
+    const progress = getAllProgressForLevel(level);
+    for (const id of Object.keys(progress)) {
+      const p = progress[id];
+      const d = p.lastReviewedAt || p.lastPracticed;
+      if (d && !fullDays.has(d)) days.add(d);
+    }
+  }
+  return { days: [...days].sort() };
+}
+
 function getPartialDaysRecord(): GoalDaysRecord {
   if (typeof window === 'undefined') return { days: [] };
+  const raw = localStorage.getItem(PARTIAL_DAYS_KEY);
+  if (raw === null) {
+    const backfilled = backfillPartialDaysFromHistory(new Set(getGoalDaysRecord().days));
+    localStorage.setItem(PARTIAL_DAYS_KEY, JSON.stringify(backfilled));
+    return backfilled;
+  }
   try {
-    const parsed = JSON.parse(localStorage.getItem(PARTIAL_DAYS_KEY) || '{"days":[]}');
+    const parsed = JSON.parse(raw);
     if (!parsed || !Array.isArray(parsed.days)) return { days: [] };
     return parsed;
   } catch {

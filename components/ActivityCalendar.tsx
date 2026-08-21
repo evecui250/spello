@@ -12,7 +12,10 @@ import { SYNCED_EVENT } from '../lib/sync';
 // mark fights with the page around it.
 const FULL_CLASSES = 'border-2 border-green-600 text-green-800 bg-green-50';
 const PARTIAL_CLASSES = 'bg-amber-200/70 text-amber-800';
-const EMPTY_CLASSES = 'text-stone-400';
+// Darker than a typical muted label (stone-400) so the date digits stay
+// easy to read at a glance, without going all the way to the near-black
+// headings use — this is still a secondary/quiet element on the card.
+const EMPTY_CLASSES = 'text-stone-600';
 const TODAY_RING = 'ring-2 ring-indigo-300 ring-offset-1 ring-offset-amber-50';
 
 const WEEKDAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -39,7 +42,7 @@ function DayCircle({ date, state, isToday, dim }: { date: number; state: DayStat
   const stateClasses = state === 'full' ? FULL_CLASSES : state === 'partial' ? PARTIAL_CLASSES : EMPTY_CLASSES;
   return (
     <div
-      className={`w-full aspect-square max-w-9 mx-auto rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${stateClasses} ${isToday ? TODAY_RING : ''} ${dim ? 'opacity-30' : ''}`}
+      className={`w-full aspect-square max-w-9 mx-auto rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${stateClasses} ${isToday ? TODAY_RING : ''} ${dim ? 'opacity-30' : ''}`}
     >
       {date}
     </div>
@@ -101,16 +104,21 @@ export default function ActivityCalendar() {
       </div>
 
       {!expanded ? (
-        <div className="grid grid-cols-7 gap-2">
-          {last7.map(d => {
-            const dateStr = localDateString(d);
-            return (
-              <div key={dateStr} className="flex flex-col items-center gap-1">
-                <span className="text-[10px] font-medium text-stone-400">{WEEKDAY_LETTERS[mondayIndex(d)]}</span>
-                <DayCircle date={d.getDate()} state={stateFor(dateStr)} isToday={dateStr === t} />
-              </div>
-            );
-          })}
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-semibold text-stone-700">
+            {MONTH_NAMES[new Date().getMonth()]} {new Date().getFullYear()}
+          </span>
+          <div className="grid grid-cols-7 gap-2">
+            {last7.map(d => {
+              const dateStr = localDateString(d);
+              return (
+                <div key={dateStr} className="flex flex-col items-center gap-1">
+                  <span className="text-xs font-medium text-stone-500">{WEEKDAY_LETTERS[mondayIndex(d)]}</span>
+                  <DayCircle date={d.getDate()} state={stateFor(dateStr)} isToday={dateStr === t} />
+                </div>
+              );
+            })}
+          </div>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -136,7 +144,7 @@ export default function ActivityCalendar() {
           </div>
           <div className="grid grid-cols-7 gap-2">
             {WEEKDAY_LETTERS.map((l, i) => (
-              <span key={i} className="text-[10px] font-medium text-stone-400 text-center">{l}</span>
+              <span key={i} className="text-xs font-medium text-stone-500 text-center">{l}</span>
             ))}
             {cells.map((d, i) => {
               if (!d) return <div key={i} />;
