@@ -1211,9 +1211,18 @@ export default function DailySessionFlow() {
 
     // The round-1 translate exercise already auto-plays the corrected
     // sentence itself (see SentenceExercise) — playing the bare word here
-    // too would overlap it, so skip this generic word-audio call for that
-    // one case only.
-    if (settings.autoPlayAudio && !extra?.exampleSentence) speakWord(word);
+    // too would overlap it, so that case stays gated behind autoPlayAudio
+    // (and skipped entirely when a reference sentence is about to play its
+    // own audio). Every actual spelling card (round 2+, study or review)
+    // always confirms pronunciation right after Check regardless of that
+    // setting and regardless of right/wrong — hearing the correct word
+    // immediately after attempting to spell it is the whole point, not
+    // something the ambient auto-play preference should gate.
+    if (currentRound === 1) {
+      if (settings.autoPlayAudio && !extra?.exampleSentence) speakWord(word);
+    } else {
+      speakWord(word);
+    }
   };
 
   const handleSubmit = () => {

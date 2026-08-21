@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation';
 import {
   getAllProgress, getSettings, today,
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
+  getTheme, Theme, THEME_CHANGED_EVENT,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
 import { SYNCED_EVENT } from '../lib/sync';
 import Logo from '../components/Logo';
 import { CheckCircleIcon } from '../components/icons';
+import { THEME_CONFIG } from '../components/AppBackground';
 
 // Once today's main goal is done, "Study more" pulls a smaller bonus round
 // instead of the user's full daily pace — repeatable as many times as there
@@ -25,6 +27,10 @@ const FIREFLIES_HOME = [
 export default function HomePage() {
   const router = useRouter();
   const [session, setSession] = useState<DailySession | null>(null);
+  // Matches the current global background theme (see AppBackground) so
+  // these two extra decorative sparkles around the hero don't stay
+  // hardcoded amber/firefly-colored under a theme they no longer belong to.
+  const [theme, setTheme] = useState<Theme>('forest');
   const [previewStudyCount, setPreviewStudyCount] = useState(0);
   const [previewReviewCount, setPreviewReviewCount] = useState(0);
   const [totalStudyCount, setTotalStudyCount] = useState(0);
@@ -83,6 +89,13 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const loadTheme = () => setTheme(getTheme());
+    loadTheme();
+    window.addEventListener(THEME_CHANGED_EVENT, loadTheme);
+    return () => window.removeEventListener(THEME_CHANGED_EVENT, loadTheme);
+  }, []);
+
   const startSession = () => {
     const settings = getSettings();
     const studyIds = buildStudyWords(settings.studyBatchSize).map(w => w.id);
@@ -132,7 +145,7 @@ export default function HomePage() {
         <span
           key={i}
           aria-hidden
-          className="animate-firefly absolute w-1.5 h-1.5 rounded-full bg-amber-200 shadow-[0_0_8px_3px_rgba(252,211,77,0.7)]"
+          className={`${THEME_CONFIG[theme].particleAnimation} absolute w-1.5 h-1.5 rounded-full ${THEME_CONFIG[theme].particleColor} ${THEME_CONFIG[theme].particleGlow}`}
           style={{ top: f.top, left: f.left, animationDelay: `${f.delay}s` }}
         />
       ))}

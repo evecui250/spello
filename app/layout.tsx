@@ -2,7 +2,7 @@
 
 import '../styles/globals.css';
 import NavBar from '../components/NavBar';
-import ForestBackground from '../components/ForestBackground';
+import AppBackground from '../components/AppBackground';
 import SyncGate from '../components/SyncGate';
 import ChunkErrorRecovery from '../components/ChunkErrorRecovery';
 import SpeechCleanup from '../components/SpeechCleanup';
@@ -43,7 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SpeechCleanup />
         <PwaRegister />
         <UsagePing />
-        <ForestBackground />
+        <AppBackground />
         <NavBar />
         {/* Bottom padding clears the fixed bottom NavBar (~72px content +
             its own safe-area inset) so the last bit of every page's

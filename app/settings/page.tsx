@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getSettings, saveSettings, switchToLevel, clearAllProgress, resetEverything, Settings } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme } from '../../lib/storage';
+import { THEME_CONFIG } from '../../components/AppBackground';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
 import { Level, wordsForLevel } from '../../lib/words';
 import { scheduleSync, syncNow } from '../../lib/sync';
@@ -38,6 +39,7 @@ export default function SettingsPage() {
   // below is still a second, final confirmation layer on top of this.
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [showPaceInfo, setShowPaceInfo] = useState(false);
+  const [theme, setTheme] = useState<Theme>('forest');
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const applySettings = (s: Settings) => {
@@ -53,6 +55,12 @@ export default function SettingsPage() {
   const loadFromStorage = () => applySettings(getSettings());
 
   useEffect(loadFromStorage, []);
+  useEffect(() => setTheme(getTheme()), []);
+
+  const handleThemeChange = (t: Theme) => {
+    setTheme(t);
+    saveTheme(t);
+  };
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -303,6 +311,34 @@ export default function SettingsPage() {
             onChange={e => { setSentenceWritingMode(e.target.checked); persist({ sentenceWritingMode: e.target.checked }); }}
             className="w-5 h-5 accent-indigo-600 shrink-0 ml-3"
           />
+        </div>
+      </div>
+
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6">
+        <label className="block font-semibold text-stone-800 mb-1">Theme</label>
+        <p className="text-stone-500 text-sm mb-3">Changes the app's background.</p>
+        <div className="grid grid-cols-4 gap-3">
+          {(Object.keys(THEME_CONFIG) as Theme[]).map(t => {
+            const cfg = THEME_CONFIG[t];
+            const isSelected = theme === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => handleThemeChange(t)}
+                className="flex flex-col items-center gap-1.5"
+              >
+                <span
+                  className={`w-full aspect-square rounded-full bg-gradient-to-b ${cfg.gradient} transition-all ${
+                    isSelected ? 'ring-2 ring-offset-2 ring-offset-amber-50 ring-indigo-500 scale-105' : 'ring-1 ring-black/10'
+                  }`}
+                />
+                <span className={`text-xs font-medium capitalize ${isSelected ? 'text-indigo-700' : 'text-stone-500'}`}>
+                  {t}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

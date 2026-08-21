@@ -54,6 +54,12 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
   const pickGerman = (id: string) => {
     if (correctIds.has(id) || wrongFlash) return;
     setSelectedGerman(id);
+    // Always speaks on tap, independent of the autoPlayAudio setting —
+    // this is a deliberate "let me hear it" action, same as tapping the
+    // speaker icon elsewhere, not the kind of automatic playback that
+    // setting is meant to gate.
+    const word = words.find(w => w.id === id);
+    if (word) speakWord(word);
   };
 
   const pickEnglish = (text: string) => {

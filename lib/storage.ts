@@ -668,6 +668,31 @@ export function saveStreak(s: Streak): void {
   localStorage.setItem(STREAK_KEY, JSON.stringify(s));
 }
 
+// --- Theme (the app's background/decoration style — a purely visual,
+// per-device preference, deliberately NOT level-namespaced (switching
+// levels shouldn't change what the app looks like) and NOT synced (unlike
+// settings/progress, there's no real expectation that two devices signed
+// into the same account share the same background choice). ---
+export type Theme = 'forest' | 'stellar' | 'ocean' | 'lavender';
+const THEME_KEY = 'wb2_theme';
+export const THEME_CHANGED_EVENT = 'wb2-theme-changed';
+
+export function getTheme(): Theme {
+  if (typeof window === 'undefined') return 'forest';
+  const raw = localStorage.getItem(THEME_KEY);
+  return raw === 'stellar' || raw === 'ocean' || raw === 'lavender' ? raw : 'forest';
+}
+
+// Dispatches THEME_CHANGED_EVENT so the background (mounted once, high up
+// in layout.tsx) picks up the change immediately — same cross-component-
+// update pattern as SYNCED_EVENT in lib/sync.ts, just for a purely local
+// change with nothing to actually sync.
+export function saveTheme(t: Theme): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(THEME_KEY, t);
+  window.dispatchEvent(new Event(THEME_CHANGED_EVENT));
+}
+
 // --- Settings ---
 
 export function getSettings(): Settings {
