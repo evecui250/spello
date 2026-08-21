@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import { WORDS, wordsForLevel, glossFor, Level, LEVEL_ORDER, Word } from '../../lib/words';
 import {
@@ -11,6 +10,7 @@ import {
 import { SYNCED_EVENT } from '../../lib/sync';
 import DachshundMascot from '../../components/Mascot';
 import GoalDaysBadge from '../../components/GoalDaysBadge';
+import ActivityCalendar from '../../components/ActivityCalendar';
 
 // A fixed pixel cap for the tallest bar, not a percentage of some
 // surrounding flex container's own height — reported as still clipping
@@ -231,17 +231,7 @@ export default function ProgressPage() {
         </div>
       </div>
 
-      {/* Straight to the Word List, pre-filtered to exactly what someone
-          looking at this card would want next: this book, words actually
-          introduced so far, no date restriction — so they can see the
-          actual words behind these counts instead of just the totals. */}
-      <Link
-        href={`/words/?level=${level}&familiarity=learning&date=all`}
-        className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm py-3 px-4 font-semibold hover:bg-amber-50 active:scale-[0.99] transition-all"
-        style={{ color: '#2f4a2c' }}
-      >
-        View word list →
-      </Link>
+      <ActivityCalendar />
 
       {openStage && createPortal(
         <div

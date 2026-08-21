@@ -104,6 +104,17 @@ const ROUND5_REMOVAL_FLAG = 'wb2_migrated_round5_removal_v1';
 // which ANY level's study or review goal was completed. Switching levels
 // doesn't reset or affect it.
 const GOAL_DAYS_KEY = 'wb2_goal_days_total';
+// A day where only ONE of study/review got done, not both — the Progress
+// page's activity calendar shows these as a fainter mark, distinct from a
+// full goal_days day. Same level-independent, date-set shape/reasoning as
+// GOAL_DAYS_KEY; kept as a fully separate record (rather than derived from
+// DailyStats) because DailyStats only ever holds TODAY's numbers — nothing
+// here would survive past midnight otherwise. A date can appear in this
+// set and LATER also complete the full goal the same day (e.g. review
+// first, study afterward) — it simply stays in both sets; the calendar
+// always prefers goal_days (full) over this one when a date is in both,
+// so being in both never downgrades a genuinely full day.
+const PARTIAL_DAYS_KEY = 'wb2_partial_days_total';
 
 // Also deliberately NOT level-namespaced, for the same reason — completing
 // either level's daily goal extends the one shared streak, the same as it
@@ -207,7 +218,7 @@ export function switchToLevel(level: Level): Settings {
 // day, the further their timezone sits from UTC), which desynced due-date
 // comparisons and could make review-eligible words not show as due, or a
 // batch of same-session words land on different scheduled days.
-function localDateString(d: Date): string {
+export function localDateString(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -307,6 +318,53 @@ export function mergeGoalDaysFromSync(remoteDays: string[]): void {
   const local = getGoalDaysRecord();
   const merged = new Set([...local.days, ...remoteDays]);
   saveGoalDaysRecord({ days: [...merged].sort() });
+}
+
+// See PARTIAL_DAYS_KEY's own comment — same {days: string[]} shape and
+// sync-merge treatment as goal days, just tracking "at least one of
+// study/review done" instead of "both done".
+function getPartialDaysRecord(): GoalDaysRecord {
+  if (typeof window === 'undefined') return { days: [] };
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PARTIAL_DAYS_KEY) || '{"days":[]}');
+    if (!parsed || !Array.isArray(parsed.days)) return { days: [] };
+    return parsed;
+  } catch {
+    return { days: [] };
+  }
+}
+
+function savePartialDaysRecord(rec: GoalDaysRecord): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(PARTIAL_DAYS_KEY, JSON.stringify(rec));
+}
+
+function touchPartialDaysCounter(): void {
+  if (typeof window === 'undefined') return;
+  const rec = getPartialDaysRecord();
+  const t = today();
+  if (rec.days.includes(t)) return;
+  savePartialDaysRecord({ days: [...rec.days, t].sort() });
+}
+
+export function getPartialDaysRecordForSync(): string[] {
+  return getPartialDaysRecord().days;
+}
+
+export function mergePartialDaysFromSync(remoteDays: string[]): void {
+  const local = getPartialDaysRecord();
+  const merged = new Set([...local.days, ...remoteDays]);
+  savePartialDaysRecord({ days: [...merged].sort() });
+}
+
+// The Progress page activity calendar's one read: every full-goal date and
+// every partial (one-of-two) date, ready to render. A date present in both
+// is a full day — dedupe in favor of full rather than showing it twice or
+// letting the caller get that wrong.
+export function getActivityCalendarDays(): { full: string[]; partial: string[] } {
+  const full = new Set(getGoalDaysRecordForSync());
+  const partial = getPartialDaysRecordForSync().filter(d => !full.has(d));
+  return { full: [...full], partial };
 }
 
 // --- Progress ---
@@ -610,6 +668,11 @@ export function markStudyGoalDone(count: number): DailyStats {
   stats.studyDone = true;
   stats.studiedCount += count;
   saveDailyStats(stats);
+  // Only counts as real activity (see PARTIAL_DAYS_KEY) when something
+  // was actually studied — the trivial "0 study words today, mark done
+  // automatically" path (see DailySessionFlow's mount effect) shouldn't
+  // by itself paint a day as partially active if review never happens.
+  if (count > 0) touchPartialDaysCounter();
   return stats;
 }
 
@@ -620,6 +683,7 @@ export function markReviewGoalDone(count: number): DailyStats {
   stats.reviewDone = true;
   stats.reviewedCount += count;
   saveDailyStats(stats);
+  if (count > 0) touchPartialDaysCounter();
   return stats;
 }
 
@@ -861,6 +925,7 @@ export function resetEverything(): void {
     localStorage.removeItem(namespacedKey(KEYS.dailySession, level));
   }
   localStorage.removeItem(GOAL_DAYS_KEY);
+  localStorage.removeItem(PARTIAL_DAYS_KEY);
   localStorage.removeItem(STREAK_KEY);
   localStorage.removeItem(ACTIVE_LEVEL_KEY);
   localStorage.removeItem(KEYS.onboardingDone);
