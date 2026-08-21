@@ -24,10 +24,18 @@ interface ThemeConfig {
   // for the button's own light cream/amber text, same contrast reasoning
   // as the background needs for its overlaid header text.
   buttonGradient: string;
+  // Progress page's "Words breakdown" bars — one color per mascot stage,
+  // in order [puppy, short, medium, long-crowned]. Same muted/premium
+  // progression style as Forest's original hand-picked bronze->sage->
+  // moss->plum (never a bright primary-color Tailwind swatch, which read
+  // as garish against the cream panel), just re-hued per theme so this
+  // chart doesn't stay green-toned regardless of what background is active.
+  stageColors: [string, string, string, string];
 }
 
 export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   forest: {
+    stageColors: ['#c9a86a', '#a3b18a', '#588157', '#5b3a5e'],
     buttonGradient: 'linear-gradient(135deg, #a9835e 0%, #8a6440 50%, #6b4a2c 100%)',
     gradient: 'from-[#0f3d3a] via-[#155c4a] to-[#0c2e25]',
     glows: [
@@ -40,6 +48,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   stellar: {
+    stageColors: ['#a89bd6', '#7b7ec2', '#5457a0', '#332f6b'],
     buttonGradient: 'linear-gradient(135deg, #8b7ec8 0%, #6a5aa8 50%, #443a78 100%)',
     gradient: 'from-[#0a0a2e] via-[#171344] to-[#050512]',
     glows: [
@@ -52,6 +61,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   ocean: {
+    stageColors: ['#8fc9c9', '#5fa8ad', '#3d7f8c', '#1f4d5c'],
     buttonGradient: 'linear-gradient(135deg, #4a9bab 0%, #327b8c 50%, #1d5266 100%)',
     gradient: 'from-[#062736] via-[#0b5266] to-[#031a24]',
     glows: [
@@ -64,6 +74,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-bubble-float',
   },
   lavender: {
+    stageColors: ['#c9a8d6', '#a37eb8', '#7a5691', '#4a3060'],
     buttonGradient: 'linear-gradient(135deg, #9b7bb8 0%, #7a5a96 50%, #543a70 100%)',
     gradient: 'from-[#382a52] via-[#5b3f78] to-[#241a38]',
     glows: [
@@ -76,6 +87,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   sunset: {
+    stageColors: ['#e0a86a', '#d97b4a', '#b8542e', '#6b2e3a'],
     buttonGradient: 'linear-gradient(135deg, #d9773f 0%, #b8542a 50%, #832e14 100%)',
     gradient: 'from-[#2b1750] via-[#c2542e] to-[#3a0e1a]',
     glows: [
@@ -88,6 +100,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   blossom: {
+    stageColors: ['#e0a8bd', '#c97a97', '#9a4a72', '#5e2f4a'],
     buttonGradient: 'linear-gradient(135deg, #b5698c 0%, #96496e 50%, #6b3050 100%)',
     gradient: 'from-[#4a1f3d] via-[#9a4a72] to-[#2e1228]',
     glows: [
@@ -100,6 +113,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-bubble-float',
   },
   ember: {
+    stageColors: ['#d9a066', '#c17a3d', '#8a5423', '#4a2e14'],
     buttonGradient: 'linear-gradient(135deg, #c17a3d 0%, #a35a24 50%, #74390f 100%)',
     gradient: 'from-[#1f1410] via-[#7a3f1a] to-[#160d09]',
     glows: [
@@ -118,6 +132,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   // background would wash that text out. Kept saturated enough at every
   // stop to still read as "bright and cheerful" without breaking that.
   citrus: {
+    stageColors: ['#ffd699', '#f2a35c', '#d9773f', '#8a3d1a'],
     buttonGradient: 'linear-gradient(135deg, #d9622a 0%, #b8431a 50%, #8a2f10 100%)',
     gradient: 'from-[#ffb347] via-[#ff7043] to-[#b8390f]',
     glows: [
@@ -130,6 +145,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     particleAnimation: 'animate-firefly',
   },
   meadow: {
+    stageColors: ['#a8d6a0', '#7ab86a', '#4a8f45', '#2a5c30'],
     buttonGradient: 'linear-gradient(135deg, #4a9b5e 0%, #2f7a45 50%, #1d5c30 100%)',
     gradient: 'from-[#5ec8e8] via-[#8bd450] to-[#1f6b3a]',
     glows: [

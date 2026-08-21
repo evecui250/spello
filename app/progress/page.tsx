@@ -6,11 +6,13 @@ import { WORDS, wordsForLevel, glossFor, Level, LEVEL_ORDER, Word } from '../../
 import {
   getAllProgress, getAllProgressForLevel, getMergedProgressAcrossLevels,
   getSettings, getStreak, getTotalGoalDays, MascotStageId, WordProgress,
+  getTheme, Theme, THEME_CHANGED_EVENT,
 } from '../../lib/storage';
 import { SYNCED_EVENT } from '../../lib/sync';
 import DachshundMascot from '../../components/Mascot';
 import GoalDaysBadge from '../../components/GoalDaysBadge';
 import ActivityCalendar from '../../components/ActivityCalendar';
+import { THEME_CONFIG } from '../../components/AppBackground';
 
 // A fixed pixel cap for the tallest bar, not a percentage of some
 // surrounding flex container's own height — reported as still clipping
@@ -21,15 +23,10 @@ import ActivityCalendar from '../../components/ActivityCalendar';
 // ambiguity, on any browser.
 const BAR_MAX_HEIGHT_PX = 84;
 const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
-// A muted, earthy progression (soft bronze -> sage -> moss -> deep plum) —
-// reads as premium against the cream panel instead of the primary-color
-// bg-sky/yellow/amber/green Tailwind swatches, which felt garish here.
-const STAGE_COLORS: Record<MascotStageId, string> = {
-  puppy: '#c9a86a',
-  short: '#a3b18a',
-  medium: '#588157',
-  'long-crowned': '#5b3a5e',
-};
+// Colors now come from THEME_CONFIG[theme].stageColors (see AppBackground)
+// — a muted, earthy 4-step progression per theme, e.g. Forest's original
+// bronze->sage->moss->plum, re-hued to match whichever background is
+// active instead of staying green-toned regardless of theme.
 // "Introduced" rather than "Learning" here — the Word List's own Learning
 // filter now means something broader (earned at least one badge, any of the
 // 4 stages including Mastered), so reusing the same word for just the
@@ -58,6 +55,14 @@ export default function ProgressPage() {
   // "which book did these come from" is the more useful question) it
   // shows a per-level count breakdown instead (see the popup itself).
   const [openStage, setOpenStage] = useState<MascotStageId | null>(null);
+  const [theme, setTheme] = useState<Theme>('forest');
+
+  useEffect(() => {
+    const loadTheme = () => setTheme(getTheme());
+    loadTheme();
+    window.addEventListener(THEME_CHANGED_EVENT, loadTheme);
+    return () => window.removeEventListener(THEME_CHANGED_EVENT, loadTheme);
+  }, []);
 
   useEffect(() => {
     // Also re-reads on SYNCED_EVENT (matches Home's pattern) — otherwise a
@@ -117,7 +122,7 @@ export default function ProgressPage() {
       stageWords[stage].push(w);
     }
   }
-  const bars = STAGE_ORDER.map(id => ({ id, total: stageCounts[id], color: STAGE_COLORS[id] }));
+  const bars = STAGE_ORDER.map((id, i) => ({ id, total: stageCounts[id], color: THEME_CONFIG[theme].stageColors[i] }));
   const maxStageCount = Math.max(...bars.map(b => b.total), 1);
   const totalWords = scope === 'all'
     ? activeLevels.reduce((sum, l) => sum + wordsForLevel(l).length, 0)
