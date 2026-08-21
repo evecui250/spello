@@ -362,17 +362,17 @@ export default function SettingsPage() {
         🎮 Try the new word-match game (preview)
       </Link>
 
-      {/* Static illustration of the roadmap that now sits next to the
+      {/* Static illustration of the roadmap that now sits under the
           round card on the actual practice pages — this one doesn't
           reflect a real day, just shows the shape of it. */}
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
         <label className="block font-semibold text-stone-800 mb-1">Daily roadmap (preview)</label>
         <p className="text-stone-500 text-sm mb-3">
-          Shows on the study pages now — Review, then Learn, then Play,
-          tracking how far through today you are.
+          Shows under the round card on the study pages now — Review,
+          Learn, then Play, so you know where you are in today's session.
         </p>
-        <div className="flex justify-center bg-stone-800/90 rounded-xl py-3 h-48">
-          <StudyRoadmap previewFraction={0.4} />
+        <div className="bg-stone-800/90 rounded-xl">
+          <StudyRoadmap previewStage="learn" />
         </div>
       </div>
 
