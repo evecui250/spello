@@ -10,7 +10,7 @@ import { SYNCED_EVENT } from '../lib/sync';
 // own "✓ Correct!" feedback color, partial days use a faint version of the
 // bronze/amber tone the cream card backgrounds already lean on, so neither
 // mark fights with the page around it.
-const FULL_CLASSES = 'border-2 border-green-600 text-green-800 bg-green-50';
+const FULL_CLASSES = 'bg-green-200/70 text-green-800';
 const PARTIAL_CLASSES = 'bg-amber-200/70 text-amber-800';
 // Darker than a typical muted label (stone-400) so the date digits stay
 // easy to read at a glance, without going all the way to the near-black
@@ -105,9 +105,9 @@ export default function ActivityCalendar() {
 
       {!expanded ? (
         <div className="flex flex-col gap-2">
-          <span className="text-sm font-semibold text-stone-700">
+          <div className="text-sm font-semibold text-stone-700 text-center">
             {MONTH_NAMES[new Date().getMonth()]} {new Date().getFullYear()}
-          </span>
+          </div>
           <div className="grid grid-cols-7 gap-2">
             {last7.map(d => {
               const dateStr = localDateString(d);
@@ -152,12 +152,13 @@ export default function ActivityCalendar() {
               return <DayCircle key={i} date={d.getDate()} state={stateFor(dateStr)} isToday={dateStr === t} dim={dateStr > t} />;
             })}
           </div>
-          <div className="flex items-center gap-4 justify-center text-[11px] text-stone-500 pt-1">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full border-2 border-green-600 bg-green-50 inline-block" />Goal met</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-200/70 inline-block" />Finished review</span>
-          </div>
         </div>
       )}
+
+      <div className="flex items-center gap-4 justify-center text-[11px] text-stone-500 pt-3">
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-200/70 inline-block" />Goal met</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-200/70 inline-block" />Finished review</span>
+      </div>
     </div>
   );
 }
