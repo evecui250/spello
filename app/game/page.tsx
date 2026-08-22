@@ -8,6 +8,7 @@ import { THEME_CONFIG } from '../../components/AppBackground';
 import { speakWord } from '../../lib/speech';
 import { getOrCreateDeviceId } from '../../lib/telemetry';
 import { supabase } from '../../lib/supabase';
+import { GAME_MIN_WORDS_REQUIRED } from '../../lib/practice';
 
 // PREVIEW PAGE — not linked from the main flow yet (see Settings' own
 // "Try the new game" link for the only current entry point). Once this is
@@ -27,10 +28,6 @@ function getLearnedWords(): Word[] {
 }
 
 const GAME_DURATION = 60;
-// Below this many learned words, there simply isn't enough vocabulary to
-// fill even one round's board — the game stays locked with an explanatory
-// message instead of a Start button.
-const MIN_WORDS_REQUIRED = 5;
 const PAIRS_PER_ROUND = 5;
 // Reserved out of each round's 5 slots for "mastered" (long-crowned) words
 // specifically, whenever any exist — see pickRoundWords below for why.
@@ -152,7 +149,7 @@ export default function GamePage() {
     if (params.get('source') === 'daily_flow') setSource('daily_flow');
   }, []);
 
-  const canPlay = learnedWords.length >= MIN_WORDS_REQUIRED;
+  const canPlay = learnedWords.length >= GAME_MIN_WORDS_REQUIRED;
 
   function drawRound() {
     const log = getDailyWordLog()[today()];
@@ -297,7 +294,7 @@ export default function GamePage() {
             </>
           ) : (
             <p className="text-amber-700 bg-amber-100/70 rounded-xl px-4 py-3 text-sm">
-              Learn at least {MIN_WORDS_REQUIRED} words first to unlock this
+              Learn at least {GAME_MIN_WORDS_REQUIRED} words first to unlock this
               game — you have {learnedWords.length} so far.
             </p>
           )}

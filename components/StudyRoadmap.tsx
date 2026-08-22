@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { getDailySession, getTheme, Theme, THEME_CHANGED_EVENT, PROGRESS_CHANGED_EVENT, SessionPhase } from '../lib/storage';
+import { hasEnoughWordsForGame } from '../lib/practice';
 import { THEME_CONFIG } from './AppBackground';
 
 type Stage = 'review' | 'learn' | 'play';
 
-const STAGES: { id: Stage; label: string }[] = [
+const ALL_STAGES: { id: Stage; label: string }[] = [
   { id: 'review', label: 'Review' },
   { id: 'learn', label: 'Learn' },
   { id: 'play', label: 'Play' },
@@ -17,9 +18,15 @@ const STAGES: { id: Stage; label: string }[] = [
 // points, not somewhere fractionally between them, per request. Review
 // covers every review-* phase plus 'report' (still the review results
 // screen); Learn covers every study-* phase; Play lights up once the
-// congrats card is showing or the day is fully done.
-function stageForPhase(phase: SessionPhase): Stage {
-  if (phase === 'congrats' || phase === 'done') return 'play';
+// congrats card is showing or the day is fully done. `gameUnlocked` is
+// false for the same reason app/game/page.tsx itself would show its
+// locked message instead of a Start button (see hasEnoughWordsForGame) —
+// congrats/done then reads as "learn" instead, since that's genuinely as
+// far as this learner (most commonly an A1 learner in their first day or
+// two) can go today. There's no third dot to fall short of at all in
+// that case — see the STAGES filter below.
+function stageForPhase(phase: SessionPhase, gameUnlocked: boolean): Stage {
+  if (phase === 'congrats' || phase === 'done') return gameUnlocked ? 'play' : 'learn';
   if (phase.startsWith('study')) return 'learn';
   return 'review';
 }
@@ -37,6 +44,12 @@ export default function StudyRoadmap() {
   const pathname = usePathname();
   const [theme, setTheme] = useState<Theme>('forest');
   const [stage, setStage] = useState<Stage | null>(null);
+  // Whether the Word Match game is actually reachable yet (see
+  // hasEnoughWordsForGame) — re-read alongside `stage` on every progress
+  // change, since crossing the word-count threshold mid-session (finishing
+  // today's last new word) should make "Play" appear without needing a
+  // reload.
+  const [gameUnlocked, setGameUnlocked] = useState(false);
 
   useEffect(() => {
     const loadTheme = () => setTheme(getTheme());
@@ -47,8 +60,10 @@ export default function StudyRoadmap() {
 
   useEffect(() => {
     const load = () => {
+      const unlocked = hasEnoughWordsForGame();
+      setGameUnlocked(unlocked);
       const session = getDailySession();
-      setStage(session ? stageForPhase(session.phase) : null);
+      setStage(session ? stageForPhase(session.phase, unlocked) : null);
     };
     load();
     window.addEventListener(PROGRESS_CHANGED_EVENT, load);
@@ -59,6 +74,10 @@ export default function StudyRoadmap() {
   // "/practice/" — comparing with a trailing slash stripped handles that
   // (and would also tolerate it being off).
   if (pathname?.replace(/\/$/, '') !== '/practice' || !stage) return null;
+  // Dropped entirely rather than shown-but-disabled — a learner who can't
+  // reach the game yet shouldn't see it advertised as a destination on
+  // their own roadmap at all (see hasEnoughWordsForGame's own comment).
+  const STAGES = gameUnlocked ? ALL_STAGES : ALL_STAGES.filter(s => s.id !== 'play');
   const cfg = THEME_CONFIG[theme];
   const activeIndex = STAGES.findIndex(s => s.id === stage);
 

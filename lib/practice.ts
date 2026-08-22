@@ -4,11 +4,36 @@ import { WORDS, Word, wordsForLevel, Level } from './words';
 import {
   getAllProgress, getSettings, today, Round, WordProgress, MascotStageId,
   getDailySession, saveDailySession, SessionPhase, getWordProgress, saveWordProgress,
+  getMergedProgressAcrossLevels,
 } from './storage';
 import { recordMilestonePass, REVIEW_PLAN, MASTERY_DAYS_AFTER_INTRODUCTION } from './srs';
 
 export function shuffled<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
+}
+
+// Word Match game unlock threshold (see app/game/page.tsx) — below this
+// many learned words, there simply isn't enough vocabulary to fill even
+// one round's board. Shared here (rather than a constant local to
+// app/game/page.tsx) so StudyRoadmap can hide its "Play" stage under the
+// exact same condition that actually locks the game page, instead of
+// advertising a destination a new learner (most commonly an A1 learner in
+// their first day or two, before they've reached 5 learned words at all)
+// can't actually reach yet.
+export const GAME_MIN_WORDS_REQUIRED = 5;
+
+// A learner-recognizable word: reached its first mascot stage (puppy) or
+// beyond, across EVERY level (not just the currently active one) — same
+// definition app/game/page.tsx's own getLearnedWords uses, just a count
+// rather than the full Word[] list (StudyRoadmap only needs to know
+// whether the game is unlocked, not which words would fill it).
+export function hasEnoughWordsForGame(): boolean {
+  const progress = getMergedProgressAcrossLevels();
+  let count = 0;
+  for (const w of WORDS) {
+    if (progress[w.id]?.mascotStage && ++count >= GAME_MIN_WORDS_REQUIRED) return true;
+  }
+  return false;
 }
 
 const WORDS_BY_ID = new Map(WORDS.map(w => [w.id, w]));

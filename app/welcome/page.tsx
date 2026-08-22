@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSettings, saveSettings, markOnboardingDone, Settings, MascotStageId } from '../../lib/storage';
+import { getSettings, saveSettings, markOnboardingDone, Settings, MascotStageId, getTheme, saveTheme, Theme } from '../../lib/storage';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
 import { Level } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
 import DachshundMascot from '../../components/Mascot';
+import { THEME_CONFIG } from '../../components/AppBackground';
 
-const STEPS = ['level', 'pace', 'mascots'] as const;
+const STEPS = ['level', 'theme', 'pace', 'mascots'] as const;
 type Step = typeof STEPS[number];
 
 // day is the cumulative day-count from introduction (see lib/srs.ts's
@@ -53,6 +54,16 @@ export default function WelcomePage() {
   const [dailyReview, setDailyReview] = useState(existing.dailyReview);
   const [autoPlayAudio, setAutoPlayAudio] = useState(existing.autoPlayAudio);
   const [requireArticle, setRequireArticle] = useState(existing.requireArticle);
+  // Theme lives in its own storage key, not Settings (see lib/storage.ts) —
+  // saved immediately on tap, same as Settings' own picker, rather than
+  // deferred to `finish` below, so AppBackground (rendered globally from
+  // the root layout, covering this page too) actually shows the new
+  // background live as part of picking it, not just after onboarding ends.
+  const [theme, setThemeState] = useState<Theme>(() => getTheme());
+  const handleThemeChange = (t: Theme) => {
+    setThemeState(t);
+    saveTheme(t);
+  };
 
   const forecast = useMemo(
     () => estimateProgressForecast(studyBatchSize, dailyReview),
@@ -114,11 +125,57 @@ export default function WelcomePage() {
             </div>
           </div>
           <button
-            onClick={() => setStep('pace')}
+            onClick={() => setStep('theme')}
             className="w-full bg-indigo-600 text-white py-3.5 rounded-2xl font-semibold shadow-md hover:bg-indigo-700 active:scale-95 transition-all"
           >
             Continue
           </button>
+        </div>
+      )}
+
+      {step === 'theme' && (
+        <div className="w-full flex flex-col gap-6">
+          <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-1">
+            <label className="block font-semibold text-stone-800 mb-1">Pick a theme</label>
+            <p className="text-stone-500 text-sm mb-3">Changes the app's background — you can always change this later in Settings.</p>
+            <div className="grid grid-cols-5 gap-x-2 gap-y-3">
+              {(Object.keys(THEME_CONFIG) as Theme[]).map(t => {
+                const cfg = THEME_CONFIG[t];
+                const isSelected = theme === t;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => handleThemeChange(t)}
+                    className="flex flex-col items-center gap-1"
+                  >
+                    <span
+                      className={`w-9 h-9 rounded-full bg-gradient-to-b ${cfg.gradient} transition-all ${
+                        isSelected ? 'ring-2 ring-offset-2 ring-offset-amber-50 ring-indigo-500 scale-110' : 'ring-1 ring-black/10'
+                      }`}
+                    />
+                    <span className={`text-[11px] font-medium capitalize ${isSelected ? 'text-indigo-700' : 'text-stone-500'}`}>
+                      {t}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setStep('level')}
+              className="flex-1 bg-amber-50/75 text-stone-700 py-3.5 rounded-2xl font-semibold border border-amber-100/50 hover:bg-amber-50 active:scale-95 transition-all"
+            >
+              Back
+            </button>
+            <button
+              onClick={() => setStep('pace')}
+              className="flex-[2] bg-indigo-600 text-white py-3.5 rounded-2xl font-semibold shadow-md hover:bg-indigo-700 active:scale-95 transition-all"
+            >
+              Continue
+            </button>
+          </div>
         </div>
       )}
 
@@ -205,7 +262,7 @@ export default function WelcomePage() {
           </div>
           <div className="flex gap-3">
             <button
-              onClick={() => setStep('level')}
+              onClick={() => setStep('theme')}
               className="flex-1 bg-amber-50/75 text-stone-700 py-3.5 rounded-2xl font-semibold border border-amber-100/50 hover:bg-amber-50 active:scale-95 transition-all"
             >
               Back
