@@ -1840,6 +1840,7 @@ export default function DailySessionFlow() {
         reviewedCount={congratsStats.reviewedCount}
         language="German"
         level={settings?.level}
+        date={today()}
         onClose={handleCloseCongrats}
       />
     );
