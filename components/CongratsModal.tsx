@@ -17,33 +17,80 @@ interface Props {
   level?: string;
 }
 
-// public/congrats.png is the shareable card's background art (1254x1254,
-// "v2" as of 2026-07 — a different illustration than the original) —
-// hand-designed with placeholder "N"/"M" glyphs marking where the actual
-// new-words/reviewed counts get overlaid at render time. These are that
-// glyph's exact pixel bounds (measured directly off the PNG, zoomed in
-// pixel-by-pixel — a same-color tolerance match alone isn't reliable here,
-// since both the icon above and the "new words"/"words" label below sit
-// close enough in color and position to bleed into a looser match). The
-// cover rectangle's padding must land in the gap on each side: below the
-// icon circle (bottom edge ≈460) and above the label text (top edge ≈558)
-// — eating into either one leaves a stray fragment of it behind.
+// Every congrats-card background shares this exact layout (verified by
+// rendering each at IMG_SIZE and overlaying these same box coordinates —
+// they all land correctly, since every image was produced against the
+// same reference composition): a rounded panel with two icon+label
+// columns, the same relative position/size in every variant, and open
+// sky top-right for the date stamp. That's what lets one shared set of
+// box coordinates work across the whole rotation instead of needing
+// per-image tuning.
 const IMG_SIZE = 1254;
 const NEW_WORDS_BOX = { x0: 410, x1: 467, y0: 487, y1: 533 };
 const REVIEWED_BOX = { x0: 780, x1: 838, y0: 487, y1: 533 };
-const CARD_BG = '#fbf7ee';
 
-function drawCount(ctx: CanvasRenderingContext2D, box: typeof NEW_WORDS_BOX, value: number, color: string) {
+interface CardVariant {
+  src: string;
+  // Only the original dog card has a baked-in "N"/"M" placeholder glyph
+  // to hide before drawing the real count (see drawCount) — every newer
+  // variant already ships with that slot left blank, so the count draws
+  // straight onto the real background with nothing to cover, which is
+  // also what sidesteps the cream-color-mismatch a hardcoded single cover
+  // color used to risk once there was more than one background.
+  coverColor?: string;
+  // Date/level stamp color, matched to what's actually behind it in each
+  // image's top-right corner (a pale cream sky reads fine with a soft
+  // warm brown; several of the newer scenes have a saturated blue-sky or
+  // green-bamboo corner instead, which needs a darker, more opaque tone
+  // to stay legible — see the card-preview check this was tuned against).
+  dateColor: string;
+}
+
+// Dark, high-opacity warm brown — reads clearly against every corner in
+// the current set, from the original's pale cream through the blue-sky
+// and bamboo-green variants, rather than needing a bespoke color per
+// image. Kept as each variant's default; only overridden where a real
+// render check shows it still isn't enough.
+const DEFAULT_DATE_COLOR = 'rgba(45, 28, 12, 0.85)';
+
+// One entry per background in the daily rotation — see pickVariant for
+// how "today's" card is chosen. Adding a new congrats_*.png later is
+// just adding a row here, since the shared box coordinates above already
+// fit the common layout.
+const CARD_VARIANTS: CardVariant[] = [
+  { src: 'congrats.png', coverColor: '#fbf7ee', dateColor: DEFAULT_DATE_COLOR },
+  { src: 'congrats_cat_new.png', dateColor: DEFAULT_DATE_COLOR },
+  { src: 'congrats_fox.png', dateColor: DEFAULT_DATE_COLOR },
+  { src: 'congrats_fox_stand.png', dateColor: DEFAULT_DATE_COLOR },
+  { src: 'congrats_panda.png', dateColor: DEFAULT_DATE_COLOR },
+  { src: 'congrats_rabbit.png', dateColor: DEFAULT_DATE_COLOR },
+];
+
+// Deterministic, not Math.random() — keyed off the calendar date so
+// reopening the SAME day's card (see Progress's daily history) always
+// shows the same background instead of reshuffling on every open, while
+// different days land on different (effectively random-looking) cards.
+function pickVariant(dateStr: string): CardVariant {
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) hash = (hash * 31 + dateStr.charCodeAt(i)) >>> 0;
+  return CARD_VARIANTS[hash % CARD_VARIANTS.length];
+}
+
+function drawCount(ctx: CanvasRenderingContext2D, box: typeof NEW_WORDS_BOX, value: number, color: string, coverColor: string | undefined) {
   const cx = (box.x0 + box.x1) / 2;
   const cy = (box.y0 + box.y1) / 2;
   const boxWidth = box.x1 - box.x0;
   const boxHeight = box.y1 - box.y0;
 
-  // Blank out the placeholder glyph first — a real count can be a different
-  // width (e.g. "12" vs the single placeholder letter), so the old glyph
-  // can't be allowed to show through around the edges of the new one.
-  ctx.fillStyle = CARD_BG;
-  ctx.fillRect(box.x0 - 40, box.y0 - 10, boxWidth + 80, boxHeight + 20);
+  // Blank out the placeholder glyph first, only if this variant has one
+  // to hide at all (see CardVariant.coverColor) — a real count can be a
+  // different width (e.g. "12" vs the single placeholder letter), so the
+  // old glyph can't be allowed to show through around the edges of the
+  // new one.
+  if (coverColor) {
+    ctx.fillStyle = coverColor;
+    ctx.fillRect(box.x0 - 40, box.y0 - 10, boxWidth + 80, boxHeight + 20);
+  }
 
   // Shrink the font for multi-digit counts so they still fit the same box
   // the single placeholder glyph was drawn in.
@@ -60,6 +107,7 @@ function drawCount(ctx: CanvasRenderingContext2D, box: typeof NEW_WORDS_BOX, val
 
 export default function CongratsModal({ studiedCount, reviewedCount, language, onClose, date, level }: Props) {
   const [imgUrl, setImgUrl] = useState<string | null>(null);
+  const dateKey = date ?? new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
     const canvas = document.createElement('canvas');
@@ -69,21 +117,31 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
     if (!ctx) return;
 
     let cancelled = false;
+    const variant = pickVariant(dateKey);
 
     const draw = (bg: HTMLImageElement) => {
       if (cancelled) return;
 
       ctx.drawImage(bg, 0, 0, IMG_SIZE, IMG_SIZE);
-      drawCount(ctx, NEW_WORDS_BOX, studiedCount, '#603096');
-      drawCount(ctx, REVIEWED_BOX, reviewedCount, '#066354');
+      drawCount(ctx, NEW_WORDS_BOX, studiedCount, '#603096', variant.coverColor);
+      drawCount(ctx, REVIEWED_BOX, reviewedCount, '#066354', variant.coverColor);
 
-      // Small date stamp in the open cream space top-right, so a saved/
+      // Small date stamp in the open sky space top-right, so a saved/
       // shared image is still self-explanatory (and a reopened past day
       // doesn't look like it's claiming to be today).
-      const dateStr = new Date(`${date ?? new Date().toISOString().slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, {
+      const dateStr = new Date(`${dateKey}T00:00:00`).toLocaleDateString(undefined, {
         year: 'numeric', month: 'short', day: 'numeric',
       });
-      ctx.fillStyle = 'rgba(120, 90, 40, 0.55)';
+      // A soft light shadow (rather than tuning the fill color per
+      // background) is what actually keeps this legible across every
+      // variant — the corner behind it ranges from plain pale sky to a
+      // busy, dark bamboo-leaf texture (see the panda card), and no single
+      // flat text color reads equally well against all of them. A blurred
+      // light halo lifts dark text off anything busy/dark underneath it
+      // while staying invisible against the already-light corners.
+      ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+      ctx.shadowBlur = 6;
+      ctx.fillStyle = variant.dateColor;
       ctx.font = '600 26px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'alphabetic';
@@ -95,6 +153,8 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
         ctx.font = '600 20px system-ui, -apple-system, sans-serif';
         ctx.fillText(`${language} ${level}`, IMG_SIZE - 70, 118);
       }
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
 
       canvas.toBlob(blob => {
         if (blob && !cancelled) setImgUrl(URL.createObjectURL(blob));
@@ -103,10 +163,10 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
 
     const bg = new window.Image();
     bg.onload = () => draw(bg);
-    bg.src = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/congrats.png`;
+    bg.src = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${variant.src}`;
 
     return () => { cancelled = true; };
-  }, [studiedCount, reviewedCount, language, date, level]);
+  }, [studiedCount, reviewedCount, language, dateKey, level]);
 
   useEffect(() => () => { if (imgUrl) URL.revokeObjectURL(imgUrl); }, [imgUrl]);
 
