@@ -6,6 +6,8 @@ import { WORDS, glossFor, Word } from '../../lib/words';
 import { getMergedProgressAcrossLevels, getSettings, getTheme, Theme, THEME_CHANGED_EVENT, getDailyWordLog, today, WordProgress } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { speakWord } from '../../lib/speech';
+import { getOrCreateDeviceId } from '../../lib/telemetry';
+import { supabase } from '../../lib/supabase';
 
 // PREVIEW PAGE — not linked from the main flow yet (see Settings' own
 // "Try the new game" link for the only current entry point). Once this is
@@ -118,6 +120,17 @@ export default function GamePage() {
   // through everything rather than getting stuck unable to find fresh
   // words for the rest of the session.
   const usedIdsRef = useRef<Set<string>>(new Set());
+  // Which entry point sent the learner here -- see the game_plays
+  // migration, which this tags every recorded play with. Plain
+  // window.location (not Next's useSearchParams) specifically to avoid
+  // the Suspense-boundary requirement that hook needs under
+  // `output: 'export'` -- same reasoning as DailySessionFlow's own
+  // previewSignInNudge param. Defaults to 'settings_preview' since that's
+  // this game's only real entry point right now (see this file's own top
+  // comment) -- Settings' own link passes this explicitly too, so the
+  // default only matters for a bookmarked/typed-in URL with no query
+  // string at all.
+  const [source, setSource] = useState<'settings_preview' | 'daily_flow'>('settings_preview');
 
   const nativeLanguage = getSettings().nativeLanguage;
   const cfg = THEME_CONFIG[theme];
@@ -131,6 +144,12 @@ export default function GamePage() {
 
   useEffect(() => {
     setLearnedWords(getLearnedWords());
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('source') === 'daily_flow') setSource('daily_flow');
   }, []);
 
   const canPlay = learnedWords.length >= MIN_WORDS_REQUIRED;
@@ -178,6 +197,28 @@ export default function GamePage() {
     const t = setTimeout(() => setTimeLeft(s => s - 1), 1000);
     return () => clearTimeout(t);
   }, [phase, timeLeft]);
+
+  // Records one completed game (see the game_plays migration) the moment
+  // the timer runs out -- best-effort/silent, same as bug_reports/
+  // usage_pings: a learner should never notice this fail, and it never
+  // blocks the results screen from showing regardless of outcome.
+  useEffect(() => {
+    if (phase !== 'over') return;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        await supabase.from('game_plays').insert({
+          device_id: getOrCreateDeviceId(),
+          user_id: session?.user.id ?? null,
+          source,
+          pairs_matched: matchedCount,
+        });
+      } catch {
+        // best-effort
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   // Evaluate a pair once both sides are picked (same mechanic as
   // MatchingQuizPage/the end-of-section matching quiz, just timed and

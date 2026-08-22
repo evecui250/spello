@@ -23,10 +23,14 @@ export interface DonutSlice {
 // A donut (not a full pie) specifically so a title/total can sit in the
 // empty center — reads at a glance without a separate label. Slices under
 // 1% of the total are still drawn (never fully invisible), just thin.
-export function DonutChart({ title, slices, emptyNote }: {
+export function DonutChart({ title, slices, emptyNote, colorForLabel }: {
   title: string;
   slices: DonutSlice[];
   emptyNote?: string;
+  // Optional: a real color per slice (e.g. each theme's own accent),
+  // instead of the generic index-based palette below — falls back to the
+  // palette for any label this doesn't cover.
+  colorForLabel?: (label: string) => string | undefined;
 }) {
   // The legend used to hard-truncate at 8 with a plain "+N more" label
   // that did nothing when tapped — the rest of the countries were simply
@@ -39,7 +43,7 @@ export function DonutChart({ title, slices, emptyNote }: {
   const arcs = slices.map((s, i) => {
     const fraction = total > 0 ? s.count / total : 0;
     const dash = fraction * circumference;
-    const arc = { ...s, color: DONUT_PALETTE[i % DONUT_PALETTE.length], dash, offset };
+    const arc = { ...s, color: colorForLabel?.(s.label) ?? DONUT_PALETTE[i % DONUT_PALETTE.length], dash, offset };
     offset += dash;
     return arc;
   });

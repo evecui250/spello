@@ -3,6 +3,16 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { TrendChart, LevelBars, DonutChart } from '../../components/AdminCharts';
+import { THEME_CONFIG } from '../../components/AppBackground';
+import { Theme } from '../../lib/storage';
+
+// Each theme's own mid-dark stageColors shade, reused as its donut-chart
+// color — a real accent per theme (rather than the generic index-based
+// palette every other DonutChart here uses) makes "which wedge is which
+// theme" readable without needing the legend at all.
+const THEME_DONUT_COLOR: Record<Theme, string> = Object.fromEntries(
+  (Object.keys(THEME_CONFIG) as Theme[]).map(t => [t, THEME_CONFIG[t].stageColors[2]]),
+) as Record<Theme, string>;
 
 interface AiUsageSummary {
   calls: number;
@@ -57,6 +67,13 @@ interface AdminStats {
     byIp: { country: string; count: number }[];
     byUser: { country: string; count: number }[];
   };
+  // Each device's current theme (most recent ping wins) -- see admin-
+  // stats' own comment for the dark -> bright ordering.
+  themeBreakdown: { theme: string; count: number }[];
+  // Word Match game plays split by entry point -- see the game_plays
+  // migration. dailyFlow reads 0 until a real end-of-learning entry point
+  // exists, not a bug.
+  gamePlaysBySource: { settingsPreview: number; dailyFlow: number };
   // Every registered account, most-recently-active first — see
   // admin-stats' own comment for what "active" means here and why.
   registeredLearners: { email: string; country: string; lastActive: string; everActive: boolean; createdAt: string }[];
@@ -106,6 +123,8 @@ export default function AdminPage() {
         ...data,
         debugErrors: data.debugErrors ?? [],
         geoBreakdown: data.geoBreakdown ?? { byIp: [], byUser: [] },
+        themeBreakdown: data.themeBreakdown ?? [],
+        gamePlaysBySource: data.gamePlaysBySource ?? { settingsPreview: 0, dailyFlow: 0 },
         today: { ...data.today, explanationClicks: data.today?.explanationClicks ?? 0 },
         trends: { ...data.trends, explanationClicks: data.trends?.explanationClicks ?? [] },
         registeredLearners: data.registeredLearners ?? [],
@@ -245,6 +264,43 @@ export default function AdminPage() {
         </div>
         <DonutChart title="By user (device)" slices={stats.geoBreakdown.byUser.map(g => ({ label: g.country, count: g.count }))} />
         <DonutChart title="By IP" slices={stats.geoBreakdown.byIp.map(g => ({ label: g.country, count: g.count }))} />
+      </div>
+
+      {/* Themes */}
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-4">
+        <div>
+          <h2 className="font-semibold text-stone-800">Themes</h2>
+          <p className="text-stone-400 text-xs -mt-0.5">
+            Each device&apos;s current theme (its most recent usage ping) — one wedge per Settings picker option, dark to bright.
+          </p>
+        </div>
+        <DonutChart
+          title="By device"
+          slices={stats.themeBreakdown.map(t => ({ label: t.theme, count: t.count }))}
+          colorForLabel={label => THEME_DONUT_COLOR[label as Theme]}
+          emptyNote="No data yet — this fills in as devices ping in with the theme column."
+        />
+      </div>
+
+      {/* Word Match game */}
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-3">
+        <div>
+          <h2 className="font-semibold text-stone-800">Word Match game</h2>
+          <p className="text-stone-400 text-xs -mt-0.5">
+            Completed games (timer ran out), split by where the learner started it from. &quot;End of learning&quot; stays 0 until that
+            real entry point exists — the preview link in Settings is the only one live right now.
+          </p>
+        </div>
+        <div className="flex gap-6">
+          <div>
+            <div className="text-2xl font-bold text-stone-800">{stats.gamePlaysBySource.settingsPreview}</div>
+            <div className="text-xs text-stone-500">Settings preview</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-stone-800">{stats.gamePlaysBySource.dailyFlow}</div>
+            <div className="text-xs text-stone-500">End of learning</div>
+          </div>
+        </div>
       </div>
 
       {/* Registered learners */}

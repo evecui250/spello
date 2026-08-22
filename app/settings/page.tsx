@@ -355,7 +355,7 @@ export default function SettingsPage() {
       {/* Preview-only entry point — not yet part of the main daily flow,
           see app/game/page.tsx's own top comment. */}
       <Link
-        href="/game"
+        href="/game?source=settings_preview"
         className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm py-3 px-4 font-semibold text-stone-700 hover:bg-amber-50 active:scale-[0.99] transition-all"
       >
         🎮 Try the new word-match game (preview)

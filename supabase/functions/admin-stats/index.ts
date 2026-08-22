@@ -216,7 +216,7 @@ Deno.serve(async (req: Request) => {
       };
     });
 
-    const { data: allPingsIdsOnly } = await admin.from('usage_pings').select('device_id, ip_address, created_at, user_id');
+    const { data: allPingsIdsOnly } = await admin.from('usage_pings').select('device_id, ip_address, created_at, user_id, theme');
     function firstSeenMap<T extends string>(rows: { created_at: string }[], key: (r: { created_at: string }) => T | null): Map<T, number> {
       const out = new Map<T, number>();
       for (const r of rows) {
@@ -228,7 +228,7 @@ Deno.serve(async (req: Request) => {
       }
       return out;
     }
-    const allPingRows = (allPingsIdsOnly ?? []) as { device_id: string; ip_address: string | null; created_at: string; user_id: string | null }[];
+    const allPingRows = (allPingsIdsOnly ?? []) as { device_id: string; ip_address: string | null; created_at: string; user_id: string | null; theme: string | null }[];
     const deviceFirstSeen = firstSeenMap(allPingRows, r => r.device_id);
     const ipFirstSeen = firstSeenMap(allPingRows, r => r.ip_address);
 
@@ -297,6 +297,47 @@ Deno.serve(async (req: Request) => {
     const toSortedArray = (m: Map<string, number>) =>
       [...m.entries()].map(([country, count]) => ({ country, count })).sort((a, b) => b.count - a.count);
     const geoBreakdown = { byIp: toSortedArray(byIpCountry), byUser: toSortedArray(byUserCountry) };
+
+    // Theme breakdown: each device's MOST RECENT ping's theme (same
+    // "most recent wins" rule as deviceLatestIp/country above) -- a
+    // device that switched themes only ever counts under whichever it's
+    // using now, not partial credit for one it briefly tried. `theme` is
+    // NULL on any ping recorded before that column existed, so devices
+    // that haven't pinged since then simply don't appear here yet.
+    // Ordered dark -> bright (THEME_CONFIG's own key order in
+    // AppBackground.tsx, i.e. Settings' picker order) rather than by
+    // count, same reasoning as LEVEL_DISPLAY_ORDER below -- a fixed order
+    // reads easier at a glance than one that reshuffles every time the
+    // numbers change.
+    const deviceLatestTheme = new Map<string, { theme: string; t: number }>();
+    for (const r of allPingRows) {
+      if (!r.theme) continue;
+      const t = new Date(r.created_at).getTime();
+      const prev = deviceLatestTheme.get(r.device_id);
+      if (!prev || t > prev.t) deviceLatestTheme.set(r.device_id, { theme: r.theme, t });
+    }
+    const THEME_DISPLAY_ORDER = ['stellar', 'ocean', 'ember', 'forest', 'lavender', 'sunset', 'citrus', 'meadow', 'bubblegum', 'vanilla'];
+    const themeRank = (theme: string) => {
+      const i = THEME_DISPLAY_ORDER.indexOf(theme);
+      return i === -1 ? THEME_DISPLAY_ORDER.length : i;
+    };
+    const themeCounts = new Map<string, number>();
+    for (const { theme } of deviceLatestTheme.values()) themeCounts.set(theme, (themeCounts.get(theme) ?? 0) + 1);
+    const themeBreakdown = [...themeCounts.entries()]
+      .map(([theme, count]) => ({ theme, count }))
+      .sort((a, b) => themeRank(a.theme) - themeRank(b.theme));
+
+    // Word Match game plays (see the game_plays migration) -- split by
+    // entry point so "how many played from Settings' preview link" vs.
+    // "how many played from the real end-of-learning slot" is visible
+    // separately. dailyFlow reads 0 until that real slot actually exists
+    // (see app/game/page.tsx's own top comment) -- expected, not a bug.
+    const { data: gamePlayRows } = await admin.from('game_plays').select('source');
+    const gamePlaysBySource = { settingsPreview: 0, dailyFlow: 0 };
+    for (const r of gamePlayRows ?? []) {
+      if (r.source === 'settings_preview') gamePlaysBySource.settingsPreview += 1;
+      else if (r.source === 'daily_flow') gamePlaysBySource.dailyFlow += 1;
+    }
 
     // Every registered account, most-recently-active first — "who's
     // actually signed up and who's actually using it" at a glance,
@@ -476,6 +517,8 @@ Deno.serve(async (req: Request) => {
       },
       levelBreakdown,
       geoBreakdown,
+      themeBreakdown,
+      gamePlaysBySource,
       registeredLearners,
       leaderboardToday,
       // Signed-in/synced learners only — see the comment on the query

@@ -1,18 +1,20 @@
 'use client';
 
 import { supabase } from './supabase';
-import { getSettings, isOnboardingDone } from './storage';
+import { getSettings, getTheme, isOnboardingDone } from './storage';
 
 // A random per-browser-profile id, minted once and reused forever — NOT
 // tied to a Spello account or CEFR level (deliberately un-namespaced,
 // unlike everything in storage.ts), since its whole point is to identify
 // "this device" even for a learner who never signs in. See the
 // usage_pings migration for why this is the only way to see those
-// learners at all.
+// learners at all. Exported so other insert-only telemetry (e.g. the
+// Word Match game's game_plays row) can tag itself with the same device
+// identity, rather than minting a second, differently-scoped id.
 const DEVICE_ID_KEY = 'wb2_device_id';
 const LAST_PING_KEY = 'wb2_last_ping_date';
 
-function getOrCreateDeviceId(): string {
+export function getOrCreateDeviceId(): string {
   let id = localStorage.getItem(DEVICE_ID_KEY);
   if (!id) {
     id = crypto.randomUUID();
@@ -62,6 +64,10 @@ export async function recordUsagePing(): Promise<void> {
       body: {
         deviceId,
         level: isOnboardingDone() ? getSettings().level : null,
+        // Always defined (getTheme() falls back to a default rather than
+        // undefined), unlike level -- there's no "hasn't picked a theme
+        // yet" state worth distinguishing, so no onboarding gate here.
+        theme: getTheme(),
         userAgent: navigator.userAgent,
         pingDate: today,
       },

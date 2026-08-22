@@ -22,6 +22,7 @@ const CORS_HEADERS = {
 interface RequestBody {
   deviceId: string;
   level: string;
+  theme?: string;
   userAgent?: string;
   pingDate: string; // YYYY-MM-DD, caller's local date
 }
@@ -33,7 +34,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = (await req.json()) as RequestBody;
-    const { deviceId, level, userAgent, pingDate } = body;
+    const { deviceId, level, theme, userAgent, pingDate } = body;
     if (!deviceId || !pingDate) {
       return json({ error: 'Missing deviceId or pingDate' }, 400);
     }
@@ -65,6 +66,7 @@ Deno.serve(async (req: Request) => {
       user_id: userId,
       signed_in: !!userId,
       level: level || null,
+      theme: theme || null,
       user_agent: userAgent || null,
       ip_address: ip,
       ping_date: pingDate,
