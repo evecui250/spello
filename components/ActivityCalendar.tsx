@@ -6,6 +6,7 @@ import { getActivityCalendarDays, getDailyWordLog, getSettings, localDateString,
 import { SYNCED_EVENT } from '../lib/sync';
 import { glossFor, Word } from '../lib/words';
 import { wordsById } from '../lib/practice';
+import CongratsModal from './CongratsModal';
 
 // Same soft, earthy palette as Progress page's mascot-stage bars (see
 // STAGE_COLORS there) rather than a bright primary green/yellow — full days
@@ -246,17 +247,29 @@ export default function ActivityCalendar() {
       </div>
 
       {selectedDate && createPortal(
-        <DayDetailPopup dateStr={selectedDate} onClose={() => setSelectedDate(null)} />,
+        <DayDetailPopup dateStr={selectedDate} isFullDay={days.full.has(selectedDate)} onClose={() => setSelectedDate(null)} />,
         document.body,
       )}
     </div>
   );
 }
 
-function DayDetailPopup({ dateStr, onClose }: { dateStr: string; onClose: () => void }) {
+function DayDetailPopup({ dateStr, isFullDay, onClose }: { dateStr: string; isFullDay: boolean; onClose: () => void }) {
   const { learned, reviewed } = wordsForDate(dateStr);
   const label = new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const nativeLanguage = getSettings().nativeLanguage;
+  // A day only ever reaches "full" (goal met) by finishing both study and
+  // review that day, the exact same condition that shows the real congrats
+  // card live — so reopening it here is safe to gate on the same flag
+  // rather than needing its own separate record of "was a card shown".
+  // Reconstructed from the same word lists the popup already displays
+  // above (deliberately the same counts a learner already sees here, not
+  // a separately-tracked number that could quietly drift from it); level
+  // comes from whichever word was actually studied that day, since a
+  // learner can switch levels between one goal-day and the next and this
+  // log isn't itself level-namespaced (see DAILY_WORD_LOG_KEY).
+  const [showCard, setShowCard] = useState(false);
+  const cardLevel = learned[0]?.level ?? reviewed[0]?.level ?? getSettings().level;
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -277,6 +290,15 @@ function DayDetailPopup({ dateStr, onClose }: { dateStr: string; onClose: () => 
             ×
           </button>
         </div>
+        {isFullDay && (
+          <button
+            type="button"
+            onClick={() => setShowCard(true)}
+            className="self-start text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-full px-3 py-1.5 transition-colors"
+          >
+            🎉 View card
+          </button>
+        )}
         {learned.length === 0 && reviewed.length === 0 ? (
           <p className="text-stone-500 text-sm">No activity that day.</p>
         ) : (
@@ -310,6 +332,16 @@ function DayDetailPopup({ dateStr, onClose }: { dateStr: string; onClose: () => 
           </>
         )}
       </div>
+      {showCard && (
+        <CongratsModal
+          studiedCount={learned.length}
+          reviewedCount={reviewed.length}
+          language="German"
+          level={cardLevel}
+          date={dateStr}
+          onClose={() => setShowCard(false)}
+        />
+      )}
     </div>
   );
 }

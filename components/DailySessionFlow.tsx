@@ -14,6 +14,7 @@ import {
 import {
   wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint,
   buildMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
+  hasEnoughWordsForGame,
 } from '../lib/practice';
 import { REVIEW_PLAN } from '../lib/srs';
 import { Word, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks } from '../lib/words';
@@ -25,6 +26,7 @@ import TranslationChoiceCard from './TranslationChoiceCard';
 import MatchingQuizPage from './MatchingQuizPage';
 import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
+import WordMatchGame from './WordMatchGame';
 import SignInNudge from './SignInNudge';
 import AiUnlockCelebration from './AiUnlockCelebration';
 import WordInfoPanel from './WordInfoPanel';
@@ -1610,8 +1612,13 @@ export default function DailySessionFlow() {
     }
   }
 
-  async function handleCloseCongrats() {
-    setShowCongrats(false);
+  // The actual "leave the daily flow" step — shared by closing the
+  // congrats card directly (no bonus round today) and quitting out of the
+  // bonus round once a learner's done playing it (see handleCloseCongrats/
+  // handleQuitPlay). Always the same ending regardless of which path got
+  // here: mark today's session done, then either nudge an anonymous
+  // learner to sign in or send them home.
+  async function finishForToday() {
     if (session) persistSession({ ...session, phase: 'done' });
     // One soft nudge, right after the celebration rather than overlapping
     // or blocking it — a learner who isn't signed in has just finished
@@ -1625,6 +1632,27 @@ export default function DailySessionFlow() {
       return;
     }
     router.push('/');
+  }
+
+  async function handleCloseCongrats() {
+    setShowCongrats(false);
+    // The bonus round only exists at all when there's enough learned
+    // vocabulary to fill even one board (see hasEnoughWordsForGame) — the
+    // exact same gate StudyRoadmap already uses to decide whether to show
+    // "Play" as a real destination in the first place, so a learner who
+    // never sees it promised there never lands on it here either.
+    if (session && hasEnoughWordsForGame()) {
+      persistSession({ ...session, phase: 'play' });
+      return;
+    }
+    await finishForToday();
+  }
+
+  // Replayable as many times as the learner likes (see WordMatchGame's own
+  // "Play again" button) — this only fires once they actively choose to
+  // stop, via its "Finish for today" button.
+  async function handleQuitPlay() {
+    await finishForToday();
   }
 
   function handleCloseSignInNudge() {
@@ -1844,6 +1872,10 @@ export default function DailySessionFlow() {
         onClose={handleCloseCongrats}
       />
     );
+  }
+
+  if (session.phase === 'play') {
+    return <WordMatchGame source="daily_flow" onQuit={handleQuitPlay} />;
   }
 
   if (session.phase === 'done') {

@@ -18,15 +18,16 @@ const ALL_STAGES: { id: Stage; label: string }[] = [
 // points, not somewhere fractionally between them, per request. Review
 // covers every review-* phase plus 'report' (still the review results
 // screen); Learn covers every study-* phase; Play lights up once the
-// congrats card is showing or the day is fully done. `gameUnlocked` is
-// false for the same reason app/game/page.tsx itself would show its
-// locked message instead of a Start button (see hasEnoughWordsForGame) —
+// congrats card is showing, the real bonus round is (phase 'play'), or
+// the day is fully done. `gameUnlocked` is false for the same reason the
+// bonus round itself is skipped straight to 'done' (see
+// DailySessionFlow's handleCloseCongrats/hasEnoughWordsForGame) —
 // congrats/done then reads as "learn" instead, since that's genuinely as
 // far as this learner (most commonly an A1 learner in their first day or
 // two) can go today. There's no third dot to fall short of at all in
 // that case — see the STAGES filter below.
 function stageForPhase(phase: SessionPhase, gameUnlocked: boolean): Stage {
-  if (phase === 'congrats' || phase === 'done') return gameUnlocked ? 'play' : 'learn';
+  if (phase === 'play' || phase === 'congrats' || phase === 'done') return gameUnlocked ? 'play' : 'learn';
   if (phase.startsWith('study')) return 'learn';
   return 'review';
 }

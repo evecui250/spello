@@ -900,6 +900,12 @@ export type SessionPhase =
   | 'review-mcq' | 'review-rounds' | 'review-matching'
   | 'report'
   | 'congrats'
+  // The bonus Word Match round after the congrats card, once per day, only
+  // reached when there are enough learned words to fill it (see
+  // hasEnoughWordsForGame) -- replayable as many times as the learner
+  // likes before they quit to 'done'. Skipped straight to 'done' entirely
+  // when the word count gate isn't met yet.
+  | 'play'
   | 'done';
 
 export interface DailySession {
