@@ -34,6 +34,20 @@ interface RequestBody {
   sentence: string;
   level: string;
   nativeLanguage?: 'en' | 'zh';
+  // 'de-to-native' (default): `sentence` is German (the AI correction) --
+  // each gloss is {lemma: German dictionary form, gloss: translation in
+  // nativeLanguage}. 'native-to-de': `sentence` is the round-1 PROMPT,
+  // written in nativeLanguage, before the learner has translated it --
+  // each gloss is {lemma: a German hint word/phrase for it, gloss: that
+  // same word's own dictionary form in nativeLanguage}, i.e. the exact
+  // same {lemma: German, gloss: nativeLanguage} shape either way, just
+  // built from whichever sentence hasn't been translated yet. Lets a
+  // learner tap ANY prompt word for a German hint, not just ones that
+  // happen to already be Spello corpus entries (see
+  // DailySessionFlow/findWordByEnglishForm's corpus-only fallback, which
+  // this complements the same way it already complements the corpus-only
+  // chain on the correction side).
+  direction?: 'de-to-native' | 'native-to-de';
 }
 
 Deno.serve(async (req: Request) => {
@@ -74,7 +88,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as RequestBody;
-    const { wordId, sentence, level, nativeLanguage } = body;
+    const { wordId, sentence, level, nativeLanguage, direction } = body;
     if (!wordId || !sentence) {
       return json({ error: 'Missing wordId or sentence' }, 400);
     }
@@ -82,6 +96,29 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Sentence too long' }, 400);
     }
     const lang = nativeLanguage === 'zh' ? 'Chinese' : 'English';
+    const promptText = direction === 'native-to-de'
+      ? `For this ${lang} sentence (a CEFR ${level || 'A1'} learner is about to translate it ` +
+        `INTO German): "${sentence}", produce a JSON object mapping EVERY distinct content word ` +
+        '(as it literally appears there, preserving capitalization) to a German dictionary-form ' +
+        'word or short phrase a learner could use for it when translating this sentence into ' +
+        'German, as "lemma" (the exact uninflected dictionary form: infinitive for verbs, ' +
+        'singular nominative for nouns, positive form for adjectives/adverbs), plus that same ' +
+        `word's own dictionary/base form in ${lang} as "gloss" (e.g. "packed" -> gloss "pack"). ` +
+        'Skip articles, pronouns, prepositions, conjunctions, and punctuation. Respond with ' +
+        'exactly this JSON: {"words": {"word1": {"lemma": "...", "gloss": "..."}, ...}}.'
+      : `For this German sentence (a CEFR ${level || 'A1'} learner's exercise): ` +
+        `"${sentence}", produce a JSON object mapping EVERY distinct word (as it ` +
+        'literally appears there, preserving capitalization) to its dictionary/base ' +
+        'form — the infinitive for verbs (e.g. "abgesagt" -> "absagen", "ruft" -> ' +
+        '"rufen"), the singular nominative for nouns (e.g. "Häuser" -> "Haus", ' +
+        '"Kindern" -> "Kind"), and the uninflected positive form for adjectives/adverbs ' +
+        '(e.g. "schönen" -> "schön") — plus a short (1-4 word) translation of that base ' +
+        `form into ${lang}. Include separable-prefix verbs split apart by German word ` +
+        'order, each part mapping to the SAME full lemma (e.g. a sentence with "sagt ... ' +
+        'ab" for "absagen" should map BOTH "sagt" and "ab" to lemma "absagen", both with ' +
+        'the same translation). Skip bare articles (der/die/das/ein/eine/einen/etc.) and ' +
+        'punctuation. Respond with exactly this JSON: {"words": {"word1": {"lemma": ' +
+        `"...", "gloss": "..."}, ...}}, each gloss in ${lang}.`;
 
     const completion = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -92,25 +129,7 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({
         model: MODEL,
         response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content:
-              `For this German sentence (a CEFR ${level || 'A1'} learner's exercise): ` +
-              `"${sentence}", produce a JSON object mapping EVERY distinct word (as it ` +
-              'literally appears there, preserving capitalization) to its dictionary/base ' +
-              'form — the infinitive for verbs (e.g. "abgesagt" -> "absagen", "ruft" -> ' +
-              '"rufen"), the singular nominative for nouns (e.g. "Häuser" -> "Haus", ' +
-              '"Kindern" -> "Kind"), and the uninflected positive form for adjectives/adverbs ' +
-              '(e.g. "schönen" -> "schön") — plus a short (1-4 word) translation of that base ' +
-              `form into ${lang}. Include separable-prefix verbs split apart by German word ` +
-              'order, each part mapping to the SAME full lemma (e.g. a sentence with "sagt ... ' +
-              'ab" for "absagen" should map BOTH "sagt" and "ab" to lemma "absagen", both with ' +
-              'the same translation). Skip bare articles (der/die/das/ein/eine/einen/etc.) and ' +
-              'punctuation. Respond with exactly this JSON: {"words": {"word1": {"lemma": ' +
-              `"...", "gloss": "..."}, ...}}, each gloss in ${lang}.`,
-          },
-        ],
+        messages: [{ role: 'system', content: promptText }],
         temperature: 0.2,
         max_tokens: 500,
       }),

@@ -5,7 +5,16 @@
 // word order) rather than substituting an independent translation of the
 // English sentence — different learners can validly translate the same
 // sentence differently (synonyms, word order), so the correction should
-// track what they actually wrote. userTranslation is OPTIONAL — omitted
+// track what they actually wrote. This also covers content the learner
+// left out entirely, not just words they got wrong (a real reported
+// case: a learner's attempt simply never rendered "carefully" from
+// "packed carefully", and the old prompt only checked for MISTRANSLATED
+// words, not MISSING ones, so the correction quietly stayed incomplete
+// too) — the corrected sentence must always convey the FULL English
+// meaning. This is deliberately never surfaced as its own callout in
+// explain-correction — the corrected sentence itself already shows the
+// added word (underlined, same as any other change), which is enough.
+// userTranslation is OPTIONAL — omitted
 // entirely for "sentence writing mode" off (see Settings), where the
 // learner skips writing anything and just gets a correct example sentence
 // directly. Also always succeeds now, even with an unusable attempt (too
@@ -143,7 +152,14 @@ Deno.serve(async (req: Request) => {
                   '"trip" or "outing" instead, that is wrong and must be corrected to the word ' +
                   'that actually means "departure" — do not just fix its grammar and leave the ' +
                   'wrong meaning in place; be equally strict about every other word choice in the ' +
-                  'sentence). You MAY keep a word choice that is a ' +
+                  'sentence). This includes content the learner OMITTED entirely, not just words ' +
+                  'they got wrong — check every part of the English sentence (including ' +
+                  'adverbs/adjectives modifying another word, e.g. "carefully" in "packed ' +
+                  'carefully") against their attempt, and if some part of the English meaning is ' +
+                  'simply missing from what they wrote (not mistranslated, just never attempted ' +
+                  'at all), ADD it into your corrected sentence so the output conveys the FULL ' +
+                  'meaning of the English sentence — never silently drop a concept just because ' +
+                  'the learner did. You MAY keep a word choice that is a ' +
                   'genuinely valid synonym correctly conveying the same meaning (different ' +
                   'learners can validly translate the same sentence differently — real synonyms, ' +
                   'word order) — but every word in your output must actually mean what the ' +

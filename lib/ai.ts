@@ -172,9 +172,14 @@ export async function getSentenceGlosses(
   sentence: string,
   level: string,
   nativeLanguage: 'en' | 'zh' = 'en',
+  // 'native-to-de': `sentence` is the round-1 PROMPT (written in
+  // nativeLanguage, not yet translated) — see sentence-glosses' own
+  // comment for why this still returns the same {lemma: German, gloss:
+  // nativeLanguage} shape either way.
+  direction: 'de-to-native' | 'native-to-de' = 'de-to-native',
 ): Promise<Record<string, WordGloss>> {
   const { data, error } = await supabase.functions.invoke('sentence-glosses', {
-    body: { wordId, sentence, level, nativeLanguage },
+    body: { wordId, sentence, level, nativeLanguage, direction },
   });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();

@@ -59,6 +59,47 @@ function isWordToken(t: string): boolean {
   return /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(t);
 }
 
+// A render-ready span for the PROMPT sentence's Chinese path: same shape
+// as ChineseClickSpan (see lib/words.ts), plus an optional `gloss` for a
+// word segmentChineseForClicks didn't recognize as a corpus entry, but
+// promptGlosses (an AI call over this exact sentence — see the effect
+// above) did. segmentChineseForClicks already merges every unmatched
+// stretch into one plain-text span (punctuation and non-corpus words
+// alike) rather than one span per character — this walks each of THOSE
+// spans a second time, greedily matching the LONGEST promptGlosses key at
+// each position (glosses' own keys are already exact substrings of this
+// specific sentence, so this never mis-segments the way matching against
+// a huge global term list could). A corpus match (span.word already set)
+// always wins outright and is never touched — this only ever fills in the
+// gaps a corpus lookup left as plain, unclickable text.
+interface GlossSpan { text: string; word?: Word; gloss?: WordGloss }
+function applyGlossFallback(spans: { text: string; word?: Word }[], glosses: Record<string, WordGloss>): GlossSpan[] {
+  const keys = Object.keys(glosses).sort((a, b) => [...b].length - [...a].length);
+  if (keys.length === 0) return spans;
+  const out: GlossSpan[] = [];
+  for (const span of spans) {
+    if (span.word) { out.push(span); continue; }
+    const chars = [...span.text];
+    let i = 0;
+    while (i < chars.length) {
+      const matchedKey = keys.find(key => {
+        const klen = [...key].length;
+        return klen > 0 && i + klen <= chars.length && chars.slice(i, i + klen).join('') === key;
+      });
+      if (matchedKey) {
+        out.push({ text: matchedKey, gloss: glosses[matchedKey] });
+        i += [...matchedKey].length;
+      } else {
+        const prev = out[out.length - 1];
+        if (prev && !prev.word && !prev.gloss) prev.text += chars[i];
+        else out.push({ text: chars[i] });
+        i += 1;
+      }
+    }
+  }
+  return out;
+}
+
 // Word-level LCS diff (order-preserving, allows insertions/substitutions/
 // deletions) — case-sensitive on purpose, since German capitalization is
 // a real grammar rule (every noun, not just sentence starts), not
@@ -357,6 +398,17 @@ function SentenceExercise({
   // correction itself. Keyed by the word exactly as it appears in
   // correction.sentence, matching resolveClickedWord's own token shape.
   const [glosses, setGlosses] = useState<Record<string, WordGloss>>({});
+  // Same idea as `glosses` above, but for the PROMPT sentence (English/
+  // Chinese, before the learner has translated it) — see the effect below
+  // and findWordByEnglishForm/segmentChineseForClicks's own comments for
+  // why a corpus-only lookup used to leave some prompt words permanently
+  // unclickable (a real reported bug: "carefully" in a prompt sentence
+  // wasn't in Spello's corpus at all, so tapping it did nothing). Keyed by
+  // the word exactly as it appears in promptSentence/promptSentenceZh —
+  // {lemma: German hint, gloss: that word's own base form}, same shape as
+  // `glosses`, just built from the not-yet-translated sentence instead
+  // (see getSentenceGlosses' direction param).
+  const [promptGlosses, setPromptGlosses] = useState<Record<string, WordGloss>>({});
   // Which word in the corrected sentence the learner tapped (see the
   // clickable-word rendering below and WordInfoPanel) — cleared implicitly
   // on remount (this whole component is keyed by word.id) rather than
@@ -367,9 +419,13 @@ function SentenceExercise({
   // selectedGlossToken is the fallback for a correction word that isn't a
   // real corpus entry (see GlossPopup below) — mutually exclusive with
   // selectedWord, since only one detail panel shows at a time.
+  // selectedPromptGlossToken is that same fallback for the PROMPT sentence
+  // (see promptGlosses above) — mutually exclusive with selectedPromptWord
+  // the same way.
   const [selectedWord, setSelectedWord] = useState<Word | null>(null);
   const [selectedGlossToken, setSelectedGlossToken] = useState<string | null>(null);
   const [selectedPromptWord, setSelectedPromptWord] = useState<Word | null>(null);
+  const [selectedPromptGlossToken, setSelectedPromptGlossToken] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -384,6 +440,26 @@ function SentenceExercise({
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [correction]);
+
+  useEffect(() => {
+    if (promptStatus !== 'ready' || !promptSentence) return;
+    const nativeLanguage = getSettings().nativeLanguage;
+    // Whichever sentence is actually ON SCREEN — the Chinese one when
+    // that's the display language and it's actually available, English
+    // otherwise (including a Chinese learner whose prompt has no zh
+    // translation yet, which already falls back to English on screen —
+    // see the render branch below).
+    const sentenceOnScreen = nativeLanguage === 'zh' && promptSentenceZh ? promptSentenceZh : promptSentence;
+    let cancelled = false;
+    getSentenceGlosses(word.id, sentenceOnScreen, level, nativeLanguage, 'native-to-de')
+      .then(words => { if (!cancelled) setPromptGlosses(words); })
+      // Best-effort, same as the correction's own glosses effect above —
+      // a failure just means prompt words stay non-clickable beyond
+      // whatever the corpus lookup already resolves.
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promptStatus, promptSentence, promptSentenceZh]);
 
   useEffect(() => {
     if (word.exercisePrompt) return;
@@ -509,44 +585,91 @@ function SentenceExercise({
                   translation, regardless of this word's own tense/case
                   here ("reads" and "read" both just show "lesen"). English
                   goes through the same tokenize+lookup shape the corrected
-                  sentence's own clickable words already use;
-                  Chinese has no word boundaries to tokenize, so it's
-                  segmented as a whole string instead (see
-                  segmentChineseForClicks) — a pure grammar word in either
-                  language (the/a, 的/了/吗) is simply never anyone's
-                  corpus entry, so it naturally stays plain, non-clickable
-                  text without needing an explicit exclusion list. */}
+                  sentence's own clickable words already use; Chinese has
+                  no word boundaries to tokenize, so it's segmented as a
+                  whole string instead (see segmentChineseForClicks). A
+                  corpus match wins first either way; promptGlosses (an AI
+                  lookup over this exact sentence, applyGlossFallback
+                  above) fills in every OTHER content word so a prompt
+                  word being clickable never depends on it happening to
+                  already be a Spello corpus entry — confirmed real: a
+                  learner couldn't tap "carefully" in a prompt sentence at
+                  all before this, since it was never anyone's corpus
+                  word, so they just left it untranslated (see
+                  correct-sentence's own comment on catching that). A pure
+                  grammar word (the/a, 的/了/吗) still stays plain, since
+                  the AI is told to skip those the same way the corpus
+                  lookup always did. */}
               {getSettings().nativeLanguage === 'zh' && promptSentenceZh
-                ? segmentChineseForClicks(promptSentenceZh, word).map((span, i) => (
-                  span.word ? (
-                    <button
-                      key={i}
-                      type="button"
-                      // Clicking the already-selected word again hides its
-                      // hint instead of just re-showing the same panel.
-                      onClick={() => setSelectedPromptWord(prev => (prev?.id === span.word!.id ? null : span.word!))}
-                      className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
-                    >
-                      {span.text}
-                    </button>
-                  ) : <span key={i}>{span.text}</span>
-                ))
+                ? applyGlossFallback(segmentChineseForClicks(promptSentenceZh, word), promptGlosses).map((span, i) => {
+                  if (span.word) {
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        // Clicking the already-selected word again hides its
+                        // hint instead of just re-showing the same panel.
+                        onClick={() => { setSelectedPromptGlossToken(null); setSelectedPromptWord(prev => (prev?.id === span.word!.id ? null : span.word!)); }}
+                        className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                      >
+                        {span.text}
+                      </button>
+                    );
+                  }
+                  if (span.gloss) {
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => { setSelectedPromptWord(null); setSelectedPromptGlossToken(prev => (prev === span.text ? null : span.text)); }}
+                        className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                      >
+                        {span.text}
+                      </button>
+                    );
+                  }
+                  return <span key={i}>{span.text}</span>;
+                })
                 : tokenize(promptSentence).map((text, i) => {
                   const match = /[A-Za-z]/.test(text) ? findWordByEnglishForm(text, word) : undefined;
-                  return match ? (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setSelectedPromptWord(prev => (prev?.id === match.id ? null : match))}
-                      className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
-                    >
-                      {text}
-                    </button>
-                  ) : <span key={i}>{text}</span>;
+                  const gloss = !match ? promptGlosses[text] : undefined;
+                  if (match) {
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => { setSelectedPromptGlossToken(null); setSelectedPromptWord(prev => (prev?.id === match.id ? null : match)); }}
+                        className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                      >
+                        {text}
+                      </button>
+                    );
+                  }
+                  if (gloss) {
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => { setSelectedPromptWord(null); setSelectedPromptGlossToken(prev => (prev === text ? null : text)); }}
+                        className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                      >
+                        {text}
+                      </button>
+                    );
+                  }
+                  return <span key={i}>{text}</span>;
                 })}
             </div>
           </div>
           {selectedPromptWord && <WordInfoPanel key={`prompt-${selectedPromptWord.id}`} word={selectedPromptWord} />}
+          {!selectedPromptWord && selectedPromptGlossToken && promptGlosses[selectedPromptGlossToken] && (
+            <GlossPopup
+              key={`prompt-gloss-${selectedPromptGlossToken}`}
+              surfaceForm={selectedPromptGlossToken}
+              lemma={promptGlosses[selectedPromptGlossToken].lemma}
+              gloss={promptGlosses[selectedPromptGlossToken].gloss}
+            />
+          )}
           <textarea
             ref={textareaRef}
             value={input}
