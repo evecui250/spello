@@ -99,7 +99,16 @@ export function speakWord(word: Word): void {
     speakWithBrowserVoice(spokenForm(word));
   };
   audio.addEventListener('error', fallback);
-  audio.play().catch(fallback);
+  // Guards a real browser race: if stopSpeech()/a newer speakWord() call
+  // already paused and cleared `currentAudio` (e.g. the learner navigated
+  // away, or the tab was backgrounded — see the visibilitychange listener
+  // below) WHILE this play() promise was still pending, some browsers
+  // resolve that promise and start playback anyway once the tab/page is
+  // active again, ignoring the earlier pause() — the audio equivalent of
+  // the AbortError guard `fallback` above already needs on the reject
+  // side. Re-pausing here the moment the promise settles, if this is no
+  // longer the current audio, closes that gap on the resolve side too.
+  audio.play().then(() => { if (currentAudio !== audio) audio.pause(); }).catch(fallback);
 }
 
 // Cancels whatever's currently playing/queued (word clip or browser TTS
@@ -115,4 +124,22 @@ export function stopSpeech(): void {
     currentAudio = null;
   }
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+}
+
+// Covers a gap SpeechCleanup (app/layout.tsx) can't: that component only
+// calls stopSpeech() on an in-app ROUTE change, but a learner backgrounding
+// the tab/app (switching apps, locking the phone, switching browser tabs)
+// without navigating anywhere doesn't fire that at all — a real reported
+// case ("audio just started randomly while I wasn't studying"). Mobile
+// Safari/Chrome are both known to suspend an in-flight speechSynthesis
+// utterance or Audio playback while a tab is hidden and let it resume once
+// it's visible again, rather than actually stopping it — from the
+// learner's side, that reads as audio starting on its own, later, out of
+// context. Stopping proactively the moment the tab is hidden (rather than
+// waiting to see if it resumes) means there's nothing left queued to
+// resume when they come back, regardless of which page they were on.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') stopSpeech();
+  });
 }
