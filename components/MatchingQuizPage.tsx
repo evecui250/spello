@@ -38,7 +38,11 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
       setCorrectIds(prev => new Set(prev).add(selectedGerman));
       setSelectedGerman(null);
       setSelectedEnglish(null);
-      if (getSettings().autoPlayAudio) speakWord(word);
+      // No speakWord here — pickGerman already spoke this word the moment
+      // it was tapped (confirmed real: playing it a second time here, on
+      // top of that, made every correct match speak twice — once for the
+      // German tap, once again for completing the pair). One play per
+      // word per attempt is enough.
       return;
     }
     setWrongFlash({ german: selectedGerman, english: selectedEnglish });

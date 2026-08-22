@@ -87,6 +87,32 @@ def spoken_text(word):
     return f"{word['article']} {word['de']}" if word.get('article') else word['de']
 
 
+class InsufficientQuotaError(Exception):
+    """Raised the moment the account's OpenAI balance actually runs out --
+    distinct from an ordinary rate limit, which also surfaces as HTTP 429
+    but is transient/worth retrying. Without this distinction, with_retry
+    below would treat "out of money" exactly like "rate limited" and burn
+    up to 8 exponential-backoff retries PER remaining word before finally
+    giving up on each one individually -- looking like it's just slow
+    rather than telling the caller to stop immediately. Checked directly
+    against the response body's OpenAI-documented {"error": {"type":
+    "insufficient_quota"}} shape rather than inferring it from anything
+    weaker (e.g. HTTP code alone), since a real transient 429 must still
+    retry normally.
+    """
+    pass
+
+
+def _raise_if_insufficient_quota(http_error):
+    try:
+        body = json.loads(http_error.read())
+    except Exception:
+        return
+    err = body.get('error') or {}
+    if err.get('type') == 'insufficient_quota' or err.get('code') == 'insufficient_quota':
+        raise InsufficientQuotaError(err.get('message') or 'OpenAI account balance exhausted (insufficient_quota).')
+
+
 def call_tts(text):
     body = {
         'model': MODEL, 'voice': VOICE, 'input': text,
@@ -97,8 +123,13 @@ def call_tts(text):
         data=json.dumps(body).encode(),
         headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {API_KEY}'},
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            _raise_if_insufficient_quota(e)
+        raise
 
 
 def call_whisper(mp3_path):
@@ -120,8 +151,13 @@ def call_whisper(mp3_path):
         data=body,
         headers={'Content-Type': f'multipart/form-data; boundary={boundary}', 'Authorization': f'Bearer {API_KEY}'},
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read()).get('text', '').strip()
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read()).get('text', '').strip()
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            _raise_if_insufficient_quota(e)
+        raise
 
 
 def with_retry(fn, *args, max_retries=8, **kwargs):
@@ -219,6 +255,8 @@ def process_word(word, target_db):
             tmp_path = tmp.name
         try:
             transcript = with_retry(call_whisper, tmp_path)
+        except InsufficientQuotaError:
+            raise  # hard stop -- must not be swallowed as "just a flaky transcript"
         except Exception as e:
             transcript = f'<whisper error: {e}>'
         finally:
@@ -268,12 +306,26 @@ def main():
 
     start = time.time()
     done = 0
+    out_of_credit = False
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = {pool.submit(process_word, w, target_db): w for w in targets}
         for fut in as_completed(futures):
             w = futures[fut]
             try:
                 result = fut.result()
+            except InsufficientQuotaError as e:
+                # A hard stop, not a per-word failure: the account's OpenAI
+                # balance is actually exhausted, so every other in-flight/
+                # queued word would fail the exact same way. Cancel
+                # whatever hasn't started yet (already-running requests
+                # still finish naturally) and stop asking for more, rather
+                # than burning through the rest of `targets` printing the
+                # same error hundreds of times.
+                print(f'\nOUT OF OPENAI CREDIT -- stopping. ({e})', file=sys.stderr)
+                for other in futures:
+                    other.cancel()
+                out_of_credit = True
+                break
             except Exception as e:
                 print(f'{w["id"]} FAILED: {e}', file=sys.stderr)
                 manifest[w['id']] = {'ok': False, 'error': str(e)}
@@ -296,6 +348,15 @@ def main():
 
     with open(manifest_path, 'w', encoding='utf-8') as f:
         json.dump(manifest, f, ensure_ascii=False, indent=1)
+
+    if out_of_credit:
+        print(
+            f'Stopped early after {done}/{len(targets)} words (out of OpenAI credit). '
+            f'Re-run the same command once the account is topped up -- already-'
+            f'completed words are skipped automatically (see the manifest).',
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
     flagged = [wid for wid, v in manifest.items() if v.get('ok') is not True and any(w['id'] == wid for w in words)]
     print(f'Done. {len(targets) - len(flagged)}/{len(targets)} verified clean via Whisper.', file=sys.stderr)
