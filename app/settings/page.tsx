@@ -11,7 +11,6 @@ import { Level, wordsForLevel } from '../../lib/words';
 import { scheduleSync, syncNow } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 import ShareCard from '../../components/ShareCard';
-import StudyRoadmap from '../../components/StudyRoadmap';
 import BugReportButton from '../../components/BugReportButton';
 import { supabase } from '../../lib/supabase';
 
@@ -361,20 +360,6 @@ export default function SettingsPage() {
       >
         🎮 Try the new word-match game (preview)
       </Link>
-
-      {/* Static illustration of the roadmap that now sits under the
-          round card on the actual practice pages — this one doesn't
-          reflect a real day, just shows the shape of it. */}
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
-        <label className="block font-semibold text-stone-800 mb-1">Daily roadmap (preview)</label>
-        <p className="text-stone-500 text-sm mb-3">
-          Shows under the round card on the study pages now — Review,
-          Learn, then Play, so you know where you are in today's session.
-        </p>
-        <div className="bg-stone-800/90 rounded-xl">
-          <StudyRoadmap previewStage="learn" />
-        </div>
-      </div>
 
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm">
         <Link href="/terms" className="text-amber-200 hover:text-amber-100 underline">Terms of Service</Link>

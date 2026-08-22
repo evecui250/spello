@@ -131,24 +131,37 @@ function chunksEarned(mascotStage: MascotStageId | undefined, fullyMastered: boo
   return 0;
 }
 
+// Which of the 4 lifetime-milestone chunks TODAY's episode is working
+// toward, keyed off the word's mascot stage rather than which rounds that
+// stage's REVIEW_PLAN entry happens to span. Used to be `roundRange[0]`
+// (a milestone's startRound), back when every milestone had a distinct
+// startRound (1/2/3/4) so it could double as a chunk index for free. That
+// stopped being true once puppy- and short-stage reviews were eased to
+// share the same round span (2-3) — two different milestones with the
+// same startRound made roundRange[0] ambiguous. This is just
+// chunksEarned(stage, false) + 1: "the chunk right after whatever's
+// already permanently earned", which is exactly "today's target" and
+// stays correct regardless of how round spans overlap.
+function chunkForStage(mascotStage: MascotStageId | undefined): 1 | 2 | 3 | 4 {
+  return (Math.min(4, chunksEarned(mascotStage, false) + 1)) as 1 | 2 | 3 | 4;
+}
+
 // Always-4-chunk progress bar — one per lifetime milestone (Learn, 1st/
 // 2nd/3rd review), not per round-within-today's-episode like the old dot
 // row (which showed a DIFFERENT NUMBER of dots depending on the word's
 // stage — 2 for a fresh word, 1 for a medium-stage review — the exact
 // inconsistency that made it hard to tell at a glance which stage a word
-// was actually at). A milestone's own startRound doubles as its chunk
-// index by construction (Learn=[1,2], 1st review=[2,3], 2nd=[3,4], 3rd=
-// [4,4]) — that's `roundRange[0]` below, today's target chunk UNLESS it's
-// already been earned (chunksEarned already covers it — reading live
-// progress rather than inferring purely from roundRange is what makes the
-// just-answered chunk actually turn green instead of staying amber until
-// the next word loads). A wrong answer/hint never changes roundRange,
-// only where currentRound sits within it, so exactly one chunk is ever
-// "today's target" at a time — never two.
-function MilestoneBar({ roundRange, wordId }: { roundRange: [Round, Round]; wordId: string }) {
+// was actually at). `activeChunk` (see chunkForStage) is today's target
+// chunk UNLESS it's already been earned (chunksEarned already covers it —
+// reading live progress rather than inferring purely from the stage this
+// episode started at is what makes the just-answered chunk actually turn
+// green instead of staying amber until the next word loads). A wrong
+// answer/hint never changes which milestone is being worked toward, only
+// where currentRound sits within its round span, so exactly one chunk is
+// ever "today's target" at a time — never two.
+function MilestoneBar({ activeChunk, wordId }: { activeChunk: 1 | 2 | 3 | 4; wordId: string }) {
   const progress = getWordProgress(wordId);
   const earned = chunksEarned(progress.mascotStage, progress.fullyMastered);
-  const activeChunk = roundRange[0];
   return (
     <div className="flex gap-1.5">
       {([1, 2, 3, 4] as const).map(chunk => (
@@ -166,14 +179,15 @@ function MilestoneBar({ roundRange, wordId }: { roundRange: [Round, Round]; word
 }
 
 // The card header's own label — one name per chunk of the MilestoneBar
-// below it (see chunksEarned), not per individual round. Round 1 and
-// round 2 both belong to chunk 1 (Day 1) despite being visibly different
-// exercises (write a sentence, then spell it half-hinted); showing
-// "Round 1"/"Round 2" text alongside a bar that only has ONE chunk for
-// both was confusing (looked like there were more stages than the bar
-// actually has). roundRange[0] doubles as the chunk index — see
-// MilestoneBar's own comment for why.
-const CHUNK_LABELS: Record<Round, string> = {
+// below it (see chunksEarned/chunkForStage), not per individual round.
+// Round 1 and round 2 both belong to chunk 1 (Day 1) despite being
+// visibly different exercises (write a sentence, then spell it
+// half-hinted); showing "Round 1"/"Round 2" text alongside a bar that
+// only has ONE chunk for both was confusing (looked like there were more
+// stages than the bar actually has). Keyed by the same 1-4 chunk index as
+// MilestoneBar's activeChunk — see chunkForStage for why that's no longer
+// just a round number.
+const CHUNK_LABELS: Record<1 | 2 | 3 | 4, string> = {
   1: 'New',
   2: '1st review',
   3: '2nd review',
@@ -193,6 +207,12 @@ interface CardSnapshot {
   roundMode: RoundMode;
   round: Round;
   roundRange: [Round, Round];
+  // Captured alongside roundRange at episode-load time (see chunkForStage)
+  // — the header label/MilestoneBar this snapshot replays need to show
+  // whichever milestone THIS episode was actually working toward, not
+  // whatever the word's live progress says now (which may have since
+  // advanced past it).
+  activeChunk: 1 | 2 | 3 | 4;
   wordStatus: 'New' | 'Continuing' | 'Review';
   correct: boolean;
   // isDirect marks a sentence-writing-mode-OFF round (see directSentence) —
@@ -737,11 +757,19 @@ export default function DailySessionFlow() {
   // Which rounds this specific card's episode actually spans — Day-1 study
   // is always rounds 1-2 (sentence, then half-hinted spelling); a review
   // episode's range depends on the word's CURRENT mascot stage (see
-  // REVIEW_PLAN): puppy-stage reviews run 2-3, short-stage 3-4, and
-  // medium-stage is a single round (4-4, one shot at the cap). The round
-  // dots below render only this range, not a fixed 4, since most episodes
-  // never touch rounds outside it.
+  // REVIEW_PLAN): puppy-stage and short-stage reviews both run 2-3
+  // (half-hint then first-letter-hint — the 2nd review repeats the 1st's
+  // difficulty on purpose, easing the ramp), and medium-stage runs 3-4
+  // (first-letter-hint then a final no-hint round). The round dots below
+  // render only this range, not a fixed 4, since most episodes never
+  // touch rounds outside it.
   const [roundRange, setRoundRange] = useState<[Round, Round]>([1, 2]);
+  // Which of the 4 lifetime-milestone chunks this episode targets — see
+  // chunkForStage. Set alongside roundRange in loadCurrent, from the same
+  // stage read, but kept as its own piece of state rather than derived
+  // from roundRange[0] since puppy- and short-stage reviews now share a
+  // round span (see REVIEW_PLAN) and are no longer distinguishable that way.
+  const [activeChunk, setActiveChunk] = useState<1 | 2 | 3 | 4>(1);
   const [hint, setHint] = useState<boolean[]>([]);
   const [values, setValues] = useState<string[]>([]);
   const [articleValues, setArticleValues] = useState<string[]>(['', '', '']);
@@ -972,6 +1000,7 @@ export default function DailySessionFlow() {
     const round = mode === 'review' ? (reviewRoundsRef.current[w.id] ?? plan.startRound) : progress.round;
     setCurrentRound(round);
     setRoundRange(mode === 'review' ? [plan.startRound, plan.capRound] : [1, 2]);
+    setActiveChunk(mode === 'review' ? chunkForStage(stage) : 1);
     const h = generateHint(w.de, round);
     const chars = [...w.de];
     setHint(h);
@@ -1158,7 +1187,7 @@ export default function DailySessionFlow() {
     const progress = getWordProgress(word.id);
     const beforeStage = progress.mascotStage;
     setCardHistory(h => [...h, {
-      word, roundMode, round: currentRound, roundRange, wordStatus, correct, sentence: sentenceForHistory ?? null,
+      word, roundMode, round: currentRound, roundRange, activeChunk, wordStatus, correct, sentence: sentenceForHistory ?? null,
     }]);
 
     if (roundMode === 'review') {
@@ -1729,9 +1758,9 @@ export default function DailySessionFlow() {
         <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5 min-h-[30rem]">
           <div>
             <div className="text-sm font-medium text-indigo-600 mb-1">
-              {CHUNK_LABELS[snap.roundRange[0]]}
+              {CHUNK_LABELS[snap.activeChunk]}
             </div>
-            <MilestoneBar roundRange={snap.roundRange} wordId={snap.word.id} />
+            <MilestoneBar activeChunk={snap.activeChunk} wordId={snap.word.id} />
           </div>
 
           <div className="text-center">
@@ -1847,7 +1876,7 @@ export default function DailySessionFlow() {
         <div>
           <div className="flex items-center justify-between mb-1">
             <div className="text-sm font-medium text-indigo-600">
-              {CHUNK_LABELS[roundRange[0]]}
+              {CHUNK_LABELS[activeChunk]}
             </div>
             {/* A labeled switch, not a pill that just names the current
                 state — confirmed real: "Writing"/"Copy" text alone didn't
@@ -1878,7 +1907,7 @@ export default function DailySessionFlow() {
               </button>
             )}
           </div>
-          <MilestoneBar roundRange={roundRange} wordId={word.id} />
+          <MilestoneBar activeChunk={activeChunk} wordId={word.id} />
         </div>
 
         <div className="text-center">

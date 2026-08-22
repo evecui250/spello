@@ -13,9 +13,11 @@ const links = [
 export default function NavBar() {
   const pathname = usePathname();
   return (
-    // Fixed to the bottom, like a native app's tab bar, rather than a
-    // website's top nav — see app/layout.tsx for the matching bottom
-    // padding on <main> so content never renders underneath it. Active
+    // Sits at the bottom like a native app's tab bar, rather than a
+    // website's top nav — the actual `fixed` positioning lives on the
+    // shared wrapper in app/layout.tsx now (stacked with StudyRoadmap),
+    // not here. See that file for the matching bottom padding on <main>
+    // so content never renders underneath it. Active
     // state is just a lighter tint of the bar's own background (bg-
     // white/10) plus brighter text (text-amber-50, the same warm off-
     // white every page heading already uses) — no separate accent color,
@@ -23,7 +25,7 @@ export default function NavBar() {
     // pb-[env(safe-area-inset-bottom)] gives room for the home-indicator
     // area when installed standalone; a no-op everywhere else.
     <nav
-      className="fixed bottom-0 inset-x-0 z-20 bg-black/25 backdrop-blur-md border-t border-white/10"
+      className="bg-black/25 backdrop-blur-md border-t border-white/10"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <div className="max-w-2xl mx-auto flex items-stretch">

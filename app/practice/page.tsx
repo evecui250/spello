@@ -1,13 +1,16 @@
 'use client';
 
 import DailySessionFlow from '../../components/DailySessionFlow';
-import StudyRoadmap from '../../components/StudyRoadmap';
 
 export default function PracticePage() {
+  // StudyRoadmap itself now renders from app/layout.tsx (stacked with
+  // NavBar as one fixed bottom bar) — this extra bottom margin is just to
+  // keep the round card's own content (e.g. its Check button) clear of
+  // that taller combined bar, on top of <main>'s own NavBar-only
+  // allowance.
   return (
-    <div className="flex flex-col gap-3">
+    <div className="mb-14">
       <DailySessionFlow />
-      <StudyRoadmap />
     </div>
   );
 }

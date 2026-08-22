@@ -37,14 +37,24 @@ export const OFFSET_AFTER_STAGE: Record<MascotStageId, number | null> = {
 // time), the round it must pass to complete that milestone, and the stage
 // it advances to on a pass. Only the 3 non-terminal stages ever enter a
 // review (long-crowned is retired).
+// Round -> hint level: 2 = half-word hint, 3 = first-letter-only hint,
+// 4 = no hint (see generateHint in lib/practice.ts). Deliberately eased
+// from an earlier version that ramped straight to a no-hint round by the
+// 2nd review and made the 3rd review nothing but a single no-hint check —
+// that jumped to fully-unaided recall too fast. Now the 1st and 2nd
+// reviews repeat the same gentler half-hint -> first-letter-hint pair
+// (one extra rep at that level instead of escalating), and the 3rd review
+// eases into the final no-hint check via a first-letter-hint round first,
+// rather than that being the only thing standing between "Strong" and
+// "Mastered".
 export const REVIEW_PLAN: Record<'puppy' | 'short' | 'medium', {
   nextStage: MascotStageId;
   startRound: Round;
   capRound: Round;
 }> = {
   puppy:  { nextStage: 'short',        startRound: 2, capRound: 3 },
-  short:  { nextStage: 'medium',       startRound: 3, capRound: 4 },
-  medium: { nextStage: 'long-crowned', startRound: 4, capRound: 4 },
+  short:  { nextStage: 'medium',       startRound: 2, capRound: 3 },
+  medium: { nextStage: 'long-crowned', startRound: 3, capRound: 4 },
 };
 
 // The round a word sits at once it reaches a given stage — used to make

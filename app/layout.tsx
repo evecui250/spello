@@ -2,6 +2,7 @@
 
 import '../styles/globals.css';
 import NavBar from '../components/NavBar';
+import StudyRoadmap from '../components/StudyRoadmap';
 import AppBackground from '../components/AppBackground';
 import SyncGate from '../components/SyncGate';
 import ChunkErrorRecovery from '../components/ChunkErrorRecovery';
@@ -44,10 +45,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <PwaRegister />
         <UsagePing />
         <AppBackground />
-        <NavBar />
-        {/* Bottom padding clears the fixed bottom NavBar (~72px content +
-            its own safe-area inset) so the last bit of every page's
-            content is never rendered underneath it. */}
+        {/* Stacked in one shared fixed-to-bottom column, not two
+            independently-fixed elements — StudyRoadmap renders nothing
+            outside the practice page, so this is just NavBar alone
+            everywhere else, but on the practice page the roadmap sits
+            directly above it as one combined bottom bar instead of either
+            overlapping the other or needing its own guessed-at height. */}
+        <div className="fixed bottom-0 inset-x-0 z-20 flex flex-col">
+          <StudyRoadmap />
+          <NavBar />
+        </div>
+        {/* Bottom padding clears the fixed bottom bar(s) above (~72px
+            NavBar + its own safe-area inset; see practice/page.tsx for the
+            extra allowance it adds on top for StudyRoadmap) so the last
+            bit of every page's content is never rendered underneath it. */}
         <main
           className="max-w-2xl mx-auto px-4 py-6"
           style={{ paddingBottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}
