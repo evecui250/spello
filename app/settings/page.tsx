@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getSettings, saveSettings, switchToLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
 import { Level, wordsForLevel, LEVEL_SOURCE } from '../../lib/words';
@@ -40,6 +40,7 @@ export default function SettingsPage() {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [showPaceInfo, setShowPaceInfo] = useState(false);
   const [theme, setTheme] = useState<Theme>('forest');
+  const [fontScale, setFontScale] = useState<FontScale>('default');
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const applySettings = (s: Settings) => {
@@ -56,6 +57,12 @@ export default function SettingsPage() {
 
   useEffect(loadFromStorage, []);
   useEffect(() => setTheme(getTheme()), []);
+  useEffect(() => setFontScale(getFontScale()), []);
+
+  const handleFontScaleChange = (s: FontScale) => {
+    setFontScale(s);
+    saveFontScale(s);
+  };
 
   const handleThemeChange = (t: Theme) => {
     setTheme(t);
@@ -184,6 +191,33 @@ export default function SettingsPage() {
                 <span className={`text-[11px] font-medium capitalize ${isSelected ? 'text-indigo-700' : 'text-stone-500'}`}>
                   {t}
                 </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6">
+        <label className="block font-semibold text-stone-800 mb-1">Font size</label>
+        <p className="text-stone-500 text-sm mb-3">Changes the text size everywhere in the app.</p>
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            { value: 'small', label: 'Small', sample: 'text-sm' },
+            { value: 'default', label: 'Default', sample: 'text-base' },
+            { value: 'large', label: 'Large', sample: 'text-lg' },
+          ] as { value: FontScale; label: string; sample: string }[]).map(opt => {
+            const isSelected = fontScale === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => handleFontScaleChange(opt.value)}
+                className={`flex flex-col items-center gap-1 rounded-xl py-3 border-2 transition-colors ${
+                  isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-stone-200'
+                }`}
+              >
+                <span className={`font-bold text-stone-800 ${opt.sample}`}>Aa</span>
+                <span className={`text-xs font-medium ${isSelected ? 'text-indigo-700' : 'text-stone-500'}`}>{opt.label}</span>
               </button>
             );
           })}

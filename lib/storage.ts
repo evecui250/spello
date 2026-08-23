@@ -707,6 +707,31 @@ export function saveTheme(t: Theme): void {
   window.dispatchEvent(new Event(THEME_CHANGED_EVENT));
 }
 
+// --- Font size (same per-device, un-synced, not-level-namespaced shape as
+// Theme above — a reading preference has nothing to do with which
+// vocabulary level is active, and there's no expectation two devices on
+// the same account share it). Applied as a root <html> font-size
+// percentage (see FontScaleEffect) rather than per-component classes —
+// nearly all of the app's text already goes through Tailwind's rem-based
+// text-* utilities, so scaling the root scales the whole app in one
+// place. ---
+export type FontScale = 'small' | 'default' | 'large';
+const FONT_SCALE_KEY = 'wb2_font_scale';
+export const FONT_SCALE_CHANGED_EVENT = 'wb2-font-scale-changed';
+const VALID_FONT_SCALES: FontScale[] = ['small', 'default', 'large'];
+
+export function getFontScale(): FontScale {
+  if (typeof window === 'undefined') return 'default';
+  const raw = localStorage.getItem(FONT_SCALE_KEY);
+  return (VALID_FONT_SCALES as string[]).includes(raw ?? '') ? (raw as FontScale) : 'default';
+}
+
+export function saveFontScale(scale: FontScale): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(FONT_SCALE_KEY, scale);
+  window.dispatchEvent(new Event(FONT_SCALE_CHANGED_EVENT));
+}
+
 // --- Settings ---
 
 export function getSettings(): Settings {

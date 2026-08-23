@@ -9,6 +9,7 @@ import ChunkErrorRecovery from '../components/ChunkErrorRecovery';
 import SpeechCleanup from '../components/SpeechCleanup';
 import PwaRegister from '../components/PwaRegister';
 import UsagePing from '../components/UsagePing';
+import FontScaleEffect from '../components/FontScaleEffect';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
@@ -44,6 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <SpeechCleanup />
         <PwaRegister />
         <UsagePing />
+        <FontScaleEffect />
         <AppBackground />
         {/* Stacked in one shared fixed-to-bottom column, not two
             independently-fixed elements — StudyRoadmap renders nothing

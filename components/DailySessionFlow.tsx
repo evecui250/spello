@@ -1250,6 +1250,54 @@ export default function DailySessionFlow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useDirectSentence, word, settings]);
 
+  // Backfills a missing reference sentence for a round 2+/review card whose
+  // progress simply predates this feature (or whose real round-1 pass hit
+  // sentenceWritingMode === false while an earlier AI call had already
+  // failed this session, so useDirectSentence above never got to run for
+  // it) — without this, such a word would show no context at all, forever,
+  // and keep auto-advancing on a correct answer unlike every other round
+  // 2+ card. Same two exceptions as everywhere else this session:
+  // isBootstrapCopyWord's ~220 A1 words never get an AI sentence at any
+  // round, and a session where aiUnreachable already fired doesn't get a
+  // second AI call to fail the same way. Same generateSentence ->
+  // correctSentence (no user translation) pipeline as useDirectSentence,
+  // just triggered later in a word's life instead of only at round 1, and
+  // persisted onto the word's progress so it sticks for every future
+  // review too, not just this card.
+  const backfillingForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!word || !settings || currentRound <= 1) return;
+    if (exampleSentence || isBootstrapCopyWord(word) || aiUnreachable) return;
+    if (backfillingForRef.current === word.id) return;
+    backfillingForRef.current = word.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        let englishPrompt = word.exercisePrompt;
+        let englishPromptZh = word.exercisePromptZh;
+        if (!englishPrompt) {
+          const generated = await generateSentence(word.id, word.de, word.en, settings.level, getKnownVocabulary(settings.level), settings.nativeLanguage);
+          englishPrompt = generated.sentence;
+          englishPromptZh = generated.sentenceZh;
+        }
+        const result = await correctSentence(word.id, word.de, settings.level, englishPrompt);
+        if (cancelled) return;
+        const sentence = { sentence: result.sentence, wordForm: result.wordForm, englishPrompt, englishPromptZh };
+        setExampleSentence(sentence);
+        saveWordProgress({ ...getWordProgress(word.id), exampleSentence: sentence });
+        scheduleSync();
+      } catch (e) {
+        if (!cancelled && e instanceof AIUnreachableError) handleAiUnreachable();
+        // Any other failure just leaves this card without a sentence —
+        // the quick auto-advance timer below is still correct for it.
+      } finally {
+        if (backfillingForRef.current === word.id) backfillingForRef.current = null;
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [word, currentRound, exampleSentence, settings, aiUnreachable]);
+
   const loadCurrent = (w: Word, mode: RoundMode) => {
     const progress = getWordProgress(w.id);
     const stage = (progress.mascotStage ?? 'puppy') as 'puppy' | 'short' | 'medium';
@@ -1833,7 +1881,11 @@ export default function DailySessionFlow() {
       window.removeEventListener('keydown', onKeyDown);
       if (timer) clearTimeout(timer);
     };
-  }, [feedback, isRoundScreen]);
+    // exampleSentence is included so a card whose sentence backfills in
+    // (see the effect above) DURING the correct-answer window still
+    // cancels/re-evaluates the auto-advance timer instead of firing on
+    // stale info from before the sentence arrived.
+  }, [feedback, isRoundScreen, exampleSentence]);
 
   const articleComplete = !needsArticle || articleValues.every(v => !!v);
   const wordComplete = hint.length > 0 && hint.every((h, i) => !h || !!values[i]) && articleComplete;

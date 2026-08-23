@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { WORDS, glossFor, Word } from '../lib/words';
 import { getMergedProgressAcrossLevels, getSettings, getTheme, Theme, THEME_CHANGED_EVENT, getDailyWordLog, today, WordProgress } from '../lib/storage';
@@ -322,49 +322,49 @@ export default function WordMatchGame({ source, onQuit }: Props) {
             />
           </div>
 
+          {/* Interleaved single grid, not two independent columns — see
+              MatchingQuizPage's identical layout for why: CSS Grid sizes
+              each row to its tallest cell across both columns, so a
+              two-line German word (more likely at a larger font size)
+              doesn't drag its own column out of alignment with the other. */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-2">
-              {roundWords.map(w => {
-                const isMatched = matchedIds.has(w.id);
-                const isSelected = selectedGerman === w.id;
-                const isWrong = wrongFlash?.german === w.id;
-                let cls = 'border-2 border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400';
-                if (isMatched) cls = 'border-2 border-green-400 bg-green-100 text-green-700 opacity-0 scale-90 pointer-events-none';
-                else if (isWrong) cls = 'border-2 border-red-400 bg-red-100 text-red-700';
-                else if (isSelected) cls = 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700';
-                return (
+            {roundWords.map((w, i) => {
+              const isMatched = matchedIds.has(w.id);
+              const isSelected = selectedGerman === w.id;
+              const isWrong = wrongFlash?.german === w.id;
+              let germanCls = 'border-2 border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400';
+              if (isMatched) germanCls = 'border-2 border-green-400 bg-green-100 text-green-700 opacity-0 scale-90 pointer-events-none';
+              else if (isWrong) germanCls = 'border-2 border-red-400 bg-red-100 text-red-700';
+              else if (isSelected) germanCls = 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700';
+
+              const text = shuffledEn[i];
+              const enIsMatched = roundWords.some(rw => matchedIds.has(rw.id) && glossFor(rw, nativeLanguage) === text);
+              const enIsSelected = selectedEnglish === text;
+              const enIsWrong = wrongFlash?.english === text;
+              let enCls = 'border-2 border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400';
+              if (enIsMatched) enCls = 'border-2 border-green-400 bg-green-100 text-green-700 opacity-0 scale-90 pointer-events-none';
+              else if (enIsWrong) enCls = 'border-2 border-red-400 bg-red-100 text-red-700';
+              else if (enIsSelected) enCls = 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700';
+
+              return (
+                <Fragment key={w.id}>
                   <button
-                    key={w.id}
                     onClick={() => pickGerman(w.id)}
                     disabled={isMatched || !!wrongFlash}
-                    className={`px-3 py-2.5 rounded-xl font-semibold text-sm text-left transition-all duration-300 ${cls}`}
+                    className={`px-3 py-2.5 rounded-xl font-semibold text-sm text-left transition-all duration-300 ${germanCls}`}
                   >
                     {w.article ? `${w.article} ` : ''}{w.de}
                   </button>
-                );
-              })}
-            </div>
-            <div className="flex flex-col gap-2">
-              {shuffledEn.map(text => {
-                const isMatched = roundWords.some(w => matchedIds.has(w.id) && glossFor(w, nativeLanguage) === text);
-                const isSelected = selectedEnglish === text;
-                const isWrong = wrongFlash?.english === text;
-                let cls = 'border-2 border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400';
-                if (isMatched) cls = 'border-2 border-green-400 bg-green-100 text-green-700 opacity-0 scale-90 pointer-events-none';
-                else if (isWrong) cls = 'border-2 border-red-400 bg-red-100 text-red-700';
-                else if (isSelected) cls = 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700';
-                return (
                   <button
-                    key={text}
                     onClick={() => pickEnglish(text)}
-                    disabled={isMatched || !!wrongFlash}
-                    className={`px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-all duration-300 ${cls}`}
+                    disabled={enIsMatched || !!wrongFlash}
+                    className={`px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-all duration-300 ${enCls}`}
                   >
                     {text}
                   </button>
-                );
-              })}
-            </div>
+                </Fragment>
+              );
+            })}
           </div>
         </div>
       )}
