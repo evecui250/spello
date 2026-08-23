@@ -732,6 +732,31 @@ export function saveFontScale(scale: FontScale): void {
   window.dispatchEvent(new Event(FONT_SCALE_CHANGED_EVENT));
 }
 
+// --- Correct-answer chime (same per-device, un-synced, not-level-
+// namespaced shape as Theme/FontScale above) — which of lib/sound.ts's
+// CHIME_OPTIONS plays on a correct answer. No CHANGED_EVENT of its own
+// (unlike Theme/FontScale): nothing needs to react live to a change —
+// playCorrectChime() just reads this fresh, by value, every time it's
+// about to play. ---
+export type SoundChoice = 'soft-two-note' | 'triad-bloom' | 'rising-glow' | 'double-ding' | 'soft-tap';
+const SOUND_CHOICE_KEY = 'wb2_sound_choice';
+const VALID_SOUND_CHOICES: SoundChoice[] = ['soft-two-note', 'triad-bloom', 'rising-glow', 'double-ding', 'soft-tap'];
+// triad-bloom was the only option before this became a Settings picker —
+// stays the default so anyone who never opens the new picker hears
+// exactly what they already do today.
+const DEFAULT_SOUND_CHOICE: SoundChoice = 'triad-bloom';
+
+export function getSoundChoice(): SoundChoice {
+  if (typeof window === 'undefined') return DEFAULT_SOUND_CHOICE;
+  const raw = localStorage.getItem(SOUND_CHOICE_KEY);
+  return (VALID_SOUND_CHOICES as string[]).includes(raw ?? '') ? (raw as SoundChoice) : DEFAULT_SOUND_CHOICE;
+}
+
+export function saveSoundChoice(choice: SoundChoice): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(SOUND_CHOICE_KEY, choice);
+}
+
 // --- Settings ---
 
 export function getSettings(): Settings {

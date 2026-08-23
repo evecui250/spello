@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { TrendChart, LevelBars, DonutChart } from '../../components/AdminCharts';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { Theme } from '../../lib/storage';
+import SettingsRedesignPreview from '../../components/SettingsRedesignPreview';
 
 // Each theme's own mid-dark stageColors shade, reused as its donut-chart
 // color — a real accent per theme (rather than the generic index-based
@@ -159,6 +160,8 @@ export default function AdminPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Admin</h1>
+
+      <SettingsRedesignPreview />
 
       {/* Temporary/diagnostic — a query failing silently used to just
           read as a wrong-looking "0" with no indication anything broke

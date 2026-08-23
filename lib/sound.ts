@@ -1,13 +1,15 @@
 'use client';
 
-// A short, synthesized "correct!" chime — plain Web Audio oscillators, no
+import { getSoundChoice, SoundChoice } from './storage';
+
+// Short, synthesized "correct!" chimes — plain Web Audio oscillators, no
 // external audio file or API (no asset to host/license, identical tone on
-// every device, nothing to wait on). Picked by the owner as their
-// favorite ("Triad Bloom") out of 10 candidates previewed on the admin
-// page; played from every real "the learner got this right" moment across
-// the app — see call sites in DailySessionFlow (spelling check, MCQ
-// answer, a perfect sentence correction) and MatchingQuizPage (finishing
-// a matching round).
+// every device, nothing to wait on). These 5 are the owner's favorites out
+// of an original 10 candidates previewed on the admin page, now selectable
+// in Settings (see SOUND_KEY). Played from every real "the learner got
+// this right" moment across the app — see call sites in DailySessionFlow
+// (spelling check, MCQ answer, a perfect sentence correction) and
+// MatchingQuizPage (finishing a matching round).
 
 let sharedCtx: AudioContext | null = null;
 function getCtx(): AudioContext | null {
@@ -21,11 +23,13 @@ function getCtx(): AudioContext | null {
 
 function tone(
   ctx: AudioContext, dest: AudioNode, freq: number, start: number, dur: number,
-  gain: number, attack = 0.006,
+  opts: { type?: OscillatorType; gain?: number; attack?: number; endFreq?: number } = {},
 ) {
+  const { type = 'sine', gain = 0.3, attack = 0.006, endFreq } = opts;
   const osc = ctx.createOscillator();
-  osc.type = 'sine';
+  osc.type = type;
   osc.frequency.setValueAtTime(freq, start);
+  if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, start + dur);
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, start);
   g.gain.linearRampToValueAtTime(gain, start + attack);
@@ -36,22 +40,90 @@ function tone(
   osc.stop(start + dur + 0.05);
 }
 
-const C5 = 523.25, E5 = 659.25, G5 = 784.0;
+function warmDestination(ctx: AudioContext, freq = 5000): AudioNode {
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = freq;
+  filter.connect(ctx.destination);
+  return filter;
+}
 
-export function playCorrectChime(): void {
+const G4 = 392.0, A4 = 440.0, C5 = 523.25, E5 = 659.25, G5 = 784.0, C6 = 1046.5;
+
+export interface ChimeOption {
+  id: SoundChoice;
+  name: string;
+  play: (ctx: AudioContext) => void;
+}
+
+export const CHIME_OPTIONS: ChimeOption[] = [
+  {
+    id: 'soft-two-note',
+    name: 'Soft Two-Note',
+    play(ctx) {
+      const d = warmDestination(ctx, 4500);
+      const t = ctx.currentTime;
+      tone(ctx, d, G4, t, 0.24, { gain: 0.3 });
+      tone(ctx, d, C5, t + 0.1, 0.3, { gain: 0.32 });
+    },
+  },
+  {
+    id: 'triad-bloom',
+    name: 'Triad Bloom',
+    play(ctx) {
+      const d = warmDestination(ctx, 5000);
+      const t = ctx.currentTime;
+      tone(ctx, d, C5, t, 0.42, { gain: 0.2 });
+      tone(ctx, d, E5, t + 0.015, 0.42, { gain: 0.2 });
+      tone(ctx, d, G5, t + 0.03, 0.48, { gain: 0.22 });
+    },
+  },
+  {
+    id: 'rising-glow',
+    name: 'Rising Glow',
+    play(ctx) {
+      const d = warmDestination(ctx, 5000);
+      const t = ctx.currentTime;
+      tone(ctx, d, G4, t, 0.12, { gain: 0.28 });
+      tone(ctx, d, A4, t + 0.07, 0.12, { gain: 0.28 });
+      tone(ctx, d, C5, t + 0.14, 0.32, { gain: 0.32 });
+    },
+  },
+  {
+    id: 'double-ding',
+    name: 'Double Ding',
+    play(ctx) {
+      const d = warmDestination(ctx, 5500);
+      const t = ctx.currentTime;
+      tone(ctx, d, G5, t, 0.24, { gain: 0.3 });
+      tone(ctx, d, C6, t + 0.11, 0.32, { gain: 0.32 });
+    },
+  },
+  {
+    id: 'soft-tap',
+    name: 'Soft Tap',
+    play(ctx) {
+      const tickDest = warmDestination(ctx, 6000);
+      const bodyDest = warmDestination(ctx, 4000);
+      const t = ctx.currentTime;
+      tone(ctx, tickDest, E5, t, 0.06, { type: 'triangle', gain: 0.16 });
+      tone(ctx, bodyDest, C5, t + 0.04, 0.36, { gain: 0.3 });
+    },
+  },
+];
+
+export function playChime(id: SoundChoice): void {
   const ctx = getCtx();
   if (!ctx) return;
+  const option = CHIME_OPTIONS.find(o => o.id === id) ?? CHIME_OPTIONS[1];
   try {
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 5000;
-    filter.connect(ctx.destination);
-    const t = ctx.currentTime;
-    tone(ctx, filter, C5, t, 0.42, 0.2);
-    tone(ctx, filter, E5, t + 0.015, 0.42, 0.2);
-    tone(ctx, filter, G5, t + 0.03, 0.48, 0.22);
+    option.play(ctx);
   } catch {
     // Best-effort — a sound glitch should never break the actual exercise
     // flow it's celebrating.
   }
+}
+
+export function playCorrectChime(): void {
+  playChime(getSoundChoice());
 }

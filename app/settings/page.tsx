@@ -12,6 +12,7 @@ import { scheduleSync, syncNow } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 import ShareCard from '../../components/ShareCard';
 import BugReportButton from '../../components/BugReportButton';
+import SoundPicker from '../../components/SoundPicker';
 import { supabase } from '../../lib/supabase';
 
 // Purely cosmetic — just decides whether to show the "Admin" link at all.
@@ -222,6 +223,12 @@ export default function SettingsPage() {
             );
           })}
         </div>
+      </div>
+
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6">
+        <label className="block font-semibold text-stone-800 mb-1">Correct-answer sound</label>
+        <p className="text-stone-500 text-sm mb-3">Plays when you spell, match, or translate a word correctly. Tap one to hear it.</p>
+        <SoundPicker />
       </div>
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-6">
