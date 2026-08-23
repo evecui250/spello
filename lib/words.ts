@@ -21,10 +21,10 @@ export const LEVEL_ORDER: Level[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 // covering more than what's actually selectable), so there's nothing
 // truthful to credit them with.
 export const LEVEL_SOURCE: Partial<Record<Level, string>> = {
-  A1: 'Wordlist: Goethe-Institut (Deutsch-Test für Zuwanderer)',
-  A2: 'Wordlist: Goethe-Institut (Deutsch-Test für Zuwanderer)',
-  B1: 'Wordlist: Goethe-Institut (Deutsch-Test für Zuwanderer)',
-  B2: 'Wordlist: Hueber, Akademie Deutsch (Band 4) — a coursebook selection, not a comprehensive official list',
+  A1: 'Wordlist: Goethe-Institut',
+  A2: 'Wordlist: Goethe-Institut',
+  B1: 'Wordlist: Goethe-Institut',
+  B2: 'Wordlist: Hueber, Akademie Deutsch',
 };
 
 export interface Word {
