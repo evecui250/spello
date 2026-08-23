@@ -1,6 +1,7 @@
 'use client';
 
 import { Word } from './words';
+import { supabase } from './supabase';
 
 // Nouns are spoken with their article (e.g. "der Tisch") so the learner
 // hears the gender along with the word, not just the bare noun.
@@ -28,7 +29,15 @@ function pickGermanVoice(): SpeechSynthesisVoice | null {
   const voices = window.speechSynthesis.getVoices();
   if (!voices.length) return null; // not loaded yet — try again on the next call
   const german = voices.filter(v => v.lang?.toLowerCase().startsWith('de'));
-  const best = german.find(v => v.lang.toLowerCase() === 'de-de') ?? german[0] ?? null;
+  // A device with literally no German voice installed at all is the one
+  // case iOS's own "falls back to the device's default voice" behavior
+  // (see this function's own comment) doesn't reliably cover on every
+  // platform — leaving utterance.voice unset then relies entirely on
+  // whichever browser/OS combination is running to pick SOMETHING for
+  // an unmatched `lang`, and not every one of them does. Explicitly
+  // falling back to ANY installed voice (wrong accent, but audible)
+  // removes that reliance outright instead of risking total silence.
+  const best = german.find(v => v.lang.toLowerCase() === 'de-de') ?? german[0] ?? voices[0] ?? null;
   cachedGermanVoice = best;
   return best;
 }
@@ -41,11 +50,31 @@ if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
   });
 }
 
+// Fires at most once per page load — a real "no sound at all" report came
+// in that this code couldn't reproduce locally (speak()/onstart both fire
+// cleanly in every environment tested), so rather than guess again blind,
+// this reports the actual browser-level failure (or confirms there wasn't
+// one) the next time it happens on a real device, same auto-diagnostic
+// pattern as handleAiUnreachable's own bug_reports insert elsewhere.
+let ttsErrorReported = false;
+function reportTtsError(detail: string): void {
+  if (ttsErrorReported) return;
+  ttsErrorReported = true;
+  supabase.from('bug_reports').insert({
+    user_id: null,
+    email: null,
+    message: `Auto-detected: speechSynthesis error while speaking a sentence/word (${detail}).`,
+    page_path: window.location.pathname,
+    user_agent: navigator.userAgent,
+  }).then(() => {}, () => {});
+}
+
 function speakWithBrowserVoice(text: string): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'de-DE';
   utterance.rate = 0.9;
+  utterance.onerror = (e) => reportTtsError(e.error);
   // See WORD_AUDIO_VOLUME below — on-device testing found the on-device
   // browser voice used for sentences was actually the LOUDER side of the
   // two, not the pre-recorded word clips, so this pulls sentences down to
@@ -64,6 +93,17 @@ function speakWithBrowserVoice(text: string): void {
   if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
     window.speechSynthesis.cancel();
   }
+  // Covers the failure mode an onerror handler alone can't: some
+  // browser/OS combinations just never start speaking at all, with no
+  // error event of any kind — the exact "no sound, no error" shape of
+  // the real report this was added for. If onstart hasn't fired by the
+  // time this utterance should already be well underway, that itself IS
+  // the failure worth reporting.
+  let started = false;
+  utterance.onstart = () => { started = true; };
+  setTimeout(() => {
+    if (!started) reportTtsError('never started');
+  }, 2000);
   window.speechSynthesis.speak(utterance);
 }
 

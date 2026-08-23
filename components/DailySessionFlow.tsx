@@ -1123,7 +1123,13 @@ function ReferenceSentence({ example, word, masked = false }: {
             {parts.after}
           </>
         ) : example.sentence}
-        {' '}
+        {/* A regular breakable space here let the button wrap onto its
+            own line right after the target word got filled in (its real
+            length pushed the line width past the sentence's own, unlike
+            the fixed-width "____" blank before Check) — a non-breaking
+            space keeps the icon glued to the sentence's last word so it
+            only ever wraps together with it, never dangling alone. */}
+        {' '}
         <TextSpeakerButton text={example.sentence} className="text-indigo-400 hover:text-indigo-600 transition-colors align-middle not-italic" />
       </div>
       {translation && (
@@ -1276,6 +1282,11 @@ export default function DailySessionFlow() {
   const letterRowRef = useRef<LetterInputRowHandle | null>(null);
   const articleRowRef = useRef<LetterInputRowHandle | null>(null);
   const handleNextRef = useRef<() => void>(() => {});
+  // The chime-then-word delay in submitResult, below — tracked so a fast
+  // learner advancing to the next card before it fires doesn't leave it
+  // to go off late, over whatever's now on screen (see loadCurrent's own
+  // cancel of this).
+  const pendingWordAudioTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const roundMode: RoundMode = session?.phase === 'review-rounds' ? 'review' : 'study';
   const word = queue[0] ?? null;
@@ -1450,6 +1461,14 @@ export default function DailySessionFlow() {
   }, [word, currentRound, exampleSentence, settings, aiUnreachable]);
 
   const loadCurrent = (w: Word, mode: RoundMode) => {
+    // A still-pending "speak the word 550ms after the chime" call from the
+    // PREVIOUS card (see submitResult) must not go off now, over whatever
+    // this new card turns out to be — a real candidate for "I only hear
+    // the chime, not the word" on a fast advance that outraces the delay
+    // (the AbortError-guarded speakWord itself already protects against
+    // an even later stray call, but this closes the gap for the timer
+    // never even getting that far).
+    clearTimeout(pendingWordAudioTimer.current);
     const progress = getWordProgress(w.id);
     const stage = (progress.mascotStage ?? 'puppy') as 'puppy' | 'short' | 'medium';
     const plan = REVIEW_PLAN[stage];
@@ -1728,7 +1747,8 @@ export default function DailySessionFlow() {
     };
     if (correct) {
       playCorrectChime();
-      setTimeout(playWord, 550);
+      clearTimeout(pendingWordAudioTimer.current);
+      pendingWordAudioTimer.current = setTimeout(playWord, 550);
     } else {
       playWord();
     }
@@ -2039,26 +2059,19 @@ export default function DailySessionFlow() {
       if (e.key === 'Enter' && Date.now() - attachedAt > 300) handleNextRef.current();
     };
     window.addEventListener('keydown', onKeyDown);
-    // Suppressed for the round-1 sentence exercise, and now equally for
-    // any round 2+/review card showing its own context sentence (see the
-    // currentRound > 1 block below) — both need a real moment to actually
-    // read, not a fixed 1.5s flash timed for a bare "✓ Correct!" banner.
-    // Confirmed real: 1.5s wasn't enough to even start reading a sentence
-    // that had just appeared, let alone its translation and grammar info
-    // too. A word with no saved sentence yet still gets the quick
-    // auto-advance, same as before, since there's nothing extra to read.
-    const isSentenceRoundDone = currentRound === 1 && roundMode === 'study' && sentenceResult !== null;
-    const hasContextToRead = currentRound > 1 && !!exampleSentence;
-    const timer = feedback === true && !isSentenceRoundDone && !hasContextToRead ? setTimeout(() => handleNextRef.current(), 1500) : undefined;
+    // No auto-advance timer any more, on ANY round (removed entirely —
+    // confirmed real, repeatedly: it kept resurfacing in different
+    // corners no single condition anticipated, like a word demoted back
+    // to round-1 copy mode via Hint, which fell through every existing
+    // suppression check since it uses neither the sentence exercise nor
+    // has a context sentence of its own). Advancing after a correct
+    // answer is always a deliberate action now — the visible Next button
+    // every round-ladder screen already shows once feedback lands, or
+    // this same Enter shortcut.
     return () => {
       window.removeEventListener('keydown', onKeyDown);
-      if (timer) clearTimeout(timer);
     };
-    // exampleSentence is included so a card whose sentence backfills in
-    // (see the effect above) DURING the correct-answer window still
-    // cancels/re-evaluates the auto-advance timer instead of firing on
-    // stale info from before the sentence arrived.
-  }, [feedback, isRoundScreen, exampleSentence]);
+  }, [feedback, isRoundScreen]);
 
   const articleComplete = !needsArticle || articleValues.every(v => !!v);
   const wordComplete = hint.length > 0 && hint.every((h, i) => !h || !!values[i]) && articleComplete;
