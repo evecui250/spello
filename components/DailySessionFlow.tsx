@@ -35,6 +35,7 @@ import { speakWord, speakText, stopSpeech } from '../lib/speech';
 import { imageUrlForWord } from '../lib/wordImage';
 import { WORDS_WITH_IMAGES } from '../lib/wordImageManifest';
 import { scheduleSync } from '../lib/sync';
+import { playCorrectChime } from '../lib/sound';
 import { correctSentence, generateSentence, explainCorrection, getSentenceGlosses, WordGloss, DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
 import { supabase } from '../lib/supabase';
 
@@ -62,6 +63,119 @@ function splitOnWordForm(sentence: string, wordForm: string): { before: string; 
 // over each of word.zh's own comma/／-separated senses instead.
 // Best-effort: returns null (plain, unbolded text) rather than risk a
 // wrong guess when nothing lines up cleanly.
+// Common irregular English forms that no suffix rule can derive (went isn't
+// "go" with anything stripped off it) — the biggest real source of missed
+// bolding, since a natural AI-written sentence uses whatever tense/form
+// actually fits, not the bare dictionary form. Not exhaustive (this is
+// still a best-effort client-side guess, not something the AI itself
+// tagged) — covers the common irregular verbs/nouns/comparatives a B1/B2
+// sentence is likely to reach for.
+const IRREGULAR_EN_FORMS: Record<string, string> = {
+  am: 'be', is: 'be', are: 'be', was: 'be', were: 'be', been: 'be', being: 'be',
+  has: 'have', had: 'have', having: 'have',
+  does: 'do', did: 'do', done: 'do',
+  went: 'go', gone: 'go', goes: 'go',
+  ate: 'eat', eaten: 'eat',
+  bought: 'buy',
+  saw: 'see', seen: 'see',
+  took: 'take', taken: 'take',
+  made: 'make',
+  gave: 'give', given: 'give',
+  got: 'get', gotten: 'get',
+  came: 'come',
+  found: 'find',
+  thought: 'think',
+  knew: 'know', known: 'know',
+  told: 'tell',
+  became: 'become',
+  began: 'begin', begun: 'begin',
+  broke: 'break', broken: 'break',
+  brought: 'bring',
+  built: 'build',
+  chose: 'choose', chosen: 'choose',
+  drank: 'drink', drunk: 'drink',
+  drove: 'drive', driven: 'drive',
+  fell: 'fall', fallen: 'fall',
+  felt: 'feel',
+  flew: 'fly', flown: 'fly',
+  forgot: 'forget', forgotten: 'forget',
+  heard: 'hear',
+  held: 'hold',
+  kept: 'keep',
+  left: 'leave',
+  lost: 'lose',
+  met: 'meet',
+  paid: 'pay',
+  ran: 'run',
+  said: 'say',
+  sold: 'sell',
+  sent: 'send',
+  sat: 'sit',
+  spoke: 'speak', spoken: 'speak',
+  spent: 'spend',
+  stood: 'stand',
+  taught: 'teach',
+  understood: 'understand',
+  wore: 'wear', worn: 'wear',
+  wrote: 'write', written: 'write',
+  won: 'win',
+  slept: 'sleep',
+  sang: 'sing', sung: 'sing',
+  rode: 'ride', ridden: 'ride',
+  rose: 'rise', risen: 'rise',
+  threw: 'throw', thrown: 'throw',
+  grew: 'grow', grown: 'grow',
+  swam: 'swim', swum: 'swim',
+  shook: 'shake', shaken: 'shake',
+  stole: 'steal', stolen: 'steal',
+  froze: 'freeze', frozen: 'freeze',
+  hid: 'hide', hidden: 'hide',
+  meant: 'mean',
+  dealt: 'deal',
+  swept: 'sweep',
+  kneeled: 'kneel', knelt: 'kneel',
+  bent: 'bend',
+  lent: 'lend',
+  children: 'child', men: 'man', women: 'woman', people: 'person',
+  feet: 'foot', teeth: 'tooth', mice: 'mouse', geese: 'goose',
+  better: 'good', best: 'good', worse: 'bad', worst: 'bad',
+  further: 'far', furthest: 'far', farther: 'far', farthest: 'far',
+  less: 'little', least: 'little', more: 'much', most: 'much',
+};
+
+// Every plausible lemma a single inflected English token could reduce to —
+// gathered as a set of GUESSES rather than one deterministic answer, since
+// English spelling rules are ambiguous in isolation (does "-es" reduce
+// "boxes" to "box", or does "-s" reduce "makes" to "make"? both patterns
+// are real). Cheap to over-generate candidates here since callers only
+// ever check set membership against a short, known list of senses.
+function englishLemmaCandidates(token: string): string[] {
+  const lower = token.toLowerCase();
+  const c = new Set<string>([lower]);
+  if (IRREGULAR_EN_FORMS[lower]) c.add(IRREGULAR_EN_FORMS[lower]);
+  if (lower.length > 3 && lower.endsWith('ies')) c.add(lower.slice(0, -3) + 'y');
+  if (lower.endsWith('es')) c.add(lower.slice(0, -2));
+  if (lower.endsWith('s') && !lower.endsWith('ss')) c.add(lower.slice(0, -1));
+  const doubledEd = lower.match(/^(.+?)([a-z])\2ed$/);
+  if (doubledEd) c.add(doubledEd[1] + doubledEd[2]);
+  if (lower.length > 3 && lower.endsWith('ied')) c.add(lower.slice(0, -3) + 'y');
+  if (lower.endsWith('ed')) {
+    c.add(lower.slice(0, -2)); // e.g. "worked" -> "work"
+    c.add(lower.slice(0, -1)); // e.g. "used" -> "use" (silent e kept)
+  }
+  const doubledIng = lower.match(/^(.+?)([a-z])\2ing$/);
+  if (doubledIng) c.add(doubledIng[1] + doubledIng[2]);
+  if (lower.endsWith('ing')) {
+    c.add(lower.slice(0, -3)); // e.g. "working" -> "work"
+    c.add(lower.slice(0, -3) + 'e'); // e.g. "making" -> "make"
+  }
+  if (lower.length > 3 && lower.endsWith('ier')) c.add(lower.slice(0, -3) + 'y');
+  if (lower.length > 4 && lower.endsWith('iest')) c.add(lower.slice(0, -4) + 'y');
+  if (lower.endsWith('er')) c.add(lower.slice(0, -2));
+  if (lower.endsWith('est')) c.add(lower.slice(0, -3));
+  return [...c];
+}
+
 function splitOnTranslationForm(translation: string, word: Word, nativeLanguage: 'en' | 'zh'): { before: string; match: string; after: string } | null {
   if (nativeLanguage === 'zh') {
     const senses = (word.zh ?? '').split(/[／,]/).map(s => s.trim()).filter(Boolean);
@@ -71,18 +185,37 @@ function splitOnTranslationForm(translation: string, word: Word, nativeLanguage:
     }
     return null;
   }
-  const senses = word.en.split(/\s*\/\s*|,/).map(s => s.trim().replace(/^to\s+/i, '').toLowerCase()).filter(Boolean);
+  // Senses kept as WORD ARRAYS (not single strings) so a phrasal gloss
+  // like "take care of" can match a contiguous multi-word run in the
+  // translation too, not just a single token — a real gap before (only
+  // the first word of a multi-word sense could ever match anything).
+  const senses = word.en
+    .split(/\s*\/\s*|,/)
+    .map(s => s.trim().replace(/^to\s+/i, '').toLowerCase())
+    .filter(Boolean)
+    .map(s => s.split(/\s+/));
+  const maxPhraseLen = senses.reduce((m, s) => Math.max(m, s.length), 1);
+
   const tokens = tokenize(translation);
-  let offset = 0;
-  for (const t of tokens) {
-    if (isWordToken(t)) {
-      const lower = t.toLowerCase();
-      const forms = new Set([lower, lower.replace(/ies$/, 'y'), lower.replace(/(ing|ed|es|s)$/, '')]);
-      if (senses.some(sense => forms.has(sense))) {
-        return { before: translation.slice(0, offset), match: t, after: translation.slice(offset + t.length) };
+  const offsets: number[] = [];
+  { let o = 0; for (const t of tokens) { offsets.push(o); o += t.length; } }
+  const wordIdxs = tokens.map((t, i) => (isWordToken(t) ? i : -1)).filter(i => i !== -1);
+
+  // Longest phrase first at each position (so "take care of" wins over
+  // just "take" when both could match), scanning left to right so the
+  // FIRST occurrence in the sentence is what gets highlighted.
+  for (let start = 0; start < wordIdxs.length; start++) {
+    for (let len = Math.min(maxPhraseLen, wordIdxs.length - start); len >= 1; len--) {
+      const idxSlice = wordIdxs.slice(start, start + len);
+      const candidateSets = idxSlice.map(i => englishLemmaCandidates(tokens[i]));
+      const matched = senses.find(sense => sense.length === len && sense.every((w, k) => candidateSets[k].includes(w)));
+      if (matched) {
+        const startOffset = offsets[idxSlice[0]];
+        const lastIdx = idxSlice[idxSlice.length - 1];
+        const endOffset = offsets[lastIdx] + tokens[lastIdx].length;
+        return { before: translation.slice(0, startOffset), match: translation.slice(startOffset, endOffset), after: translation.slice(endOffset) };
       }
     }
-    offset += t.length;
   }
   return null;
 }
@@ -335,10 +468,10 @@ interface CardSnapshot {
 // every other word type (by far the minority of the corpus, but still a
 // few hundred words) showed nothing at all here.
 const WORD_TYPE_LABEL: Partial<Record<WordType, string>> = {
-  adjective: 'Adj.',
-  adverb: 'Adv.',
-  preposition: 'Prep.',
-  conjunction: 'Conj.',
+  adjective: 'Adjective',
+  adverb: 'Adverb',
+  preposition: 'Preposition',
+  conjunction: 'Conjunction',
   phrase: 'Phrase',
 };
 
@@ -601,6 +734,18 @@ function SentenceExercise({
   // correct-sentence) — comparing what came back against what they
   // actually wrote is what tells us that.
   const correctionDiff = correction ? diffAgainstAttempt(input, correction.sentence) : null;
+
+  // Chimes exactly on a genuinely perfect translation (no corrections at
+  // all) — not on every correction, since most attempts here get some
+  // useful fix and this is meant to celebrate "you wrote it correctly",
+  // not every submission. `correction` (a new object each time a fresh
+  // one lands) is the right dependency, not `correctionDiff` itself,
+  // which is recomputed every render regardless of whether anything new
+  // actually happened.
+  useEffect(() => {
+    if (correction && correctionDiff?.perfect) playCorrectChime();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [correction]);
 
   // Not folded into onUnreachable/the parent's session-wide AI-unreachable
   // handling — this is a small optional extra on top of a correction that
@@ -923,7 +1068,7 @@ function SentenceExercise({
 // extra hint on top of whatever the letter-tiles already show. Revealed
 // (masked=false) the instant Check is pressed, same moment the tiles
 // themselves reveal right/wrong.
-function ReferenceSentence({ example, word, label = 'Example sentence', masked = false }: {
+function ReferenceSentence({ example, word, masked = false }: {
   example: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string };
   // Optional purely for the translation fallback below — a saved
   // exampleSentence from before englishPrompt/englishPromptZh existed as
@@ -935,7 +1080,6 @@ function ReferenceSentence({ example, word, label = 'Example sentence', masked =
   // file) recovers a translation for that case; still nothing to show
   // for the rare word with neither.
   word?: Word;
-  label?: string;
   masked?: boolean;
 }) {
   const parts = splitOnWordForm(example.sentence, example.wordForm);
@@ -956,9 +1100,12 @@ function ReferenceSentence({ example, word, label = 'Example sentence', masked =
   const translationParts = translation && word ? splitOnTranslationForm(translation, word, nativeLanguage) : null;
   return (
     <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
-      <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1 flex items-center justify-center gap-1.5">
-        {label}
-        <TextSpeakerButton text={example.sentence} className="text-indigo-400 hover:text-indigo-600 transition-colors normal-case" />
+      {/* No "Example sentence"/"In context" label any more — confirmed
+          real feedback that it read as clutter once the sentence itself
+          was already doing that job. The speaker button alone stays,
+          still centered above the sentence. */}
+      <div className="flex items-center justify-center mb-1">
+        <TextSpeakerButton text={example.sentence} className="text-indigo-400 hover:text-indigo-600 transition-colors" />
       </div>
       <div className="text-stone-700 italic">
         {parts ? (
@@ -976,11 +1123,11 @@ function ReferenceSentence({ example, word, label = 'Example sentence', masked =
         ) : example.sentence}
       </div>
       {translation && (
-        <div className="text-stone-400 text-xs mt-1">
+        <div className="text-stone-500 text-sm mt-1">
           {translationParts ? (
             <>
               {translationParts.before}
-              <span className="font-semibold text-stone-600">{translationParts.match}</span>
+              <span className="font-semibold text-stone-700">{translationParts.match}</span>
               {translationParts.after}
             </>
           ) : translation}
@@ -1574,6 +1721,7 @@ export default function DailySessionFlow() {
     const wordRight = checkAnswer(word.de, values.join(''));
     const articleGuess = articleValues.join('').toLowerCase();
     const articleRight = !needsArticle || articleGuess === word.article;
+    if (wordRight && articleRight) playCorrectChime();
     // A fetched reference sentence (sentence writing mode off) is saved
     // exactly like a real round-1 correction would be — same shape, same
     // downstream behavior (shown on Word List) — just with no actual user
@@ -1663,6 +1811,7 @@ export default function DailySessionFlow() {
   // Retried until a clean pass — see enterReviewMcqPhase.
   function handleReviewMcqAnswer(correct: boolean) {
     if (!session || !mcqCurrent) return;
+    if (correct) playCorrectChime();
     const next: DailySession = {
       ...session,
       reviewMcqQueueIds: session.reviewMcqQueueIds.slice(1),
@@ -1676,6 +1825,7 @@ export default function DailySessionFlow() {
   // Retried until a clean pass — see enterStudyMcqPhase.
   function handleStudyMcqAnswer(correct: boolean) {
     if (!session || !mcqCurrent) return;
+    if (correct) playCorrectChime();
     const next: DailySession = {
       ...session,
       studyMcqQueueIds: session.studyMcqQueueIds.slice(1),
@@ -2169,7 +2319,7 @@ export default function DailySessionFlow() {
                   nothing at all once paged back to. */}
               {snap.round > 1 && (
                 <div className="flex flex-col gap-2">
-                  {snap.contextSentence && <ReferenceSentence example={snap.contextSentence} word={snap.word} label="In context" />}
+                  {snap.contextSentence && <ReferenceSentence example={snap.contextSentence} word={snap.word} />}
                   <WordGrammarInfo word={snap.word} />
                 </div>
               )}
@@ -2288,7 +2438,7 @@ export default function DailySessionFlow() {
         {currentRound > 1 && (
           <div className="flex flex-col gap-2">
             {exampleSentence && (
-              <ReferenceSentence example={exampleSentence} word={word} label={feedback === null ? 'Example sentence' : 'In context'} masked={feedback === null} />
+              <ReferenceSentence example={exampleSentence} word={word} masked={feedback === null} />
             )}
             {feedback !== null && <WordGrammarInfo word={word} />}
           </div>

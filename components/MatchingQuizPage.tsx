@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { Word, glossFor } from '../lib/words';
 import { getSettings } from '../lib/storage';
 import { speakWord } from '../lib/speech';
+import { playCorrectChime } from '../lib/sound';
 
 interface Props {
   words: Word[];
@@ -28,6 +29,13 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
   const [wrongFlash, setWrongFlash] = useState<{ german: string; english: string } | null>(null);
 
   const allCorrect = correctIds.size === words.length;
+
+  // Chimes once, exactly when this page's last pair locks in — "finished
+  // the matching quiz", not every individual correct pair along the way.
+  useEffect(() => {
+    if (allCorrect) playCorrectChime();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allCorrect]);
 
   // Once both sides of a pair are selected (in either order), evaluate it.
   useEffect(() => {
