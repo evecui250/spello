@@ -279,6 +279,28 @@ interface CardSnapshot {
 // (during this early testing phase — see correct-sentence/generate-
 // sentence, which rate-limit anonymous callers by IP instead of by
 // user_id when there's no session to log usage against).
+// Plural (nouns) / conjugation forms (verbs) — the same small caption
+// used under a word's headline wherever it's shown at full size:
+// SentenceWordHeader (round 1), the round-1-fallback "Copy this word"
+// header, and now also the post-Check reveal on every later spelling
+// round (see the parent's feedback!==null branch), so a learner isn't
+// only ever shown this once, on day 1, and never again.
+function WordGrammarInfo({ word }: { word: Word }) {
+  return (
+    <>
+      {/* Plural only makes sense for nouns, and only when the corpus
+          actually has one (a handful of nouns — e.g. uncountable ones —
+          are stored with an empty plural on purpose). */}
+      {word.type === 'noun' && word.plural && (
+        <div className="text-xs text-stone-400 mt-0.5">Plural: die {word.plural}</div>
+      )}
+      {word.type === 'verb' && word.thirdPerson && word.pastTense && word.perfectTense && (
+        <div className="text-xs text-stone-400 mt-0.5">Verb | {word.thirdPerson}, {word.pastTense}, {word.perfectTense}</div>
+      )}
+    </>
+  );
+}
+
 // SentenceWordHeader is shown above both the input step and the result step
 // (see the parent's currentRound === 1 branch) so the word stays visible
 // throughout — the correction lands on the same card instead of swapping to
@@ -291,15 +313,7 @@ function SentenceWordHeader({ word }: { word: Word }) {
         {word.article ? `${word.article} ` : ''}{word.de}{' '}
         <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
       </div>
-      {/* Plural only makes sense for nouns, and only when the corpus
-          actually has one (a handful of nouns — e.g. uncountable ones —
-          are stored with an empty plural on purpose). */}
-      {word.type === 'noun' && word.plural && (
-        <div className="text-xs text-stone-400 mt-0.5">Plural: die {word.plural}</div>
-      )}
-      {word.type === 'verb' && word.thirdPerson && word.pastTense && word.perfectTense && (
-        <div className="text-xs text-stone-400 mt-0.5">Verb | {word.thirdPerson}, {word.pastTense}, {word.perfectTense}</div>
-      )}
+      <WordGrammarInfo word={word} />
     </div>
   );
 }
@@ -826,13 +840,26 @@ function SentenceExercise({
 
 // Shows a correct example sentence with the target word called out in bold
 // — used for round 1's copy-mode reference (sentence writing mode off, or
-// the history replay of one of those rounds). wordForm is the exact
-// inflected substring the AI reported using, so the bolding lines up with
-// however the word actually appears in the sentence (which may differ from
-// its dictionary form, e.g. plural/case endings).
-function ReferenceSentence({ example, label = 'Example sentence' }: {
+// the history replay of one of those rounds), and now also round 2+/
+// review's own context sentence (see the parent's currentRound > 1
+// branch). wordForm is the exact inflected substring the AI reported
+// using, so the bolding (or the blank, when masked) lines up with however
+// the word actually appears in the sentence (which may differ from its
+// dictionary form, e.g. plural/case endings).
+//
+// masked (round 2+/review's pre-Check state only): swaps the target word
+// for a plain blank instead of bolding it — the whole point of showing
+// context here is the SENTENCE, not a second free look at the spelling
+// mid-attempt, which would just hand the learner the answer they're
+// supposed to be recalling unaided. A fixed-width blank rather than one
+// sized to the word's own length, so it doesn't leak letter-count as an
+// extra hint on top of whatever the letter-tiles already show. Revealed
+// (masked=false) the instant Check is pressed, same moment the tiles
+// themselves reveal right/wrong.
+function ReferenceSentence({ example, label = 'Example sentence', masked = false }: {
   example: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string };
   label?: string;
+  masked?: boolean;
 }) {
   const parts = splitOnWordForm(example.sentence, example.wordForm);
   // englishPrompt/englishPromptZh is literally what this German sentence
@@ -852,7 +879,13 @@ function ReferenceSentence({ example, label = 'Example sentence' }: {
         {parts ? (
           <>
             {parts.before}
-            <span className="font-bold text-indigo-700 not-italic">{parts.match}</span>
+            {masked ? (
+              <span className="inline-block px-2 rounded bg-indigo-200/70 text-transparent select-none not-italic" aria-hidden>
+                ____
+              </span>
+            ) : (
+              <span className="font-bold text-indigo-700 not-italic">{parts.match}</span>
+            )}
             {parts.after}
           </>
         ) : example.sentence}
@@ -907,11 +940,15 @@ export default function DailySessionFlow() {
   const [matchingPageKey, setMatchingPageKey] = useState(0);
   const [mcqCurrent, setMcqCurrent] = useState<{ word: Word; correct: string; choices: string[] } | null>(null);
   // The current word's saved example sentence, if it already has one from
-  // a previous round-1 pass (only used to gate which round-1 UI shows —
-  // no longer displayed during rounds 2+/review, see ReferenceSentence's
-  // own comment for why), and the just-produced correction for the round-1
-  // sentence exercise (shown in place of the generic "✓ Correct!" banner).
-  const [exampleSentence, setExampleSentence] = useState<{ sentence: string; wordForm: string } | null>(null);
+  // a previous round-1 pass — gates which round-1 UI shows, AND (now) is
+  // also shown as context on every round 2+/review card too (see the
+  // parent's currentRound > 1 branch and ReferenceSentence's own masked
+  // prop). Typed with the full translation fields (not just sentence/
+  // wordForm) specifically so that reuse doesn't need a second, separate
+  // read of the same saved data. The just-produced correction for the
+  // round-1 sentence exercise is a separate piece of state (sentenceResult,
+  // below) shown in place of the generic "✓ Correct!" banner.
+  const [exampleSentence, setExampleSentence] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string } | null>(null);
   const [sentenceResult, setSentenceResult] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string } | null>(null);
   // The learner's in-progress typed attempt, lifted up here (rather than
   // living only as SentenceExercise's own local state) specifically so it
@@ -2071,6 +2108,19 @@ export default function DailySessionFlow() {
           <div className="text-2xl font-semibold text-slate-700">{glossFor(word, getSettings().nativeLanguage)}</div>
         </div>
 
+        {/* Context for every round 2+/review card, not just round 1 — the
+            word's own saved sentence (from whichever round-1 pass actually
+            produced it), target word blanked out so this is a hint about
+            USAGE/meaning, not a second free look at the spelling they're
+            supposed to be recalling unaided (see ReferenceSentence's own
+            masked comment). currentRound > 1 excludes round 1 itself
+            (which either runs its own translate exercise or, in copy-mode,
+            already shows the word in full — nothing to mask there) and any
+            round-1 Hint-demotion (still pure copy-mode, same reasoning). */}
+        {currentRound > 1 && exampleSentence && feedback === null && (
+          <ReferenceSentence example={exampleSentence} masked />
+        )}
+
         {/* Four reasons the translation exercise is skipped for round 1:
             !exampleSentence excludes a word demoted BACK to round 1 via Hint
             from round 2 — it already has a saved sentence from its real
@@ -2116,12 +2166,7 @@ export default function DailySessionFlow() {
                 <div className="text-2xl font-bold text-indigo-800 tracking-wide break-words">
                   {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
                 </div>
-                {word.type === 'noun' && word.plural && (
-                  <div className="text-xs text-stone-400 mt-0.5">Plural: die {word.plural}</div>
-                )}
-                {word.type === 'verb' && word.thirdPerson && word.pastTense && word.perfectTense && (
-                  <div className="text-xs text-stone-400 mt-0.5">Verb | {word.thirdPerson}, {word.pastTense}, {word.perfectTense}</div>
-                )}
+                <WordGrammarInfo word={word} />
               </div>
             )}
 
@@ -2234,6 +2279,17 @@ export default function DailySessionFlow() {
                     </>
                   )}
                 </div>
+                {/* The same context sentence shown masked above, now
+                    revealed — right or wrong, seeing the word actually
+                    used is worth showing either way. Plural/verb-forms
+                    alongside it for the same reason: round 1 shows this
+                    once, on day 1, and never again otherwise. */}
+                {currentRound > 1 && (
+                  <div className="flex flex-col gap-2 text-center">
+                    {exampleSentence && <ReferenceSentence example={exampleSentence} label="In context" />}
+                    <WordGrammarInfo word={word} />
+                  </div>
+                )}
                 <button
                   onClick={handleNext}
                   className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
