@@ -187,7 +187,8 @@ export default function SettingsPage() {
         <button
           type="button"
           onClick={() => setAppearanceOpen(v => !v)}
-          className="w-full flex items-center justify-between gap-3 p-6 text-left"
+          aria-expanded={appearanceOpen}
+          className="w-full flex items-center justify-between gap-3 p-6 text-left hover:bg-amber-100/40 active:bg-amber-100/60 transition-colors"
         >
           <div>
             <span className="block font-semibold text-stone-800">Appearance</span>
@@ -197,7 +198,15 @@ export default function SettingsPage() {
               </span>
             )}
           </div>
-          <span className={`text-stone-400 shrink-0 transition-transform ${appearanceOpen ? 'rotate-180' : ''}`}>▾</span>
+          {/* A bare gray chevron read as too subtle to notice as tappable
+              — a filled indigo badge (same accent as everything else
+              interactive on this page) makes it look like a real control,
+              not decoration. */}
+          <span
+            className={`shrink-0 w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-base font-bold transition-transform ${appearanceOpen ? 'rotate-180' : ''}`}
+          >
+            ▾
+          </span>
         </button>
         {appearanceOpen && (
           <div className="px-6 pb-6 flex flex-col gap-6 border-t border-amber-100/60 pt-5">
