@@ -3990,7 +3990,27 @@ export function findWordByEnglishForm(rawToken: string, targetWord?: Word): Word
       if (combined.length > 0) { candidates = combined; break; }
     }
   }
-  return candidates ? pickBestCandidate(candidates, targetWord) : undefined;
+  if (!candidates) return undefined;
+  // A genuine, unresolvable tie between two-or-more PURE function words
+  // (prepositions/conjunctions) — e.g. "to" matching both "nach" (its
+  // "after"/directional sense) and "zu" (its infinitive-marker/dative
+  // sense) — confirmed real: pickBestCandidate's own primary/pool[0]
+  // tie-break has no actual signal to prefer one over the other here (both
+  // are marked primary for this exact key), so it silently always picks
+  // whichever happens to sit earlier in the corpus array, regardless of
+  // which one this specific sentence actually needs grammatically. Rather
+  // than confidently show a coin-flip that's wrong roughly as often as
+  // it's right, bail out to undefined here so the caller's own AI-gloss
+  // fallback (which sees the full sentence, not just this one token) gets
+  // a real chance to judge it from context instead. Still resolves
+  // instantly, as before, whenever there's only one real candidate, or
+  // when one of the tied candidates is the actual word being tested this
+  // round (pickBestCandidate's own targetWord check already covers that).
+  if (candidates.length > 1 && !candidates.some(c => c.word.id === targetWord?.id)
+    && candidates.every(c => FUNCTION_WORD_TYPES.includes(c.word.type))) {
+    return undefined;
+  }
+  return pickBestCandidate(candidates, targetWord);
 }
 
 // Chinese: no whitespace word boundaries, so this segments a whole prompt

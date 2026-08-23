@@ -104,8 +104,12 @@ Deno.serve(async (req: Request) => {
         'German, as "lemma" (the exact uninflected dictionary form: infinitive for verbs, ' +
         'singular nominative for nouns, positive form for adjectives/adverbs), plus that same ' +
         `word's own dictionary/base form in ${lang} as "gloss" (e.g. "packed" -> gloss "pack"). ` +
-        'Skip articles, pronouns, prepositions, conjunctions, and punctuation. Respond with ' +
-        'exactly this JSON: {"words": {"word1": {"lemma": "...", "gloss": "..."}, ...}}.'
+        'Skip only pure grammar words that carry no independent translatable meaning of their ' +
+        "own — articles (a/the), personal/demonstrative pronouns (it/this/that), prepositions, " +
+        'conjunctions, and punctuation. Quantifiers and determiners such as "all", "every", ' +
+        '"some", "many", "each", "several", and "both" DO carry real translatable meaning and ' +
+        'must be included, not skipped (e.g. "all" -> lemma "alle"). Respond with exactly this ' +
+        'JSON: {"words": {"word1": {"lemma": "...", "gloss": "..."}, ...}}.'
       : `For this German sentence (a CEFR ${level || 'A1'} learner's exercise): ` +
         `"${sentence}", produce a JSON object mapping EVERY distinct word (as it ` +
         'literally appears there, preserving capitalization) to its dictionary/base ' +
