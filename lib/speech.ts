@@ -69,12 +69,20 @@ function reportTtsError(detail: string): void {
   }).then(() => {}, () => {});
 }
 
-function speakWithBrowserVoice(text: string): void {
+// Confirmed real (two auto-filed bug reports, one from desktop Chrome, one
+// from mobile Safari, both "never started" — same failure on unrelated
+// engines) rather than an isolated iOS quirk: this matches a well-known
+// speechSynthesis bug where the queue can get stuck PAUSED after enough
+// cancel() calls (this app calls stopSpeech()'s own cancel() on every
+// route change/tab-hide) and every speak() after that silently does
+// nothing until the page reloads — no error event, nothing. resume() is
+// the standard, harmless-elsewhere unstick for that; calling it right
+// before every speak() costs nothing on a browser that was never stuck.
+function speakWithBrowserVoice(text: string, isRetry = false): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'de-DE';
   utterance.rate = 0.9;
-  utterance.onerror = (e) => reportTtsError(e.error);
   // See WORD_AUDIO_VOLUME below — on-device testing found the on-device
   // browser voice used for sentences was actually the LOUDER side of the
   // two, not the pre-recorded word clips, so this pulls sentences down to
@@ -82,6 +90,12 @@ function speakWithBrowserVoice(text: string): void {
   utterance.volume = SENTENCE_AUDIO_VOLUME;
   const voice = pickGermanVoice();
   if (voice) utterance.voice = voice;
+  utterance.onerror = (e) => {
+    if (isRetry) reportTtsError(e.error);
+    // A genuine error (not just a silent hang) on the FIRST attempt is
+    // still worth one retry — see the onstart-timeout branch below for
+    // why a retry, not an immediate report.
+  };
   // Only cancel when something is actually in-flight -- calling cancel()
   // unconditionally right before speak(), even with nothing queued, is a
   // known Chromium/Chrome-on-Android flake: the immediately-following
@@ -93,16 +107,21 @@ function speakWithBrowserVoice(text: string): void {
   if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
     window.speechSynthesis.cancel();
   }
+  window.speechSynthesis.resume();
   // Covers the failure mode an onerror handler alone can't: some
   // browser/OS combinations just never start speaking at all, with no
   // error event of any kind — the exact "no sound, no error" shape of
-  // the real report this was added for. If onstart hasn't fired by the
-  // time this utterance should already be well underway, that itself IS
-  // the failure worth reporting.
+  // both real reports this was added for. If onstart hasn't fired by the
+  // time this utterance should already be well underway, that's the
+  // signature of the stuck-queue bug above — cancel to clear whatever's
+  // wedged and retry ONCE before actually reporting a failure.
   let started = false;
   utterance.onstart = () => { started = true; };
   setTimeout(() => {
-    if (!started) reportTtsError('never started');
+    if (started) return;
+    if (isRetry) { reportTtsError('never started (after retry)'); return; }
+    window.speechSynthesis.cancel();
+    speakWithBrowserVoice(text, true);
   }, 2000);
   window.speechSynthesis.speak(utterance);
 }
