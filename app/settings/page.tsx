@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { getSettings, saveSettings, switchToLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
-import { Level, wordsForLevel } from '../../lib/words';
+import { Level, wordsForLevel, LEVEL_SOURCE } from '../../lib/words';
 import { scheduleSync, syncNow } from '../../lib/sync';
 import AccountPanel from '../../components/AccountPanel';
 import ShareCard from '../../components/ShareCard';
@@ -204,6 +204,9 @@ export default function SettingsPage() {
             <option value="B2">B2</option>
           </select>
           <p className="text-stone-500 text-sm mt-1">This vocabulary book has {wordsForLevel(level).length} words for {level}.</p>
+          {LEVEL_SOURCE[level] && (
+            <p className="text-stone-400 text-xs mt-0.5">{LEVEL_SOURCE[level]}</p>
+          )}
         </div>
 
         <div>

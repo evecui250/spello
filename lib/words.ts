@@ -8,6 +8,25 @@ export type WordType = 'noun' | 'verb' | 'adjective' | 'adverb' | 'conjunction' 
 export type Level = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
 export const LEVEL_ORDER: Level[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
+// Which real-world wordlist each level's vocabulary was actually drawn
+// from (see the commits that added each level's words for the full
+// story) — shown as a small credit under the level picker (Settings/
+// Welcome) so the source isn't just implicit. A1/A2/B1 all come from the
+// Goethe-Institut's official DTZ (Deutsch-Test für Zuwanderer) wordlists;
+// B2 is different in kind, not just source — a chapter-organized
+// coursebook (Hueber's "Akademie Deutsch, Band 4"), not a comprehensive
+// official list the way the other three are, which is worth being
+// explicit about rather than crediting it the same way. C1/C2 aren't
+// real, populated levels yet (see Level's own comment on LEVEL_ORDER
+// covering more than what's actually selectable), so there's nothing
+// truthful to credit them with.
+export const LEVEL_SOURCE: Partial<Record<Level, string>> = {
+  A1: 'Wordlist: Goethe-Institut (Deutsch-Test für Zuwanderer)',
+  A2: 'Wordlist: Goethe-Institut (Deutsch-Test für Zuwanderer)',
+  B1: 'Wordlist: Goethe-Institut (Deutsch-Test für Zuwanderer)',
+  B2: 'Wordlist: Hueber, Akademie Deutsch (Band 4) — a coursebook selection, not a comprehensive official list',
+};
+
 export interface Word {
   id: string;
   de: string;

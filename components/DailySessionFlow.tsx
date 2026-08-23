@@ -264,6 +264,14 @@ interface CardSnapshot {
   // history replay below shows it that way instead of as a translate/
   // correction card.
   sentence?: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; userInput: string; isDirect?: boolean } | null;
+  // The round 2+/review context sentence actually shown live (see the
+  // parent's currentRound > 1 block) — captured at answer time so
+  // reopening this exact card via "Previous" shows precisely what was on
+  // screen then, not whatever the word's live saved sentence happens to
+  // be now (only ever different if a LATER round for this same word, or a
+  // future day, overwrote it — rare, but the live state and "what this
+  // historical round actually looked like" aren't guaranteed to match).
+  contextSentence?: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string } | null;
 }
 
 // Round 1 (translation exercise, all non-bootstrap words — see
@@ -856,8 +864,18 @@ function SentenceExercise({
 // extra hint on top of whatever the letter-tiles already show. Revealed
 // (masked=false) the instant Check is pressed, same moment the tiles
 // themselves reveal right/wrong.
-function ReferenceSentence({ example, label = 'Example sentence', masked = false }: {
+function ReferenceSentence({ example, word, label = 'Example sentence', masked = false }: {
   example: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string };
+  // Optional purely for the translation fallback below — a saved
+  // exampleSentence from before englishPrompt/englishPromptZh existed as
+  // fields at all has neither, which used to just silently show the
+  // German sentence with no translation underneath it (confirmed real:
+  // "sometimes only the German sentence is shown"). Falling back to the
+  // corpus's own pre-baked exercisePrompt/exercisePromptZh (the same
+  // fallback chain the history/"Back" view already uses elsewhere in this
+  // file) recovers a translation for that case; still nothing to show
+  // for the rare word with neither.
+  word?: Word;
   label?: string;
   masked?: boolean;
 }) {
@@ -868,7 +886,9 @@ function ReferenceSentence({ example, label = 'Example sentence', masked = false
   // beneath so copy-mode (no writing exercise, so this is the learner's
   // only look at what the sentence actually means) isn't just an opaque
   // German string to memorize.
-  const translation = getSettings().nativeLanguage === 'zh' ? example.englishPromptZh : example.englishPrompt;
+  const translation = getSettings().nativeLanguage === 'zh'
+    ? (example.englishPromptZh ?? word?.exercisePromptZh ?? example.englishPrompt)
+    : (example.englishPrompt ?? word?.exercisePrompt);
   return (
     <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
       <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1 flex items-center justify-center gap-1.5">
@@ -1350,6 +1370,7 @@ export default function DailySessionFlow() {
     const beforeStage = progress.mascotStage;
     setCardHistory(h => [...h, {
       word, roundMode, round: currentRound, roundRange, activeChunk, wordStatus, correct, sentence: sentenceForHistory ?? null,
+      contextSentence: currentRound > 1 ? (exampleSentence ?? null) : null,
     }]);
 
     if (roundMode === 'review') {
@@ -1722,11 +1743,17 @@ export default function DailySessionFlow() {
       if (e.key === 'Enter' && Date.now() - attachedAt > 300) handleNextRef.current();
     };
     window.addEventListener('keydown', onKeyDown);
-    // Suppressed for the round-1 sentence exercise — the corrected sentence
-    // needs a moment to actually read, not a fixed 1.5s flash, so that case
-    // waits for the learner's own "Next" click instead.
+    // Suppressed for the round-1 sentence exercise, and now equally for
+    // any round 2+/review card showing its own context sentence (see the
+    // currentRound > 1 block below) — both need a real moment to actually
+    // read, not a fixed 1.5s flash timed for a bare "✓ Correct!" banner.
+    // Confirmed real: 1.5s wasn't enough to even start reading a sentence
+    // that had just appeared, let alone its translation and grammar info
+    // too. A word with no saved sentence yet still gets the quick
+    // auto-advance, same as before, since there's nothing extra to read.
     const isSentenceRoundDone = currentRound === 1 && roundMode === 'study' && sentenceResult !== null;
-    const timer = feedback === true && !isSentenceRoundDone ? setTimeout(() => handleNextRef.current(), 1500) : undefined;
+    const hasContextToRead = currentRound > 1 && !!exampleSentence;
+    const timer = feedback === true && !isSentenceRoundDone && !hasContextToRead ? setTimeout(() => handleNextRef.current(), 1500) : undefined;
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       if (timer) clearTimeout(timer);
@@ -1967,14 +1994,9 @@ export default function DailySessionFlow() {
                 <div className="text-2xl font-bold text-indigo-800 tracking-wide break-words">
                   {snap.word.article ? `${snap.word.article} ` : ''}{snap.word.de}
                 </div>
-                {snap.word.type === 'noun' && snap.word.plural && (
-                  <div className="text-xs text-stone-400 mt-0.5">Plural: die {snap.word.plural}</div>
-                )}
-                {snap.word.type === 'verb' && snap.word.thirdPerson && snap.word.pastTense && snap.word.perfectTense && (
-                  <div className="text-xs text-stone-400 mt-0.5">Verb | {snap.word.thirdPerson}, {snap.word.pastTense}, {snap.word.perfectTense}</div>
-                )}
+                <WordGrammarInfo word={snap.word} />
               </div>
-              <ReferenceSentence example={snap.sentence} />
+              <ReferenceSentence example={snap.sentence} word={snap.word} />
               <div className={`text-center py-3 rounded-xl font-semibold text-lg ${snap.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                 {snap.correct ? '✓ Correct!' : '✗ Wrong that time'}
               </div>
@@ -2011,6 +2033,19 @@ export default function DailySessionFlow() {
               <div className={`text-center py-3 rounded-xl font-semibold text-lg ${snap.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                 {snap.correct ? '✓ Correct!' : '✗ Wrong that time'}
               </div>
+              {/* Same round 2+/review context block the live card showed —
+                  see the live version's own comment. Always revealed here
+                  (never masked): "Previous" is a read-only replay of an
+                  ALREADY-answered round, so it should show exactly what
+                  was on screen right before Next was pressed, not the
+                  pre-Check state — confirmed real: this used to show
+                  nothing at all once paged back to. */}
+              {snap.round > 1 && (
+                <div className="flex flex-col gap-2">
+                  {snap.contextSentence && <ReferenceSentence example={snap.contextSentence} word={snap.word} label="In context" />}
+                  <WordGrammarInfo word={snap.word} />
+                </div>
+              )}
             </div>
           )}
 
@@ -2108,17 +2143,28 @@ export default function DailySessionFlow() {
           <div className="text-2xl font-semibold text-slate-700">{glossFor(word, getSettings().nativeLanguage)}</div>
         </div>
 
-        {/* Context for every round 2+/review card, not just round 1 — the
-            word's own saved sentence (from whichever round-1 pass actually
-            produced it), target word blanked out so this is a hint about
-            USAGE/meaning, not a second free look at the spelling they're
-            supposed to be recalling unaided (see ReferenceSentence's own
-            masked comment). currentRound > 1 excludes round 1 itself
-            (which either runs its own translate exercise or, in copy-mode,
-            already shows the word in full — nothing to mask there) and any
-            round-1 Hint-demotion (still pure copy-mode, same reasoning). */}
-        {currentRound > 1 && exampleSentence && feedback === null && (
-          <ReferenceSentence example={exampleSentence} masked />
+        {/* Context for every round 2+/review card, not just round 1 —
+            fixed in this ONE spot regardless of feedback state (used to
+            jump from here, pre-Check, down to the bottom, post-Check —
+            confirmed real: reported as visually inconsistent). Pre-Check,
+            the word's own saved sentence shows with the target word
+            blanked out (a hint about USAGE/meaning, not a second free
+            look at the spelling they're supposed to be recalling
+            unaided — see ReferenceSentence's own masked comment); the
+            instant Check is pressed, it reveals in place, joined by the
+            same plural/verb-forms round 1 already shows once and never
+            again otherwise (see WordGrammarInfo). currentRound > 1
+            excludes round 1 itself (which either runs its own translate
+            exercise or, in copy-mode, already shows the word in full —
+            nothing to mask there) and any round-1 Hint-demotion (still
+            pure copy-mode, same reasoning). */}
+        {currentRound > 1 && (
+          <div className="flex flex-col gap-2">
+            {exampleSentence && (
+              <ReferenceSentence example={exampleSentence} word={word} label={feedback === null ? 'Example sentence' : 'In context'} masked={feedback === null} />
+            )}
+            {feedback !== null && <WordGrammarInfo word={word} />}
+          </div>
         )}
 
         {/* Four reasons the translation exercise is skipped for round 1:
@@ -2279,17 +2325,6 @@ export default function DailySessionFlow() {
                     </>
                   )}
                 </div>
-                {/* The same context sentence shown masked above, now
-                    revealed — right or wrong, seeing the word actually
-                    used is worth showing either way. Plural/verb-forms
-                    alongside it for the same reason: round 1 shows this
-                    once, on day 1, and never again otherwise. */}
-                {currentRound > 1 && (
-                  <div className="flex flex-col gap-2 text-center">
-                    {exampleSentence && <ReferenceSentence example={exampleSentence} label="In context" />}
-                    <WordGrammarInfo word={word} />
-                  </div>
-                )}
                 <button
                   onClick={handleNext}
                   className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
