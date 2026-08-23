@@ -110,12 +110,15 @@ Deno.serve(async (req: Request) => {
               `The correct sentence is: "${correctedSentence}". ` +
               `Compare the attempt against the correction and identify AT MOST ${pointCap} concrete ` +
               'GRAMMAR points the learner should take away — but fewer is better than more: only ' +
-              'include a point for a mistake that is actually there, and only their MAJOR mistakes ' +
-              `(never pad the list up to ${pointCap} with a minor or borderline point just to fill ` +
-              'it out). If there is truly only one real grammar issue, return exactly one point. ' +
-              'Article/case (der/die/das, den/dem/der ' +
-              'agreement), adjective endings, verb tense/conjugation, preposition choice, or a ' +
-              'word-class mix-up (e.g. using a verb form where a noun was needed, like ' +
+              'include a point for a mistake that is actually there. That said, do NOT under-report ' +
+              'either — if there are genuinely 2-3 DISTINCT real grammar issues (e.g. a wrong ' +
+              'article AND a wrong adjective ending AND a wrong possessive-pronoun case, all in the ' +
+              'same sentence), give each its own point, up to the cap; "fewer is better" means never ' +
+              'padding the list with a minor or borderline point just to fill it out, not skipping a ' +
+              'second or third issue that is actually there to keep the list short. If there is truly ' +
+              'only one real grammar issue, return exactly one point. Article/case (der/die/das, ' +
+              'den/dem/der agreement), adjective endings, verb tense/conjugation, preposition ' +
+              'choice, or a word-class mix-up (e.g. using a verb form where a noun was needed, like ' +
               '"reisen" [to travel] instead of "Reisende" [traveler]). Before writing each point, ' +
               "re-read the attempt's actual word order carefully and confirm EXACTLY which word " +
               "or phrase in the attempt the point is about, and what that word was governing/" +
@@ -123,19 +126,36 @@ Deno.serve(async (req: Request) => {
               "word order means a preposition/article near one noun in the attempt can land near " +
               'a different noun in the correction, or vice versa; do not assume based on position ' +
               'alone. If you are not sure which specific word changed or what it was attached to, ' +
-              'leave that point out rather than risk mis-describing it. Do NOT mention spelling ' +
-              'typos, capitalization (German capitalizes every noun — that is a spelling ' +
-              'convention to internalize by habit, not a grammar insight worth a point), or ' +
-              'hyphenation, and do not simply say a word "was wrong" — every point must explain the actual ' +
-              'grammar rule behind the fix, briefly, so it is something the learner can apply ' +
-              'next time. Lead with the concrete fact itself, not a restated category label — ' +
-              'say directly what the gender/case/tense/form actually IS and why, rather than a ' +
-              'generic preface like "the noun\'s gender and case need to match" before finally ' +
-              'giving the specific answer. For example, in Chinese, prefer a compact phrasing ' +
-              'like \'"Sozialarbeiter" 是阳性，所以是der而不是die\' over a longer \'名词的性别和格' +
-              '需要正确匹配，例如"der Sozialarbeiter"而不是"die Sozialarbeiter"\' — same ' +
-              'information, without the throat-clearing. Skip anything you are not confident is ' +
-              'actually correct — accuracy ' +
+              'leave that point out rather than risk mis-describing it. ' +
+              'Only flag something as a mistake if the German grammar OBJECTIVELY requires a ' +
+              'specific form given what the English sentence actually says. If the English sentence ' +
+              'itself is silent or ambiguous on a detail — most commonly formal vs informal address ' +
+              '("Sie" vs "du/ihn/ihm/dich"), or a pronoun that does not pin down gender/number/' +
+              'formality — and the learner picked one valid reading of that ambiguity, do NOT treat ' +
+              'it as wrong, even though the correction happens to use a different valid choice; leave ' +
+              'it out of the points entirely rather than describe it as a mistake. ' +
+              'Capitalization (German capitalizes every noun — a spelling convention to internalize ' +
+              'by habit, not a grammar insight worth a point) and hyphenation are never their own ' +
+              'point. Spelling: if one or more changed words are pure SPELLING mistakes — the ' +
+              'SAME word, just misspelled, with no grammar difference at all (e.g. "Testergbnis" ' +
+              'instead of "Testergebnis", "Dokter" instead of "Doktor") — do not give each one its ' +
+              'own point or a full grammar explanation; instead combine every spelling-only mistake ' +
+              'into exactly ONE point using this compact template: "Spelling mistakes: A instead of ' +
+              'B, C instead of D." (list only the ones that are pure spelling; a single spelling slip ' +
+              'still gets this same one-line format, just with one pair). Do not simply say a word ' +
+              '"was wrong" for anything else either — every non-spelling point must explain the ' +
+              'actual grammar rule behind the fix, briefly, so it is something the learner can apply ' +
+              'next time. For an AGREEMENT fix specifically (adjective ending, article, or ' +
+              'possessive pronoun matching a noun\'s gender/case), use this compact shape and ' +
+              'nothing more verbose: \'"[word]" before "[noun]" should be "[corrected form]" ' +
+              'because "[noun]" is [gender/case].\' State the answer directly in that shape — do not ' +
+              'restate the rule abstractly first (e.g. "the adjective needs the correct ending") ' +
+              'before finally giving the specific answer. The same directness applies to every other ' +
+              'point too: lead with the concrete fact itself, not a restated category label. For ' +
+              'example, in Chinese, prefer a compact phrasing like \'"Sozialarbeiter" 是阳性，所以' +
+              '是der而不是die\' over a longer \'名词的性别和格需要正确匹配，例如"der ' +
+              'Sozialarbeiter"而不是"die Sozialarbeiter"\' — same information, without the ' +
+              'throat-clearing. Skip anything you are not confident is actually correct — accuracy ' +
               `matters more than reaching ${pointCap}; fewer solid points beats padding out to ` +
               `${pointCap} with a shaky one. If the attempt was blank, too garbled, or simply used different (not ` +
               'wrong) vocabulary with no real grammar issue to point out, return a single point ' +

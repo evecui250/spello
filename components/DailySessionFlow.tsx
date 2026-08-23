@@ -1745,7 +1745,16 @@ export default function DailySessionFlow() {
         speakWord(word);
       }
     };
-    if (correct) {
+    // A round-1 sentence-writing/direct-sentence submission always calls
+    // this with correct=true (see this function's own params — there's no
+    // real pass/fail for a translation attempt, just a correction), so it
+    // must NOT get this generic chime: that would fire on every attempt,
+    // "perfect" or not (confirmed real). The sentence-writing case already
+    // has its own chime, gated on the correction actually being perfect
+    // (see SentenceExercise's own effect); the direct-sentence (copy
+    // mode) case never had a real attempt to judge at all, so no chime.
+    const isSentenceOrDirectSubmission = currentRound === 1 && !!extra?.exampleSentence;
+    if (correct && !isSentenceOrDirectSubmission) {
       playCorrectChime();
       clearTimeout(pendingWordAudioTimer.current);
       pendingWordAudioTimer.current = setTimeout(playWord, 550);

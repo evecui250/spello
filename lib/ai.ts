@@ -43,6 +43,41 @@ function rethrow(error: unknown): never {
   throw error;
 }
 
+// supabase-js's own invoke() has no timeout of its own — a stalled
+// connection (poor mobile signal, a dropped packet with no RST) can leave
+// the underlying fetch neither resolving nor rejecting, which every
+// caller here previously just awaited forever. That read as a card stuck
+// on "Preparing an example sentence…"/"Checking…" with no way out short
+// of leaving the page — the exact real report this was added for. Every
+// invoke() below now races against this timeout and surfaces the same
+// AIUnreachableError a genuine network failure already does, so a hang
+// reaches the same retry-capable UI instead of hanging indefinitely.
+const AI_CALL_TIMEOUT_MS = 20000;
+function invokeWithTimeout<T>(fnName: string, body: object): Promise<{ data: T | null; error: unknown }> {
+  return new Promise(resolve => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve({ data: null, error: new AIUnreachableError() });
+    }, AI_CALL_TIMEOUT_MS);
+    supabase.functions.invoke(fnName, { body }).then(
+      result => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result as { data: T | null; error: unknown });
+      },
+      err => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ data: null, error: err });
+      },
+    );
+  });
+}
+
 
 export interface AiUsageStats {
   calls: number;
@@ -90,9 +125,7 @@ export async function generateSentence(
   knownVocabulary: string[],
   nativeLanguage: 'en' | 'zh' = 'en',
 ): Promise<GeneratedSentence> {
-  const { data, error } = await supabase.functions.invoke('generate-sentence', {
-    body: { wordId, wordDe, wordEn, level, knownVocabulary, nativeLanguage },
-  });
+  const { data, error } = await invokeWithTimeout<{ sentence?: string; sentenceZh?: string; limitReached?: boolean }>('generate-sentence', { wordId, wordDe, wordEn, level, knownVocabulary, nativeLanguage });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (!data?.sentence) throw new Error('Malformed AI response');
@@ -117,9 +150,7 @@ export async function correctSentence(
   englishPrompt: string,
   userTranslation?: string,
 ): Promise<SentenceCorrectionResult> {
-  const { data, error } = await supabase.functions.invoke('correct-sentence', {
-    body: { wordId, wordDe, level, englishPrompt, userTranslation },
-  });
+  const { data, error } = await invokeWithTimeout<{ sentence?: string; wordForm?: string; limitReached?: boolean }>('correct-sentence', { wordId, wordDe, level, englishPrompt, userTranslation });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (!data?.sentence || !data?.wordForm) throw new Error('Malformed AI response');
@@ -144,9 +175,7 @@ export async function explainCorrection(
   nativeLanguage: 'en' | 'zh' = 'en',
   maxPoints?: number,
 ): Promise<string[]> {
-  const { data, error } = await supabase.functions.invoke('explain-correction', {
-    body: { wordId, wordDe, level, originalAttempt, correctedSentence, nativeLanguage, maxPoints },
-  });
+  const { data, error } = await invokeWithTimeout<{ points?: string[]; limitReached?: boolean }>('explain-correction', { wordId, wordDe, level, originalAttempt, correctedSentence, nativeLanguage, maxPoints });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (!Array.isArray(data?.points) || data.points.length === 0) throw new Error('Malformed AI response');
@@ -178,9 +207,7 @@ export async function getSentenceGlosses(
   // nativeLanguage} shape either way.
   direction: 'de-to-native' | 'native-to-de' = 'de-to-native',
 ): Promise<Record<string, WordGloss>> {
-  const { data, error } = await supabase.functions.invoke('sentence-glosses', {
-    body: { wordId, sentence, level, nativeLanguage, direction },
-  });
+  const { data, error } = await invokeWithTimeout<{ words?: Record<string, WordGloss>; limitReached?: boolean }>('sentence-glosses', { wordId, sentence, level, nativeLanguage, direction });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
   const words = data?.words && typeof data.words === 'object' ? data.words : {};
