@@ -17,7 +17,7 @@ import {
   hasEnoughWordsForGame,
 } from '../lib/practice';
 import { REVIEW_PLAN } from '../lib/srs';
-import { Word, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks } from '../lib/words';
+import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
 import SpeakerButton from './SpeakerButton';
@@ -49,6 +49,42 @@ function splitOnWordForm(sentence: string, wordForm: string): { before: string; 
     match: sentence.slice(idx, idx + wordForm.length),
     after: sentence.slice(idx + wordForm.length),
   };
+}
+
+// Same idea as splitOnWordForm, but for the ENGLISH/CHINESE translation
+// line (see ReferenceSentence) — finds the target word's own gloss inside
+// it so that can be bolded too (e.g. "verderben", en: "to spoil, go bad",
+// bolds "spoil" inside "...it will spoil quickly."). English tokens get
+// the same de-inflection (strip -s/-ed/-ing/-ies) findWordByEnglishForm's
+// own corpus lookup already relies on, since a translation is written
+// naturally and almost never uses the bare dictionary form verbatim.
+// Chinese has no inflection to strip, so it's a plain substring search
+// over each of word.zh's own comma/／-separated senses instead.
+// Best-effort: returns null (plain, unbolded text) rather than risk a
+// wrong guess when nothing lines up cleanly.
+function splitOnTranslationForm(translation: string, word: Word, nativeLanguage: 'en' | 'zh'): { before: string; match: string; after: string } | null {
+  if (nativeLanguage === 'zh') {
+    const senses = (word.zh ?? '').split(/[／,]/).map(s => s.trim()).filter(Boolean);
+    for (const sense of senses) {
+      const idx = translation.indexOf(sense);
+      if (idx !== -1) return { before: translation.slice(0, idx), match: translation.slice(idx, idx + sense.length), after: translation.slice(idx + sense.length) };
+    }
+    return null;
+  }
+  const senses = word.en.split(/\s*\/\s*|,/).map(s => s.trim().replace(/^to\s+/i, '').toLowerCase()).filter(Boolean);
+  const tokens = tokenize(translation);
+  let offset = 0;
+  for (const t of tokens) {
+    if (isWordToken(t)) {
+      const lower = t.toLowerCase();
+      const forms = new Set([lower, lower.replace(/ies$/, 'y'), lower.replace(/(ing|ed|es|s)$/, '')]);
+      if (senses.some(sense => forms.has(sense))) {
+        return { before: translation.slice(0, offset), match: t, after: translation.slice(offset + t.length) };
+      }
+    }
+    offset += t.length;
+  }
+  return null;
 }
 
 // Splits into alternating word / non-word (whitespace, punctuation) tokens,
@@ -293,20 +329,43 @@ interface CardSnapshot {
 // header, and now also the post-Check reveal on every later spelling
 // round (see the parent's feedback!==null branch), so a learner isn't
 // only ever shown this once, on day 1, and never again.
+// Short tag for every word type that isn't a noun/verb (those two get
+// their own richer line below instead — plural, or full conjugation).
+// Confirmed real: a learner only ever saw a grammar note for nouns/verbs;
+// every other word type (by far the minority of the corpus, but still a
+// few hundred words) showed nothing at all here.
+const WORD_TYPE_LABEL: Partial<Record<WordType, string>> = {
+  adjective: 'Adj.',
+  adverb: 'Adv.',
+  preposition: 'Prep.',
+  conjunction: 'Conj.',
+  phrase: 'Phrase',
+};
+
 function WordGrammarInfo({ word }: { word: Word }) {
-  return (
-    <>
-      {/* Plural only makes sense for nouns, and only when the corpus
-          actually has one (a handful of nouns — e.g. uncountable ones —
-          are stored with an empty plural on purpose). */}
-      {word.type === 'noun' && word.plural && (
-        <div className="text-xs text-stone-400 mt-0.5">Plural: die {word.plural}</div>
-      )}
-      {word.type === 'verb' && word.thirdPerson && word.pastTense && word.perfectTense && (
-        <div className="text-xs text-stone-400 mt-0.5">Verb | {word.thirdPerson}, {word.pastTense}, {word.perfectTense}</div>
-      )}
-    </>
-  );
+  // Centered — this used to inherit whatever alignment its parent
+  // happened to set (fine in the two ORIGINAL spots that were already
+  // text-center containers, but left-aligned once also placed inside the
+  // round 2+/review context block, which isn't).
+  const cls = 'text-xs text-stone-400 mt-0.5 text-center';
+  if (word.type === 'noun') {
+    // Plural only shows when the corpus actually has one (a handful of
+    // nouns — e.g. uncountable ones — are stored with an empty plural on
+    // purpose); still tagged as a noun either way rather than showing
+    // nothing for those.
+    return <div className={cls}>{word.plural ? `Plural: die ${word.plural}` : 'Noun'}</div>;
+  }
+  if (word.type === 'verb') {
+    return (
+      <div className={cls}>
+        {word.thirdPerson && word.pastTense && word.perfectTense
+          ? `Verb | ${word.thirdPerson}, ${word.pastTense}, ${word.perfectTense}`
+          : 'Verb'}
+      </div>
+    );
+  }
+  const label = WORD_TYPE_LABEL[word.type];
+  return label ? <div className={cls}>{label}</div> : null;
 }
 
 // SentenceWordHeader is shown above both the input step and the result step
@@ -886,9 +945,15 @@ function ReferenceSentence({ example, word, label = 'Example sentence', masked =
   // beneath so copy-mode (no writing exercise, so this is the learner's
   // only look at what the sentence actually means) isn't just an opaque
   // German string to memorize.
-  const translation = getSettings().nativeLanguage === 'zh'
+  const nativeLanguage = getSettings().nativeLanguage;
+  const translation = nativeLanguage === 'zh'
     ? (example.englishPromptZh ?? word?.exercisePromptZh ?? example.englishPrompt)
     : (example.englishPrompt ?? word?.exercisePrompt);
+  // Bold the target word's own gloss inside the translation too, same
+  // spirit as bolding wordForm in the German sentence above — needs the
+  // actual Word (for its en/zh gloss), so this stays null (plain,
+  // unbolded translation) for the one call site that doesn't pass one.
+  const translationParts = translation && word ? splitOnTranslationForm(translation, word, nativeLanguage) : null;
   return (
     <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
       <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1 flex items-center justify-center gap-1.5">
@@ -910,7 +975,17 @@ function ReferenceSentence({ example, word, label = 'Example sentence', masked =
           </>
         ) : example.sentence}
       </div>
-      {translation && <div className="text-stone-400 text-xs mt-1">{translation}</div>}
+      {translation && (
+        <div className="text-stone-400 text-xs mt-1">
+          {translationParts ? (
+            <>
+              {translationParts.before}
+              <span className="font-semibold text-stone-600">{translationParts.match}</span>
+              {translationParts.after}
+            </>
+          ) : translation}
+        </div>
+      )}
     </div>
   );
 }
@@ -2220,7 +2295,7 @@ export default function DailySessionFlow() {
               <p className="text-stone-400 text-xs text-center">Preparing an example sentence…</p>
             )}
             {useDirectSentence && directSentenceStatus === 'ready' && directSentence && (
-              <ReferenceSentence example={directSentence} />
+              <ReferenceSentence example={directSentence} word={word} />
             )}
             {/* aiUnreachable, not directSentenceStatus — this needs to show
                 regardless of which of the three AI call sites tripped it
