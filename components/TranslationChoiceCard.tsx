@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Word, glossFor } from '../lib/words';
 import { getSettings } from '../lib/storage';
 import { speakWord } from '../lib/speech';
+import { playCorrectChime } from '../lib/sound';
 
 interface Props {
   word: Word;
@@ -56,19 +57,24 @@ export default function TranslationChoiceCard({ word, correct: correctChoice, ch
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selected, correct, onAnswer]);
 
-  // Every pick plays the word's pronunciation once. A correct pick also
-  // auto-advances after a short pause; a wrong one still needs a manual
-  // Next so there's time to read which one was actually right.
+  // Every pick plays the word's pronunciation once. No auto-advance on a
+  // correct pick any more (confirmed real: it kept firing before there
+  // was time to register the correct-answer chime/reading) — every
+  // answer, right or wrong, now waits for a manual Next. A correct pick
+  // also plays the chime FIRST, THEN the word's pronunciation a moment
+  // later — playing both at once made the chime intermittently inaudible
+  // (see lib/sound's own comment on why), and the order also just reads
+  // better: "yes, correct" before "here's how it's said".
   useEffect(() => {
     if (selected === null) return;
+    if (correct) {
+      playCorrectChime();
+      const timer = setTimeout(() => speakWord(word), 550);
+      return () => clearTimeout(timer);
+    }
     speakWord(word);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, word]);
-
-  useEffect(() => {
-    if (!correct) return;
-    const timer = setTimeout(() => onAnswer(true), 1200);
-    return () => clearTimeout(timer);
-  }, [correct, onAnswer]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -112,7 +118,7 @@ export default function TranslationChoiceCard({ word, correct: correctChoice, ch
             );
           })}
         </div>
-        {selected !== null && !correct && (
+        {selected !== null && (
           <button
             onClick={() => onAnswer(correct)}
             className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"

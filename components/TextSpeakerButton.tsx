@@ -1,6 +1,7 @@
 'use client';
 
 import { speakText } from '../lib/speech';
+import SpeakerIcon from './SpeakerIcon';
 
 interface Props {
   text: string;
@@ -20,7 +21,7 @@ export default function TextSpeakerButton({ text, className }: Props) {
       aria-label="Play pronunciation of this sentence"
       className={className ?? 'text-indigo-400 hover:text-indigo-600 transition-colors'}
     >
-      🔊
+      <SpeakerIcon />
     </button>
   );
 }

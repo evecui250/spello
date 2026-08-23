@@ -2,6 +2,7 @@
 
 import { Word } from '../lib/words';
 import { speakWord } from '../lib/speech';
+import SpeakerIcon from './SpeakerIcon';
 
 interface Props {
   word: Word;
@@ -16,7 +17,7 @@ export default function SpeakerButton({ word, className }: Props) {
       aria-label={`Play pronunciation of ${word.de}`}
       className={className ?? 'text-indigo-400 hover:text-indigo-600 transition-colors'}
     >
-      🔊
+      <SpeakerIcon />
     </button>
   );
 }

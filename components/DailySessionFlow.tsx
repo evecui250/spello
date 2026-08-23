@@ -702,10 +702,22 @@ function SentenceExercise({
   // as speakWord's own fallback path, so this costs no API/AI usage at all.
   // Cancelled on cleanup (word change, or this whole exercise unmounting) —
   // otherwise a still-queued utterance keeps playing after the learner has
-  // already moved on to the next word or left the page entirely.
+  // already moved on to the next word or left the page entirely. On a
+  // genuinely perfect translation, the chime plays first and the spoken
+  // sentence is delayed a beat behind it (same reasoning as the
+  // round-ladder's own chime-then-word sequencing) rather than both
+  // firing at once.
   useEffect(() => {
-    if (correction && getSettings().autoPlayAudio) speakText(correction.sentence);
-    return () => stopSpeech();
+    if (!correction) return;
+    const diff = diffAgainstAttempt(input, correction.sentence);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (diff.perfect) {
+      playCorrectChime();
+      if (getSettings().autoPlayAudio) timer = setTimeout(() => speakText(correction.sentence), 550);
+    } else if (getSettings().autoPlayAudio) {
+      speakText(correction.sentence);
+    }
+    return () => { clearTimeout(timer); stopSpeech(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [correction]);
 
@@ -734,18 +746,9 @@ function SentenceExercise({
   // correct-sentence) — comparing what came back against what they
   // actually wrote is what tells us that.
   const correctionDiff = correction ? diffAgainstAttempt(input, correction.sentence) : null;
-
-  // Chimes exactly on a genuinely perfect translation (no corrections at
-  // all) — not on every correction, since most attempts here get some
-  // useful fix and this is meant to celebrate "you wrote it correctly",
-  // not every submission. `correction` (a new object each time a fresh
-  // one lands) is the right dependency, not `correctionDiff` itself,
-  // which is recomputed every render regardless of whether anything new
-  // actually happened.
-  useEffect(() => {
-    if (correction && correctionDiff?.perfect) playCorrectChime();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [correction]);
+  // The chime for a genuinely perfect translation lives in the speakText
+  // effect above (sequenced ahead of the spoken sentence), not a separate
+  // effect here.
 
   // Not folded into onUnreachable/the parent's session-wide AI-unreachable
   // handling — this is a small optional extra on top of a correction that
@@ -1709,10 +1712,24 @@ export default function DailySessionFlow() {
     // setting and regardless of right/wrong — hearing the correct word
     // immediately after attempting to spell it is the whole point, not
     // something the ambient auto-play preference should gate.
-    if (currentRound === 1) {
-      if (settings.autoPlayAudio && !extra?.exampleSentence) speakWord(word);
+    //
+    // On a CORRECT answer, the chime plays first and the word's own
+    // pronunciation is delayed a beat behind it — playing both at the
+    // same instant made the chime intermittently inaudible, and the
+    // order also just reads better: "yes, correct" before "here's how
+    // it's said".
+    const playWord = () => {
+      if (currentRound === 1) {
+        if (settings.autoPlayAudio && !extra?.exampleSentence) speakWord(word);
+      } else {
+        speakWord(word);
+      }
+    };
+    if (correct) {
+      playCorrectChime();
+      setTimeout(playWord, 550);
     } else {
-      speakWord(word);
+      playWord();
     }
   };
 
@@ -1721,7 +1738,9 @@ export default function DailySessionFlow() {
     const wordRight = checkAnswer(word.de, values.join(''));
     const articleGuess = articleValues.join('').toLowerCase();
     const articleRight = !needsArticle || articleGuess === word.article;
-    if (wordRight && articleRight) playCorrectChime();
+    // Chime lives in submitResult now, sequenced ahead of the word's own
+    // pronunciation (see its own comment) — playing it here too would
+    // double it up.
     // A fetched reference sentence (sentence writing mode off) is saved
     // exactly like a real round-1 correction would be — same shape, same
     // downstream behavior (shown on Word List) — just with no actual user
@@ -1811,7 +1830,9 @@ export default function DailySessionFlow() {
   // Retried until a clean pass — see enterReviewMcqPhase.
   function handleReviewMcqAnswer(correct: boolean) {
     if (!session || !mcqCurrent) return;
-    if (correct) playCorrectChime();
+    // No playCorrectChime() here -- TranslationChoiceCard already plays it
+    // the moment a correct choice is picked, not when Next is eventually
+    // clicked.
     const next: DailySession = {
       ...session,
       reviewMcqQueueIds: session.reviewMcqQueueIds.slice(1),
@@ -1825,7 +1846,8 @@ export default function DailySessionFlow() {
   // Retried until a clean pass — see enterStudyMcqPhase.
   function handleStudyMcqAnswer(correct: boolean) {
     if (!session || !mcqCurrent) return;
-    if (correct) playCorrectChime();
+    // See handleReviewMcqAnswer's own comment -- TranslationChoiceCard
+    // already played the chime on pick.
     const next: DailySession = {
       ...session,
       studyMcqQueueIds: session.studyMcqQueueIds.slice(1),

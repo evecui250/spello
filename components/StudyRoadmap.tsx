@@ -103,7 +103,7 @@ export default function StudyRoadmap() {
                 <span
                   className={`text-[11px] font-semibold ${isActive ? 'text-amber-100' : 'text-amber-100/55'}`}
                 >
-                  {s.label}{s.id === 'play' ? ' 🎮' : ''}
+                  {s.label}
                 </span>
               </div>
             );

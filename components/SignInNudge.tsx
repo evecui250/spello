@@ -28,7 +28,6 @@ export default function SignInNudge({ onClose }: Props) {
         className="bg-amber-50 rounded-2xl p-5 max-w-sm w-full flex flex-col gap-3 shadow-xl text-center"
         onClick={e => e.stopPropagation()}
       >
-        <p className="text-3xl">☁️</p>
         <h2 className="font-semibold text-stone-800 text-lg">Don't lose today's progress</h2>
         <p className="text-stone-500 text-sm">
           It only lives on this device. Sign in with just an email to back it up.

@@ -296,7 +296,7 @@ function DayDetailPopup({ dateStr, isFullDay, onClose }: { dateStr: string; isFu
             onClick={() => setShowCard(true)}
             className="self-start text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-full px-3 py-1.5 transition-colors"
           >
-            🎉 View card
+            View card
           </button>
         )}
         {learned.length === 0 && reviewed.length === 0 ? (

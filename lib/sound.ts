@@ -17,8 +17,26 @@ function getCtx(): AudioContext | null {
   const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return null;
   if (!sharedCtx) sharedCtx = new Ctor();
-  if (sharedCtx.state === 'suspended') sharedCtx.resume();
   return sharedCtx;
+}
+
+// A freshly-created (or long-idle) AudioContext starts/settles back into
+// 'suspended' until resumed — resume() is async, and scheduling tones
+// against ctx.currentTime before it actually finishes resuming was the
+// real cause of the chime intermittently going silent (confirmed real:
+// "sometimes I don't get the chime"). Awaiting this before scheduling
+// anything guarantees the context is actually running first.
+async function ensureRunning(ctx: AudioContext): Promise<boolean> {
+  if (ctx.state === 'running') return true;
+  try {
+    await ctx.resume();
+  } catch {
+    return false;
+  }
+  // TS narrows ctx.state's type from the check above and doesn't account
+  // for it changing across the `await` — reading it through an unknown
+  // AudioContextState avoids a bogus "no overlap" compile error.
+  return (ctx.state as AudioContextState) === 'running';
 }
 
 function tone(
@@ -116,12 +134,19 @@ export function playChime(id: SoundChoice): void {
   const ctx = getCtx();
   if (!ctx) return;
   const option = CHIME_OPTIONS.find(o => o.id === id) ?? CHIME_OPTIONS[1];
-  try {
-    option.play(ctx);
-  } catch {
-    // Best-effort — a sound glitch should never break the actual exercise
-    // flow it's celebrating.
-  }
+  // Fire-and-forget from the caller's side (every call site here is a
+  // void context) — but internally this always waits for the context to
+  // actually be running before scheduling a single oscillator.
+  (async () => {
+    const ok = await ensureRunning(ctx);
+    if (!ok) return;
+    try {
+      option.play(ctx);
+    } catch {
+      // Best-effort — a sound glitch should never break the actual
+      // exercise flow it's celebrating.
+    }
+  })();
 }
 
 export function playCorrectChime(): void {

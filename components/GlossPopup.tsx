@@ -1,6 +1,7 @@
 'use client';
 
 import { speakText } from '../lib/speech';
+import SpeakerIcon from './SpeakerIcon';
 
 // The fallback shown when a learner taps a word inside an AI-corrected
 // sentence that ISN'T one of Spello's own corpus words (see
@@ -21,9 +22,9 @@ export default function GlossPopup({ lemma, gloss }: { surfaceForm: string; lemm
           type="button"
           onClick={() => speakText(lemma)}
           aria-label={`Play pronunciation of ${lemma}`}
-          className="ml-1.5 align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-base"
+          className="ml-1.5 align-middle text-indigo-400 hover:text-indigo-600 transition-colors"
         >
-          🔊
+          <SpeakerIcon />
         </button>
       </span>
       <div className="text-stone-600 text-sm">{gloss}</div>

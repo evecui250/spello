@@ -4,11 +4,18 @@ import { useEffect, useState } from 'react';
 import { getSoundChoice, saveSoundChoice, SoundChoice } from '../lib/storage';
 import { CHIME_OPTIONS, playChime } from '../lib/sound';
 
+interface Props {
+  // Optional -- lets a parent (e.g. Settings' collapsed Appearance
+  // summary line) stay in sync with the pick without owning the
+  // selection state itself.
+  onChange?: (id: SoundChoice) => void;
+}
+
 // Tapping a row both previews it (immediate playChime) and selects it —
 // no separate "preview" vs "confirm" step, since a chime is short enough
 // that hearing it IS trying it out, the same way tapping a Theme swatch
 // both shows and picks a color.
-export default function SoundPicker() {
+export default function SoundPicker({ onChange }: Props) {
   const [choice, setChoice] = useState<SoundChoice>('triad-bloom');
   useEffect(() => setChoice(getSoundChoice()), []);
 
@@ -16,6 +23,7 @@ export default function SoundPicker() {
     setChoice(id);
     saveSoundChoice(id);
     playChime(id);
+    onChange?.(id);
   };
 
   return (

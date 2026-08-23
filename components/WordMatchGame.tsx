@@ -226,7 +226,6 @@ export default function WordMatchGame({ source, onQuit }: Props) {
       setMatchedCount(c => c + POINTS_PER_MATCH);
       setJustScored(true);
       setTimeout(() => setJustScored(false), 400);
-      speakWord(word);
       return;
     }
     setWrongFlash({ german: selectedGerman, english: selectedEnglish });
@@ -252,6 +251,11 @@ export default function WordMatchGame({ source, onQuit }: Props) {
   const pickGerman = (id: string) => {
     if (matchedIds.has(id) || wrongFlash) return;
     setSelectedGerman(id);
+    // Speaks on every tap of a German word, right or wrong -- not just
+    // when it happens to complete a correct pair (confirmed real: that
+    // read as "the sound only plays when I tap the English side").
+    const word = roundWords.find(w => w.id === id);
+    if (word) speakWord(word);
   };
   const pickEnglish = (text: string) => {
     if (wrongFlash) return;
@@ -279,7 +283,6 @@ export default function WordMatchGame({ source, onQuit }: Props) {
 
       {phase === 'intro' && (
         <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-4 items-center text-center">
-          <div className="text-5xl">🎮</div>
           <h2 className="text-lg font-bold text-stone-800">Match words against the clock</h2>
           {canPlay ? (
             <>
@@ -371,7 +374,6 @@ export default function WordMatchGame({ source, onQuit }: Props) {
 
       {phase === 'over' && (
         <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-3 items-center text-center">
-          <div className="text-5xl">⏱️</div>
           <h2 className="text-lg font-bold text-stone-800">Time&apos;s up!</h2>
           <div className="text-3xl font-extrabold text-indigo-700">{matchedCount} pairs matched</div>
           <button
