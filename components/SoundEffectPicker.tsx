@@ -51,10 +51,12 @@ function warmDestination(ctx: AudioContext, freq = 7000): AudioNode {
   return filter;
 }
 
-// C6/D6/E6/G6/A6/C7 — a small pentatonic-ish palette, so any combination
-// of notes below already sounds pleasant together rather than clashing.
-const C6 = 1046.5, D6 = 1174.7, E6 = 1318.5, G6 = 1568.0, A6 = 1760.0, C7 = 2093.0;
-const G5 = 784.0, A5 = 880.0, C6b = C6;
+// C4 through C6 — a small pentatonic-ish palette in a lower, warmer
+// register than the first round of candidates (owner feedback: #7 — G5
+// to C6 — was the only one pitched right; everything above C6 read as
+// too high). Nothing below now goes higher than #7's own C6 ceiling.
+const C4 = 261.63, E4 = 329.63, G4 = 392.0, A4 = 440.0;
+const C5 = 523.25, E5 = 659.25, G5 = 784.0, A5 = 880.0, C6 = 1046.5;
 
 export interface ChimePreset {
   id: string;
@@ -65,116 +67,115 @@ export interface ChimePreset {
 
 export const CHIME_PRESETS: ChimePreset[] = [
   {
-    id: 'soft-two-note',
+    id: 'soft-two-note-v2',
     name: '1. Soft Two-Note',
-    blurb: 'A gentle two-note "ta-da", softer and lower than the classic app chime.',
+    blurb: 'A gentle two-note "ta-da", a full octave lower and mellower than the first version.',
+    play(ctx) {
+      const d = warmDestination(ctx, 4500);
+      const t = ctx.currentTime;
+      tone(ctx, d, G4, t, 0.24, { gain: 0.3 });
+      tone(ctx, d, C5, t + 0.1, 0.3, { gain: 0.32 });
+    },
+  },
+  {
+    id: 'triad-bloom-v2',
+    name: '2. Triad Bloom',
+    blurb: 'Three notes blooming together into a warm chord, like a small "yes!"',
+    play(ctx) {
+      const d = warmDestination(ctx, 5000);
+      const t = ctx.currentTime;
+      tone(ctx, d, C5, t, 0.42, { gain: 0.2 });
+      tone(ctx, d, E5, t + 0.015, 0.42, { gain: 0.2 });
+      tone(ctx, d, G5, t + 0.03, 0.48, { gain: 0.22 });
+    },
+  },
+  {
+    id: 'bell-pluck-v2',
+    name: '3. Bell Pluck',
+    blurb: 'One warm, low bell-like note with a faint overtone, quick decay.',
     play(ctx) {
       const d = warmDestination(ctx, 6000);
       const t = ctx.currentTime;
-      tone(ctx, d, C6, t, 0.22, { gain: 0.28 });
-      tone(ctx, d, E6, t + 0.09, 0.28, { gain: 0.3 });
+      tone(ctx, d, E4, t, 0.48, { type: 'triangle', gain: 0.34 });
+      tone(ctx, d, E4 * 2.4, t, 0.26, { type: 'sine', gain: 0.06 });
     },
   },
   {
-    id: 'triad-bloom',
-    name: '2. Triad Bloom',
-    blurb: 'Three notes blooming together into a soft chord, like a small "yes!"',
+    id: 'rising-glow',
+    name: '4. Rising Glow',
+    blurb: 'Three quick ascending notes, warm rather than sparkly, settling on a soft landing.',
     play(ctx) {
-      const d = warmDestination(ctx, 6500);
+      const d = warmDestination(ctx, 5000);
       const t = ctx.currentTime;
-      tone(ctx, d, C6, t, 0.4, { gain: 0.18 });
-      tone(ctx, d, E6, t + 0.015, 0.4, { gain: 0.18 });
-      tone(ctx, d, G6, t + 0.03, 0.45, { gain: 0.2 });
+      tone(ctx, d, G4, t, 0.12, { gain: 0.28 });
+      tone(ctx, d, A4, t + 0.07, 0.12, { gain: 0.28 });
+      tone(ctx, d, C5, t + 0.14, 0.32, { gain: 0.32 });
     },
   },
   {
-    id: 'bell-pluck',
-    name: '3. Bell Pluck',
-    blurb: 'One warm bell-like note with a faint inharmonic overtone, quick decay.',
-    play(ctx) {
-      const d = warmDestination(ctx, 9000);
-      const t = ctx.currentTime;
-      tone(ctx, d, A5, t, 0.45, { type: 'triangle', gain: 0.32 });
-      tone(ctx, d, A5 * 2.4, t, 0.25, { type: 'sine', gain: 0.06 });
-    },
-  },
-  {
-    id: 'rising-sparkle',
-    name: '4. Rising Sparkle',
-    blurb: 'Three quick ascending notes with a light shimmer on the last one.',
-    play(ctx) {
-      const d = warmDestination(ctx, 8000);
-      const t = ctx.currentTime;
-      tone(ctx, d, C6, t, 0.11, { gain: 0.26 });
-      tone(ctx, d, D6, t + 0.07, 0.11, { gain: 0.26 });
-      tone(ctx, d, G6, t + 0.14, 0.3, { gain: 0.3 });
-      tone(ctx, d, G6 * 2, t + 0.14, 0.2, { gain: 0.05 });
-    },
-  },
-  {
-    id: 'marimba-pop',
+    id: 'marimba-pop-v2',
     name: '5. Marimba Pop',
-    blurb: 'A single soft "pop" with a little downward pitch slide, like a wooden mallet.',
+    blurb: 'A single low, soft "pop" with a little downward pitch slide, like a wooden mallet.',
     play(ctx) {
-      const d = warmDestination(ctx, 5500);
+      const d = warmDestination(ctx, 4000);
       const t = ctx.currentTime;
-      tone(ctx, d, G5, t, 0.22, { type: 'sine', gain: 0.34, endFreq: G5 * 0.85 });
+      tone(ctx, d, C4, t, 0.24, { type: 'sine', gain: 0.36, endFreq: C4 * 0.85 });
     },
   },
   {
-    id: 'gentle-arpeggio',
+    id: 'gentle-arpeggio-v2',
     name: '6. Gentle Arpeggio',
-    blurb: 'A soft four-note harp-like run, overlapping as it climbs.',
+    blurb: 'A soft four-note harp-like run, climbing up to meet #7\'s own top note.',
     play(ctx) {
-      const d = warmDestination(ctx, 6500);
+      const d = warmDestination(ctx, 5000);
       const t = ctx.currentTime;
-      [C6, E6, G6, C7].forEach((f, i) => {
-        tone(ctx, d, f, t + i * 0.05, 0.35, { type: 'triangle', gain: 0.2 });
+      [C5, E5, G5, C6].forEach((f, i) => {
+        tone(ctx, d, f, t + i * 0.055, 0.35, { type: 'triangle', gain: 0.22 });
       });
     },
   },
   {
     id: 'double-ding-soft',
-    name: '7. Double Ding (soft)',
+    name: '7. Double Ding (soft) — your pick, unchanged',
     blurb: 'The familiar two-note "ding-ding" shape, pitched lower and rounder.',
     play(ctx) {
       const d = warmDestination(ctx, 5500);
       const t = ctx.currentTime;
       tone(ctx, d, G5, t, 0.24, { gain: 0.3 });
-      tone(ctx, d, C6b, t + 0.11, 0.32, { gain: 0.32 });
+      tone(ctx, d, C6, t + 0.11, 0.32, { gain: 0.32 });
     },
   },
   {
-    id: 'crystal-tap',
-    name: '8. Crystal Tap',
-    blurb: 'A tiny high tick followed by a warm resonant tone underneath.',
+    id: 'soft-tap',
+    name: '8. Soft Tap',
+    blurb: 'A gentle tick followed by a warm resonant tone underneath — no longer a sharp high tick.',
     play(ctx) {
-      const tickDest = warmDestination(ctx, 11000);
-      const bodyDest = warmDestination(ctx, 5000);
+      const tickDest = warmDestination(ctx, 6000);
+      const bodyDest = warmDestination(ctx, 4000);
       const t = ctx.currentTime;
-      tone(ctx, tickDest, C7, t, 0.05, { type: 'triangle', gain: 0.14 });
-      tone(ctx, bodyDest, C6, t + 0.04, 0.35, { gain: 0.28 });
+      tone(ctx, tickDest, E5, t, 0.06, { type: 'triangle', gain: 0.16 });
+      tone(ctx, bodyDest, C5, t + 0.04, 0.36, { gain: 0.3 });
     },
   },
   {
-    id: 'soft-fifth',
+    id: 'soft-fifth-v2',
     name: '9. Soft Fifth Chord',
-    blurb: 'Two notes a fifth apart, ringing together softly — calm, not showy.',
+    blurb: 'Two notes a fifth apart, ringing together softly in a lower register — calm, not showy.',
     play(ctx) {
-      const d = warmDestination(ctx, 6000);
+      const d = warmDestination(ctx, 4500);
       const t = ctx.currentTime;
-      tone(ctx, d, C6, t, 0.32, { gain: 0.22 });
-      tone(ctx, d, G6, t, 0.34, { gain: 0.22 });
+      tone(ctx, d, C5, t, 0.34, { gain: 0.24 });
+      tone(ctx, d, G5, t, 0.36, { gain: 0.24 });
     },
   },
   {
-    id: 'playful-bounce',
+    id: 'playful-bounce-v2',
     name: '10. Playful Bounce',
-    blurb: 'A quick upward pitch bend on one note — small, bouncy, a bit cheeky.',
+    blurb: 'A quick upward pitch bend on one note, in a lower range — bouncy without being squeaky.',
     play(ctx) {
-      const d = warmDestination(ctx, 6500);
+      const d = warmDestination(ctx, 4500);
       const t = ctx.currentTime;
-      tone(ctx, d, 600, t, 0.16, { type: 'triangle', gain: 0.3, endFreq: 950 });
+      tone(ctx, d, 300, t, 0.18, { type: 'triangle', gain: 0.32, endFreq: 450 });
     },
   },
 ];
