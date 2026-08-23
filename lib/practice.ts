@@ -250,7 +250,13 @@ export function resizeTodayStudyBatch(newSize: number): void {
   }
 }
 
-// Earlier stage = less mature = reviewed first when due dates tie.
+// Later stage = more mature = reviewed first when due dates tie (see
+// buildReviewWords' own comment) — a word one review away from being
+// fully mastered clears out of the pool for good on a pass, while an
+// earlier-stage word just cycles back into a future review regardless,
+// so finishing the near-done ones first actually shrinks the backlog
+// instead of leaving them to keep losing the daily-cap lottery to a
+// constant stream of earlier-stage words.
 const STAGE_RANK: Record<MascotStageId, number> = { puppy: 0, short: 1, medium: 2, 'long-crowned': 3 };
 
 // Review pool: words that have finished introduction (mascotStage set) and
@@ -274,11 +280,12 @@ export function buildReviewWords(
     if (!includeToday && p.nextReviewDue && p.nextReviewDue > t) return false;
     return true;
   });
-  // Most overdue first, then earliest-stage (least mature) first.
+  // Most overdue first, then most-mature-stage first (see STAGE_RANK's
+  // own comment) when due dates tie.
   pool.sort((a, b) => {
     const dueA = allProgress[a.id].nextReviewDue ?? t;
     const dueB = allProgress[b.id].nextReviewDue ?? t;
-    return dueA.localeCompare(dueB) || STAGE_RANK[allProgress[a.id].mascotStage!] - STAGE_RANK[allProgress[b.id].mascotStage!];
+    return dueA.localeCompare(dueB) || STAGE_RANK[allProgress[b.id].mascotStage!] - STAGE_RANK[allProgress[a.id].mascotStage!];
   });
   return pool.slice(0, limit);
 }

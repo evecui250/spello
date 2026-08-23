@@ -62,8 +62,20 @@ const CARD_VARIANTS: CardVariant[] = [
   { src: 'congrats_cat_new.png', dateColor: DEFAULT_DATE_COLOR },
   { src: 'congrats_fox.png', dateColor: DEFAULT_DATE_COLOR },
   { src: 'congrats_fox_stand.png', dateColor: DEFAULT_DATE_COLOR },
-  { src: 'congrats_panda.png', dateColor: DEFAULT_DATE_COLOR },
+  // panda_wrist replaces the original panda card outright (same bamboo
+  // scene, the mascot just wears the watch on its wrist instead).
+  { src: 'congrats_panda_wrist.png', dateColor: DEFAULT_DATE_COLOR },
   { src: 'congrats_rabbit.png', dateColor: DEFAULT_DATE_COLOR },
+  { src: 'congrats_elephant.png', dateColor: DEFAULT_DATE_COLOR },
+  { src: 'congrats_hedgehog.png', dateColor: DEFAULT_DATE_COLOR },
+  { src: 'congrats_koala.png', dateColor: DEFAULT_DATE_COLOR },
+  { src: 'congrats_otter.png', dateColor: DEFAULT_DATE_COLOR },
+  // Night scene (dark navy sky) — still DEFAULT_DATE_COLOR, not a bespoke
+  // light color: the shadowColor glow drawn behind the date text below
+  // (a soft white halo) is exactly what already handles a dark/busy
+  // corner like this one, same as it does for the bamboo-leaf panda scene.
+  { src: 'congrats_owl.png', dateColor: DEFAULT_DATE_COLOR },
+  { src: 'congrats_penguin.png', dateColor: DEFAULT_DATE_COLOR },
 ];
 
 // Deterministic, not Math.random() — keyed off the calendar date so

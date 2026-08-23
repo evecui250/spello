@@ -1105,11 +1105,10 @@ function ReferenceSentence({ example, word, masked = false }: {
     <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
       {/* No "Example sentence"/"In context" label any more — confirmed
           real feedback that it read as clutter once the sentence itself
-          was already doing that job. The speaker button alone stays,
-          still centered above the sentence. */}
-      <div className="flex items-center justify-center mb-1">
-        <TextSpeakerButton text={example.sentence} className="text-indigo-400 hover:text-indigo-600 transition-colors" />
-      </div>
+          was already doing that job. The speaker button now sits inline
+          at the END of the German sentence instead of its own header row
+          above it — confirmed real that the old row-above placement took
+          up a lot of vertical space for a single icon. */}
       <div className="text-stone-700 italic">
         {parts ? (
           <>
@@ -1124,13 +1123,15 @@ function ReferenceSentence({ example, word, masked = false }: {
             {parts.after}
           </>
         ) : example.sentence}
+        {' '}
+        <TextSpeakerButton text={example.sentence} className="text-indigo-400 hover:text-indigo-600 transition-colors align-middle not-italic" />
       </div>
       {translation && (
         <div className="text-stone-500 text-sm mt-1">
           {translationParts ? (
             <>
               {translationParts.before}
-              <span className="font-semibold text-stone-700">{translationParts.match}</span>
+              <span className="font-bold text-indigo-700">{translationParts.match}</span>
               {translationParts.after}
             </>
           ) : translation}

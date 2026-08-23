@@ -515,13 +515,24 @@ function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): Wo
   // yet) look review-eligible to buildReviewWords.
   const mascotStage = p?.mascotStage ?? (fullyMastered ? 'long-crowned' : undefined);
   // Grandfathering: a word already past introduction (has a stage) but with
-  // no next-review date, or one that's already overdue, becomes due today
-  // instead of trying to reverse-engineer a historical schedule — the exact
-  // same "meet it where it is" treatment an overdue review already gets.
-  // A genuinely future-dated old-schedule date is left alone (avoids
-  // dumping a huge backlog on a long-time user's first post-migration day).
+  // NO next-review date at all — a real pre-fixed-schedule record — becomes
+  // due today instead of trying to reverse-engineer a historical schedule.
+  // Deliberately NOT "or one that's already overdue" any more (confirmed
+  // real bug: that ran on every single load/getWordProgress call, not
+  // once, so a word that simply hadn't been reviewed yet today had its
+  // genuinely-overdue date silently rewritten to today, EVERY day it went
+  // unreviewed — permanently erasing how overdue it actually was and
+  // masking it behind an ever-refreshing "due today" instead. Combined
+  // with buildReviewWords sorting same-due-date words by least-mature
+  // stage first, this meant a huge, perpetually-regenerating pile of
+  // fresher puppy/short words could indefinitely crowd out the smaller
+  // number of medium-stage words one review away from being fully
+  // mastered — the real explanation behind "0 words mastered" even after
+  // weeks of real use. A genuinely overdue date must be left alone: it's
+  // exactly the signal buildReviewWords' "most overdue first" sort needs
+  // to actually prioritize it.
   let nextReviewDue = p?.nextReviewDue;
-  if (mascotStage && mascotStage !== 'long-crowned' && (!nextReviewDue || nextReviewDue < today())) {
+  if (mascotStage && mascotStage !== 'long-crowned' && !nextReviewDue) {
     nextReviewDue = today();
   }
   if (mascotStage === 'long-crowned') nextReviewDue = undefined;

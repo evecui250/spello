@@ -430,26 +430,24 @@ export default function SettingsPage() {
         <ShareCard />
       </div>
 
-      {/* Preview-only entry point — not yet part of the main daily flow,
-          see app/game/page.tsx's own top comment. */}
-      <Link
-        href="/game?source=settings_preview"
-        className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm py-3 px-4 font-semibold text-stone-700 hover:bg-amber-50 active:scale-[0.99] transition-all"
+      {/* A tester previously mis-tapped a prominent on-page danger-zone
+          button, which is why this opens a confirmation modal rather than
+          resetting outright — but per owner feedback, burying the entry
+          point itself as a small text link made it too easy to miss
+          entirely. Same visual weight as View welcome guide/Share Spello
+          above, just red-tinted so it still reads as the odd one out. */}
+      <button
+        type="button"
+        onClick={() => setResetModalOpen(true)}
+        className="text-center bg-red-50/80 backdrop-blur-sm rounded-2xl border border-red-100 shadow-sm p-4 font-semibold text-red-700 hover:bg-red-100/60 transition-colors"
       >
-        Try the new word-match game (preview)
-      </Link>
+        Reset account
+      </button>
 
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm">
         <Link href="/terms" className="text-amber-200 hover:text-amber-100 underline">Terms of Service</Link>
         <Link href="/privacy" className="text-amber-200 hover:text-amber-100 underline">Privacy Policy</Link>
         <BugReportButton />
-        <button
-          type="button"
-          onClick={() => setResetModalOpen(true)}
-          className="text-amber-200 hover:text-amber-100 underline"
-        >
-          Reset
-        </button>
         {signedInEmail === ADMIN_EMAIL && (
           <Link href="/admin" className="text-amber-200 hover:text-amber-100 underline">Admin</Link>
         )}

@@ -53,7 +53,17 @@ function speakWithBrowserVoice(text: string): void {
   utterance.volume = SENTENCE_AUDIO_VOLUME;
   const voice = pickGermanVoice();
   if (voice) utterance.voice = voice;
-  window.speechSynthesis.cancel();
+  // Only cancel when something is actually in-flight -- calling cancel()
+  // unconditionally right before speak(), even with nothing queued, is a
+  // known Chromium/Chrome-on-Android flake: the immediately-following
+  // speak() can get silently dropped rather than actually spoken,
+  // reportedly worse right after a fresh page load (exactly when a
+  // learner's first tap of this button would hit it). Skipping the
+  // no-op cancel avoids that race entirely; a genuinely in-flight
+  // utterance (rapid repeat taps) still gets cancelled as before.
+  if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+    window.speechSynthesis.cancel();
+  }
   window.speechSynthesis.speak(utterance);
 }
 
