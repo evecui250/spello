@@ -290,13 +290,102 @@ function isLetter(ch: string): boolean {
   return /[a-zA-ZäöüÄÖÜß]/.test(ch);
 }
 
+// Closed lists of genuine, unambiguous German word-formation prefixes,
+// checked longest-first so e.g. "zurück" wins over any shorter coincidental
+// overlap. Deliberately excludes short 2-letter prefixes (be-, er-, an-,
+// zu-) even though they're real — at 2 letters they're too likely to
+// coincidentally match the START of a monomorphemic word that just isn't
+// prefixed at all (e.g. "bellen" starts with "be" but isn't be- + "llen").
+// The 3+-letter ones here are genuine, closed word-formation classes with
+// far lower collision risk: German verbs really do draw their prefixes
+// from this specific list, not from arbitrary syllables.
+const VERB_PREFIXES = [
+  'auseinander', 'hinterher', 'entgegen', 'zusammen',
+  'zurück', 'wieder', 'weiter',
+  'durch', 'unter', 'über', 'wider', 'hinter', 'miss',
+  'auf', 'aus', 'bei', 'ein', 'mit', 'vor', 'weg', 'los', 'hin', 'her', 'zer', 'ver', 'ent', 'emp', 'um',
+].sort((a, b) => b.length - a.length);
+
+// Same idea for the small closed set of quantity words German uses to
+// build compound-style adjectives/nouns (einseitig = ein+seitig,
+// mehrsprachig = mehr+sprachig) — not verbs, so kept separate.
+const QUANTITY_PREFIXES = ['ein', 'zwei', 'drei', 'vier', 'fünf', 'mehr', 'viel', 'wenig', 'halb', 'ganz', 'gleich']
+  .sort((a, b) => b.length - a.length);
+
+// Every corpus word's lowercased form, 3+ letters — built once, lazily,
+// and reused as the "is this a recognizable standalone word?" check for
+// compound splitting below. Not level-filtered: a simpler word from ANY
+// level (even one the learner hasn't studied yet) still being a real,
+// nameable German word is exactly what makes a compound's first half
+// recognizable, so restricting this to "already-known" words would make
+// the hint worse, not more honest.
+let corpusWordSet: Set<string> | null = null;
+function getCorpusWordSet(): Set<string> {
+  if (!corpusWordSet) {
+    corpusWordSet = new Set(WORDS.map(w => w.de.toLowerCase()).filter(w => w.length >= 3));
+  }
+  return corpusWordSet;
+}
+
+// A few common linking fragments German inserts between compound parts
+// (Verkehrsmittel = Verkehr+s+Mittel, Tageszeitung = Tag+es+Zeitung) —
+// tried after a recognized head word, longest first.
+const LINKING_FRAGMENTS = ['es', 'en', 's', 'n', 'e', ''];
+
+// Finds a linguistically real place to split `word.de`'s FIRST chunk off
+// for round 2's hint, rather than an arbitrary letter-count half — a verb
+// prefix (closed list), a quantity prefix on an adjective/noun (closed
+// list), or (for any word type) another whole corpus word recognizable at
+// the start of this one, optionally followed by a linking fragment.
+// Returns the character length of that first chunk, or null when nothing
+// reliable is found (most words: no prefix, no recognizable compound
+// head) — callers fall back to the plain half-letter split for those,
+// same as before this existed.
+function splitMorphemePrefix(word: Word): number | null {
+  const lower = word.de.toLowerCase();
+
+  if (word.type === 'verb') {
+    for (const p of VERB_PREFIXES) {
+      if (lower.startsWith(p) && lower.length - p.length >= 2) return p.length;
+    }
+  } else {
+    for (const p of QUANTITY_PREFIXES) {
+      if (lower.startsWith(p) && lower.length - p.length >= 3) return p.length;
+    }
+  }
+
+  const candidates = getCorpusWordSet();
+  const maxHeadLen = Math.min(lower.length - 3, 14);
+  // 4, not 3 -- a real audit against the whole corpus found 3-letter
+  // "head" words (gar, nie, eng, wer, man, fan...) coincidentally
+  // matching the start of a totally unrelated loanword often enough to
+  // matter (Qualifikation -> "Qual", Garderobe -> "Gar", Niederlage ->
+  // "Nie") -- a wrong-looking hint is worse than the plain half-split
+  // fallback it would otherwise get, so this trades away a few
+  // legitimate short matches (Fuß, Rad) to cut that false-positive rate
+  // way down.
+  for (let len = maxHeadLen; len >= 4; len--) {
+    const head = lower.slice(0, len);
+    if (!candidates.has(head)) continue;
+    for (const link of LINKING_FRAGMENTS) {
+      const cut = len + link.length;
+      if (lower.length - cut < 3) continue;
+      if (lower.slice(len, cut) === link) return cut;
+    }
+  }
+  return null;
+}
+
 // Returns hint pattern: true = hidden (user must type it), false = revealed (locked, pre-filled).
 // Round 1: nothing revealed in the tiles (the word is shown separately as reference text).
-// Round 2: ~50% of letters revealed, always including the first letter.
+// Round 2: a linguistically real first chunk revealed when one can be
+// found with confidence (verb prefix, quantity prefix, or a recognizable
+// compound head — see splitMorphemePrefix), otherwise ~50% of letters as
+// a plain fallback. Always includes the first letter either way.
 // Round 3: only the first letter revealed.
 // Round 4: no hints — full recall.
-export function generateHint(word: string, round: Round): boolean[] {
-  const chars = [...word];
+export function generateHint(word: Word, round: Round): boolean[] {
+  const chars = [...word.de];
   const n = chars.length;
   const letterIndices = chars.map((c, i) => (isLetter(c) ? i : -1)).filter(i => i !== -1);
 
@@ -306,14 +395,18 @@ export function generateHint(word: string, round: Round): boolean[] {
   } else if (round === 3) {
     base = Array.from({ length: n }, (_, i) => i !== letterIndices[0]);
   } else {
-    // round 2 — reveal the first half of the word's LETTERS (not a random
-    // half, and not a raw character-count split, so a hyphen or similar
-    // never eats into the allowance — it's revealed unconditionally below
-    // anyway). A real prefix is a much stronger recall cue than scattered
-    // random letters, and being deterministic means recomputing this (e.g.
-    // after switching tabs and back) always reproduces the exact same
-    // reveal instead of a fresh random draw that reads as a different card.
-    const revealCount = Math.max(1, Math.round(letterIndices.length / 2));
+    // round 2 — reveal a real morpheme boundary when one is found with
+    // confidence, else the first half of the word's LETTERS (not a
+    // random half, and not a raw character-count split, so a hyphen or
+    // similar never eats into the allowance — it's revealed
+    // unconditionally below anyway). Being deterministic either way
+    // means recomputing this (e.g. after switching tabs and back)
+    // always reproduces the exact same reveal instead of a fresh random
+    // draw that reads as a different card.
+    const morphemeLen = splitMorphemePrefix(word);
+    const revealCount = morphemeLen !== null
+      ? letterIndices.filter(i => i < morphemeLen).length
+      : Math.max(1, Math.round(letterIndices.length / 2));
     const revealed = new Set(letterIndices.slice(0, revealCount));
     base = Array.from({ length: n }, (_, i) => !revealed.has(i));
   }

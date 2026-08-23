@@ -1456,7 +1456,7 @@ export default function DailySessionFlow() {
     setCurrentRound(round);
     setRoundRange(mode === 'review' ? [plan.startRound, plan.capRound] : [1, 2]);
     setActiveChunk(mode === 'review' ? chunkForStage(stage) : 1);
-    const h = generateHint(w.de, round);
+    const h = generateHint(w, round);
     const chars = [...w.de];
     setHint(h);
     setValues(chars.map((c, i) => (h[i] ? '' : c)));
@@ -1769,7 +1769,7 @@ export default function DailySessionFlow() {
     }
 
     setCurrentRound(nextRound);
-    const h = generateHint(word.de, nextRound);
+    const h = generateHint(word, nextRound);
     const chars = [...word.de];
     setHint(h);
     setValues(chars.map((c, i) => (h[i] ? '' : c)));
