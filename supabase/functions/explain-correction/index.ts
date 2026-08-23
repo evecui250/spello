@@ -108,42 +108,58 @@ Deno.serve(async (req: Request) => {
               'You are a German tutor. A beginner learner (CEFR ' + (level || 'A1') + ') tried to ' +
               `translate a sentence, practicing the word "${wordDe}". Their attempt: "${originalAttempt || '(nothing — they left it blank)'}". ` +
               `The correct sentence is: "${correctedSentence}". ` +
-              `Compare the attempt against the correction and identify AT MOST ${pointCap} concrete ` +
-              'GRAMMAR points the learner should take away — but fewer is better than more: only ' +
-              'include a point for a mistake that is actually there. That said, do NOT under-report ' +
-              'either — if there are genuinely 2-3 DISTINCT real grammar issues (e.g. a wrong ' +
-              'article AND a wrong adjective ending AND a wrong possessive-pronoun case, all in the ' +
-              'same sentence), give each its own point, up to the cap; "fewer is better" means never ' +
-              'padding the list with a minor or borderline point just to fill it out, not skipping a ' +
-              'second or third issue that is actually there to keep the list short. If there is truly ' +
-              'only one real grammar issue, return exactly one point. Article/case (der/die/das, ' +
-              'den/dem/der agreement), adjective endings, verb tense/conjugation, preposition ' +
-              'choice, or a word-class mix-up (e.g. using a verb form where a noun was needed, like ' +
-              '"reisen" [to travel] instead of "Reisende" [traveler]). Before writing each point, ' +
-              "re-read the attempt's actual word order carefully and confirm EXACTLY which word " +
-              "or phrase in the attempt the point is about, and what that word was governing/" +
-              'modifying THERE (not what a similar-looking word would typically govern) — German ' +
-              "word order means a preposition/article near one noun in the attempt can land near " +
-              'a different noun in the correction, or vice versa; do not assume based on position ' +
-              'alone. If you are not sure which specific word changed or what it was attached to, ' +
-              'leave that point out rather than risk mis-describing it. ' +
-              'Only flag something as a mistake if the German grammar OBJECTIVELY requires a ' +
-              'specific form given what the English sentence actually says. If the English sentence ' +
-              'itself is silent or ambiguous on a detail — most commonly formal vs informal address ' +
-              '("Sie" vs "du/ihn/ihm/dich"), or a pronoun that does not pin down gender/number/' +
-              'formality — and the learner picked one valid reading of that ambiguity, do NOT treat ' +
-              'it as wrong, even though the correction happens to use a different valid choice; leave ' +
-              'it out of the points entirely rather than describe it as a mistake. ' +
-              'Capitalization (German capitalizes every noun — a spelling convention to internalize ' +
-              'by habit, not a grammar insight worth a point) and hyphenation are never their own ' +
-              'point. Spelling: if one or more changed words are pure SPELLING mistakes — the ' +
-              'SAME word, just misspelled, with no grammar difference at all (e.g. "Testergbnis" ' +
-              'instead of "Testergebnis", "Dokter" instead of "Doktor") — do not give each one its ' +
-              'own point or a full grammar explanation; instead combine every spelling-only mistake ' +
-              'into exactly ONE point using this compact template: "Spelling mistakes: A instead of ' +
-              'B, C instead of D." (list only the ones that are pure spelling; a single spelling slip ' +
-              'still gets this same one-line format, just with one pair). Do not simply say a word ' +
-              '"was wrong" for anything else either — every non-spelling point must explain the ' +
+              'FIRST, carefully go word by word through BOTH sentences and list every single word ' +
+              'that differs at all between the attempt and the correction — do not skip any, ' +
+              'including a subtle one- or two-letter difference that looks like a typo (e.g. ' +
+              '"geziegt" vs "gezeigt"); missing one of these is a real failure. For EACH changed ' +
+              'word, decide which of the two buckets below it belongs to — every changed word goes ' +
+              'in exactly one bucket, never both, and never silently dropped: ' +
+              '\n\n' +
+              '1) SPELLING — the exact same word, just misspelled (letters added/dropped/swapped/' +
+              'transposed), with no actual difference in grammatical form or meaning (e.g. ' +
+              '"Testergbnis"/"Testergebnis", "Dokter"/"Doktor", "geziegt"/"gezeigt"). Put every one ' +
+              'of these in the "spelling" array as {"wrong": "...", "correct": "..."} using the exact ' +
+              'substrings verbatim as they appear in the attempt and correction respectively — do ' +
+              'not paraphrase them, and do not also make a grammar point about them. Capitalization ' +
+              '(German capitalizes every noun) and hyphenation differences belong here too, not as ' +
+              'their own grammar point. There is no cap on how many spelling entries you list — a ' +
+              'sentence with three typos needs all three, not just the first. ' +
+              '\n\n' +
+              '2) GRAMMAR — a genuine difference in form, agreement, tense, case, word choice, or ' +
+              `word ORDER. Identify AT MOST ${pointCap} of these as concrete points the learner ` +
+              'should take away — but fewer is better than more: only include a point for a mistake ' +
+              'that is actually there. That said, do NOT under-report either — if there are ' +
+              'genuinely 2-3 DISTINCT real grammar issues (e.g. a wrong article AND a wrong ' +
+              'adjective ending AND a wrong possessive-pronoun case, all in the same sentence), give ' +
+              'each its own point, up to the cap; "fewer is better" means never padding the list with ' +
+              'a minor or borderline point just to fill it out, not skipping a second or third issue ' +
+              'that is actually there to keep the list short. If there is truly only one real grammar ' +
+              'issue, return exactly one point. Covers: article/case (der/die/das, den/dem/der ' +
+              'agreement), adjective endings, verb tense/conjugation, preposition choice, a ' +
+              'word-class mix-up (e.g. using a verb form where a noun was needed, like "reisen" [to ' +
+              'travel] instead of "Reisende" [traveler]), AND word order — German subordinate ' +
+              'clauses (e.g. after "dass", "weil", "obwohl") require the finite verb to move to the ' +
+              'very end of the clause; if the learner\'s word is already the CORRECT word/form but ' +
+              'just in the wrong position, that is a word-order mistake, not a form mistake — say so ' +
+              'explicitly by naming where it belongs (e.g. \'After "dass", the finite verb "war" ' +
+              'must move to the end of the clause.\'). NEVER phrase a point as \'"X" should be "X"\' ' +
+              '(the same word on both sides) — if you catch yourself about to write that, it is ' +
+              'almost always actually a word-order issue described wrong; fix the phrasing to ' +
+              'describe the position, not a form change. Before writing each point, re-read the ' +
+              "attempt's actual word order carefully and confirm EXACTLY which word or phrase in " +
+              'the attempt the point is about, and what that word was governing/modifying THERE ' +
+              '(not what a similar-looking word would typically govern) — German word order means a ' +
+              'preposition/article near one noun in the attempt can land near a different noun in ' +
+              'the correction, or vice versa; do not assume based on position alone. If you are not ' +
+              'sure which specific word changed or what it was attached to, leave that point out ' +
+              'rather than risk mis-describing it. Only flag something as a mistake if the German ' +
+              'grammar OBJECTIVELY requires a specific form given what the English sentence actually ' +
+              'says. If the English sentence itself is silent or ambiguous on a detail — most ' +
+              'commonly formal vs informal address ("Sie" vs "du/ihn/ihm/dich"), or a pronoun that ' +
+              'does not pin down gender/number/formality — and the learner picked one valid reading ' +
+              'of that ambiguity, do NOT treat it as wrong, even though the correction happens to use ' +
+              'a different valid choice; leave it out of the points entirely rather than describe it ' +
+              'as a mistake. Do not simply say a word "was wrong" — every point must explain the ' +
               'actual grammar rule behind the fix, briefly, so it is something the learner can apply ' +
               'next time. For an AGREEMENT fix specifically (adjective ending, article, or ' +
               'possessive pronoun matching a noun\'s gender/case), use this compact shape and ' +
@@ -157,16 +173,19 @@ Deno.serve(async (req: Request) => {
               'Sozialarbeiter"而不是"die Sozialarbeiter"\' — same information, without the ' +
               'throat-clearing. Skip anything you are not confident is actually correct — accuracy ' +
               `matters more than reaching ${pointCap}; fewer solid points beats padding out to ` +
-              `${pointCap} with a shaky one. If the attempt was blank, too garbled, or simply used different (not ` +
-              'wrong) vocabulary with no real grammar issue to point out, return a single point ' +
-              'that briefly says what the correct sentence means instead. Each point must be ' +
-              `ONE short, plain sentence (no more than ~20 words), written in ${lang}, and must ` +
-              'NOT repeat the full corrected sentence back — the learner can already see it. ' +
-              'Respond with exactly this JSON: {"points": ["...", ...]}.',
+              `${pointCap} with a shaky one. If the attempt was blank, too garbled, or simply used ` +
+              'different (not wrong) vocabulary with no real grammar issue to point out, return a ' +
+              'single point that briefly says what the correct sentence means instead. Each point ' +
+              `must be ONE short, plain sentence (no more than ~20 words), written in ${lang}, and ` +
+              'must NOT repeat the full corrected sentence back — the learner can already see it. ' +
+              '\n\n' +
+              'Respond with exactly this JSON: {"points": ["...", ...], "spelling": [{"wrong": ' +
+              '"...", "correct": "..."}, ...]}. Either array may be empty (e.g. spelling: [] if ' +
+              'there were no pure spelling mistakes at all), but not both.',
           },
         ],
         temperature: 0.2,
-        max_tokens: 260,
+        max_tokens: 350,
       }),
     });
 
@@ -178,7 +197,7 @@ Deno.serve(async (req: Request) => {
 
     const result = await completion.json();
     const raw: string = result.choices?.[0]?.message?.content ?? '{}';
-    let parsed: { points?: string[] } = {};
+    let parsed: { points?: string[]; spelling?: { wrong?: string; correct?: string }[] } = {};
     try {
       parsed = JSON.parse(raw);
     } catch {
@@ -197,11 +216,15 @@ Deno.serve(async (req: Request) => {
     });
 
     const points = Array.isArray(parsed.points) ? parsed.points.filter(p => typeof p === 'string' && p.trim()) : [];
-    if (points.length === 0) {
+    const spelling = Array.isArray(parsed.spelling)
+      ? parsed.spelling.filter((s): s is { wrong: string; correct: string } =>
+          !!s && typeof s.wrong === 'string' && !!s.wrong.trim() && typeof s.correct === 'string' && !!s.correct.trim())
+      : [];
+    if (points.length === 0 && spelling.length === 0) {
       console.error('Malformed AI response (explain-correction):', raw);
       return json({ error: 'AI returned an empty explanation' }, 502);
     }
-    return json({ points });
+    return json({ points, spelling });
   } catch (err) {
     console.error('explain-correction error:', err);
     return json({ error: 'Unexpected error' }, 500);

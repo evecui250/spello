@@ -157,12 +157,30 @@ export async function correctSentence(
   return { sentence: data.sentence, wordForm: data.wordForm };
 }
 
+// A single misspelled word, paired with its correction — kept as
+// STRUCTURED data (not folded into a prose `points` bullet) specifically
+// so the UI can compute its own letter-level diff and underline exactly
+// what changed, rather than trying to parse that back out of AI-written
+// text. wrong/correct are the exact substrings as they literally appear
+// in the attempt/correction (verbatim, so a client-side diff lines up).
+export interface SpellingMistake {
+  wrong: string;
+  correct: string;
+}
+
+export interface ExplanationResult {
+  points: string[];
+  spelling: SpellingMistake[];
+}
+
 // The "Why?" button — a short, on-demand GRAMMAR explanation (article/
-// case, adjective endings, verb tense, preposition choice, word-class
-// mix-ups — not spelling, not a vague "this was wrong") of a single
-// correction, only ever called if the learner taps for it (never part of
-// the main check flow, so it never adds latency there). Returns up to 3
-// short bullet points, in the learner's own nativeLanguage. Shares
+// case, adjective endings, verb tense, word order, preposition choice,
+// word-class mix-ups) of a single correction, PLUS every pure spelling
+// slip found separately (see SpellingMistake) — only ever called if the
+// learner taps for it (never part of the main check flow, so it never
+// adds latency there). `points` is capped at 3 short bullets, in the
+// learner's own nativeLanguage; `spelling` has no such cap (a sentence
+// with three typos should surface all three, not just the first). Shares
 // correct-sentence's daily cap (see explain-correction's own comment) and
 // throws the same way, so callers can reuse the exact same error handling
 // (AIUnreachableError/DailyLimitReachedError) already built for corrections.
@@ -174,12 +192,16 @@ export async function explainCorrection(
   correctedSentence: string,
   nativeLanguage: 'en' | 'zh' = 'en',
   maxPoints?: number,
-): Promise<string[]> {
-  const { data, error } = await invokeWithTimeout<{ points?: string[]; limitReached?: boolean }>('explain-correction', { wordId, wordDe, level, originalAttempt, correctedSentence, nativeLanguage, maxPoints });
+): Promise<ExplanationResult> {
+  const { data, error } = await invokeWithTimeout<{ points?: string[]; spelling?: SpellingMistake[]; limitReached?: boolean }>('explain-correction', { wordId, wordDe, level, originalAttempt, correctedSentence, nativeLanguage, maxPoints });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
-  if (!Array.isArray(data?.points) || data.points.length === 0) throw new Error('Malformed AI response');
-  return data.points as string[];
+  const points = Array.isArray(data?.points) ? data.points : [];
+  const spelling = Array.isArray(data?.spelling)
+    ? data.spelling.filter((s): s is SpellingMistake => !!s && typeof s.wrong === 'string' && typeof s.correct === 'string')
+    : [];
+  if (points.length === 0 && spelling.length === 0) throw new Error('Malformed AI response');
+  return { points, spelling };
 }
 
 export interface WordGloss {
