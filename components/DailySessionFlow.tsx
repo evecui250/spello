@@ -2752,7 +2752,19 @@ export default function DailySessionFlow() {
                   Check
                 </button>
                 {currentRound > 1 && (
-                  <button onClick={handleHint} className="w-full text-slate-400 py-1 text-sm font-medium hover:text-slate-600 transition-colors">
+                  // Explicit key -- without one, this sits at the same
+                  // child position the feedback screen's own "Next →"
+                  // button occupies (see below), so advancing to a new
+                  // round-2+ card let React reuse that SAME DOM node
+                  // rather than mount a fresh one: the node's className
+                  // morphed from Next's bg-indigo-600 straight to Hint's
+                  // transparent background, and since both classNames
+                  // include a transition, the browser animated that
+                  // color change -- a real, confirmed "purple blink"
+                  // right after tapping Next. A distinct key tells React
+                  // these are different elements, forcing a clean
+                  // unmount/remount instead of an in-place style morph.
+                  <button key="hint" onClick={handleHint} className="w-full text-slate-400 py-1 text-sm font-medium hover:text-slate-600 transition-colors">
                     Hint
                   </button>
                 )}
@@ -2769,6 +2781,7 @@ export default function DailySessionFlow() {
                   )}
                 </div>
                 <button
+                  key="next"
                   onClick={handleNext}
                   className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
                 >

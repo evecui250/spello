@@ -152,7 +152,15 @@ Deno.serve(async (req: Request) => {
               'preposition/article near one noun in the attempt can land near a different noun in ' +
               'the correction, or vice versa; do not assume based on position alone. If you are not ' +
               'sure which specific word changed or what it was attached to, leave that point out ' +
-              'rather than risk mis-describing it. Only flag something as a mistake if the German ' +
+              'rather than risk mis-describing it. Before including ANY point, check the exact word/ ' +
+              'phrase you are about to quote as "wrong" against what you are about to quote as ' +
+              '"correct" — if they are character-for-character identical, that word did NOT actually ' +
+              'change between the attempt and the correction (a real case: "Erwerb" appeared ' +
+              'unchanged in both, yet a point was invented claiming it needed to agree with a nearby ' +
+              'plural noun — it did not, nothing about it was wrong). Do not invent an agreement/case ' +
+              'reason for a word just because a plural or other noun sits nearby; find whichever word ' +
+              'ACTUALLY differs instead, or omit the point entirely if nothing nearby actually does. ' +
+              'Only flag something as a mistake if the German ' +
               'grammar OBJECTIVELY requires a specific form given what the English sentence actually ' +
               'says. If the English sentence itself is silent or ambiguous on a detail — most ' +
               'commonly formal vs informal address ("Sie" vs "du/ihn/ihm/dich"), or a pronoun that ' +
@@ -215,10 +223,24 @@ Deno.serve(async (req: Request) => {
       kind: 'explanation',
     });
 
-    const points = Array.isArray(parsed.points) ? parsed.points.filter(p => typeof p === 'string' && p.trim()) : [];
+    // Hard backstop for the exact failure the prompt above tries to head
+    // off ("Erwerb" should be "Erwerb" because it needs to match the
+    // plural "Fähigkeiten" — a real, confirmed case where the model
+    // invented an agreement reason for a word that hadn't actually
+    // changed at all). Catches the same-quoted-substring-twice shape
+    // regardless of phrasing, so a prompt-compliance slip still can't
+    // reach the learner as a nonsensical point.
+    const SAME_WORD_POINT = /"([^"]+)"[^".]*\bshould be\b[^".]*"\1"/i;
+    const points = Array.isArray(parsed.points)
+      ? parsed.points.filter(p => typeof p === 'string' && p.trim() && !SAME_WORD_POINT.test(p))
+      : [];
     const spelling = Array.isArray(parsed.spelling)
       ? parsed.spelling.filter((s): s is { wrong: string; correct: string } =>
-          !!s && typeof s.wrong === 'string' && !!s.wrong.trim() && typeof s.correct === 'string' && !!s.correct.trim())
+          !!s && typeof s.wrong === 'string' && !!s.wrong.trim() && typeof s.correct === 'string' && !!s.correct.trim()
+          // Same backstop as SAME_WORD_POINT above, for the structured
+          // side: a "spelling mistake" that's actually identical on both
+          // sides isn't one.
+          && s.wrong.trim() !== s.correct.trim())
       : [];
     if (points.length === 0 && spelling.length === 0) {
       console.error('Malformed AI response (explain-correction):', raw);
