@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -13,7 +13,7 @@ import {
 } from '../lib/storage';
 import {
   wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint,
-  buildMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
+  buildMcqChoices, buildReverseMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
   hasEnoughWordsForGame,
 } from '../lib/practice';
 import { REVIEW_PLAN } from '../lib/srs';
@@ -23,6 +23,7 @@ import SpecialCharButtons from './SpecialCharButtons';
 import SpeakerButton from './SpeakerButton';
 import TextSpeakerButton from './TextSpeakerButton';
 import TranslationChoiceCard from './TranslationChoiceCard';
+import WordMeaningChoiceCard from './WordMeaningChoiceCard';
 import MatchingQuizPage from './MatchingQuizPage';
 import DachshundMascot from './Mascot';
 import CongratsModal from './CongratsModal';
@@ -466,9 +467,11 @@ function MilestoneBar({ activeChunk, wordId }: { activeChunk: 1 | 2 | 3 | 4; wor
 // The card header's own label — one name per chunk of the MilestoneBar
 // below it (see chunksEarned/chunkForStage), not per individual round.
 // Round 1 and round 2 both belong to chunk 1 (Day 1) despite being
-// visibly different exercises (write a sentence, then spell it
-// half-hinted); showing "Round 1"/"Round 2" text alongside a bar that
-// only has ONE chunk for both was confusing (looked like there were more
+// visibly different exercises (write a sentence, then pick its meaning —
+// see isIntroMcqStep, which skips this header/bar entirely for its own
+// standalone card, same as the separate study-mcq/review-mcq phases
+// already do); showing "Round 1"/"Round 2" text alongside a bar that only
+// has ONE chunk for both was confusing (looked like there were more
 // stages than the bar actually has). Keyed by the same 1-4 chunk index as
 // MilestoneBar's activeChunk — see chunkForStage for why that's no longer
 // just a round number.
@@ -1268,7 +1271,15 @@ export default function DailySessionFlow() {
   const [values, setValues] = useState<string[]>([]);
   const [articleValues, setArticleValues] = useState<string[]>(['', '', '']);
   const [feedback, setFeedback] = useState<boolean | null>(null);
-  const [justCompleted, setJustCompleted] = useState(false);
+  // A ref, not state: read only inside advanceStudyQueue/advanceReviewQueue
+  // (never rendered), and isIntroMcqStep's onAnswer needs to call
+  // submitResult then immediately handleNext in the SAME synchronous
+  // handler (WordMeaningChoiceCard's own internal Next button already
+  // covers the "see feedback, then advance" pause the letter-tile flow
+  // spreads across two separate clicks/renders) — a state setter's value
+  // wouldn't be visible to that same-tick read (same staleness reasoning
+  // reviewRoundsRef exists for), a ref's is.
+  const justCompletedRef = useRef(false);
   const [attemptKey, setAttemptKey] = useState(0);
 
   // Bumped on every matching-quiz page completion so MatchingQuizPage always
@@ -1374,6 +1385,29 @@ export default function DailySessionFlow() {
 
   const roundMode: RoundMode = session?.phase === 'review-rounds' ? 'review' : 'study';
   const word = queue[0] ?? null;
+  // Introduction's spelling test (the old round 2 — half the letters
+  // given) is replaced by this reversed-direction MCQ instead (owner
+  // call): the German word is shown, the learner picks its meaning,
+  // and passing it is what completes introduction now — see
+  // WordMeaningChoiceCard's own comment for why it reads differently
+  // from the existing (forward) MCQ checkpoint rather than just
+  // repeating it. Study only — a review word can also be sitting at
+  // round 2 (REVIEW_PLAN's puppy/short milestones both start there),
+  // but that's real spelling practice on an already-introduced word,
+  // not this. mascotStage unset is exactly "hasn't finished
+  // introduction yet" (see lib/storage's own WordProgress comment).
+  const isIntroMcqStep = roundMode === 'study' && currentRound === 2 && !!word && !getWordProgress(word.id).mascotStage;
+  // Memoized on the attempt, not recomputed every render, so the four
+  // choices stay put while the learner is looking at them (a parent
+  // re-render for something unrelated, e.g. the streak ticking, must
+  // not reshuffle the options out from under a half-made decision) but
+  // are genuinely fresh the next time this exact word reaches this step
+  // (attemptKey bumps on every fresh loadCurrent/requestHint call).
+  const introMcqChoices = useMemo(
+    () => (isIntroMcqStep && word && settings ? buildReverseMcqChoices(word, settings.nativeLanguage) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isIntroMcqStep, word?.id, attemptKey, settings?.nativeLanguage],
+  );
   const needsArticle = !!(settings?.requireArticle && word?.type === 'noun' && word?.article);
   // Same gating reasons as the copy-the-word fallback below (see its own
   // comment) PLUS sentence writing mode being explicitly off — a word
@@ -1566,7 +1600,7 @@ export default function DailySessionFlow() {
     setValues(chars.map((c, i) => (h[i] ? '' : c)));
     setArticleValues(['', '', '']);
     setFeedback(null);
-    setJustCompleted(false);
+    justCompletedRef.current = false;
     setAttemptKey(k => k + 1);
     setExampleSentence(progress.exampleSentence ?? null);
     setSentenceResult(null);
@@ -1765,7 +1799,7 @@ export default function DailySessionFlow() {
       // own daily-goal counts still showed it as not-yet-done).
       if (outcome.isFinal) logWordActivity(word.id, 'reviewed');
       setFeedback(correct);
-      setJustCompleted(outcome.isFinal);
+      justCompletedRef.current = outcome.isFinal;
 
       // Always persists the ref's new state (see DailySession.reviewRounds)
       // — folded into one persistSession call together with the earned-
@@ -1799,7 +1833,7 @@ export default function DailySessionFlow() {
       // anything for this word today.
       if (correct) logWordActivity(word.id, earnedBadge ? 'learned' : 'reviewed');
       setFeedback(correct);
-      setJustCompleted(completed);
+      justCompletedRef.current = completed;
 
       if (earnedBadge) {
         persistSession({ ...session, earnedPuppies: session.earnedPuppies + 1 });
@@ -1979,7 +2013,7 @@ export default function DailySessionFlow() {
   function advanceStudyQueue() {
     if (!session) return;
     const rest = queue.slice(1);
-    if (!justCompleted) rest.push(queue[0]);
+    if (!justCompletedRef.current) rest.push(queue[0]);
     setQueue(rest);
     const restIds = rest.map(w => w.id);
 
@@ -2017,7 +2051,7 @@ export default function DailySessionFlow() {
   function advanceReviewQueue() {
     if (!session) return;
     const rest = queue.slice(1);
-    if (!justCompleted) rest.push(queue[0]);
+    if (!justCompletedRef.current) rest.push(queue[0]);
     setQueue(rest);
     const next: DailySession = { ...session, reviewQueueIds: rest.map(w => w.id) };
     persistSession(next);
@@ -2184,7 +2218,15 @@ export default function DailySessionFlow() {
   // stop somewhere either way; a wrong answer isn't "done" the same way a
   // right one is).
   useEffect(() => {
-    if (!word || feedback !== null || !wordComplete) return;
+    // isIntroMcqStep's letter-tile state (hint/values) still computes in
+    // the background even though WordMeaningChoiceCard is what's actually
+    // on screen for that step (see isIntroMcqStep's own comment) -- an
+    // unreachable degenerate case (a hint pattern with nothing left to
+    // type at all) could otherwise silently auto-submit through the OLD
+    // path via this effect while the learner is looking at an entirely
+    // different question. Explicitly excluded rather than relying on it
+    // never actually happening.
+    if (!word || feedback !== null || !wordComplete || isIntroMcqStep) return;
     const wordRight = checkAnswer(word.de, values.join(''));
     const articleGuess = articleValues.join('').toLowerCase();
     const articleRight = !needsArticle || articleGuess === word.article;
@@ -2543,6 +2585,37 @@ export default function DailySessionFlow() {
         </div>
       </div>
 
+      {isIntroMcqStep && introMcqChoices ? (
+        // Introduction's round 2 replacement — see isIntroMcqStep's own
+        // comment. Rendered on its own (not nested inside the amber
+        // round-ladder card below, which supplies near-identical styling
+        // of its own) for the same reason the existing study-mcq/
+        // review-mcq PHASES already render TranslationChoiceCard
+        // standalone rather than inside that card: WordMeaningChoiceCard
+        // is a complete, self-contained question+answer+Next unit, and
+        // the round-ladder card's own gloss display just above would
+        // otherwise hand the learner the exact answer this exercise is
+        // testing.
+        <WordMeaningChoiceCard
+          key={`${word.id}-${attemptKey}`}
+          word={word}
+          correct={introMcqChoices.correct}
+          choices={introMcqChoices.choices}
+          // WordMeaningChoiceCard's own "Next →" already covers the
+          // "see feedback, then move on" pause (pick a choice -> colors
+          // land -> tap Next) the letter-tile flow spreads across two
+          // separate clicks instead — so this single callback both
+          // scores the attempt AND advances the queue, rather than
+          // landing on the letter-tile fragment's own (now redundant)
+          // feedback banner + second Next tap. Safe to call handleNext
+          // synchronously right after submitResult (rather than waiting
+          // for a re-render) because submitResult's own progress writes
+          // go straight to storage (read fresh by advanceStudyQueue) and
+          // the one piece of same-tick state it needs, justCompletedRef,
+          // is a ref specifically so this read isn't stale.
+          onAnswer={correct => { submitResult(correct); handleNext(); }}
+        />
+      ) : (
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5 min-h-[30rem]">
         <div>
           <div className="flex items-center justify-between mb-1">
@@ -2792,6 +2865,7 @@ export default function DailySessionFlow() {
           </>
         )}
       </div>
+      )}
     </div>
   );
 }
