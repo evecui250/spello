@@ -2172,6 +2172,30 @@ export default function DailySessionFlow() {
 
   const articleComplete = !needsArticle || articleValues.every(v => !!v);
   const wordComplete = hint.length > 0 && hint.every((h, i) => !h || !!values[i]) && articleComplete;
+
+  // Verification-code-style instant feedback: the moment every tile holds
+  // the actually-correct letter (and the article, if any is required),
+  // submit right away instead of waiting for an explicit Check tap --
+  // same pattern as a phone/SMS code field auto-submitting the instant the
+  // last correct digit lands. Deliberately one-sided: a COMPLETE-but-wrong
+  // fill does NOT auto-submit -- the learner still has to press Check
+  // themselves to see a wrong answer. Only a genuinely correct fill skips
+  // that step, which is the only case this was ever about (typing has to
+  // stop somewhere either way; a wrong answer isn't "done" the same way a
+  // right one is).
+  useEffect(() => {
+    if (!word || feedback !== null || !wordComplete) return;
+    const wordRight = checkAnswer(word.de, values.join(''));
+    const articleGuess = articleValues.join('').toLowerCase();
+    const articleRight = !needsArticle || articleGuess === word.article;
+    if (wordRight && articleRight) handleSubmit();
+    // handleSubmit/word/needsArticle are recreated every render but this
+    // effect only needs to re-check when the actual typed content (or the
+    // feedback gate) changes -- including them would just re-run this on
+    // every keystroke-unrelated render for no benefit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values, articleValues, wordComplete, feedback]);
+
   const completedCount = totalWords - queue.length;
   const progressPct = totalWords > 0 ? Math.min(100, Math.round((completedCount / totalWords) * 100)) : 0;
 
@@ -2227,6 +2251,21 @@ export default function DailySessionFlow() {
         <p className="text-amber-100/80 mb-6">
           Today {session.studyWordIds.length} word{session.studyWordIds.length === 1 ? '' : 's'} learned.
         </p>
+        {/* Moved up here (right under the summary line) rather than below
+            the full word list -- real feedback was that learners had to
+            scroll past every word introduced today just to find the way
+            forward. Left in place at the bottom too would just be a
+            redundant second copy of the same action, so this replaces
+            that one rather than duplicating it. */}
+        <div className="flex flex-col items-center gap-3 mb-6">
+          <button
+            onClick={handleFinishStudy}
+            className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+          >
+            Continue →
+          </button>
+          <Link href="/" className="text-amber-200 underline text-sm">Back to Home</Link>
+        </div>
         {session.earnedPuppies > 0 && (
           <div className="mx-auto mb-6 max-w-xs bg-amber-50/75 backdrop-blur-sm border border-amber-100/50 rounded-2xl px-5 py-4 flex flex-col items-center gap-1.5">
             <DachshundMascot stage="puppy" className="w-20 h-20" />
@@ -2269,15 +2308,6 @@ export default function DailySessionFlow() {
             })}
           </div>
         )}
-        <div className="flex flex-col items-center gap-3">
-          <button
-            onClick={handleFinishStudy}
-            className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
-          >
-            Continue →
-          </button>
-          <Link href="/" className="text-amber-200 underline text-sm">Back to Home</Link>
-        </div>
       </div>
     );
   }
@@ -2294,6 +2324,15 @@ export default function DailySessionFlow() {
         <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           {session.reviewWordIds.length} word{session.reviewWordIds.length === 1 ? '' : 's'} reviewed today
         </h2>
+        {/* Moved up from below the word list -- same reasoning as
+            study-done's own Continue button above: don't make learners
+            scroll past every reviewed word just to move on. */}
+        <button
+          onClick={handleContinueFromReport}
+          className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all mb-6"
+        >
+          Continue →
+        </button>
         {reviewedWords.length > 0 && (
           <div className="mx-auto mb-6 max-w-sm flex flex-col gap-2 text-left">
             {reviewedWords.map(w => {
@@ -2324,12 +2363,6 @@ export default function DailySessionFlow() {
             })}
           </div>
         )}
-        <button
-          onClick={handleContinueFromReport}
-          className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
-        >
-          Continue →
-        </button>
       </div>
     );
   }
