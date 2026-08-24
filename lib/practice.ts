@@ -383,12 +383,97 @@ function splitMorphemePrefix(word: Word): number | null {
   return null;
 }
 
+// Closed list of common German noun-forming SUFFIXES -- grammatical
+// endings that (unlike a genuine compound tail, see NOUN_COMPOUND_TAILS
+// below) aren't standalone words on their own, so the "is this a real
+// word?" corpus search further down can never catch them. Kept to
+// suffixes that are reliably THIS suffix whenever a word happens to end
+// in them, same bar VERB_PREFIXES/QUANTITY_PREFIXES hold their own closed
+// lists to -- no "-e"/"-er"/"-in"-style 1-2 letter endings, which are far
+// too common as ordinary word endings to mean anything on their own.
+const NOUN_SUFFIXES = ['schaft', 'ismus', 'heit', 'keit', 'chen', 'lein', 'ling', 'tät', 'ung', 'nis', 'tum', 'anz', 'enz', 'sal', 'ion']
+  .sort((a, b) => b.length - a.length);
+
+// A small closed list of ordinary, high-frequency German nouns that very
+// commonly sit as the RIGHT-hand half of a compound (Freitag, Geburtstag,
+// Schulzeit, Ehemann...) -- real words, so in principle the generic
+// corpus-word search below would eventually find them too, but several
+// (tag, ort, amt, weg) are exactly the 3-letter length that search
+// deliberately excludes (see splitMorphemePrefix's own comment on why:
+// 3-letter matches false-positive too often across the WHOLE corpus to
+// trust blindly). These specific ones are curated and safe at 3 letters
+// precisely because they're being checked as compound TAILS, not heads --
+// a word ending in "...tag" is far more reliably "some noun + Tag" than a
+// word merely starting with "gar" is reliably "gar + something".
+const NOUN_COMPOUND_TAILS = [
+  'tag', 'jahr', 'zeit', 'mann', 'frau', 'kind', 'haus', 'wort', 'werk',
+  'welt', 'land', 'stadt', 'raum', 'platz', 'stück', 'teil', 'punkt',
+  'grund', 'kraft', 'macht', 'recht', 'wert', 'form', 'stelle', 'seite',
+  'mittel', 'woche', 'monat', 'stunde', 'minute', 'amt', 'weg',
+  // Deliberately NOT 'ort' despite being just as common a compound tail
+  // (Vorort, Wohnort, Standort) -- a real corpus audit found it
+  // false-positives on loanwords ending in "-port"/"-fort" purely by
+  // coincidence (Export, Import, Transport, Komfort all end in "ort"
+  // without being "Ex/Im/Trans/Kom" + "Ort" at all), a worse hit rate
+  // than the false-positive bar the rest of this list clears.
+].sort((a, b) => b.length - a.length);
+
+// Mirror of splitMorphemePrefix, but for the END of a NOUN instead of the
+// start. German compounds put their semantic HEAD on the right (a
+// "Haustür" is a kind of Tür, not a kind of Haus) -- so the right-hand
+// chunk is very often either a plain, already-known word (Tag, Jahr,
+// Zeit, Haus...) or a closed-class grammatical suffix (-heit, -ung...)
+// that recurs across dozens of unrelated words. Neither is worth testing
+// recall of the way the word's own distinctive root/left-hand half is --
+// revealing that trailing chunk and blanking the root, instead of always
+// blanking the back half the way the generic 50% fallback does, puts the
+// blank where the actually-new vocabulary lives (e.g. "Freitag" ->
+// reveal "tag", blank "Frei"; "Gesundheit" -> reveal "heit", blank
+// "Gesund"). Only ever tried for nouns (see generateHint) -- verbs/
+// adjectives keep the existing front-split-only treatment. Returns the
+// character length of that trailing chunk, or null when nothing reliable
+// is found.
+function splitMorphemeSuffix(word: Word): number | null {
+  const lower = word.de.toLowerCase();
+  const n = lower.length;
+
+  for (const s of NOUN_SUFFIXES) {
+    if (lower.endsWith(s) && n - s.length >= 3) return s.length;
+  }
+  for (const t of NOUN_COMPOUND_TAILS) {
+    if (lower.endsWith(t) && n - t.length >= 3) return t.length;
+  }
+
+  const candidates = getCorpusWordSet();
+  const maxTailLen = Math.min(n - 3, 14);
+  // Same 4-letter floor as splitMorphemePrefix's own generic search, and
+  // for the same reason -- a 3-letter word coincidentally matching the
+  // END of some unrelated longer word isn't safe to trust blindly outside
+  // the curated lists above.
+  for (let len = maxTailLen; len >= 4; len--) {
+    const tail = lower.slice(n - len);
+    if (!candidates.has(tail)) continue;
+    for (const link of LINKING_FRAGMENTS) {
+      const cut = len + link.length;
+      if (n - cut < 3) continue;
+      if (lower.slice(n - cut, n - len) === link) return cut;
+    }
+  }
+  return null;
+}
+
 // Returns hint pattern: true = hidden (user must type it), false = revealed (locked, pre-filled).
 // Round 1: nothing revealed in the tiles (the word is shown separately as reference text).
-// Round 2: a linguistically real first chunk revealed when one can be
-// found with confidence (verb prefix, quantity prefix, or a recognizable
-// compound head — see splitMorphemePrefix), otherwise ~50% of letters as
-// a plain fallback. Always includes the first letter either way.
+// Round 2: for a NOUN, a recognizable trailing chunk (compound tail or
+// grammatical suffix — see splitMorphemeSuffix) revealed and its root
+// blanked, when one is found with confidence; otherwise (any other word
+// type, or a noun with no such trailing chunk) a linguistically real
+// FIRST chunk revealed when one can be found with confidence (verb
+// prefix, quantity prefix, or a recognizable compound head — see
+// splitMorphemePrefix), otherwise ~50% of letters as a plain fallback.
+// The suffix case is the one exception to "always includes the first
+// letter" below — its whole point is blanking the root, which usually
+// starts at position 0.
 // Round 3: only the first letter revealed.
 // Round 4: no hints — full recall.
 export function generateHint(word: Word, round: Round): boolean[] {
@@ -410,11 +495,22 @@ export function generateHint(word: Word, round: Round): boolean[] {
     // means recomputing this (e.g. after switching tabs and back)
     // always reproduces the exact same reveal instead of a fresh random
     // draw that reads as a different card.
-    const morphemeLen = splitMorphemePrefix(word);
-    const revealCount = morphemeLen !== null
-      ? letterIndices.filter(i => i < morphemeLen).length
-      : Math.max(1, Math.round(letterIndices.length / 2));
-    const revealed = new Set(letterIndices.slice(0, revealCount));
+    const suffixLen = word.type === 'noun' ? splitMorphemeSuffix(word) : null;
+    const morphemeLen = suffixLen ?? splitMorphemePrefix(word);
+    const fromEnd = suffixLen !== null;
+    let revealCount: number;
+    if (morphemeLen !== null) {
+      revealCount = fromEnd
+        ? letterIndices.filter(i => i >= n - morphemeLen).length
+        : letterIndices.filter(i => i < morphemeLen).length;
+    } else {
+      revealCount = Math.max(1, Math.round(letterIndices.length / 2));
+    }
+    const revealed = new Set(
+      fromEnd
+        ? (revealCount > 0 ? letterIndices.slice(-revealCount) : [])
+        : letterIndices.slice(0, revealCount),
+    );
     base = Array.from({ length: n }, (_, i) => !revealed.has(i));
   }
 
