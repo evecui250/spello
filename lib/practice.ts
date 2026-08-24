@@ -1,6 +1,6 @@
 'use client';
 
-import { WORDS, Word, wordsForLevel, Level } from './words';
+import { WORDS, Word, wordsForLevel, Level, glossFor } from './words';
 import {
   getAllProgress, getSettings, today, Round, WordProgress, MascotStageId,
   getDailySession, saveDailySession, SessionPhase, getWordProgress, saveWordProgress,
@@ -790,6 +790,65 @@ export function buildMcqChoices(word: Word, seen: string[] = []): { correct: str
   }
 
   return { correct: correctForm, choices: shuffled([correctForm, ...wrongChoices]) };
+}
+
+// Splits a gloss like "recipe / prescription" or "caregiver, supervisor"
+// into its individual meanings, lowercased and trimmed — both shapes are
+// real (see lib/words.ts), and buildReverseMcqChoices below needs to spot
+// a PARTIAL overlap between two words' glosses, not just an exact
+// full-string duplicate.
+function glossTokens(gloss: string): string[] {
+  return gloss.toLowerCase().split(/[/,]/).map(s => s.trim()).filter(Boolean);
+}
+
+// The reverse direction of buildMcqChoices: the German word is shown, the
+// learner picks its MEANING (in nativeLanguage) from 4 choices. Same
+// same-category+type -> same-type -> same-level fallback pool as
+// buildMcqChoices, for the same reason (a distractor from outside the
+// word's own level/word-class is either unrecognizable or trivially easy
+// to rule out by shape alone) — but with one extra exclusion that
+// direction never needed: two DIFFERENT German words routinely share the
+// exact same translation (a real corpus audit found 59 such pairs at the
+// same level+type — "Kellner"/"Ober" both gloss "waiter", "Arzt"/"Doktor"
+// both "doctor"), which would show that translation as both the correct
+// answer AND a wrong choice — confusing at best, genuinely unresolvable
+// at worst. Checked via glossTokens so a partial overlap (one word's
+// gloss is "prescription", another's is "recipe / prescription") is
+// caught too, not just an exact match.
+export function buildReverseMcqChoices(
+  word: Word, nativeLanguage: 'en' | 'zh', seen: string[] = [],
+): { correct: string; choices: string[] } {
+  const correctGloss = glossFor(word, nativeLanguage);
+  const correctTokens = glossTokens(correctGloss);
+  const seenTokens = new Set(seen.flatMap(glossTokens));
+  const picked = new Set<string>();
+  const wrongChoices: string[] = [];
+
+  const addFrom = (pool: Word[]) => {
+    for (const w of shuffled(pool)) {
+      if (wrongChoices.length >= 3) break;
+      const gloss = glossFor(w, nativeLanguage);
+      const key = gloss.toLowerCase();
+      if (picked.has(key)) continue;
+      const tokens = glossTokens(gloss);
+      if (tokens.some(t => correctTokens.includes(t) || seenTokens.has(t))) continue;
+      picked.add(key);
+      wrongChoices.push(gloss);
+    }
+  };
+
+  const sameLevel = WORDS.filter(w => w.id !== word.id && w.level === word.level);
+  if (word.category) {
+    addFrom(sameLevel.filter(w => w.category === word.category && w.type === word.type));
+  }
+  if (wrongChoices.length < 3) {
+    addFrom(sameLevel.filter(w => w.type === word.type));
+  }
+  if (wrongChoices.length < 3) {
+    addFrom(sameLevel);
+  }
+
+  return { correct: correctGloss, choices: shuffled([correctGloss, ...wrongChoices]) };
 }
 
 // Chunks word ids into matching-quiz pages of exactly 5 each. A page is only
