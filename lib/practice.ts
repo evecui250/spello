@@ -339,28 +339,37 @@ function getCorpusWordSet(): Set<string> {
 // tried after a recognized head word, longest first.
 const LINKING_FRAGMENTS = ['es', 'en', 's', 'n', 'e', ''];
 
-// Finds a linguistically real place to split `word.de`'s FIRST chunk off
-// for round 2's hint, rather than an arbitrary letter-count half — a verb
-// prefix (closed list), a quantity prefix on an adjective/noun (closed
-// list), or (for any word type) another whole corpus word recognizable at
-// the start of this one, optionally followed by a linking fragment.
-// Returns the character length of that first chunk, or null when nothing
-// reliable is found (most words: no prefix, no recognizable compound
-// head) — callers fall back to the plain half-letter split for those,
-// same as before this existed.
-function splitMorphemePrefix(word: Word): number | null {
+// The closed-list half of splitMorphemePrefix — a verb prefix, or (for a
+// NOUN too, not just verbs themselves) the exact same prefix a nominalized
+// verb keeps (Aufforderung <- auffordern, Entwicklung <- entwickeln,
+// Verständnis <- verstehen...), or a quantity prefix on an adjective/noun.
+// Kept separate from the generic corpus-word search below so callers can
+// tell a curated, low-false-positive match apart from a coincidental one
+// (see generateHint's own tiering).
+function frontClosedPrefixLen(word: Word): number | null {
   const lower = word.de.toLowerCase();
 
   if (word.type === 'verb') {
     for (const p of VERB_PREFIXES) {
       if (lower.startsWith(p) && lower.length - p.length >= 2) return p.length;
     }
-  } else {
-    for (const p of QUANTITY_PREFIXES) {
-      if (lower.startsWith(p) && lower.length - p.length >= 3) return p.length;
-    }
+    return null;
   }
+  for (const p of QUANTITY_PREFIXES) {
+    if (lower.startsWith(p) && lower.length - p.length >= 3) return p.length;
+  }
+  return null;
+}
 
+// The fuzzy half: is some other whole corpus word recognizable at the
+// START of this one (optionally followed by a linking fragment)? Prone to
+// coincidental false positives (Qualifikation -> "Qual", Klavier ->
+// "vier") in a way the closed lists above aren't, since it'll match ANY
+// real word regardless of whether it's actually functioning as a prefix
+// here — kept as the lower-trust fallback tier in generateHint rather
+// than an equal alternative.
+function frontGenericHeadLen(word: Word): number | null {
+  const lower = word.de.toLowerCase();
   const candidates = getCorpusWordSet();
   const maxHeadLen = Math.min(lower.length - 3, 14);
   // 4, not 3 -- a real audit against the whole corpus found 3-letter
@@ -381,6 +390,16 @@ function splitMorphemePrefix(word: Word): number | null {
     }
   }
   return null;
+}
+
+// Finds a linguistically real place to split `word.de`'s FIRST chunk off
+// for round 2's hint, rather than an arbitrary letter-count half. Returns
+// the character length of that first chunk, or null when nothing reliable
+// is found — callers fall back to the plain half-letter split for those.
+// Used as-is for verbs/adjectives/etc.; nouns go through generateHint's
+// own finer-grained tiering instead (see there for why).
+function splitMorphemePrefix(word: Word): number | null {
+  return frontClosedPrefixLen(word) ?? frontGenericHeadLen(word);
 }
 
 // Closed list of common German noun-forming SUFFIXES -- grammatical
@@ -418,38 +437,30 @@ const NOUN_COMPOUND_TAILS = [
   // than the false-positive bar the rest of this list clears.
 ].sort((a, b) => b.length - a.length);
 
-// Mirror of splitMorphemePrefix, but for the END of a NOUN instead of the
-// start. German compounds put their semantic HEAD on the right (a
-// "Haustür" is a kind of Tür, not a kind of Haus) -- so the right-hand
-// chunk is very often either a plain, already-known word (Tag, Jahr,
-// Zeit, Haus...) or a closed-class grammatical suffix (-heit, -ung...)
-// that recurs across dozens of unrelated words. Neither is worth testing
-// recall of the way the word's own distinctive root/left-hand half is --
-// revealing that trailing chunk and blanking the root, instead of always
-// blanking the back half the way the generic 50% fallback does, puts the
-// blank where the actually-new vocabulary lives (e.g. "Freitag" ->
-// reveal "tag", blank "Frei"; "Gesundheit" -> reveal "heit", blank
-// "Gesund"). Only ever tried for nouns (see generateHint) -- verbs/
-// adjectives keep the existing front-split-only treatment. Returns the
-// character length of that trailing chunk, or null when nothing reliable
-// is found.
-function splitMorphemeSuffix(word: Word): number | null {
+// Mirror of frontClosedPrefixLen, but for the END of a NOUN — a curated
+// compound-tail word (Tag, Jahr, Zeit, Haus...). German compounds put
+// their semantic HEAD on the right (a "Haustür" is a kind of Tür, not a
+// kind of Haus), so this is a genuinely common, low-false-positive
+// pattern in its own right, same trust tier as a closed prefix list.
+function backStrongTailLen(word: Word): number | null {
   const lower = word.de.toLowerCase();
   const n = lower.length;
-
-  for (const s of NOUN_SUFFIXES) {
-    if (lower.endsWith(s) && n - s.length >= 3) return s.length;
-  }
   for (const t of NOUN_COMPOUND_TAILS) {
     if (lower.endsWith(t) && n - t.length >= 3) return t.length;
   }
+  return null;
+}
 
+// Mirror of frontGenericHeadLen, but for the END — is some other whole
+// corpus word recognizable at the END of this one (optionally preceded by
+// a linking fragment)? Same coincidental-false-positive risk as the front
+// version (Transport -> "sport", by sheer luck "Sport" is a real word) --
+// lower-trust fallback tier, same reasoning.
+function backGenericTailLen(word: Word): number | null {
+  const lower = word.de.toLowerCase();
+  const n = lower.length;
   const candidates = getCorpusWordSet();
   const maxTailLen = Math.min(n - 3, 14);
-  // Same 4-letter floor as splitMorphemePrefix's own generic search, and
-  // for the same reason -- a 3-letter word coincidentally matching the
-  // END of some unrelated longer word isn't safe to trust blindly outside
-  // the curated lists above.
   for (let len = maxTailLen; len >= 4; len--) {
     const tail = lower.slice(n - len);
     if (!candidates.has(tail)) continue;
@@ -462,18 +473,85 @@ function splitMorphemeSuffix(word: Word): number | null {
   return null;
 }
 
+// The WEAKEST tier: a bare grammatical noun-forming suffix (-heit, -ung,
+// -nis...) with no standalone meaning of its own — unlike a genuine
+// compound tail (backStrongTailLen) or an actual recognizable word
+// (backGenericTailLen), this carries almost no word-specific information,
+// so generateHint only reaches for it once NEITHER side of the word has
+// anything better to offer (a real audit found the opposite priority
+// produces bad splits on long words -- "Arbeitserlaubnis" as
+// "_____________nis", blanking 13 letters, when "Arbeits________" was
+// sitting right there via the front side instead).
+function backWeakSuffixLen(word: Word): number | null {
+  const lower = word.de.toLowerCase();
+  const n = lower.length;
+  for (const s of NOUN_SUFFIXES) {
+    if (lower.endsWith(s) && n - s.length >= 3) return s.length;
+  }
+  return null;
+}
+
+// How many of a word's LETTERS (not raw characters) fall inside a
+// `morphemeLen`-character chunk at the given end.
+function revealCountFor(morphemeLen: number, fromEnd: boolean, letterIndices: number[], n: number): number {
+  return fromEnd
+    ? letterIndices.filter(i => i >= n - morphemeLen).length
+    : letterIndices.filter(i => i < morphemeLen).length;
+}
+
+// Picks between a front candidate and a back candidate for round 2's
+// reveal, when both are at the same trust tier — whichever leaves the
+// more balanced (closest to half the word's letters) reveal wins. An
+// exact tie favors the back candidate: German compounds put their
+// semantic head on the right (see backStrongTailLen's own comment), so
+// that's this app's default direction when the two are otherwise
+// indistinguishable (this is what keeps "Freitag" revealing "tag" rather
+// than "frei", even though both are equally valid matches there).
+function pickFrontOrBack(
+  word: Word, frontLen: number | null, backLen: number | null, letterIndices: number[], n: number,
+): { morphemeLen: number; fromEnd: boolean } | null {
+  if (frontLen === null && backLen === null) return null;
+  if (frontLen === null) return { morphemeLen: backLen!, fromEnd: true };
+  if (backLen === null) return { morphemeLen: frontLen, fromEnd: false };
+
+  // Before falling back to raw balance, check whether one direction
+  // leaves the LOSING side looking like a genuine word while the other
+  // wouldn't. A linking fragment absorbed by the winning side (see
+  // LINKING_FRAGMENTS) effectively steals a letter from whatever's on the
+  // other side -- confirmed real: "Landschaft"'s front match ("Lands",
+  // absorbing the linking "s") was one letter narrower than "schaft" by
+  // raw balance, so it won, but that left "chaft" (not a word) blanked
+  // instead of "Land" (a word) -- one bare letter-count away from a much
+  // cleaner split the other direction already had on offer. This check
+  // catches that directly rather than trying to out-guess it via balance
+  // math alone.
+  const lower = word.de.toLowerCase();
+  const candidates = getCorpusWordSet();
+  const frontWinBlankIsWord = candidates.has(lower.slice(frontLen));
+  const backWinBlankIsWord = candidates.has(lower.slice(0, n - backLen));
+  if (frontWinBlankIsWord && !backWinBlankIsWord) return { morphemeLen: frontLen, fromEnd: false };
+  if (backWinBlankIsWord && !frontWinBlankIsWord) return { morphemeLen: backLen, fromEnd: true };
+
+  const target = letterIndices.length / 2;
+  const frontDiff = Math.abs(revealCountFor(frontLen, false, letterIndices, n) - target);
+  const backDiff = Math.abs(revealCountFor(backLen, true, letterIndices, n) - target);
+  return backDiff <= frontDiff ? { morphemeLen: backLen, fromEnd: true } : { morphemeLen: frontLen, fromEnd: false };
+}
+
 // Returns hint pattern: true = hidden (user must type it), false = revealed (locked, pre-filled).
 // Round 1: nothing revealed in the tiles (the word is shown separately as reference text).
-// Round 2: for a NOUN, a recognizable trailing chunk (compound tail or
-// grammatical suffix — see splitMorphemeSuffix) revealed and its root
-// blanked, when one is found with confidence; otherwise (any other word
-// type, or a noun with no such trailing chunk) a linguistically real
-// FIRST chunk revealed when one can be found with confidence (verb
-// prefix, quantity prefix, or a recognizable compound head — see
-// splitMorphemePrefix), otherwise ~50% of letters as a plain fallback.
-// The suffix case is the one exception to "always includes the first
-// letter" below — its whole point is blanking the root, which usually
-// starts at position 0.
+// Round 2: reveal a real morpheme boundary when one is found with
+// confidence, otherwise ~50% of letters as a plain fallback. For a NOUN,
+// two trust tiers are tried in order, front OR back candidates competing
+// within each tier (see pickFrontOrBack) before ever dropping to the
+// next: (1) closed-list prefixes/compound-tails; (2) either a
+// recognizable whole word at either edge, or (only on the back side, as
+// its own fallback within this same tier) a bare grammatical suffix
+// (-heit, -ung, -nis...) — see backWeakSuffixLen's own comment for why
+// that one only competes here rather than going first. Non-nouns keep
+// the front-only treatment. Whichever side wins is the one exception to
+// "always includes the first letter" below — a back-side reveal's whole
+// point is blanking the root, which usually starts at position 0.
 // Round 3: only the first letter revealed.
 // Round 4: no hints — full recall.
 export function generateHint(word: Word, round: Round): boolean[] {
@@ -487,25 +565,31 @@ export function generateHint(word: Word, round: Round): boolean[] {
   } else if (round === 3) {
     base = Array.from({ length: n }, (_, i) => i !== letterIndices[0]);
   } else {
-    // round 2 — reveal a real morpheme boundary when one is found with
-    // confidence, else the first half of the word's LETTERS (not a
-    // random half, and not a raw character-count split, so a hyphen or
-    // similar never eats into the allowance — it's revealed
-    // unconditionally below anyway). Being deterministic either way
-    // means recomputing this (e.g. after switching tabs and back)
-    // always reproduces the exact same reveal instead of a fresh random
-    // draw that reads as a different card.
-    const suffixLen = word.type === 'noun' ? splitMorphemeSuffix(word) : null;
-    const morphemeLen = suffixLen ?? splitMorphemePrefix(word);
-    const fromEnd = suffixLen !== null;
-    let revealCount: number;
-    if (morphemeLen !== null) {
-      revealCount = fromEnd
-        ? letterIndices.filter(i => i >= n - morphemeLen).length
-        : letterIndices.filter(i => i < morphemeLen).length;
+    // round 2 — see this function's own doc comment for the tiering.
+    // Being fully deterministic means recomputing this (e.g. after
+    // switching tabs and back) always reproduces the exact same reveal
+    // instead of a fresh random draw that reads as a different card.
+    let picked: { morphemeLen: number; fromEnd: boolean } | null = null;
+    if (word.type === 'noun') {
+      // Tier 2's back side folds the bare grammatical suffix in as its
+      // own fallback (rather than a separate, subordinate tier 3) -- a
+      // real audit found the strict-tiers version left "Freundschaft"
+      // revealing "Freunds" and blanking the non-word fragment "chaft",
+      // when the -schaft suffix match (revealing "schaft", blanking the
+      // complete word "Freund") was sitting right there but never got a
+      // turn to compete because tier 2's front-generic match had already
+      // resolved things first.
+      picked = pickFrontOrBack(word, frontClosedPrefixLen(word), backStrongTailLen(word), letterIndices, n)
+        ?? pickFrontOrBack(word, frontGenericHeadLen(word), backGenericTailLen(word) ?? backWeakSuffixLen(word), letterIndices, n);
     } else {
-      revealCount = Math.max(1, Math.round(letterIndices.length / 2));
+      const frontLen = splitMorphemePrefix(word);
+      if (frontLen !== null) picked = { morphemeLen: frontLen, fromEnd: false };
     }
+
+    const revealCount = picked !== null
+      ? revealCountFor(picked.morphemeLen, picked.fromEnd, letterIndices, n)
+      : Math.max(1, Math.round(letterIndices.length / 2));
+    const fromEnd = picked?.fromEnd ?? false;
     const revealed = new Set(
       fromEnd
         ? (revealCount > 0 ? letterIndices.slice(-revealCount) : [])
