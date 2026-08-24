@@ -796,6 +796,12 @@ function SentenceExercise({
 
   async function handleSubmit() {
     if (!input.trim() || status === 'loading' || !promptSentence) return;
+    // Dismisses the on-screen keyboard the moment Check is pressed,
+    // instead of leaving it up until the learner taps away themselves —
+    // confirmed real: several testers reported the keyboard staying open
+    // after they'd finished typing, requiring a second, separate tap to
+    // close it.
+    textareaRef.current?.blur();
     setStatus('loading');
     try {
       const result = await correctSentence(word.id, word.de, level, promptSentence, input.trim());
@@ -1843,6 +1849,10 @@ export default function DailySessionFlow() {
 
   const handleSubmit = () => {
     if (!word || !wordComplete) return;
+    // Same reasoning as SentenceExercise's own handleSubmit -- dismiss the
+    // on-screen keyboard the moment Check fires instead of leaving it up
+    // until the learner taps away themselves.
+    activeInputRef.current?.blur();
     const wordRight = checkAnswer(word.de, values.join(''));
     const articleGuess = articleValues.join('').toLowerCase();
     const articleRight = !needsArticle || articleGuess === word.article;
