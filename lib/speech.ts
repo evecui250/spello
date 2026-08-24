@@ -56,14 +56,25 @@ if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
 // this reports the actual browser-level failure (or confirms there wasn't
 // one) the next time it happens on a real device, same auto-diagnostic
 // pattern as handleAiUnreachable's own bug_reports insert elsewhere.
+// A later report showed the retry ITSELF also failing ("never started
+// (after retry)") — a different, deeper failure than the stuck-queue bug
+// resume()/retry were built for (that one didn't survive a single retry).
+// Since another blind fix attempt isn't warranted without more signal,
+// this now captures the actual speechSynthesis state at the moment of
+// failure (voice count, speaking/pending/paused) instead of just the
+// bare detail string, so the NEXT report actually says why, rather than
+// needing yet another guess.
 let ttsErrorReported = false;
 function reportTtsError(detail: string): void {
   if (ttsErrorReported) return;
   ttsErrorReported = true;
+  const synth = window.speechSynthesis;
+  const diagnostics = `voices=${synth.getVoices().length}, speaking=${synth.speaking}, ` +
+    `pending=${synth.pending}, paused=${synth.paused}`;
   supabase.from('bug_reports').insert({
     user_id: null,
     email: null,
-    message: `Auto-detected: speechSynthesis error while speaking a sentence/word (${detail}).`,
+    message: `Auto-detected: speechSynthesis error while speaking a sentence/word (${detail}). [${diagnostics}]`,
     page_path: window.location.pathname,
     user_agent: navigator.userAgent,
   }).then(() => {}, () => {});
