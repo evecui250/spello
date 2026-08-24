@@ -466,15 +466,17 @@ function MilestoneBar({ activeChunk, wordId }: { activeChunk: 1 | 2 | 3 | 4; wor
 
 // The card header's own label — one name per chunk of the MilestoneBar
 // below it (see chunksEarned/chunkForStage), not per individual round.
-// Round 1 and round 2 both belong to chunk 1 (Day 1) despite being
-// visibly different exercises (write a sentence, then pick its meaning —
-// see isIntroMcqStep, which skips this header/bar entirely for its own
-// standalone card, same as the separate study-mcq/review-mcq phases
-// already do); showing "Round 1"/"Round 2" text alongside a bar that only
-// has ONE chunk for both was confusing (looked like there were more
-// stages than the bar actually has). Keyed by the same 1-4 chunk index as
-// MilestoneBar's activeChunk — see chunkForStage for why that's no longer
-// just a round number.
+// Chunk 1 (Day 1) is introduction: round 1 in the round-ladder card here,
+// then the reversed-MCQ batch checkpoint (see enterStudyMcqPhase) — a
+// standalone screen with no MilestoneBar of its own, same as review's own
+// MCQ checkpoint. On puppy/short review milestones, round 2 and round 3
+// share chunk 2/3 the same visible-exercises-one-chunk way introduction
+// used to before round 2 moved out of this card entirely; showing
+// "Round 2"/"Round 3" text alongside a bar that only has ONE chunk for
+// both was confusing (looked like there were more stages than the bar
+// actually has). Keyed by the same 1-4 chunk index as MilestoneBar's
+// activeChunk — see chunkForStage for why that's no longer just a round
+// number.
 const CHUNK_LABELS: Record<1 | 2 | 3 | 4, string> = {
   1: 'New',
   2: '1st review',
@@ -1272,13 +1274,9 @@ export default function DailySessionFlow() {
   const [articleValues, setArticleValues] = useState<string[]>(['', '', '']);
   const [feedback, setFeedback] = useState<boolean | null>(null);
   // A ref, not state: read only inside advanceStudyQueue/advanceReviewQueue
-  // (never rendered), and isIntroMcqStep's onAnswer needs to call
-  // submitResult then immediately handleNext in the SAME synchronous
-  // handler (WordMeaningChoiceCard's own internal Next button already
-  // covers the "see feedback, then advance" pause the letter-tile flow
-  // spreads across two separate clicks/renders) — a state setter's value
-  // wouldn't be visible to that same-tick read (same staleness reasoning
-  // reviewRoundsRef exists for), a ref's is.
+  // (never rendered) — a ref sidesteps any risk of a same-tick read seeing
+  // a stale value the way a state setter's value wouldn't be (same
+  // staleness reasoning reviewRoundsRef exists for elsewhere in this file).
   const justCompletedRef = useRef(false);
   const [attemptKey, setAttemptKey] = useState(0);
 
@@ -1385,29 +1383,6 @@ export default function DailySessionFlow() {
 
   const roundMode: RoundMode = session?.phase === 'review-rounds' ? 'review' : 'study';
   const word = queue[0] ?? null;
-  // Introduction's spelling test (the old round 2 — half the letters
-  // given) is replaced by this reversed-direction MCQ instead (owner
-  // call): the German word is shown, the learner picks its meaning,
-  // and passing it is what completes introduction now — see
-  // WordMeaningChoiceCard's own comment for why it reads differently
-  // from the existing (forward) MCQ checkpoint rather than just
-  // repeating it. Study only — a review word can also be sitting at
-  // round 2 (REVIEW_PLAN's puppy/short milestones both start there),
-  // but that's real spelling practice on an already-introduced word,
-  // not this. mascotStage unset is exactly "hasn't finished
-  // introduction yet" (see lib/storage's own WordProgress comment).
-  const isIntroMcqStep = roundMode === 'study' && currentRound === 2 && !!word && !getWordProgress(word.id).mascotStage;
-  // Memoized on the attempt, not recomputed every render, so the four
-  // choices stay put while the learner is looking at them (a parent
-  // re-render for something unrelated, e.g. the streak ticking, must
-  // not reshuffle the options out from under a half-made decision) but
-  // are genuinely fresh the next time this exact word reaches this step
-  // (attemptKey bumps on every fresh loadCurrent/requestHint call).
-  const introMcqChoices = useMemo(
-    () => (isIntroMcqStep && word && settings ? buildReverseMcqChoices(word, settings.nativeLanguage) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isIntroMcqStep, word?.id, attemptKey, settings?.nativeLanguage],
-  );
   const needsArticle = !!(settings?.requireArticle && word?.type === 'noun' && word?.article);
   // Same gating reasons as the copy-the-word fallback below (see its own
   // comment) PLUS sentence writing mode being explicitly off — a word
@@ -1689,10 +1664,23 @@ export default function DailySessionFlow() {
     setMcqCurrent({ word: w, correct, choices });
   }
 
-  // Round-1.5 checkpoint — "what does this word mean?" once every study
-  // word has had its round-1 pass (see advanceStudyQueue's gate), same
-  // retry-until-clean mechanic as review's own MCQ above. Ends by
-  // continuing the round ladder into round 2.
+  // Round-1.5 checkpoint — introduction's ONLY remaining test once round 1
+  // is done (owner call: round 2's half-hint typing is gone from
+  // introduction entirely). Reversed-direction MCQ (German shown, pick
+  // its meaning — see WordMeaningChoiceCard), and this is now what
+  // actually completes introduction (handleStudyMcqAnswer's own correct
+  // branch calls applyResult/recordMilestonePass), not just reinforcement
+  // the way review's own forward-direction MCQ checkpoint still is. Same
+  // retry-until-clean mechanic as review's own MCQ above — a wrong pick
+  // does NOT demote anything, it just requeues into studyMcqWrongIds for
+  // another attempt (fresh distractors) once the current pass drains, so
+  // a stumble here costs another question later in the batch, never a
+  // trip back to round 1. Ends by continuing the round ladder (which, for
+  // a brand new word, will find nothing left to do and fall straight
+  // through to finishStudyRounds — see enterRoundsPhase's own tail; a
+  // rare pre-existing word already mid-introduction at round 2 from
+  // before this changed is the one case that still has something left
+  // there).
   function enterStudyMcqPhase(ds: DailySession) {
     if (ds.studyMcqQueueIds.length === 0) {
       if (ds.studyMcqWrongIds.length > 0) {
@@ -1713,7 +1701,7 @@ export default function DailySessionFlow() {
       enterStudyMcqPhase(next);
       return;
     }
-    const { correct, choices } = buildMcqChoices(w, mcqSeenRef.current[w.id] ?? []);
+    const { correct, choices } = buildReverseMcqChoices(w, settings?.nativeLanguage ?? 'en', mcqSeenRef.current[w.id] ?? []);
     mcqSeenRef.current[w.id] = [...(mcqSeenRef.current[w.id] ?? []), ...choices];
     setMcqCurrent({ word: w, correct, choices });
   }
@@ -1815,9 +1803,19 @@ export default function DailySessionFlow() {
       });
       if (earnedUpgrade) addEarnedUpgrade(stage!);
     } else {
-      // Day 1 (introduction) completes on a clean round-2 pass — correct at
-      // round 1 just promotes to round 2 (applyResult), it isn't "done" yet.
-      const completed = progress.round === 2 && correct;
+      // A correct submission here is always this word's ONLY round-ladder
+      // step for introduction now (round 1 -- see applyResult's own
+      // comment on why a bare promotion to round 2 doesn't render
+      // anywhere any more, and enterStudyMcqPhase for what completes
+      // introduction instead), so "correct" alone means "done with the
+      // round-ladder, hand off to the reversed-MCQ batch" -- except for a
+      // rare pre-existing word already mid-introduction at round 2 from
+      // before this changed (still shown via the old round-2 typing UI,
+      // see the round-ladder's own rendering), where a correct submission
+      // there completes introduction outright via applyResult's own
+      // recordMilestonePass branch. Either way, "correct" is exactly the
+      // right signal for "this word is done here."
+      const completed = correct;
       const updated = { ...applyResult(progress, correct), ...extra };
       const earnedBadge = updated.studiedTimes > progress.studiedTimes;
 
@@ -1995,15 +1993,44 @@ export default function DailySessionFlow() {
     enterReviewMcqPhase(next);
   }
 
-  // Retried until a clean pass — see enterStudyMcqPhase.
+  // Retried until a clean pass — see enterStudyMcqPhase. Unlike
+  // handleReviewMcqAnswer (pure reinforcement, never touches progress),
+  // a CORRECT answer here is what actually completes introduction now —
+  // this phase only ever gets a word once its round-1 pass has already
+  // set progress.round to 2 (see advanceStudyQueue's own gate), so
+  // applyResult's cap-round branch always resolves to recordMilestonePass
+  // here, exactly the way a clean round-2 typing pass used to. A WRONG
+  // answer touches nothing at all (no demotion) — it just requeues into
+  // studyMcqWrongIds same as always, so a stumble costs another question
+  // later in this same batch, never a trip back to round 1.
   function handleStudyMcqAnswer(correct: boolean) {
     if (!session || !mcqCurrent) return;
+    const word = mcqCurrent.word;
+    let earnedBadge = false;
+    if (correct) {
+      const progress = getWordProgress(word.id);
+      const updated = applyResult(progress, true);
+      earnedBadge = updated.studiedTimes > progress.studiedTimes;
+      saveWordProgress(updated);
+      scheduleSync();
+      // Same "learned" vs "reviewed" distinction submitResult's own study
+      // branch draws — earnedBadge is the exact answer that completes
+      // introduction (mascotStage reaches 'puppy' for the first time).
+      logWordActivity(word.id, earnedBadge ? 'learned' : 'reviewed');
+      if (earnedBadge) addEarnedPuppy();
+    }
     // See handleReviewMcqAnswer's own comment -- TranslationChoiceCard
-    // already played the chime on pick.
+    // (and WordMeaningChoiceCard, the same way) already played the chime
+    // on pick.
     const next: DailySession = {
       ...session,
       studyMcqQueueIds: session.studyMcqQueueIds.slice(1),
       studyMcqWrongIds: correct ? session.studyMcqWrongIds : [...session.studyMcqWrongIds, mcqCurrent.word.id],
+      // Folded into this same persistSession call, not a separate one —
+      // see submitResult's own review branch for why a second call
+      // spreading the same (still-stale, pre-rerender) `session` would
+      // silently undo the queue update just made above.
+      ...(earnedBadge ? { earnedPuppies: session.earnedPuppies + 1 } : {}),
     };
     setMcqCurrent(null);
     persistSession(next);
@@ -2017,12 +2044,12 @@ export default function DailySessionFlow() {
     setQueue(rest);
     const restIds = rest.map(w => w.id);
 
-    // The round-1.5 "what does this word mean?" checkpoint fires once,
-    // exactly when every word that actually NEEDED a round-1 pass today
-    // has finished it (the sentence exercise always promotes round 1 -> 2
-    // on submit, so "round >= 2" is that signal) — before round 2
-    // continues. Scoped to studyRound1NeededIds (see its own comment), NOT
-    // the full studyWordIds — a "Continuing" carryover word already past
+    // The round-1.5 reversed-MCQ checkpoint (now what actually completes
+    // introduction — see enterStudyMcqPhase) fires once, exactly when
+    // every word that actually NEEDED a round-1 pass today has finished
+    // it (a round-1 submission always promotes round 1 -> 2, so
+    // "round >= 2" is that signal). Scoped to studyRound1NeededIds (see
+    // its own comment), NOT the full studyWordIds — a "Continuing" carryover word already past
     // round 1 would otherwise satisfy this gate for free, firing the
     // checkpoint (and quizzing on that carryover word too) the moment a
     // single genuinely-new word finishes round 1, before the learner has
@@ -2218,15 +2245,7 @@ export default function DailySessionFlow() {
   // stop somewhere either way; a wrong answer isn't "done" the same way a
   // right one is).
   useEffect(() => {
-    // isIntroMcqStep's letter-tile state (hint/values) still computes in
-    // the background even though WordMeaningChoiceCard is what's actually
-    // on screen for that step (see isIntroMcqStep's own comment) -- an
-    // unreachable degenerate case (a hint pattern with nothing left to
-    // type at all) could otherwise silently auto-submit through the OLD
-    // path via this effect while the learner is looking at an entirely
-    // different question. Explicitly excluded rather than relying on it
-    // never actually happening.
-    if (!word || feedback !== null || !wordComplete || isIntroMcqStep) return;
+    if (!word || feedback !== null || !wordComplete) return;
     const wordRight = checkAnswer(word.de, values.join(''));
     const articleGuess = articleValues.join('').toLowerCase();
     const articleRight = !needsArticle || articleGuess === word.article;
@@ -2266,10 +2285,20 @@ export default function DailySessionFlow() {
     );
   }
 
-  if (session.phase === 'study-mcq' || session.phase === 'review-mcq') {
+  // study-mcq (introduction's reversed-direction checkpoint, now the
+  // thing that actually completes introduction — see enterStudyMcqPhase)
+  // and review-mcq (the existing forward-direction, pure-reinforcement
+  // checkpoint, unchanged) render different card components for the same
+  // reason they're built as different components at all — see
+  // WordMeaningChoiceCard's own comment on why the two directions get
+  // distinct framing copy rather than sharing one.
+  if (session.phase === 'study-mcq') {
     if (!mcqCurrent) return null;
-    const onAnswer = session.phase === 'study-mcq' ? handleStudyMcqAnswer : handleReviewMcqAnswer;
-    return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={onAnswer} isReview={session.phase === 'review-mcq'} />;
+    return <WordMeaningChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={handleStudyMcqAnswer} />;
+  }
+  if (session.phase === 'review-mcq') {
+    if (!mcqCurrent) return null;
+    return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={handleReviewMcqAnswer} isReview />;
   }
 
   if (session.phase === 'study-matching' || session.phase === 'review-matching') {
@@ -2585,37 +2614,6 @@ export default function DailySessionFlow() {
         </div>
       </div>
 
-      {isIntroMcqStep && introMcqChoices ? (
-        // Introduction's round 2 replacement — see isIntroMcqStep's own
-        // comment. Rendered on its own (not nested inside the amber
-        // round-ladder card below, which supplies near-identical styling
-        // of its own) for the same reason the existing study-mcq/
-        // review-mcq PHASES already render TranslationChoiceCard
-        // standalone rather than inside that card: WordMeaningChoiceCard
-        // is a complete, self-contained question+answer+Next unit, and
-        // the round-ladder card's own gloss display just above would
-        // otherwise hand the learner the exact answer this exercise is
-        // testing.
-        <WordMeaningChoiceCard
-          key={`${word.id}-${attemptKey}`}
-          word={word}
-          correct={introMcqChoices.correct}
-          choices={introMcqChoices.choices}
-          // WordMeaningChoiceCard's own "Next →" already covers the
-          // "see feedback, then move on" pause (pick a choice -> colors
-          // land -> tap Next) the letter-tile flow spreads across two
-          // separate clicks instead — so this single callback both
-          // scores the attempt AND advances the queue, rather than
-          // landing on the letter-tile fragment's own (now redundant)
-          // feedback banner + second Next tap. Safe to call handleNext
-          // synchronously right after submitResult (rather than waiting
-          // for a re-render) because submitResult's own progress writes
-          // go straight to storage (read fresh by advanceStudyQueue) and
-          // the one piece of same-tick state it needs, justCompletedRef,
-          // is a ref specifically so this read isn't stale.
-          onAnswer={correct => { submitResult(correct); handleNext(); }}
-        />
-      ) : (
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5 min-h-[30rem]">
         <div>
           <div className="flex items-center justify-between mb-1">
@@ -2865,7 +2863,6 @@ export default function DailySessionFlow() {
           </>
         )}
       </div>
-      )}
     </div>
   );
 }
