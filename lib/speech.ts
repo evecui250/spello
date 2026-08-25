@@ -80,6 +80,20 @@ function reportTtsError(detail: string): void {
   }).then(() => {}, () => {});
 }
 
+// Bumped by every call that means "whatever was queued before no longer
+// matters" — a fresh speakWithBrowserVoice call (this one, right below,
+// unconditionally) and stopSpeech()'s own explicit cancel(). Each
+// utterance captures the value AT THE MOMENT IT WAS CREATED; its onerror/
+// onstart-timeout handlers both bail out silently if the counter has
+// since moved on, rather than reporting anything. Confirmed real and
+// necessary: a report came in with error "interrupted" that was just the
+// visibilitychange handler's own stopSpeech() doing its job while a word
+// happened to be mid-speech (the learner switched tabs/apps) —
+// speechSynthesis fires onerror with "interrupted" for ANY cancelled
+// utterance, deliberate or not, so without this every ordinary
+// navigate-away-mid-word moment was being misfiled as a genuine TTS bug.
+let speechGeneration = 0;
+
 // Confirmed real (two auto-filed bug reports, one from desktop Chrome, one
 // from mobile Safari, both "never started" — same failure on unrelated
 // engines) rather than an isolated iOS quirk: this matches a well-known
@@ -91,6 +105,7 @@ function reportTtsError(detail: string): void {
 // before every speak() costs nothing on a browser that was never stuck.
 function speakWithBrowserVoice(text: string, isRetry = false): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  const myGeneration = ++speechGeneration;
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'de-DE';
   utterance.rate = 0.9;
@@ -102,6 +117,10 @@ function speakWithBrowserVoice(text: string, isRetry = false): void {
   const voice = pickGermanVoice();
   if (voice) utterance.voice = voice;
   utterance.onerror = (e) => {
+    // Superseded by a newer speak() call or an explicit stopSpeech() by
+    // the time this fired — see speechGeneration's own comment. Not a
+    // real failure, nothing to report.
+    if (speechGeneration !== myGeneration) return;
     if (isRetry) reportTtsError(e.error);
     // A genuine error (not just a silent hang) on the FIRST attempt is
     // still worth one retry — see the onstart-timeout branch below for
@@ -130,6 +149,10 @@ function speakWithBrowserVoice(text: string, isRetry = false): void {
   utterance.onstart = () => { started = true; };
   setTimeout(() => {
     if (started) return;
+    // Same supersession check as onerror above — a route change or
+    // tab-hide since this was scheduled means there's deliberately
+    // nothing left to retry for.
+    if (speechGeneration !== myGeneration) return;
     if (isRetry) { reportTtsError('never started (after retry)'); return; }
     window.speechSynthesis.cancel();
     speakWithBrowserVoice(text, true);
@@ -199,6 +222,10 @@ export function speakWord(word: Word): void {
 // currently-speaking utterance and anything queued behind it.
 export function stopSpeech(): void {
   if (typeof window === 'undefined') return;
+  // See speechGeneration's own comment — marks anything currently in
+  // flight as deliberately superseded, not a failure, before actually
+  // cancelling it.
+  speechGeneration++;
   if (currentAudio) {
     currentAudio.pause();
     currentAudio = null;

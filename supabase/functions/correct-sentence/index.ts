@@ -170,7 +170,12 @@ Deno.serve(async (req: Request) => {
                   'both correctly translate "during" before a noun phrase; "an" can govern several ' +
                   'different relationships) — only replace the learner\'s preposition if it is ' +
                   'actually grammatically wrong or changes the meaning for THAT context, never ' +
-                  'just because a different preposition you\'d have picked also works. ' +
+                  'just because a different preposition you\'d have picked also works. Relatedly, ' +
+                  'German preposition+article contractions (im/in dem, am/an dem, zum/zu dem, ' +
+                  'zur/zu der, beim/bei dem, vom/von dem, ins/in das, ans/an das, aufs/auf das) ' +
+                  'are both EQUALLY CORRECT forms of the same phrase, not an error in either ' +
+                  'direction (a real case: a learner wrote "in dem" and it was wrongly changed ' +
+                  'to "im") — leave whichever one the learner used exactly as they wrote it. ' +
                   `EXCEPTION, and this overrides everything above: never replace the target word ` +
                   `"${wordDe}" itself with a different German word, even if you think a different ` +
                   'word fits the English sentence better — the whole point of this exercise is ' +
