@@ -1708,7 +1708,15 @@ export default function DailySessionFlow() {
       enterReviewMcqReversedPhase(next);
       return;
     }
-    const { correct, choices } = buildReverseMcqChoices(w, settings?.nativeLanguage ?? 'en', mcqSeenRef.current[w.id] ?? []);
+    // getSettings() directly, not the `settings` state variable -- a
+    // session resuming STRAIGHT into this phase on a fresh page load
+    // calls this synchronously from the same mount effect that just
+    // called setSettings(), before React has actually applied that
+    // state update -- `settings` would silently still be its initial
+    // null there, wrongly falling back to English rather than the
+    // learner's real nativeLanguage. getSettings() reads localStorage
+    // directly, no state-timing race to fall into.
+    const { correct, choices } = buildReverseMcqChoices(w, getSettings().nativeLanguage, mcqSeenRef.current[w.id] ?? []);
     mcqSeenRef.current[w.id] = [...(mcqSeenRef.current[w.id] ?? []), ...choices];
     setMcqCurrent({ word: w, correct, choices });
   }
@@ -1750,7 +1758,15 @@ export default function DailySessionFlow() {
       enterStudyMcqPhase(next);
       return;
     }
-    const { correct, choices } = buildReverseMcqChoices(w, settings?.nativeLanguage ?? 'en', mcqSeenRef.current[w.id] ?? []);
+    // getSettings() directly, not the `settings` state variable -- a
+    // session resuming STRAIGHT into this phase on a fresh page load
+    // calls this synchronously from the same mount effect that just
+    // called setSettings(), before React has actually applied that
+    // state update -- `settings` would silently still be its initial
+    // null there, wrongly falling back to English rather than the
+    // learner's real nativeLanguage. getSettings() reads localStorage
+    // directly, no state-timing race to fall into.
+    const { correct, choices } = buildReverseMcqChoices(w, getSettings().nativeLanguage, mcqSeenRef.current[w.id] ?? []);
     mcqSeenRef.current[w.id] = [...(mcqSeenRef.current[w.id] ?? []), ...choices];
     setMcqCurrent({ word: w, correct, choices });
   }

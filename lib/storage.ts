@@ -1099,10 +1099,18 @@ function normalizeDailySession(raw: Partial<DailySession>): DailySession {
   // Same round-3 migration as normalizeProgress's own — only ever matters
   // for a session already mid-review, TODAY, at the exact moment this
   // changed (sessions reset daily, so it can't linger past that).
-  if (normalized.reviewRounds) {
+  // Guarded against reviewRounds being present-but-not-a-plain-object (a
+  // stray `null` stored explicitly would otherwise survive the `...raw`
+  // spread above and override the `{}` default, then throw the moment
+  // Object.keys touches it) — belt-and-suspenders after a real "crashes
+  // once right after a deploy, fine on reload" report that could fit a
+  // bad-stored-session shape as easily as a stale cached bundle.
+  if (normalized.reviewRounds && typeof normalized.reviewRounds === 'object') {
     for (const id of Object.keys(normalized.reviewRounds)) {
       if ((normalized.reviewRounds[id] as number) === 3) normalized.reviewRounds[id] = 2;
     }
+  } else {
+    normalized.reviewRounds = {};
   }
   return normalized;
 }
