@@ -1,6 +1,7 @@
 'use client';
 
 import { getSoundChoice, SoundChoice } from './storage';
+import { supabase } from './supabase';
 
 // Short, synthesized "correct!" chimes — plain Web Audio oscillators, no
 // external audio file or API (no asset to host/license, identical tone on
@@ -11,12 +12,43 @@ import { getSoundChoice, SoundChoice } from './storage';
 // (spelling check, MCQ answer, a perfect sentence correction) and
 // MatchingQuizPage (finishing a matching round).
 
+// Fires at most once per page load — two independent reports of TOTAL
+// chime silence (not the "sometimes" intermittent case ensureRunning
+// below already fixed) came in for both a round's correct-chime AND
+// Settings' own chime preview, which share nothing except this file --
+// pointing at something failing here itself rather than either call
+// site. Nothing here was previously guarded against actually throwing
+// (constructing an AudioContext outside a browser's liked conditions can
+// throw synchronously on some engines, not just end up suspended), so a
+// failure had nowhere to go but an uncaught error in the console and
+// silence with no other signal. Same auto-diagnostic pattern as
+// lib/speech.ts's reportTtsError, reusing the same bug_reports table.
+let chimeErrorReported = false;
+function reportChimeError(detail: string): void {
+  if (chimeErrorReported) return;
+  chimeErrorReported = true;
+  supabase.from('bug_reports').insert({
+    user_id: null,
+    email: null,
+    message: `Auto-detected: chime failed to play (${detail}).`,
+    page_path: window.location.pathname,
+    user_agent: navigator.userAgent,
+  }).then(() => {}, () => {});
+}
+
 let sharedCtx: AudioContext | null = null;
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return null;
-  if (!sharedCtx) sharedCtx = new Ctor();
+  if (!sharedCtx) {
+    try {
+      sharedCtx = new Ctor();
+    } catch (e) {
+      reportChimeError(`AudioContext construction threw: ${e}`);
+      return null;
+    }
+  }
   return sharedCtx;
 }
 
@@ -139,12 +171,17 @@ export function playChime(id: SoundChoice): void {
   // actually be running before scheduling a single oscillator.
   (async () => {
     const ok = await ensureRunning(ctx);
-    if (!ok) return;
+    if (!ok) {
+      reportChimeError(`never reached 'running' (state=${ctx.state})`);
+      return;
+    }
     try {
       option.play(ctx);
-    } catch {
+    } catch (e) {
       // Best-effort — a sound glitch should never break the actual
-      // exercise flow it's celebrating.
+      // exercise flow it's celebrating. Reported (not just swallowed) so
+      // a genuine failure like this actually surfaces somewhere.
+      reportChimeError(`option.play threw: ${e}`);
     }
   })();
 }
