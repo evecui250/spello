@@ -33,34 +33,36 @@ export const OFFSET_AFTER_STAGE: Record<MascotStageId, number | null> = {
   'long-crowned': null,
 };
 
-// Each review milestone's starting round (wherever the word left off last
-// time), the round it must pass to complete that milestone, and the stage
-// it advances to on a pass. Only the 3 non-terminal stages ever enter a
-// review (long-crowned is retired).
-// Round -> hint level: 2 = half-word hint, 3 = first-letter-only hint,
-// 4 = no hint (see generateHint in lib/practice.ts). Deliberately eased
-// from an earlier version that ramped straight to a no-hint round by the
-// 2nd review and made the 3rd review nothing but a single no-hint check —
-// that jumped to fully-unaided recall too fast. Now the 1st and 2nd
-// reviews repeat the same gentler half-hint -> first-letter-hint pair
-// (one extra rep at that level instead of escalating), and the 3rd review
-// eases into the final no-hint check via a first-letter-hint round first,
-// rather than that being the only thing standing between "Strong" and
-// "Mastered".
-export const REVIEW_PLAN: Record<'puppy' | 'short' | 'medium', {
+// Each review milestone's own recipe (owner call, reworked from an
+// earlier all-typing version to cut down how much of every review is
+// spelling): puppy's 1st review is a forward MCQ batch ("which German
+// word means this?") then a single half-hint round 2 pass. medium's 3rd
+// review is a forward MCQ batch then a single no-hint round 4 pass — a
+// miss (wrong answer OR Hint) drops straight to round 2 for a full extra
+// round of scaffolding, not a one-step-back demotion, since round 3 no
+// longer exists anywhere to land on (see applyReviewResult). short's 2nd
+// review has NO round-ladder step at all any more: it's a reversed MCQ
+// batch ("what does this word mean?") on its own, plus the shared
+// end-of-day matching-quiz recap — see SessionPhase's own comment on
+// review-mcq-reversed for why that's a genuinely separate mechanism
+// rather than an entry in this table, which is why 'short' isn't a key
+// here at all (only the two stages that still use the round-ladder are).
+export const REVIEW_PLAN: Record<'puppy' | 'medium', {
   nextStage: MascotStageId;
   startRound: Round;
   capRound: Round;
 }> = {
-  puppy:  { nextStage: 'short',        startRound: 2, capRound: 3 },
-  short:  { nextStage: 'medium',       startRound: 2, capRound: 3 },
-  medium: { nextStage: 'long-crowned', startRound: 3, capRound: 4 },
+  puppy:  { nextStage: 'short',        startRound: 2, capRound: 2 },
+  medium: { nextStage: 'long-crowned', startRound: 4, capRound: 4 },
 };
 
 // The round a word sits at once it reaches a given stage — used to make
 // sure `round` never reports lower than what was actually just passed.
+// 'short' has no round-ladder step of its own (see REVIEW_PLAN's own
+// comment) — 2 here is just "carried forward from puppy, never actually
+// read for anything," not a real position in a ladder it doesn't use.
 const ROUND_FOR_STAGE: Record<MascotStageId, Round> = {
-  puppy: 2, short: 3, medium: 4, 'long-crowned': 4,
+  puppy: 2, short: 2, medium: 4, 'long-crowned': 4,
 };
 
 // Total days from introduction to full mastery, on-schedule with no

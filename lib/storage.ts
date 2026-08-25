@@ -6,7 +6,14 @@ import { Level, LEVEL_ORDER } from './words';
 // now the pass condition, both for a word's first climb in Study and for a
 // Review episode. See lib/practice.ts's requestHint for the "give me more
 // hints" demotion path (round 1 has nowhere lower to go).
-export type Round = 1 | 2 | 3 | 4;
+// Round 3 (first-letter-only hint) was removed entirely (owner call): every
+// exercise that used to sit at round 3 is now either a batch MCQ/MCQ_reversed
+// checkpoint or has been folded into round 2/4 directly — see lib/srs.ts's
+// REVIEW_PLAN and lib/practice.ts's applyReviewResult for the full schedule.
+// A handful of pre-existing WordProgress/session records may still carry a
+// literal `3` from before this changed; those are treated as round 2 the
+// moment they're read (see the migration in getWordProgress/normalizeProgress).
+export type Round = 1 | 2 | 4;
 export const MAX_ROUND: Round = 4;
 
 // The 4-stage dachshund mascot — a word's progress through the fixed
@@ -536,9 +543,17 @@ function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): Wo
     nextReviewDue = today();
   }
   if (mascotStage === 'long-crowned') nextReviewDue = undefined;
+  // Migration: round 3 no longer exists (see Round's own comment) — a
+  // record written before this changed can still literally have a 3
+  // sitting in storage (e.g. a medium-stage word demoted there from a
+  // wrong round-4 attempt under the old rules). Remapped to round 2 on
+  // read, the same target a fresh round-4 miss lands on now, rather than
+  // leaving an impossible value for anything downstream to trip over.
+  const rawRound = p?.round as number | undefined;
+  const round: Round = rawRound === 3 ? 2 : ((rawRound as Round) ?? 1);
   return {
     id,
-    round: (p?.round as Round) ?? 1,
+    round,
     studiedTimes: p?.studiedTimes ?? successfulReviews,
     fullyMastered,
     lastPracticed: p?.lastPracticed,
@@ -958,7 +973,17 @@ export function resetDailyGoalsForExtraRound(): void {
 export type SessionPhase =
   | 'study-mcq' | 'study-rounds' | 'study-matching'
   | 'study-done'
-  | 'review-mcq' | 'review-rounds' | 'review-matching'
+  // review-mcq (forward: "which German word means this?") and
+  // review-mcq-reversed ("what does this word mean?") are deliberately
+  // separate phases, not one mixed-direction batch -- kept apart so a
+  // learner always knows which direction they're being asked in (see
+  // WordMeaningChoiceCard's own comment on why the two directions get
+  // distinct framing at all). review-mcq-reversed is 'short'-stage
+  // review's ONLY checkpoint now -- it has no round-ladder step of its
+  // own any more (see REVIEW_PLAN), so a correct pick there is what
+  // actually advances short -> medium, the same way study-mcq's own
+  // reversed checkpoint now completes introduction.
+  | 'review-mcq' | 'review-mcq-reversed' | 'review-rounds' | 'review-matching'
   | 'report'
   | 'congrats'
   // The bonus Word Match round after the congrats card, once per day, only
@@ -994,6 +1019,12 @@ export interface DailySession {
   // mechanic as studyMcqWrongIds above.
   reviewMcqQueueIds: string[];
   reviewMcqWrongIds: string[];
+  // 'short'-stage review's own reversed-direction checkpoint (see
+  // SessionPhase's own comment) — same retry-until-clean mechanic as
+  // reviewMcqQueueIds/reviewMcqWrongIds above, just a fully separate
+  // queue/phase rather than mixed into that one.
+  reviewMcqReversedQueueIds: string[];
+  reviewMcqReversedWrongIds: string[];
   matchingQueueIds: string[]; // which page comes next in the matching quiz
   // The exact in-session order of the study/review round-ladder queue,
   // updated every time it changes (a wrong answer requeues a word to the
@@ -1054,15 +1085,26 @@ export interface DailySession {
 // a real stored session, unlike the DailySession type's own guarantees,
 // can genuinely be missing fields added after it was saved.
 function normalizeDailySession(raw: Partial<DailySession>): DailySession {
-  return {
+  const normalized = {
     studyMcqDone: false,
     studyMcqQueueIds: [],
     studyMcqWrongIds: [],
     reviewMatchingDone: false,
     reviewMcqWrongIds: [],
+    reviewMcqReversedQueueIds: [],
+    reviewMcqReversedWrongIds: [],
     reviewRounds: {},
     ...raw,
   } as DailySession;
+  // Same round-3 migration as normalizeProgress's own — only ever matters
+  // for a session already mid-review, TODAY, at the exact moment this
+  // changed (sessions reset daily, so it can't linger past that).
+  if (normalized.reviewRounds) {
+    for (const id of Object.keys(normalized.reviewRounds)) {
+      if ((normalized.reviewRounds[id] as number) === 3) normalized.reviewRounds[id] = 2;
+    }
+  }
+  return normalized;
 }
 
 export function getDailySession(): DailySession | null {
@@ -1083,11 +1125,18 @@ export function saveDailySession(s: DailySession): void {
 }
 
 export function startDailySession(studyWordIds: string[], reviewWordIds: string[], isExtra = false): DailySession {
-  // Every review-eligible word gets the pre-review "what does this word
-  // mean?" reminder, regardless of which milestone (1st/2nd/3rd review)
-  // it's on — computed up front so it's also what decides the initial
-  // phase below when there's nothing to study today.
-  const reviewMcqQueueIds = [...reviewWordIds];
+  // Every review-eligible word gets a pre-review MCQ reminder, but which
+  // DIRECTION depends on its own current stage (see REVIEW_PLAN/
+  // SessionPhase's own comments): puppy/medium still get the forward
+  // "which German word means this?" check ahead of their own round-ladder
+  // step; short has no round-ladder step at all any more, so its reversed
+  // "what does this word mean?" check is the whole thing — kept as a
+  // fully separate queue/phase from the forward one, not mixed together,
+  // so a learner always knows which direction they're being asked in.
+  const allProgress = getAllProgress();
+  const isShortStage = (id: string) => allProgress[id]?.mascotStage === 'short';
+  const reviewMcqQueueIds = reviewWordIds.filter(id => !isShortStage(id));
+  const reviewMcqReversedQueueIds = reviewWordIds.filter(isShortStage);
 
   const s: DailySession = {
     date: today(),
@@ -1100,6 +1149,7 @@ export function startDailySession(studyWordIds: string[], reviewWordIds: string[
     // streak/congrats bookkeeping still goes through the one code path that
     // owns it.
     phase: reviewMcqQueueIds.length > 0 ? 'review-mcq'
+      : reviewMcqReversedQueueIds.length > 0 ? 'review-mcq-reversed'
       : reviewWordIds.length > 0 ? 'review-rounds'
       : studyWordIds.length > 0 ? 'study-rounds' : 'report',
     studyWordIds,
@@ -1111,6 +1161,8 @@ export function startDailySession(studyWordIds: string[], reviewWordIds: string[
     reviewMatchingDone: false,
     reviewMcqQueueIds,
     reviewMcqWrongIds: [],
+    reviewMcqReversedQueueIds,
+    reviewMcqReversedWrongIds: [],
     matchingQueueIds: [],
     earnedPuppies: 0,
     earnedUpgrades: {},

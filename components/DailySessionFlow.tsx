@@ -12,11 +12,11 @@ import {
   logWordActivity,
 } from '../lib/storage';
 import {
-  wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint,
+  wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint, demoteReviewRound,
   buildMcqChoices, buildReverseMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
   hasEnoughWordsForGame,
 } from '../lib/practice';
-import { REVIEW_PLAN } from '../lib/srs';
+import { REVIEW_PLAN, recordMilestonePass } from '../lib/srs';
 import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
@@ -1564,7 +1564,11 @@ export default function DailySessionFlow() {
     clearTimeout(pendingWordAudioTimer.current);
     const progress = getWordProgress(w.id);
     const stage = (progress.mascotStage ?? 'puppy') as 'puppy' | 'short' | 'medium';
-    const plan = REVIEW_PLAN[stage];
+    // A 'short'-stage word never reaches here in review mode — it's fully
+    // handled by its own reversed-MCQ batch checkpoint before the
+    // round-ladder is ever entered (see REVIEW_PLAN's own comment), so
+    // this narrowing is safe.
+    const plan = REVIEW_PLAN[stage === 'medium' ? 'medium' : 'puppy'];
     const round = mode === 'review' ? (reviewRoundsRef.current[w.id] ?? plan.startRound) : progress.round;
     setCurrentRound(round);
     setRoundRange(mode === 'review' ? [plan.startRound, plan.capRound] : [1, 2]);
@@ -1635,16 +1639,25 @@ export default function DailySessionFlow() {
     }
   }
 
-  // Pre-review reminder for every review-eligible word (see
-  // reviewMcqQueueIds) — retried until a clean pass: once the queue drains,
-  // a non-empty reviewMcqWrongIds becomes the next (reshuffled) pass, same
-  // mechanic as enterStudyMcqPhase below.
+  // Pre-review reminder for every puppy/medium-stage review word (see
+  // reviewMcqQueueIds — 'short'-stage words never appear here, they get
+  // their own reversed-direction checkpoint below instead) — retried
+  // until a clean pass: once the queue drains, a non-empty
+  // reviewMcqWrongIds becomes the next (reshuffled) pass, same mechanic
+  // as enterStudyMcqPhase below. Once BOTH this and the reversed
+  // checkpoint (if any) are done, continues into the round-ladder.
   function enterReviewMcqPhase(ds: DailySession) {
     if (ds.reviewMcqQueueIds.length === 0) {
       if (ds.reviewMcqWrongIds.length > 0) {
         const next: DailySession = { ...ds, reviewMcqQueueIds: shuffled(ds.reviewMcqWrongIds), reviewMcqWrongIds: [] };
         persistSession(next);
         enterReviewMcqPhase(next);
+        return;
+      }
+      if (ds.reviewMcqReversedQueueIds.length > 0) {
+        const next: DailySession = { ...ds, phase: 'review-mcq-reversed' };
+        persistSession(next);
+        enterReviewMcqReversedPhase(next);
         return;
       }
       const next: DailySession = { ...ds, phase: 'review-rounds' };
@@ -1660,6 +1673,42 @@ export default function DailySessionFlow() {
       return;
     }
     const { correct, choices } = buildMcqChoices(w, mcqSeenRef.current[w.id] ?? []);
+    mcqSeenRef.current[w.id] = [...(mcqSeenRef.current[w.id] ?? []), ...choices];
+    setMcqCurrent({ word: w, correct, choices });
+  }
+
+  // 'short'-stage review's ONLY checkpoint (see REVIEW_PLAN/SessionPhase's
+  // own comments) — reversed-direction MCQ, same retry-until-clean
+  // mechanic as enterReviewMcqPhase above, but a fully separate queue/
+  // phase so the two directions never mix on the same screen. Unlike
+  // that forward checkpoint (pure reinforcement), a correct answer here
+  // is what actually advances short -> medium — see
+  // handleReviewMcqReversedAnswer. Ends by continuing into the
+  // round-ladder, same as enterReviewMcqPhase's own tail (by the time
+  // this drains, every 'short'-stage word has already passed and moved
+  // on to 'medium' with a future nextReviewDue, so isRoundsDone
+  // naturally skips them there without any extra filtering needed).
+  function enterReviewMcqReversedPhase(ds: DailySession) {
+    if (ds.reviewMcqReversedQueueIds.length === 0) {
+      if (ds.reviewMcqReversedWrongIds.length > 0) {
+        const next: DailySession = { ...ds, reviewMcqReversedQueueIds: shuffled(ds.reviewMcqReversedWrongIds), reviewMcqReversedWrongIds: [] };
+        persistSession(next);
+        enterReviewMcqReversedPhase(next);
+        return;
+      }
+      const next: DailySession = { ...ds, phase: 'review-rounds' };
+      persistSession(next);
+      enterRoundsPhase(next, 'review');
+      return;
+    }
+    const w = wordsById([ds.reviewMcqReversedQueueIds[0]])[0];
+    if (!w) {
+      const next: DailySession = { ...ds, reviewMcqReversedQueueIds: ds.reviewMcqReversedQueueIds.slice(1) };
+      persistSession(next);
+      enterReviewMcqReversedPhase(next);
+      return;
+    }
+    const { correct, choices } = buildReverseMcqChoices(w, settings?.nativeLanguage ?? 'en', mcqSeenRef.current[w.id] ?? []);
     mcqSeenRef.current[w.id] = [...(mcqSeenRef.current[w.id] ?? []), ...choices];
     setMcqCurrent({ word: w, correct, choices });
   }
@@ -1724,6 +1773,7 @@ export default function DailySessionFlow() {
     if (ds.phase === 'study-mcq') enterStudyMcqPhase(ds);
     else if (ds.phase === 'study-rounds') enterRoundsPhase(ds, 'study');
     else if (ds.phase === 'review-mcq') enterReviewMcqPhase(ds);
+    else if (ds.phase === 'review-mcq-reversed') enterReviewMcqReversedPhase(ds);
     else if (ds.phase === 'review-rounds') enterRoundsPhase(ds, 'review');
     setReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1909,9 +1959,18 @@ export default function DailySessionFlow() {
   const handleHint = () => {
     if (!word || feedback !== null || currentRound <= 1) return;
     const progress = getWordProgress(word.id);
-    const { progress: updated, nextRound } = requestHint(progress, currentRound);
-    const finalProgress = roundMode === 'study' ? { ...updated, round: nextRound } : updated;
-    saveWordProgress(finalProgress);
+    // Review's own demotion isn't a plain "one step back" any more now
+    // that round 3 is gone (see demoteReviewRound's own comment for why
+    // medium jumps straight to round 2 instead of a contiguous -1) —
+    // requestHint's generic demoteRound is still exactly right for
+    // study's own legacy round-2 carryover case, so only review branches
+    // away from it here.
+    const touched = { ...progress, lastPracticed: today() };
+    const nextRound = roundMode === 'review'
+      ? demoteReviewRound(progress.mascotStage === 'medium' ? 'medium' : 'puppy')
+      : requestHint(progress, currentRound).nextRound;
+    const updated = roundMode === 'study' ? { ...touched, round: nextRound } : touched;
+    saveWordProgress(updated);
     scheduleSync();
     if (roundMode === 'review' && session) {
       reviewRoundsRef.current[word.id] = nextRound;
@@ -1954,12 +2013,14 @@ export default function DailySessionFlow() {
   // Day 1 truly complete for every word in today's batch (round 2 passed —
   // see isRoundsDone's study branch) — the matching-quiz recap runs once,
   // here at the actual end, before the "N words learned" summary.
+  // Introduction no longer ends with a matching-quiz recap (owner call —
+  // it's round 1 -> the reversed-MCQ batch, full stop) — straight to the
+  // "N words learned" summary. enterMatchingPhase/'study-matching' are
+  // left in place (just never entered by a new session any more) purely
+  // so a session that happened to already be mid-recap at the exact
+  // moment this changed still finishes cleanly instead of crashing.
   function finishStudyRounds(ds: DailySession) {
     markStudyGoalDone(ds.studyWordIds.length);
-    if (!ds.studyMatchingDone) {
-      enterMatchingPhase(ds, 'study');
-      return;
-    }
     proceedPastStudy(ds);
   }
 
@@ -1991,6 +2052,36 @@ export default function DailySessionFlow() {
     setMcqCurrent(null);
     persistSession(next);
     enterReviewMcqPhase(next);
+  }
+
+  // Retried until a clean pass — see enterReviewMcqReversedPhase. Unlike
+  // handleReviewMcqAnswer (pure reinforcement, never touches progress), a
+  // CORRECT answer here is what actually advances 'short' -> 'medium' —
+  // this phase is short-stage review's ONLY checkpoint, there's no
+  // round-ladder step behind it the way puppy/medium still have. A WRONG
+  // answer touches nothing at all (no schedule change) — it just
+  // requeues into reviewMcqReversedWrongIds same as always, so a stumble
+  // costs another question later in this same batch.
+  function handleReviewMcqReversedAnswer(correct: boolean) {
+    if (!session || !mcqCurrent) return;
+    const word = mcqCurrent.word;
+    if (correct) {
+      const progress = getWordProgress(word.id);
+      const updated = recordMilestonePass({ ...progress, lastPracticed: today() }, 'medium');
+      saveWordProgress(updated);
+      scheduleSync();
+      logWordActivity(word.id, 'reviewed');
+      addEarnedUpgrade('medium');
+    }
+    const next: DailySession = {
+      ...session,
+      reviewMcqReversedQueueIds: session.reviewMcqReversedQueueIds.slice(1),
+      reviewMcqReversedWrongIds: correct ? session.reviewMcqReversedWrongIds : [...session.reviewMcqReversedWrongIds, mcqCurrent.word.id],
+      ...(correct ? { earnedUpgrades: { ...session.earnedUpgrades, medium: (session.earnedUpgrades.medium ?? 0) + 1 } } : {}),
+    };
+    setMcqCurrent(null);
+    persistSession(next);
+    enterReviewMcqReversedPhase(next);
   }
 
   // Retried until a clean pass — see enterStudyMcqPhase. Unlike
@@ -2299,6 +2390,14 @@ export default function DailySessionFlow() {
   if (session.phase === 'review-mcq') {
     if (!mcqCurrent) return null;
     return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={handleReviewMcqAnswer} isReview />;
+  }
+  // 'short'-stage review's own checkpoint — see enterReviewMcqReversedPhase.
+  // A fully separate phase/screen from review-mcq above (not merged into
+  // one mixed-direction batch), so a learner is never asked to switch
+  // direction mid-stream without a clear break.
+  if (session.phase === 'review-mcq-reversed') {
+    if (!mcqCurrent) return null;
+    return <WordMeaningChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={handleReviewMcqReversedAnswer} isReview />;
   }
 
   if (session.phase === 'study-matching' || session.phase === 'review-matching') {

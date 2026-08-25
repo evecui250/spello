@@ -552,8 +552,8 @@ function pickFrontOrBack(
 // the front-only treatment. Whichever side wins is the one exception to
 // "always includes the first letter" below — a back-side reveal's whole
 // point is blanking the root, which usually starts at position 0.
-// Round 3: only the first letter revealed.
-// Round 4: no hints — full recall.
+// Round 4: no hints — full recall. (Round 3 — first-letter-only — was
+// removed entirely; see Round's own comment.)
 export function generateHint(word: Word, round: Round): boolean[] {
   const chars = [...word.de];
   const n = chars.length;
@@ -562,8 +562,6 @@ export function generateHint(word: Word, round: Round): boolean[] {
   let base: boolean[];
   if (round === 1 || round === 4) {
     base = Array.from({ length: n }, () => true);
-  } else if (round === 3) {
-    base = Array.from({ length: n }, (_, i) => i !== letterIndices[0]);
   } else {
     // round 2 — see this function's own doc comment for the tiering.
     // Being fully deterministic means recomputing this (e.g. after
@@ -685,12 +683,33 @@ export function applyResult(progress: WordProgress, correct: boolean): WordProgr
 // A learner-requested hint: explicitly demotes one round for more
 // scaffolding, same demotion a wrong answer now causes — a proactive ask
 // instead of a reactive one. Not available at round 1 (nothing lower to
-// go — the button itself is hidden then).
+// go — the button itself is hidden then). STUDY only now — a review word
+// demoting needs the stage-aware demoteReviewRound below instead, since
+// round 3's removal means "one step back" no longer means the same thing
+// for every stage (see its own comment).
 export function requestHint(progress: WordProgress, currentRound: Round): { progress: WordProgress; nextRound: Round } {
   return {
     progress: { ...progress, lastPracticed: today() },
     nextRound: demoteRound(currentRound),
   };
+}
+
+// The review-side equivalent of requestHint/a wrong answer's demotion,
+// used by BOTH applyReviewResult's own wrong branch and the round-ladder's
+// Hint button in review mode. Round 3 no longer exists, so "one step
+// back" can't just be currentRound-1 any more: puppy has only the one
+// rung (round 2 — also its own REVIEW_PLAN.startRound, so "demoted" and
+// "fresh" coincide there); medium's own fresh start is round 4 directly
+// now (see REVIEW_PLAN), so its demotion target is NOT plan.startRound —
+// a miss there is an explicit jump to round 2, a full extra round of
+// scaffolding rather than a one-step demotion, since missing the
+// near-mastery blind-recall test deserves more help, not less (explicit
+// owner call). Both stages land on round 2 either way, just for
+// different reasons — hardcoded rather than derived from REVIEW_PLAN so
+// a future change to medium's own startRound can't silently change what
+// a miss demotes to.
+export function demoteReviewRound(stage: 'puppy' | 'medium'): Round {
+  return 2;
 }
 
 export interface ReviewOutcome {
@@ -706,14 +725,18 @@ export interface ReviewOutcome {
   scored: boolean;
 }
 
-// Review scoring: each of the 3 review milestones (1st/2nd/3rd) has its own
-// start round and cap round, derived from the word's CURRENT mascotStage
-// (see lib/srs.ts's REVIEW_PLAN) — a word can only ever be on the one
-// milestone that stage implies. Correct at the cap round completes that
-// milestone (recordMilestonePass advances the stage and reschedules).
-// Correct below the cap promotes one round, same visit. Wrong now demotes
-// one round (same as Hint), floored at this milestone's own start round —
-// it can't drop back into a PREVIOUS milestone's territory.
+// Review scoring for the two stages that still use the round-ladder at
+// all (puppy and medium — see REVIEW_PLAN's own comment for why 'short'
+// isn't handled here; it goes through the reversed-MCQ batch instead,
+// see DailySessionFlow's handleReviewMcqReversedAnswer). On a fresh,
+// never-demoted visit each stage has exactly ONE round to pass (puppy:
+// round 2, medium: round 4), so a correct answer usually completes the
+// milestone outright. The one exception: after a medium-stage miss
+// demotes to round 2 (see demoteReviewRound), a correct round-2 retry
+// only climbs BACK to round 4 rather than completing the milestone from
+// there — passing the easier scaffolded round isn't the same as passing
+// the actual no-hint test, so the word still has to clear round 4 for
+// real before it's mastered.
 export function applyReviewResult(progress: WordProgress, correct: boolean, currentRound: Round): ReviewOutcome {
   const t = today();
 
@@ -725,17 +748,22 @@ export function applyReviewResult(progress: WordProgress, correct: boolean, curr
     return { progress, nextRound: currentRound, isFinal: true, scored: false };
   }
 
-  const stage = (progress.mascotStage ?? 'puppy') as 'puppy' | 'short' | 'medium';
+  const stage = (progress.mascotStage === 'medium' ? 'medium' : 'puppy') as 'puppy' | 'medium';
   const plan = REVIEW_PLAN[stage];
 
   if (correct) {
     if (currentRound >= plan.capRound) {
       return { progress: recordMilestonePass(progress, plan.nextStage, t), nextRound: plan.capRound, isFinal: true, scored: true };
     }
-    return { progress: { ...progress, lastPracticed: t }, nextRound: (currentRound + 1) as Round, isFinal: false, scored: true };
+    // Only medium can be "correct but below cap" now (a post-demotion
+    // round-2 retry climbing back toward round 4) — puppy's single rung
+    // IS its cap round, so it always takes the branch above instead.
+    // Rounds no longer form a contiguous ladder (3 is gone), so this is
+    // a direct jump to capRound, not a "+1".
+    return { progress: { ...progress, lastPracticed: t }, nextRound: plan.capRound, isFinal: false, scored: true };
   }
 
-  return { progress: { ...progress, lastPracticed: t }, nextRound: demoteRound(currentRound, plan.startRound), isFinal: false, scored: true };
+  return { progress: { ...progress, lastPracticed: t }, nextRound: demoteReviewRound(stage), isFinal: false, scored: true };
 }
 
 // Same "der/die/das X" form spoken and shown everywhere else a bare German
