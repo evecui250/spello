@@ -24,20 +24,56 @@ export function audioUrlForWord(word: Word): string {
 // list (once it's loaded) avoids that.
 let cachedGermanVoice: SpeechSynthesisVoice | null | undefined;
 
+// Picks a German voice from a voice list, preferring one that runs fully
+// on-device (voice.localService === true) over a network-backed voice.
+// A network voice depends on a round-trip to the browser/OS vendor's TTS
+// service completing — bad connectivity, a corporate proxy, or a
+// regional block all make that round-trip simply never finish, and
+// speechSynthesis has no error event for "the network call never came
+// back": from the caller's side that looks identical to the "never
+// started, no error at all" hang this file was built to diagnose. Both
+// auto-filed reports so far had plenty of voices available (221, 68), so
+// a genuinely missing German voice isn't the likely explanation — an
+// unreliable network voice being the one JS happened to pick is a much
+// better fit for a failure this silent.
+//
+// `exclude`, when given, is skipped entirely. This matters for the retry
+// path below: retrying with the exact same (cached) voice object — which
+// is what this function used to always hand back — guarantees an
+// identical silent failure if that specific voice is what's broken,
+// which matches every "never started (after retry)" report seen so far
+// (the retry is a fresh speak() call, but never a fresh voice choice).
+function selectGermanVoice(
+  voices: SpeechSynthesisVoice[],
+  exclude?: SpeechSynthesisVoice | null,
+): SpeechSynthesisVoice | null {
+  const usable = exclude ? voices.filter(v => v !== exclude) : voices;
+  const german = usable.filter(v => v.lang?.toLowerCase().startsWith('de'));
+  const localGerman = german.filter(v => v.localService);
+  // A device with literally no German voice installed at all is the one
+  // case iOS's own "falls back to the device's default voice" behavior
+  // doesn't reliably cover on every platform — leaving utterance.voice
+  // unset then relies entirely on whichever browser/OS combination is
+  // running to pick SOMETHING for an unmatched `lang`, and not every one
+  // of them does. Explicitly falling back to ANY installed voice (wrong
+  // accent, but audible) removes that reliance outright instead of
+  // risking total silence.
+  return (
+    localGerman.find(v => v.lang.toLowerCase() === 'de-de') ??
+    localGerman[0] ??
+    german.find(v => v.lang.toLowerCase() === 'de-de') ??
+    german[0] ??
+    usable.find(v => v.localService) ??
+    usable[0] ??
+    null
+  );
+}
+
 function pickGermanVoice(): SpeechSynthesisVoice | null {
   if (cachedGermanVoice !== undefined) return cachedGermanVoice;
   const voices = window.speechSynthesis.getVoices();
   if (!voices.length) return null; // not loaded yet — try again on the next call
-  const german = voices.filter(v => v.lang?.toLowerCase().startsWith('de'));
-  // A device with literally no German voice installed at all is the one
-  // case iOS's own "falls back to the device's default voice" behavior
-  // (see this function's own comment) doesn't reliably cover on every
-  // platform — leaving utterance.voice unset then relies entirely on
-  // whichever browser/OS combination is running to pick SOMETHING for
-  // an unmatched `lang`, and not every one of them does. Explicitly
-  // falling back to ANY installed voice (wrong accent, but audible)
-  // removes that reliance outright instead of risking total silence.
-  const best = german.find(v => v.lang.toLowerCase() === 'de-de') ?? german[0] ?? voices[0] ?? null;
+  const best = selectGermanVoice(voices);
   cachedGermanVoice = best;
   return best;
 }
@@ -65,12 +101,21 @@ if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
 // bare detail string, so the NEXT report actually says why, rather than
 // needing yet another guess.
 let ttsErrorReported = false;
-function reportTtsError(detail: string): void {
+function reportTtsError(detail: string, voice?: SpeechSynthesisVoice | null): void {
   if (ttsErrorReported) return;
   ttsErrorReported = true;
   const synth = window.speechSynthesis;
+  // Which voice was actually in play matters as much as the synth's queue
+  // state — see selectGermanVoice's own comment on why a network-backed
+  // voice is the leading suspect for a hang with no error event at all.
+  // Recording it here means the NEXT report either confirms that theory
+  // (still a network voice, even after this file starts preferring local
+  // ones) or rules it out outright, instead of leaving it a guess again.
+  const voiceInfo = voice
+    ? `voice=${voice.name} (${voice.lang}, ${voice.localService ? 'local' : 'network'})`
+    : 'voice=none';
   const diagnostics = `voices=${synth.getVoices().length}, speaking=${synth.speaking}, ` +
-    `pending=${synth.pending}, paused=${synth.paused}`;
+    `pending=${synth.pending}, paused=${synth.paused}, ${voiceInfo}`;
   supabase.from('bug_reports').insert({
     user_id: null,
     email: null,
@@ -103,7 +148,11 @@ let speechGeneration = 0;
 // nothing until the page reloads — no error event, nothing. resume() is
 // the standard, harmless-elsewhere unstick for that; calling it right
 // before every speak() costs nothing on a browser that was never stuck.
-function speakWithBrowserVoice(text: string, isRetry = false): void {
+function speakWithBrowserVoice(
+  text: string,
+  isRetry = false,
+  excludeVoice: SpeechSynthesisVoice | null = null,
+): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   const myGeneration = ++speechGeneration;
   const utterance = new SpeechSynthesisUtterance(text);
@@ -114,14 +163,20 @@ function speakWithBrowserVoice(text: string, isRetry = false): void {
   // two, not the pre-recorded word clips, so this pulls sentences down to
   // roughly match instead.
   utterance.volume = SENTENCE_AUDIO_VOLUME;
-  const voice = pickGermanVoice();
+  // A retry always re-picks live (bypassing the cache) and explicitly
+  // excludes whatever voice the failed attempt used — see
+  // selectGermanVoice's own comment for why reusing that same voice
+  // object here would just reproduce the same silent hang.
+  const voice = isRetry
+    ? selectGermanVoice(window.speechSynthesis.getVoices(), excludeVoice)
+    : pickGermanVoice();
   if (voice) utterance.voice = voice;
   utterance.onerror = (e) => {
     // Superseded by a newer speak() call or an explicit stopSpeech() by
     // the time this fired — see speechGeneration's own comment. Not a
     // real failure, nothing to report.
     if (speechGeneration !== myGeneration) return;
-    if (isRetry) reportTtsError(e.error);
+    if (isRetry) reportTtsError(e.error, voice);
     // A genuine error (not just a silent hang) on the FIRST attempt is
     // still worth one retry — see the onstart-timeout branch below for
     // why a retry, not an immediate report.
@@ -153,9 +208,9 @@ function speakWithBrowserVoice(text: string, isRetry = false): void {
     // tab-hide since this was scheduled means there's deliberately
     // nothing left to retry for.
     if (speechGeneration !== myGeneration) return;
-    if (isRetry) { reportTtsError('never started (after retry)'); return; }
+    if (isRetry) { reportTtsError('never started (after retry)', voice); return; }
     window.speechSynthesis.cancel();
-    speakWithBrowserVoice(text, true);
+    speakWithBrowserVoice(text, true, voice);
   }, 2000);
   window.speechSynthesis.speak(utterance);
 }
