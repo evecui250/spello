@@ -12,6 +12,12 @@ interface Props {
   choices: string[];
   onAnswer: (correct: boolean) => void;
   isReview?: boolean;
+  // Day-wide "Can't listen right now" flag (see DailySession's own
+  // mcqReversedRevealed) — once set, every audio-first question today
+  // starts pre-revealed instead of making the learner tap the fallback
+  // button again for every single word.
+  initiallyRevealed?: boolean;
+  onReveal?: () => void;
 }
 
 // The reverse of TranslationChoiceCard: the learner picks the MEANING of a
@@ -29,29 +35,38 @@ interface Props {
 // distinct framing keeps that a conscious choice each time.
 // Reinforcement only, same as TranslationChoiceCard: never touches
 // mastery/growth scoring or nextReviewDue on its own.
-export default function WordMeaningChoiceCard({ word, correct: correctChoice, choices, onAnswer, isReview }: Props) {
+export default function WordMeaningChoiceCard({ word, correct: correctChoice, choices, onAnswer, isReview, initiallyRevealed, onReveal }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   // The learner's own escape hatch for "I can't listen right now" (no
   // headphones, a noisy room, sound off) — falls back to exactly the old
-  // show-the-word behavior. Reset alongside `selected` on a fresh question,
-  // not remembered across words — someone who taps it once for a single
-  // noisy moment shouldn't have every later word revealed by default too.
-  const [wordRevealed, setWordRevealed] = useState(false);
+  // show-the-word behavior. Seeded from (and reset back to) whatever the
+  // day-wide flag says, not hardcoded false, since tapping the fallback
+  // once means every OTHER word today should also start revealed (see
+  // onReveal/initiallyRevealed's own comment).
+  const [wordRevealed, setWordRevealed] = useState(!!initiallyRevealed);
 
   // Same reset-on-fresh-question guard as TranslationChoiceCard's own
   // effect — see its comment for why `choices` (always freshly shuffled,
   // even for a repeated word) is the reliable signal here rather than
-  // `word.id` alone.
+  // `word.id` alone. Deliberately NOT keyed on `initiallyRevealed` too —
+  // that flag flipping true from THIS card's own fallback tap already set
+  // local wordRevealed directly; re-running this on that same change would
+  // just be a redundant no-op, not a bug, but there's no reason to invite
+  // the extra render.
   useEffect(() => {
     setSelected(null);
-    setWordRevealed(false);
+    setWordRevealed(!!initiallyRevealed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [choices]);
 
   // Plays the word once a fresh question is actually on screen — this is
   // the ONLY way the learner encounters the word before answering (no
   // written form shown), so unlike SpeakerButton elsewhere this isn't an
-  // optional nicety, it's the question itself.
+  // optional nicety, it's the question itself. Skipped once the day-wide
+  // "can't listen right now" flag is set — that's the learner explicitly
+  // saying audio isn't wanted right now, not just for this one word.
   useEffect(() => {
+    if (initiallyRevealed) return;
     speakWord(word);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [choices]);
@@ -114,7 +129,7 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
             </button>
             <span className="text-xs text-slate-400">Tap to hear it again</span>
             <button
-              onClick={() => setWordRevealed(true)}
+              onClick={() => { setWordRevealed(true); onReveal?.(); }}
               className="text-xs text-indigo-500 underline mt-1"
             >
               Can't listen right now? Show the word

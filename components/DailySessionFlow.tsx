@@ -2078,6 +2078,15 @@ export default function DailySessionFlow() {
   // answer touches nothing at all (no schedule change) — it just
   // requeues into reviewMcqReversedWrongIds same as always, so a stumble
   // costs another question later in this same batch.
+  // WordMeaningChoiceCard's own "Can't listen right now? Show the word"
+  // fallback — once tapped, every OTHER audio-first MCQ_reversed question
+  // today (study or review) also starts pre-revealed, rather than making
+  // the learner tap the same escape hatch again for every single word.
+  function handleRevealMcqReversed() {
+    if (!session || session.mcqReversedRevealed) return;
+    persistSession({ ...session, mcqReversedRevealed: true });
+  }
+
   function handleReviewMcqReversedAnswer(correct: boolean) {
     if (!session || !mcqCurrent) return;
     const word = mcqCurrent.word;
@@ -2401,7 +2410,17 @@ export default function DailySessionFlow() {
   // distinct framing copy rather than sharing one.
   if (session.phase === 'study-mcq') {
     if (!mcqCurrent) return null;
-    return <WordMeaningChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={handleStudyMcqAnswer} />;
+    return (
+      <WordMeaningChoiceCard
+        key={mcqCurrent.word.id}
+        word={mcqCurrent.word}
+        correct={mcqCurrent.correct}
+        choices={mcqCurrent.choices}
+        onAnswer={handleStudyMcqAnswer}
+        initiallyRevealed={!!session.mcqReversedRevealed}
+        onReveal={handleRevealMcqReversed}
+      />
+    );
   }
   if (session.phase === 'review-mcq') {
     if (!mcqCurrent) return null;
@@ -2413,7 +2432,18 @@ export default function DailySessionFlow() {
   // direction mid-stream without a clear break.
   if (session.phase === 'review-mcq-reversed') {
     if (!mcqCurrent) return null;
-    return <WordMeaningChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={handleReviewMcqReversedAnswer} isReview />;
+    return (
+      <WordMeaningChoiceCard
+        key={mcqCurrent.word.id}
+        word={mcqCurrent.word}
+        correct={mcqCurrent.correct}
+        choices={mcqCurrent.choices}
+        onAnswer={handleReviewMcqReversedAnswer}
+        isReview
+        initiallyRevealed={!!session.mcqReversedRevealed}
+        onReveal={handleRevealMcqReversed}
+      />
+    );
   }
 
   if (session.phase === 'study-matching' || session.phase === 'review-matching') {

@@ -1032,6 +1032,15 @@ export interface DailySession {
   // queue/phase rather than mixed into that one.
   reviewMcqReversedQueueIds: string[];
   reviewMcqReversedWrongIds: string[];
+  // Set the first time the learner taps WordMeaningChoiceCard's own
+  // "Can't listen right now? Show the word" fallback — every OTHER
+  // audio-first MCQ_reversed question today (study or review) then also
+  // starts pre-revealed instead of making them tap that same button
+  // again for every single word for the rest of the day. Resets tomorrow
+  // like the rest of this session; not a Settings-level permanent
+  // preference, since a single noisy moment doesn't mean they never want
+  // the audio-first version again.
+  mcqReversedRevealed?: boolean;
   matchingQueueIds: string[]; // which page comes next in the matching quiz
   // The exact in-session order of the study/review round-ladder queue,
   // updated every time it changes (a wrong answer requeues a word to the
