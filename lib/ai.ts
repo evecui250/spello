@@ -2,6 +2,7 @@
 
 import { FunctionsFetchError } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { WordType } from './words';
 
 // Always succeeds now — see correct-sentence's own comment for why: an
 // unusable/absent attempt falls back to a fresh direct translation
@@ -235,6 +236,35 @@ export async function generateParagraphExercise(
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (!data?.paragraph || !Array.isArray(data.answers)) throw new Error('Malformed AI response');
   return { paragraph: data.paragraph, answers: data.answers };
+}
+
+export interface LookupWordResult {
+  de: string;
+  article?: 'der' | 'die' | 'das';
+  plural?: string;
+  type: WordType;
+  thirdPerson?: string;
+  pastTense?: string;
+  perfectTense?: string;
+  en: string;
+  zh: string;
+  category?: string;
+}
+
+// Backs the Word List page's "look up & add" flow (see
+// app/words/page.tsx) — defines a German/English/Chinese term the learner
+// typed well enough to become a full Word entry (see lib/words.ts) they
+// can save to their own list (see lib/storage.ts's addCustomWord).
+// Returns null (not a throw) when the AI genuinely couldn't resolve it to
+// a real word/phrase at all — a distinct case from every other error
+// here, since it means "try a different search," not "something broke."
+export async function lookupWord(term: string, level: string): Promise<LookupWordResult | null> {
+  const { data, error } = await invokeWithTimeout<{ found?: boolean; word?: LookupWordResult; limitReached?: boolean }>('lookup-word', { term, level });
+  if (error) rethrow(error);
+  if (data?.limitReached) throw new DailyLimitReachedError();
+  if (data?.found === false) return null;
+  if (!data?.word) throw new Error('Malformed AI response');
+  return data.word;
 }
 
 export interface WordGloss {

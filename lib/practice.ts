@@ -5,11 +5,25 @@ import {
   getAllProgress, getSettings, today, Round, WordProgress, MascotStageId,
   getDailySession, saveDailySession, SessionPhase, getWordProgress, saveWordProgress,
   getMergedProgressAcrossLevels, ParagraphBlank, ParagraphExercise,
+  getAllCustomWords, getAllCustomWordsAcrossLevels, getAllCustomWordsForLevel,
 } from './storage';
 import { recordMilestonePass, REVIEW_PLAN, MASTERY_DAYS_AFTER_INTRODUCTION } from './srs';
 
 export function shuffled<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
+}
+
+// A level's full study/review-eligible pool: the static curated corpus
+// PLUS whatever the learner has added themselves under this level (see
+// storage.ts's custom-words section) — owner call: a learner's own added
+// words count exactly the same as any corpus word (daily study/review
+// batches, hints, MCQ distractors, the works), not a separate bolted-on
+// mode. Every call site that used to read wordsForLevel/WORDS directly
+// for anything learner-facing (as opposed to admin/corpus-content tooling)
+// should go through this instead so a custom word is never silently
+// invisible to one part of the pipeline while working in another.
+export function allWordsForLevel(level: Level): Word[] {
+  return [...wordsForLevel(level), ...Object.values(getAllCustomWordsForLevel(level))];
 }
 
 // Word Match game unlock threshold (see app/game/page.tsx) — below this
@@ -26,11 +40,12 @@ export const GAME_MIN_WORDS_REQUIRED = 5;
 // beyond, across EVERY level (not just the currently active one) — same
 // definition app/game/page.tsx's own getLearnedWords uses, just a count
 // rather than the full Word[] list (StudyRoadmap only needs to know
-// whether the game is unlocked, not which words would fill it).
+// whether the game is unlocked, not which words would fill it). Includes
+// learner-added custom words — see allWordsForLevel's own comment.
 export function hasEnoughWordsForGame(): boolean {
   const progress = getMergedProgressAcrossLevels();
   let count = 0;
-  for (const w of WORDS) {
+  for (const w of [...WORDS, ...getAllCustomWordsAcrossLevels()]) {
     if (progress[w.id]?.mascotStage && ++count >= GAME_MIN_WORDS_REQUIRED) return true;
   }
   return false;
@@ -38,9 +53,17 @@ export function hasEnoughWordsForGame(): boolean {
 
 const WORDS_BY_ID = new Map(WORDS.map(w => [w.id, w]));
 
-// Looks up words by id, preserving order and silently dropping unknown ids.
+// Looks up words by id, preserving order and silently dropping unknown
+// ids. Checks the static corpus map first (the overwhelmingly common
+// case, and a plain Map lookup), falling back to the caller's own active
+// level's custom words for anything not found there — a custom word's id
+// is always prefixed (see isCustomWordId) precisely so it can never
+// collide with a static id and be resolved to the wrong word.
 export function wordsById(ids: string[]): Word[] {
-  return ids.map(id => WORDS_BY_ID.get(id)).filter((w): w is Word => !!w);
+  const custom = getAllCustomWords();
+  return ids
+    .map(id => WORDS_BY_ID.get(id) ?? custom[id])
+    .filter((w): w is Word => !!w);
 }
 
 // Beginners find long words disproportionately harder to type from scratch —
@@ -111,7 +134,7 @@ export function buildStudyWords(
   const allProgress = getAllProgress();
   const inProgress: Word[] = [];
   const fresh: Word[] = [];
-  for (const w of wordsForLevel(settings.level)) {
+  for (const w of allWordsForLevel(settings.level)) {
     if (excludeIds.has(w.id)) continue;
     const p = allProgress[w.id];
     if (!p) fresh.push(w);
@@ -194,7 +217,7 @@ const PREREQUISITE_LEVELS: Record<Level, Level[]> = {
 // English glosses (what the AI actually needs — the learner has to know
 // the English concept to translate it into German).
 export function getKnownVocabulary(level: Level): string[] {
-  const lowerWords = PREREQUISITE_LEVELS[level].flatMap(l => wordsForLevel(l));
+  const lowerWords = PREREQUISITE_LEVELS[level].flatMap(l => allWordsForLevel(l));
   const baseline = level === 'A1' ? wordsForLevel('A1').filter(w => w.highFrequency) : [];
   const seen = new Set<string>();
   const result: string[] = [];
@@ -273,7 +296,7 @@ export function buildReviewWords(
 ): Word[] {
   const allProgress = getAllProgress();
   const t = today();
-  const pool = wordsForLevel(getSettings().level).filter(w => {
+  const pool = allWordsForLevel(getSettings().level).filter(w => {
     const p = allProgress[w.id];
     if (!p || !p.mascotStage || p.fullyMastered) return false;
     if (excludeIds.has(w.id)) return false;
@@ -683,7 +706,7 @@ export interface ProgressForecast {
 // review capacity.
 export function estimateProgressForecast(studyBatchSize: number, dailyReview: number): ProgressForecast {
   const allProgress = getAllProgress();
-  const levelWords = wordsForLevel(getSettings().level);
+  const levelWords = allWordsForLevel(getSettings().level);
   let introduced = 0;
   for (const w of levelWords) {
     if (allProgress[w.id]) introduced++;
@@ -862,7 +885,7 @@ export function buildMcqChoices(word: Word, seen: string[] = []): { correct: str
     }
   };
 
-  const sameLevel = WORDS.filter(w => w.id !== word.id && w.level === word.level);
+  const sameLevel = allWordsForLevel(word.level).filter(w => w.id !== word.id);
   if (word.category) {
     addFrom(sameLevel.filter(w => w.category === word.category && w.type === word.type));
   }
@@ -921,7 +944,7 @@ export function buildReverseMcqChoices(
     }
   };
 
-  const sameLevel = WORDS.filter(w => w.id !== word.id && w.level === word.level);
+  const sameLevel = allWordsForLevel(word.level).filter(w => w.id !== word.id);
   if (word.category) {
     addFrom(sameLevel.filter(w => w.category === word.category && w.type === word.type));
   }

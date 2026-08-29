@@ -6,8 +6,9 @@ import { WORDS, wordsForLevel, glossFor, Level, LEVEL_ORDER, Word } from '../../
 import {
   getAllProgress, getAllProgressForLevel, getMergedProgressAcrossLevels,
   getSettings, getStreak, getTotalGoalDays, MascotStageId, WordProgress,
-  getTheme, Theme, THEME_CHANGED_EVENT,
+  getTheme, Theme, THEME_CHANGED_EVENT, getAllCustomWordsAcrossLevels,
 } from '../../lib/storage';
+import { allWordsForLevel } from '../../lib/practice';
 import { SYNCED_EVENT } from '../../lib/sync';
 import DachshundMascot from '../../components/Mascot';
 import GoalDaysBadge from '../../components/GoalDaysBadge';
@@ -109,7 +110,7 @@ export default function ProgressPage() {
     puppy: [], short: [], medium: [], 'long-crowned': [],
   };
   let introducedCount = 0;
-  for (const w of WORDS) {
+  for (const w of [...WORDS, ...getAllCustomWordsAcrossLevels()]) {
     if (scope === 'current' && w.level !== level) continue;
     const p = effectiveProgress[w.id];
     if (!p || p.studiedTimes === 0) continue;
@@ -125,8 +126,8 @@ export default function ProgressPage() {
   const bars = STAGE_ORDER.map((id, i) => ({ id, total: stageCounts[id], color: THEME_CONFIG[theme].stageColors[i] }));
   const maxStageCount = Math.max(...bars.map(b => b.total), 1);
   const totalWords = scope === 'all'
-    ? activeLevels.reduce((sum, l) => sum + wordsForLevel(l).length, 0)
-    : wordsForLevel(level).length;
+    ? activeLevels.reduce((sum, l) => sum + allWordsForLevel(l).length, 0)
+    : allWordsForLevel(level).length;
 
   // A1 only: the ~220 curated high-frequency words always come first and
   // use the copy-the-word round 1 (see isBootstrapCopyWord) — sentence

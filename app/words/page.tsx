@@ -2,12 +2,19 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { WORDS, wordsForLevel, Word, Level, glossFor } from '../../lib/words';
-import { getMergedProgressAcrossLevels, getSettings, WordProgress, MascotStageId, today } from '../../lib/storage';
+import {
+  getMergedProgressAcrossLevels, getSettings, WordProgress, MascotStageId, today,
+  getAllCustomWordsForLevel, getAllCustomWordsAcrossLevels, addCustomWord, removeCustomWord,
+  newCustomWordId, isCustomWordId,
+} from '../../lib/storage';
 import { daysBetween } from '../../lib/srs';
 import { imageUrlForWord } from '../../lib/wordImage';
 import { WORDS_WITH_IMAGES } from '../../lib/wordImageManifest';
+import { lookupWord, LookupWordResult, DailyLimitReachedError, AIUnreachableError } from '../../lib/ai';
+import { scheduleSync } from '../../lib/sync';
 import SpeakerButton from '../../components/SpeakerButton';
 import DachshundMascot from '../../components/Mascot';
+import WordInfoPanel from '../../components/WordInfoPanel';
 
 // Same wording as Progress page's STAGE_LABEL — "Introduced" rather than
 // "New" for a word that's actually finished Day 1, so this list's badge
@@ -159,6 +166,33 @@ export default function WordsPage() {
   // hydration instead.
   const [filterLevel, setFilterLevel] = useState<BookFilter>('A1');
   const [nativeLanguage, setNativeLanguage] = useState<'en' | 'zh'>('en');
+  // Bumped on every add/remove so the `words` memo below (which reads
+  // custom words fresh from storage each time, not from React state)
+  // actually recomputes — storage.ts's add/removeCustomWord aren't
+  // themselves reactive, same reason PROGRESS_CHANGED_EVENT exists
+  // elsewhere, just simpler to force locally here since this page is the
+  // only thing that needs to react to it.
+  const [customWordsVersion, setCustomWordsVersion] = useState(0);
+  // The "look up & add" flow's own state — a separate small piece of UI
+  // triggered when a search matches nothing in the current book (see
+  // searchMatchesAnything below), entirely independent of the list/filter
+  // state above it.
+  const [lookupStatus, setLookupStatus] = useState<'idle' | 'loading' | 'not-found' | 'error' | 'limit-reached' | 'unreachable'>('idle');
+  const [lookupResult, setLookupResult] = useState<LookupWordResult | null>(null);
+
+  // Learner-added words, read fresh from storage — kept as its own STATE
+  // (populated only inside an effect below), never read directly during
+  // render, for the same reason filterLevel/nativeLanguage above aren't a
+  // lazy getSettings() read either: this page prerenders at build time
+  // with no window at all (server sees none), so a live localStorage read
+  // sitting directly in the `words` memo would make the client's very
+  // first render (before this effect has had a chance to run) disagree
+  // with that prerendered HTML the instant any custom word actually
+  // exists — confirmed real via a genuine hydration-mismatch error (724
+  // vs 725 words) the moment a test seeded one into localStorage ahead of
+  // the initial render. Starting empty here matches the prerender exactly;
+  // the effect's update then lands safely AFTER hydration completes.
+  const [customWords, setCustomWords] = useState<Word[]>([]);
 
   useEffect(() => {
     setNativeLanguage(getSettings().nativeLanguage);
@@ -167,12 +201,27 @@ export default function WordsPage() {
     applyParam('date', ['all', 'today', '7days', '30days'], setDateFilter);
   }, []);
 
+  useEffect(() => {
+    setCustomWords(filterLevel === 'all' ? getAllCustomWordsAcrossLevels() : Object.values(getAllCustomWordsForLevel(filterLevel)));
+  }, [filterLevel, customWordsVersion]);
+
+  // Which book a newly-added word (see AddWordCard below) actually belongs
+  // to — whichever specific book is being browsed, or the learner's own
+  // active study level when browsing "All books" (so it's never left
+  // ambiguous which book a lookup result would be filed under).
+  const addTargetLevel: Level = filterLevel === 'all' ? getSettings().level : filterLevel;
+
+  // Learner-added words merge in alongside the curated corpus — same
+  // "count exactly the same" treatment as the study/review pipeline (see
+  // lib/practice.ts's allWordsForLevel), so this page (the only place a
+  // learner can see/manage them) shows the true combined list rather than
+  // silently hiding half of it.
   const words = useMemo(() => {
     const pool = filterLevel === 'all'
-      ? WORDS.filter(w => (BOOK_LEVELS as string[]).includes(w.level))
-      : wordsForLevel(filterLevel);
+      ? [...WORDS.filter(w => (BOOK_LEVELS as string[]).includes(w.level)), ...customWords]
+      : [...wordsForLevel(filterLevel), ...customWords];
     return [...pool].sort((a, b) => a.de.localeCompare(b.de, 'de'));
-  }, [filterLevel]);
+  }, [filterLevel, customWords]);
 
   useEffect(() => {
     setProgress(getMergedProgressAcrossLevels());
@@ -193,7 +242,48 @@ export default function WordsPage() {
     .sort((a, b) => a.rank - b.rank)
     .map(x => x.w);
 
+  // Whether the search itself (ignoring the familiarity/date filters,
+  // which are orthogonal display narrowing, not "does this word exist at
+  // all") found anything in the currently-browsed book(s) — this, not
+  // `filtered.length === 0`, is what should gate the "look up & add"
+  // offer below, so it never appears just because e.g. "Mastered" happens
+  // to hide every real match.
+  const searchMatchesAnything = search.trim() !== '' && words.some(w => searchRank(w, q, nativeLanguage) !== null);
+
   const earned = (p?: WordProgress) => !!p && p.studiedTimes > 0;
+
+  function handleLookup() {
+    const term = search.trim();
+    if (!term) return;
+    setLookupStatus('loading');
+    setLookupResult(null);
+    lookupWord(term, addTargetLevel)
+      .then(result => {
+        if (!result) { setLookupStatus('not-found'); return; }
+        setLookupResult(result);
+        setLookupStatus('idle');
+      })
+      .catch(e => {
+        if (e instanceof AIUnreachableError) { setLookupStatus('unreachable'); return; }
+        setLookupStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
+      });
+  }
+
+  function handleAddWord(result: LookupWordResult) {
+    addCustomWord({ ...result, id: newCustomWordId(), level: addTargetLevel });
+    setCustomWordsVersion(v => v + 1);
+    setLookupResult(null);
+    setLookupStatus('idle');
+    setSearch('');
+    scheduleSync();
+  }
+
+  function handleRemoveWord(w: Word) {
+    if (!window.confirm(`Remove "${w.de}" from your words? Any progress on it will be lost too.`)) return;
+    removeCustomWord(w.id);
+    setCustomWordsVersion(v => v + 1);
+    scheduleSync();
+  }
 
   function WordItem({ w }: { w: Word }) {
     const sentence = progress[w.id]?.exampleSentence;
@@ -210,6 +300,11 @@ export default function WordsPage() {
           {filterLevel === 'all' && (
             <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-stone-500 bg-stone-100 rounded-full px-2 py-0.5 align-middle">
               {w.level}
+            </span>
+          )}
+          {isCustomWordId(w.id) && (
+            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-indigo-600 bg-indigo-100 rounded-full px-2 py-0.5 align-middle">
+              My word
             </span>
           )}
           <div className="text-stone-500 text-sm">{glossFor(w, nativeLanguage)}</div>
@@ -244,6 +339,15 @@ export default function WordsPage() {
             </span>
           )}
         </span>
+        {isCustomWordId(w.id) && (
+          <button
+            onClick={() => handleRemoveWord(w)}
+            aria-label={`Remove ${w.de} from your words`}
+            className="shrink-0 self-start text-stone-300 hover:text-red-500 transition-colors text-lg leading-none px-1"
+          >
+            ×
+          </button>
+        )}
       </div>
     );
   }
@@ -256,7 +360,7 @@ export default function WordsPage() {
         type="search"
         placeholder="Search German or English…"
         value={search}
-        onChange={e => setSearch(e.target.value)}
+        onChange={e => { setSearch(e.target.value); setLookupStatus('idle'); setLookupResult(null); }}
         className="bg-amber-50/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-4 py-2 text-stone-800 placeholder:text-stone-500 focus:outline-none focus:border-amber-300"
       />
 
@@ -300,6 +404,61 @@ export default function WordsPage() {
           <option value="30days">Past 30 days</option>
         </select>
       </div>
+
+      {/* "Look up & add" — only offered once the search itself has come up
+          empty in the book(s) actually being browsed (see
+          searchMatchesAnything's own comment) — a learner who already has
+          matches to look at shouldn't be nudged to add a duplicate. */}
+      {searchMatchesAnything === false && (
+        <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex flex-col gap-2.5">
+          {!lookupResult && (
+            <>
+              <p className="text-stone-600 text-sm">
+                No match for "{search.trim()}" in {addTargetLevel}.
+              </p>
+              <button
+                onClick={handleLookup}
+                disabled={lookupStatus === 'loading'}
+                className="self-start bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {lookupStatus === 'loading' ? 'Looking up…' : `Look up "${search.trim()}" & add it`}
+              </button>
+              {lookupStatus === 'not-found' && (
+                <p className="text-stone-500 text-xs">
+                  Couldn't find a German word or translation for that — check the spelling, or try a different word.
+                </p>
+              )}
+              {lookupStatus === 'limit-reached' && (
+                <p className="text-amber-600 text-xs">Used up today's AI lookups — come back tomorrow.</p>
+              )}
+              {(lookupStatus === 'error' || lookupStatus === 'unreachable') && (
+                <p className="text-red-500 text-xs">Couldn't look that up right now — try again.</p>
+              )}
+            </>
+          )}
+          {lookupResult && (
+            <>
+              <WordInfoPanel
+                word={{ ...lookupResult, id: '__preview__', level: addTargetLevel }}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleAddWord(lookupResult)}
+                  className="flex-1 bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+                >
+                  Add to my words
+                </button>
+                <button
+                  onClick={() => { setLookupResult(null); setLookupStatus('idle'); }}
+                  className="text-stone-500 text-sm px-3 py-2"
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <p className="text-emerald-100/70 text-sm">{filtered.length} words</p>
       <div className="flex flex-col gap-2">

@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { WORDS, glossFor, Word } from '../lib/words';
-import { getMergedProgressAcrossLevels, getSettings, getTheme, Theme, THEME_CHANGED_EVENT, getDailyWordLog, today, WordProgress } from '../lib/storage';
+import { getMergedProgressAcrossLevels, getSettings, getTheme, Theme, THEME_CHANGED_EVENT, getDailyWordLog, today, WordProgress, getAllCustomWordsAcrossLevels } from '../lib/storage';
 import { THEME_CONFIG } from './AppBackground';
 import { speakWord } from '../lib/speech';
 import { getOrCreateDeviceId } from '../lib/telemetry';
@@ -21,9 +21,13 @@ import { GAME_MIN_WORDS_REQUIRED } from '../lib/practice';
 // already defines it (see Progress page's own stage breakdown). Pulled
 // across every level (getMergedProgressAcrossLevels), not just the
 // currently active one, since the game itself isn't level-specific.
+// Includes learner-added custom words (see lib/practice.ts's
+// hasEnoughWordsForGame, which gates whether this game is even reachable,
+// and allWordsForLevel's own comment) — a custom word earns its way into
+// this game the same as any corpus word once it's actually learned.
 function getLearnedWords(): Word[] {
   const progress = getMergedProgressAcrossLevels();
-  return WORDS.filter(w => !!progress[w.id]?.mascotStage);
+  return [...WORDS, ...getAllCustomWordsAcrossLevels()].filter(w => !!progress[w.id]?.mascotStage);
 }
 
 const GAME_DURATION = 60;

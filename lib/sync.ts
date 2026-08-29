@@ -9,9 +9,10 @@ import {
   getGoalDaysRecordForSync, mergeGoalDaysFromSync,
   getPartialDaysRecordForSync, mergePartialDaysFromSync,
   getDailyWordLogForSync, mergeDailyWordLogFromSync, DailyWordLog,
+  getAllCustomWordsForLevel, saveAllCustomWordsForLevel,
   today,
 } from './storage';
-import { Level, LEVEL_ORDER } from './words';
+import { Level, LEVEL_ORDER, Word } from './words';
 
 // Each level is its own profile locally (see storage.ts) — the remote row
 // mirrors that by nesting every level's progress/settings under its own key,
@@ -21,6 +22,9 @@ import { Level, LEVEL_ORDER } from './words';
 // extends the one shared streak, so it's stored flat, not nested.
 type ProgressByLevel = Partial<Record<Level, Record<string, WordProgress>>>;
 type SettingsByLevel = Partial<Record<Level, Settings>>;
+// Learner-added vocabulary (see lib/storage.ts's custom-words section) —
+// nested by level the same way progress/settings are, for the same reason.
+type CustomWordsByLevel = Partial<Record<Level, Record<string, Word>>>;
 // Legacy shape from before streak became global — one entry per level.
 type LegacyStreakByLevel = Partial<Record<Level, Streak>>;
 
@@ -31,6 +35,7 @@ interface RemoteRow {
   goal_days: string[] | null;
   partial_days: string[] | null;
   word_log: DailyWordLog | null;
+  custom_words: CustomWordsByLevel | null;
   updated_at: string | null;
 }
 
@@ -86,7 +91,7 @@ function mergeProgress(
 export async function pullAndMerge(userId: string): Promise<void> {
   const { data, error } = await supabase
     .from('user_progress')
-    .select('progress, streak, settings, goal_days, partial_days, word_log, updated_at')
+    .select('progress, streak, settings, goal_days, partial_days, word_log, custom_words, updated_at')
     .eq('user_id', userId)
     .maybeSingle<RemoteRow>();
 
@@ -160,6 +165,19 @@ export async function pullAndMerge(userId: string): Promise<void> {
   if (data.word_log && typeof data.word_log === 'object' && Object.keys(data.word_log).length > 0) {
     mergeDailyWordLogFromSync(data.word_log);
   }
+
+  // Plain union by id, per level — unlike WordProgress there's no "further
+  // along" to compare (a custom word is just user-authored data, not a
+  // milestone track), and a same-id collision between devices is
+  // essentially impossible anyway (ids are freshly-generated UUIDs, never
+  // reused or mutated after creation — see storage.ts's newCustomWordId),
+  // so remote simply fills in whatever local doesn't already have.
+  const remoteCustomWordsByLevel = (data.custom_words ?? {}) as CustomWordsByLevel;
+  for (const level of LEVEL_ORDER) {
+    const remoteWords = remoteCustomWordsByLevel[level];
+    if (!remoteWords) continue;
+    saveAllCustomWordsForLevel(level, { ...remoteWords, ...getAllCustomWordsForLevel(level) });
+  }
 }
 
 // Pushes every level's local state up as this user's remote snapshot —
@@ -177,10 +195,13 @@ export async function pullAndMerge(userId: string): Promise<void> {
 async function pushToRemote(userId: string): Promise<void> {
   const progress: ProgressByLevel = {};
   const settings: SettingsByLevel = {};
+  const customWords: CustomWordsByLevel = {};
   for (const level of LEVEL_ORDER) {
     const p = getAllProgressForLevel(level);
     if (Object.keys(p).length > 0) progress[level] = p;
     settings[level] = getSettingsForLevel(level);
+    const cw = getAllCustomWordsForLevel(level);
+    if (Object.keys(cw).length > 0) customWords[level] = cw;
   }
   const streak = getStreak();
   const activeLevel = getActiveLevel();
@@ -204,6 +225,7 @@ async function pushToRemote(userId: string): Promise<void> {
     goal_days: getGoalDaysRecordForSync(),
     partial_days: getPartialDaysRecordForSync(),
     word_log: getDailyWordLogForSync(),
+    custom_words: customWords,
     updated_at: new Date().toISOString(),
     level: activeLevel,
   };
