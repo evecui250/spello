@@ -321,6 +321,24 @@ function speakWithBrowserVoice(
   // time this utterance should already be well underway, that's the
   // signature of the stuck-queue bug above — cancel to clear whatever's
   // wedged and retry ONCE before actually reporting a failure.
+  //
+  // Real, still-recurring reports named the SAME voice as the retry's own
+  // choice even after voice selection itself was fixed and verified
+  // correct in isolation — but every single one of those reports also
+  // showed `speaking=true` at the failure moment, which is the more
+  // consistent signal: the engine believes something is already playing
+  // and won't accept a new utterance, independent of which voice is
+  // asked for. Two adjustments follow from that, not another voice-logic
+  // change: (1) 2000ms may simply be too impatient for a genuinely slow-
+  // but-working first utterance in a session (some engines take a real
+  // moment to spin up) — raised to give onstart more room to fire before
+  // this cancels a perfectly good utterance out from under itself, which
+  // would look exactly like "needs several taps" from the outside: each
+  // premature cancel-and-retry throws away an utterance that might have
+  // played fine a moment later. (2) cancel() is asynchronous in some
+  // engines — calling speak() again immediately afterward can race the
+  // cancellation still being processed and get silently dropped; a short
+  // delay between them gives it room to actually complete first.
   let started = false;
   utterance.onstart = () => { started = true; };
   setTimeout(() => {
@@ -333,8 +351,11 @@ function speakWithBrowserVoice(
     markVoiceBad(voice);
     if (isRetry) { reportTtsError('never started (after retry)', voice); onFailure?.(); return; }
     window.speechSynthesis.cancel();
-    speakWithBrowserVoice(text, true, voice, onEnd, onFailure);
-  }, 2000);
+    setTimeout(() => {
+      if (speechGeneration !== myGeneration) return;
+      speakWithBrowserVoice(text, true, voice, onEnd, onFailure);
+    }, 200);
+  }, 3500);
   window.speechSynthesis.speak(utterance);
 }
 
