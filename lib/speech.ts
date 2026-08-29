@@ -64,19 +64,50 @@ let cachedGermanVoice: SpeechSynthesisVoice | null | undefined;
 // unreliable network voice being the one JS happened to pick is a much
 // better fit for a failure this silent.
 //
-// `exclude`, when given, is skipped entirely. This matters for the retry
-// path below: retrying with the exact same (cached) voice object — which
-// is what this function used to always hand back — guarantees an
-// identical silent failure if that specific voice is what's broken,
-// which matches every "never started (after retry)" report seen so far
-// (the retry is a fresh speak() call, but never a fresh voice choice).
+// Root cause finally confirmed (not another guess): every "never started
+// (after retry)" report named the exact same voice both times — e.g.
+// "Eddy (de-DE, local)" — which should have been impossible, since the
+// retry explicitly excludes whatever voice just failed. The bug was in
+// HOW exclusion compared voices: by object reference (`v !== exclude`).
+// getVoices() is not guaranteed to return the SAME object instances on
+// every call (confirmed several Chrome versions return a freshly-built
+// array each time, same underlying voices, new object identities) — so
+// comparing the cached, already-failed voice object against a brand-new
+// getVoices() array on retry never actually excluded anything: nothing in
+// the fresh array is `===` the old object, so the "excluded" voice gets
+// re-selected and re-fails identically every single time. Fixed by
+// comparing a stable key (name+lang) instead of object identity.
+//
+// Separately: "Eddy" is one of macOS's newer expressive/personality
+// voices (alongside Flo, Grandma, Grandpa, Reed, Rocko, Sandy, Shelley) —
+// widely documented (Chromium/WebKit bug trackers, Stack Overflow) as
+// listed by getVoices() but unreliable when actually invoked through the
+// Web Speech API specifically, independent of this app. Deprioritized
+// below (not excluded outright — still usable if it's truly the only
+// voice available) so a normal classic voice like "Anna" wins the FIRST
+// pick too, not just after a failure.
+const FLAKY_VOICE_NAMES = new Set(['Eddy', 'Flo', 'Grandma', 'Grandpa', 'Reed', 'Rocko', 'Sandy', 'Shelley']);
+function isKnownFlakyVoice(v: SpeechSynthesisVoice): boolean {
+  return FLAKY_VOICE_NAMES.has(v.name.replace(/\s*\(.*\)$/, '').trim());
+}
+function voiceKey(v: SpeechSynthesisVoice): string {
+  return `${v.name}|${v.lang}`;
+}
+
+// `exclude`, when given, is skipped entirely — compared by voiceKey (see
+// above), not object identity, so a retry actually gets a different voice
+// when one exists.
 function selectGermanVoice(
   voices: SpeechSynthesisVoice[],
   exclude?: SpeechSynthesisVoice | null,
 ): SpeechSynthesisVoice | null {
-  const usable = exclude ? voices.filter(v => v !== exclude) : voices;
+  const excludeKey = exclude ? voiceKey(exclude) : null;
+  const usable = excludeKey ? voices.filter(v => voiceKey(v) !== excludeKey) : voices;
   const german = usable.filter(v => v.lang?.toLowerCase().startsWith('de'));
-  const localGerman = german.filter(v => v.localService);
+  // Non-flaky candidates first, flaky ones only as a last resort within
+  // each tier — a known-flaky voice is still better than nothing if it's
+  // truly the only one available for this tier.
+  const localGerman = [...german.filter(v => v.localService && !isKnownFlakyVoice(v)), ...german.filter(v => v.localService && isKnownFlakyVoice(v))];
   // A device with literally no German voice installed at all is the one
   // case iOS's own "falls back to the device's default voice" behavior
   // doesn't reliably cover on every platform — leaving utterance.voice
