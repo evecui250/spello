@@ -123,21 +123,40 @@ Deno.serve(async (req: Request) => {
               'not paraphrase them, and do not also make a grammar point about them. Capitalization ' +
               '(German capitalizes every noun) and hyphenation differences belong here too, not as ' +
               'their own grammar point. There is no cap on how many spelling entries you list — a ' +
-              'sentence with three typos needs all three, not just the first. ' +
+              'sentence with three typos needs all three, not just the first. Do NOT put two ' +
+              'DIFFERENT WORDS here just because the correction swapped one for the other — a real, ' +
+              'confirmed mistake: "aufwenden" (a real verb meaning "to expend/spend") was filed as a ' +
+              '"spelling" fix for "verbringen" (an entirely different verb, "to spend time"). Two ' +
+              'distinct dictionary words are a WORD-CHOICE issue (bucket 2 below), never spelling — ' +
+              'if you cannot tell which bucket a pair belongs in, ask: would a native speaker call ' +
+              'the wrong version a TYPO of the right one, or a DIFFERENT WORD? Only the former is ' +
+              'spelling. ' +
               '\n\n' +
-              '2) GRAMMAR — a genuine difference in form, agreement, tense, case, word choice, or ' +
-              `word ORDER. Identify AT MOST ${pointCap} of these as concrete points the learner ` +
-              'should take away — but fewer is better than more: only include a point for a mistake ' +
-              'that is actually there. That said, do NOT under-report either — if there are ' +
-              'genuinely 2-3 DISTINCT real grammar issues (e.g. a wrong article AND a wrong ' +
-              'adjective ending AND a wrong possessive-pronoun case, all in the same sentence), give ' +
-              'each its own point, up to the cap; "fewer is better" means never padding the list with ' +
-              'a minor or borderline point just to fill it out, not skipping a second or third issue ' +
-              'that is actually there to keep the list short. If there is truly only one real grammar ' +
-              'issue, return exactly one point. Covers: article/case (der/die/das, den/dem/der ' +
-              'agreement), adjective endings, verb tense/conjugation, preposition choice, a ' +
-              'word-class mix-up (e.g. using a verb form where a noun was needed, like "reisen" [to ' +
-              'travel] instead of "Reisende" [traveler]), AND word order — German subordinate ' +
+              '2) GRAMMAR — a genuine difference in form, agreement, tense, case, word choice, a ' +
+              `word missing entirely, or word ORDER. Identify AT MOST ${pointCap} of these as ` +
+              'concrete points the learner should take away — but fewer is better than more: only ' +
+              'include a point for a mistake that is actually there. That said, do NOT under-report ' +
+              'either — if there are genuinely 2-3 DISTINCT real grammar issues (e.g. a wrong ' +
+              'article AND a wrong adjective ending AND a wrong possessive-pronoun case, all in the ' +
+              'same sentence), give each its own point, up to the cap; "fewer is better" means never ' +
+              'padding the list with a minor or borderline point just to fill it out, not skipping a ' +
+              'second or third issue that is actually there to keep the list short. If there is ' +
+              'truly only one real grammar issue, return exactly one point. Covers: article/case ' +
+              '(der/die/das, den/dem/der agreement), adjective endings, verb tense/conjugation, ' +
+              'preposition choice, a word-class mix-up (e.g. using a verb form where a noun was ' +
+              'needed, like "reisen" [to travel] instead of "Reisende" [traveler]); a WORD MISSING ' +
+              'ENTIRELY from the attempt that the correction added (most commonly a dropped article ' +
+              'before a noun, e.g. attempt has "mit Familie", correction has "mit der Familie") — ' +
+              'this is not a "changed word" since nothing in the attempt corresponds to it, so ' +
+              'checking for insertions specifically, not just substitutions, matters; a real, ' +
+              'confirmed miss: a dropped "der" before a dative noun went completely unreported while ' +
+              'a minor, defensible word-choice difference got explained instead — a genuinely missing ' +
+              'required word always outranks a debatable vocabulary choice, prioritize it; a WORD ' +
+              'CHOICE difference ONLY when the attempt\'s word is actually wrong given the sentence\'s ' +
+              'meaning (e.g. a verb that does not fit the intended action at all) — if the attempt\'s ' +
+              'word is a valid near-synonym of the correction (defensible, just less idiomatic, not ' +
+              'objectively wrong), leave it out of the points entirely rather than lecture on a ' +
+              'preference; AND word order — German subordinate ' +
               'clauses (e.g. after "dass", "weil", "obwohl") require the finite verb to move to the ' +
               'very end of the clause; if the learner\'s word is already the CORRECT word/form but ' +
               'just in the wrong position, that is a word-order mistake, not a form mistake — say so ' +
@@ -145,7 +164,17 @@ Deno.serve(async (req: Request) => {
               'must move to the end of the clause.\'). NEVER phrase a point as \'"X" should be "X"\' ' +
               '(the same word on both sides) — if you catch yourself about to write that, it is ' +
               'almost always actually a word-order issue described wrong; fix the phrasing to ' +
-              'describe the position, not a form change. Before writing each point, re-read the ' +
+              'describe the position, not a form change. A real, confirmed miss of a related shape: ' +
+              'the attempt wrote BOTH "hat gefühlt" (a wrong, unrelated verb/tense) AND a badly-' +
+              'misspelled "emfpinden" elsewhere, expressing the same idea twice — the correction ' +
+              'simply drops the redundant "hat gefühlt" and keeps (the now-corrected) "empfinden". ' +
+              'A point phrased as \'"empfinden" should be used instead of "hat gefühlt"\' is ' +
+              'misleading here — the learner DID already write (a misspelled) "empfinden" elsewhere ' +
+              'in the same sentence, so implying they never used it at all is wrong. When the ' +
+              'attempt expresses one idea with two different words/phrases and the correction just ' +
+              'removes the redundant one, that is a style/redundancy fix, not a clean grammar rule — ' +
+              'omit it from points entirely rather than describe it in a way that misstates what the ' +
+              'learner actually wrote. Before writing each point, re-read the ' +
               "attempt's actual word order carefully and confirm EXACTLY which word or phrase in " +
               'the attempt the point is about, and what that word was governing/modifying THERE ' +
               '(not what a similar-looking word would typically govern) — German word order means a ' +
@@ -231,10 +260,10 @@ Deno.serve(async (req: Request) => {
     // regardless of phrasing, so a prompt-compliance slip still can't
     // reach the learner as a nonsensical point.
     const SAME_WORD_POINT = /"([^"]+)"[^".]*\bshould be\b[^".]*"\1"/i;
-    const points = Array.isArray(parsed.points)
+    let points = Array.isArray(parsed.points)
       ? parsed.points.filter(p => typeof p === 'string' && p.trim() && !SAME_WORD_POINT.test(p))
       : [];
-    const spelling = Array.isArray(parsed.spelling)
+    let spelling = Array.isArray(parsed.spelling)
       ? parsed.spelling.filter((s): s is { wrong: string; correct: string } =>
           !!s && typeof s.wrong === 'string' && !!s.wrong.trim() && typeof s.correct === 'string' && !!s.correct.trim()
           // Same backstop as SAME_WORD_POINT above, for the structured
@@ -242,6 +271,50 @@ Deno.serve(async (req: Request) => {
           // sides isn't one.
           && s.wrong.trim() !== s.correct.trim())
       : [];
+
+    // Real, confirmed case: the model classified "aufwenden" -> "verbringen"
+    // (two entirely different verbs) as "spelling", despite the prompt's own
+    // explicit definition (same word, just misspelled) ruling that out --
+    // instructions alone weren't reliable enough here, same reason
+    // SAME_WORD_POINT exists as a hard backstop rather than just a prompt
+    // request. A genuine typo has a small edit distance relative to word
+    // length (confirmed against real corpus examples: "gefült"/"gefühlt" ~15%
+    // different, "geziegt"/"gezeigt" ~28%); two different words don't
+    // ("aufwenden"/"verbringen" ~70%). Anything over half the longer word's
+    // length is dropped from spelling entirely, not reclassified as a
+    // grammar point either -- if it's a defensible near-synonym rather than
+    // an objective error, the prompt's own "only flag what's objectively
+    // wrong" rule already means no point should exist for it anyway.
+    spelling = spelling.filter(s => levenshtein(s.wrong.trim().toLowerCase(), s.correct.trim().toLowerCase()) / Math.max(s.wrong.length, s.correct.length) <= 0.5);
+
+    // Second, distinct real case from the same underlying cause: "Familie"
+    // -> "der Familie" (a missing article -- the exact grammar point
+    // already correctly identified elsewhere in the SAME response) also
+    // got filed as "spelling". A missing article passed the edit-distance
+    // check above (inserting "der " is a small edit relative to length),
+    // so it needs its own guard: a genuine spelling fix never changes how
+    // many space-separated words are on each side (it corrects letters
+    // WITHIN an existing word, like "hat gefült" -> "hat gefühlt", still
+    // two words both sides) -- a word count mismatch means a whole word
+    // was added or dropped, which is a grammar issue (usually a missing
+    // article), never spelling.
+    spelling = spelling.filter(s => s.wrong.trim().split(/\s+/).length === s.correct.trim().split(/\s+/).length);
+
+    // Real, confirmed case: a spelling entry ("bissen" -> "bisschen") got a
+    // SECOND, redundant point ALSO explaining "'bissen' should be
+    // 'bisschen' for the correct spelling" -- directly contradicting the
+    // prompt's own explicit "do not also make a grammar point about them"
+    // instruction for spelling entries. A code-level filter closes this
+    // the same way SAME_WORD_POINT does for a different compliance slip:
+    // drop any point that explicitly says "spelling" (the exact tell in
+    // the real case) or that quotes BOTH sides of an already-listed
+    // spelling entry (a near-certain restatement regardless of phrasing).
+    points = points.filter(p => {
+      const lower = p.toLowerCase();
+      if (lower.includes('spelling')) return false;
+      return !spelling.some(s => lower.includes(s.wrong.trim().toLowerCase()) && lower.includes(s.correct.trim().toLowerCase()));
+    });
+
     if (points.length === 0 && spelling.length === 0) {
       console.error('Malformed AI response (explain-correction):', raw);
       return json({ error: 'AI returned an empty explanation' }, 502);
@@ -258,4 +331,20 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
+}
+
+// Standard edit distance -- used above purely to tell "a genuine typo of
+// the same word" from "a different word entirely" for a spelling entry's
+// own sanity check, not for anything user-facing.
+function levenshtein(a: string, b: string): number {
+  const dp: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...new Array(b.length).fill(0)]);
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
 }

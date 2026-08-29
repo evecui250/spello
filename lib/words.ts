@@ -4052,8 +4052,32 @@ function pickBestCandidate(candidates: GlossCandidate[], targetWord?: Word, prec
   return (pool.find(c => c.primary) ?? pool[0]).word;
 }
 
-export function findWordByEnglishForm(rawToken: string, targetWord?: Word): Word | undefined {
-  const cleaned = rawToken.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
+// nextToken (optional): the sentence's very next word-token after
+// rawToken, if any — tried FIRST as a 2-word phrase ("spend"+"time" ->
+// "spend time") before falling back to rawToken alone. Confirmed real:
+// clicking "spend" in "...when they spend time with family" resolved to
+// aufwenden ("to expend, spend") instead of verbringen ("to spend
+// time") — not a tie-break bug, verbringen was never even a CANDIDATE
+// for the bare word "spend" at all, since its entire gloss is the single
+// multi-word key "spend time" (getEnglishFormMap splits only on ","/"/",
+// never on spaces) and a single-word click can only ever look up "spend"
+// on its own. Trying the 2-word phrase first catches this exactly, with
+// no risk to any other click: an unrelated word pair (e.g. "the cat")
+// simply matches no gloss key at all, so it falls through to the
+// existing single-word resolution completely unchanged.
+export function findWordByEnglishForm(rawToken: string, targetWord?: Word, nextToken?: string): Word | undefined {
+  const clean = (s: string) => s.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
+  if (nextToken) {
+    const phrase = `${clean(rawToken)} ${clean(nextToken)}`.trim();
+    if (phrase.includes(' ')) {
+      const phraseMatch = resolveCleanedEnglishToken(phrase, targetWord);
+      if (phraseMatch) return phraseMatch;
+    }
+  }
+  return resolveCleanedEnglishToken(clean(rawToken), targetWord);
+}
+
+function resolveCleanedEnglishToken(cleaned: string, targetWord?: Word): Word | undefined {
   if (!cleaned) return undefined;
   const lower = cleaned.toLowerCase();
   const map = getEnglishFormMap();

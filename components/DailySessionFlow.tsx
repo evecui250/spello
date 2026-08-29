@@ -885,8 +885,15 @@ function SentenceExercise({
                   }
                   return <span key={i}>{span.text}</span>;
                 })
-                : tokenize(promptSentence).map((text, i) => {
-                  const match = /[A-Za-z]/.test(text) ? findWordByEnglishForm(text, word) : undefined;
+                : tokenize(promptSentence).map((text, i, tokens) => {
+                  // Passing the sentence's own next word-token lets a
+                  // multi-word gloss ("spend time") resolve correctly from
+                  // clicking just its first word — see
+                  // findWordByEnglishForm's own comment for the real
+                  // "spend" -> aufwenden (should've been verbringen) case
+                  // this fixes.
+                  const nextWordToken = tokens.slice(i + 1).find(isWordToken);
+                  const match = /[A-Za-z]/.test(text) ? findWordByEnglishForm(text, word, nextWordToken) : undefined;
                   const gloss = !match ? promptGlosses[text] : undefined;
                   if (match) {
                     return (
@@ -2958,7 +2965,15 @@ export default function DailySessionFlow() {
               // what clears it again on a later perfect redo.
               const perfect = diffAgainstAttempt(userInput, correction.sentence).perfect;
               submitResult(true, {
-                exampleSentence: correction,
+                // Real bug caught live: this used to set exampleSentence
+                // to the correction UNCONDITIONALLY, even on a wrong first
+                // attempt — showing the correct German answer right in
+                // the Word List's own row for a word that's supposed to
+                // still be hidden behind "Needs practice" until the
+                // learner actually gets it right themselves. Only ever
+                // set on a genuinely perfect attempt now; a redo (see
+                // MistakeRedoCard) is what fills it in later once earned.
+                ...(perfect ? { exampleSentence: correction } : {}),
                 lastMistake: perfect ? undefined : {
                   englishPrompt: correction.englishPrompt,
                   englishPromptZh: correction.englishPromptZh,

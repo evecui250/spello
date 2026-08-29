@@ -62,21 +62,25 @@ function searchRank(w: Word, q: string, nativeLanguage: 'en' | 'zh'): number | n
 const BOOK_LEVELS: Level[] = ['A1', 'A2', 'B1', 'B2'];
 type BookFilter = 'all' | Level;
 
-type Familiarity = 'all' | 'new' | 'learning' | 'mastered' | 'needsPractice';
+type Familiarity = 'all' | 'new' | 'learning' | 'mastered' | 'practicedSentences';
 
 // "New" = hasn't completed its first learning pass yet (round 4 success),
 // even if attempts are already in progress. "Learning" = has completed at
 // least one pass — spans all 4 mascot stages, including fully mastered
 // words (it's a broad "has this been engaged with" bucket, not mutually
 // exclusive with "Mastered"). "Mastered" is a specific, overlapping
-// drill-down for the fullyMastered subset of "Learning". "needsPractice"
+// drill-down for the fullyMastered subset of "Learning". "practicedSentences"
 // (the "Mistake Notebook") is its own separate, overlapping dimension —
-// a word's round-1 introduction sentence needed correcting (see
-// WordProgress.lastMistake) — independent of which mascot stage it's
-// since moved on to.
+// every word whose round-1 introduction sentence was actually attempted,
+// whether it came back perfect (exampleSentence set) or still needs a
+// redo (WordProgress.lastMistake set) — independent of which mascot stage
+// it's since moved on to. The two are mutually exclusive on any given
+// word (see DailySessionFlow's onCorrected and MistakeRedoCard, which
+// only ever set one or the other), so this is really "either" rather
+// than a genuine overlap the way "Mastered" is with "Learning".
 function matchesFamiliarity(p: WordProgress | undefined, filter: Familiarity): boolean {
   if (filter === 'all') return true;
-  if (filter === 'needsPractice') return !!p?.lastMistake;
+  if (filter === 'practicedSentences') return !!p?.lastMistake || !!p?.exampleSentence;
   const earned = !!p && p.studiedTimes > 0;
   if (filter === 'new') return !earned;
   if (filter === 'learning') return earned;
@@ -202,8 +206,17 @@ export default function WordsPage() {
   // generated doesn't need to regenerate it after adding.
   const [lookupResultId, setLookupResultId] = useState<string | null>(null);
   // Which word's "Needs practice" redo modal is open, if any — see
-  // MistakeRedoCard.
-  const [redoWord, setRedoWord] = useState<Word | null>(null);
+  // MistakeRedoCard. Captures the mistake itself ONCE, at the moment
+  // "Redo" is tapped, rather than reading it live from `progress` on
+  // every render — real bug caught live: the modal's own visibility used
+  // to be gated on `progress[w.id]?.lastMistake` still being set, which a
+  // SUCCESSFUL redo immediately clears — the instant that happened, the
+  // whole modal (including the "Perfect!" message it was about to show)
+  // unmounted before the learner could ever see it, leaving only the
+  // chime as evidence anything happened. Keeping the snapshot here
+  // instead means the modal's own lifecycle is independent of the data
+  // it's busy updating.
+  const [redoTarget, setRedoTarget] = useState<{ word: Word; mistake: NonNullable<WordProgress['lastMistake']> } | null>(null);
 
   // Learner-added words, read fresh from storage — kept as its own STATE
   // (populated only inside an effect below), never read directly during
@@ -222,7 +235,7 @@ export default function WordsPage() {
   useEffect(() => {
     setNativeLanguage(getSettings().nativeLanguage);
     if (!applyParam('level', ['all', ...BOOK_LEVELS], setFilterLevel)) setFilterLevel(getSettings().level);
-    applyParam('familiarity', ['all', 'new', 'learning', 'mastered', 'needsPractice'], setFilterFamiliarity);
+    applyParam('familiarity', ['all', 'new', 'learning', 'mastered', 'practicedSentences'], setFilterFamiliarity);
     applyParam('date', ['all', 'today', '7days', '30days'], setDateFilter);
   }, []);
 
@@ -271,7 +284,18 @@ export default function WordsPage() {
     })
     .map(w => ({ w, rank: search ? searchRank(w, q, nativeLanguage) : 0 }))
     .filter((x): x is { w: Word; rank: number } => x.rank !== null)
-    .sort((a, b) => a.rank - b.rank)
+    .sort((a, b) => {
+      // "Practiced sentences" puts imperfect ones (still needing a redo)
+      // first, ahead of already-perfect ones — the whole point of this
+      // view is prompting a learner toward what still needs fixing, not
+      // burying it under everything they already got right.
+      if (filterFamiliarity === 'practicedSentences') {
+        const aImperfect = !!progress[a.w.id]?.lastMistake;
+        const bImperfect = !!progress[b.w.id]?.lastMistake;
+        if (aImperfect !== bImperfect) return aImperfect ? -1 : 1;
+      }
+      return a.rank - b.rank;
+    })
     .map(x => x.w);
 
   // Whether the search itself (ignoring the familiarity/date filters,
@@ -372,7 +396,7 @@ export default function WordsPage() {
           )}
           {progress[w.id]?.lastMistake && (
             <button
-              onClick={() => setRedoWord(w)}
+              onClick={() => setRedoTarget({ word: w, mistake: progress[w.id].lastMistake! })}
               className="mt-1 text-xs font-semibold text-amber-700 bg-amber-100 rounded-full px-2.5 py-1 hover:bg-amber-200 transition-colors"
             >
               ✎ Needs practice — Redo
@@ -451,7 +475,7 @@ export default function WordsPage() {
           <option value="new">New</option>
           <option value="learning">Learning</option>
           <option value="mastered">Mastered</option>
-          <option value="needsPractice">Needs practice</option>
+          <option value="practicedSentences">Practiced sentences</option>
         </select>
 
         <select
@@ -542,17 +566,17 @@ export default function WordsPage() {
           own modal — escapes any ancestor's backdrop-filter/transform,
           which would otherwise become the containing block for this fixed
           overlay. */}
-      {redoWord && progress[redoWord.id]?.lastMistake && createPortal(
+      {redoTarget && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setRedoWord(null)}
+          onClick={() => setRedoTarget(null)}
         >
           <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <MistakeRedoCard
-              word={redoWord}
-              mistake={progress[redoWord.id].lastMistake!}
-              level={redoWord.level}
-              onDone={() => setRedoWord(null)}
+              word={redoTarget.word}
+              mistake={redoTarget.mistake}
+              level={redoTarget.word.level}
+              onDone={() => setRedoTarget(null)}
             />
           </div>
         </div>,
