@@ -8,6 +8,11 @@ import SpeakerIcon from './SpeakerIcon';
 interface Props {
   word: Word;
   className?: string;
+  // false for a word that isn't actually saved yet (the Word List's own
+  // lookup preview, before "Add to my words" is tapped — see
+  // WordInfoPanel's own isPreview prop) — see speakWord/speakWordOnce's
+  // own comment for the real cross-word-audio bug this prevents.
+  allowAudioGeneration?: boolean;
 }
 
 // A real report caught this: tapping the button for a word with no
@@ -23,7 +28,7 @@ interface Props {
 // total mystery.
 const FAILURE_DISPLAY_MS = 2000;
 
-export default function SpeakerButton({ word, className }: Props) {
+export default function SpeakerButton({ word, className, allowAudioGeneration = true }: Props) {
   const [failed, setFailed] = useState(false);
 
   const handleClick = () => {
@@ -31,7 +36,7 @@ export default function SpeakerButton({ word, className }: Props) {
     speakWord(word, () => {
       setFailed(true);
       setTimeout(() => setFailed(false), FAILURE_DISPLAY_MS);
-    });
+    }, allowAudioGeneration);
   };
 
   return (

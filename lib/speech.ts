@@ -311,7 +311,7 @@ function isPageHidden(): boolean {
 // actually finishes (whichever path it took) — speakWord's own repeat
 // chain below is the only caller that needs it; every other call site
 // just wants "play the word" and leaves it out.
-function speakWordOnce(word: Word, onEnded?: () => void, onFailure?: () => void): void {
+function speakWordOnce(word: Word, onEnded?: () => void, onFailure?: () => void, allowAudioGeneration = true): void {
   if (typeof window === 'undefined' || isPageHidden()) return;
   if (currentAudio) {
     currentAudio.pause();
@@ -327,7 +327,14 @@ function speakWordOnce(word: Word, onEnded?: () => void, onFailure?: () => void)
     // must not trigger the (lower-quality, possibly wrong-accent) browser
     // TTS fallback. Only fall back if we're still the current audio.
     if (currentAudio !== audio) return;
-    if (isCustomWordId(word.id) && !audioGenerationAttempted.has(word.id)) {
+    // allowAudioGeneration=false is for a word that isn't real/saved yet
+    // (the Word List's own lookup PREVIEW, before "Add to my words" is
+    // even tapped — see app/words/page.tsx) — confirmed real: without
+    // this, tapping the preview's speaker generated and cached audio
+    // under that preview's placeholder id, and a LATER, DIFFERENT
+    // preview reusing the same placeholder id would then incorrectly
+    // play the FIRST word's cached pronunciation instead of its own.
+    if (allowAudioGeneration && isCustomWordId(word.id) && !audioGenerationAttempted.has(word.id)) {
       audioGenerationAttempted.add(word.id);
       generateWordAudio(word.id, spokenForm(word));
     }
@@ -376,14 +383,17 @@ let wordChainGeneration = 0;
 // clip essentially never hits this (only if that file AND the browser TTS
 // fallback both fail); a learner-added custom word has no clip of its own
 // at all, so it leans on the fallback's own reliability every single time.
-export function speakWord(word: Word, onFailure?: () => void): void {
+// allowAudioGeneration=false for a word that isn't actually saved yet
+// (see speakWordOnce's own comment) — every existing call site keeps its
+// current behavior unchanged since this defaults to true.
+export function speakWord(word: Word, onFailure?: () => void, allowAudioGeneration = true): void {
   const myChain = ++wordChainGeneration;
   const times = Math.max(1, Math.min(5, Math.round(getSettings().wordRepeatCount ?? 1)));
   let played = 0;
   const playNext = () => {
     if (wordChainGeneration !== myChain) return;
     played++;
-    speakWordOnce(word, played < times ? () => setTimeout(playNext, WORD_REPEAT_GAP_MS) : undefined, onFailure);
+    speakWordOnce(word, played < times ? () => setTimeout(playNext, WORD_REPEAT_GAP_MS) : undefined, onFailure, allowAudioGeneration);
   };
   playNext();
 }

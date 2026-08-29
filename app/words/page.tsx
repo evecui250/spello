@@ -459,9 +459,15 @@ export default function WordsPage() {
                   generates its own real one) rather than an arbitrary
                   string: WordInfoPanel's own "My word" vs "from LEVEL"
                   badge keys off isCustomWordId, and a real lookup preview
-                  should read the same way the saved word actually will. */}
+                  should read the same way the saved word actually will.
+                  isPreview also blocks its speaker button from generating
+                  real audio under this shared placeholder id -- a real
+                  bug caught live: a LATER, different preview reusing the
+                  same id would otherwise inherit whatever word's clip got
+                  generated first. */}
               <WordInfoPanel
                 word={{ ...lookupResult, id: 'custom-preview', level: addTargetLevel }}
+                isPreview
               />
               <div className="flex gap-2">
                 <button

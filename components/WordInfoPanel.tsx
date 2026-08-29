@@ -13,6 +13,12 @@ interface Props {
   // which have always shown the bare dictionary form only; only the bonus
   // paragraph exercise passes this so far.
   usedForm?: string;
+  // True only for the Word List's own lookup PREVIEW (before "Add to my
+  // words" is tapped) — blocks its SpeakerButton from generating/caching
+  // real audio under the preview's id (see speakWordOnce's own comment
+  // for the cross-word-audio bug this avoids: a later, DIFFERENT preview
+  // would otherwise incorrectly inherit an earlier one's cached clip).
+  isPreview?: boolean;
 }
 
 // Shown when a learner clicks a word inside an AI-corrected sentence, the
@@ -20,7 +26,7 @@ interface Props {
 // or the bonus paragraph exercise (see ParagraphExerciseCard) — its German
 // dictionary form, pronunciation, meaning, which CEFR book it belongs to,
 // and (when available) its plural or other conjugated forms.
-export default function WordInfoPanel({ word, usedForm }: Props) {
+export default function WordInfoPanel({ word, usedForm, isPreview }: Props) {
   const settings = getSettings();
 
   return (
@@ -28,7 +34,7 @@ export default function WordInfoPanel({ word, usedForm }: Props) {
       <div className="flex items-center justify-between gap-2">
         <span className="text-lg font-bold text-indigo-800">
           {word.article ? `${word.article} ` : ''}{word.de}
-          <SpeakerButton word={word} className="ml-1.5 align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-base" />
+          <SpeakerButton word={word} allowAudioGeneration={!isPreview} className="ml-1.5 align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-base" />
         </span>
         {/* A custom (AI-looked-up) word isn't actually FROM the curated
             book it's filed under -- "from B2" there would misleadingly
