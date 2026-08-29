@@ -156,12 +156,23 @@ Deno.serve(async (req: Request) => {
               'meaning (e.g. a verb that does not fit the intended action at all) — if the attempt\'s ' +
               'word is a valid near-synonym of the correction (defensible, just less idiomatic, not ' +
               'objectively wrong), leave it out of the points entirely rather than lecture on a ' +
-              'preference; AND word order — German subordinate ' +
-              'clauses (e.g. after "dass", "weil", "obwohl") require the finite verb to move to the ' +
-              'very end of the clause; if the learner\'s word is already the CORRECT word/form but ' +
-              'just in the wrong position, that is a word-order mistake, not a form mistake — say so ' +
-              'explicitly by naming where it belongs (e.g. \'After "dass", the finite verb "war" ' +
-              'must move to the end of the clause.\'). NEVER phrase a point as \'"X" should be "X"\' ' +
+              'preference; AND word order — TWO DISTINCT rules, name which one actually applies, ' +
+              'do not just describe the symptom: (a) MAIN clause verb-second (V2) — the finite verb ' +
+              'is always the SECOND element of a main clause, right after the subject (or after ' +
+              'whatever else opens the clause), never later; a real, confirmed miss of exactly this ' +
+              'shape: the attempt wrote "Die Eltern oft hart arbeiten..." (verb pushed to the end, ' +
+              'English word order) instead of "Die Eltern arbeiten oft hart..." — the point must ' +
+              'name the RULE, not just the swap: \'The finite verb "arbeiten" must be the second ' +
+              'element of the clause, right after the subject "Die Eltern" — not moved to the end.\' ' +
+              'A point that only says \'"oft" should come after "arbeiten"\' describes the symptom ' +
+              'without ever saying WHY (the verb belongs in second position), which is exactly the ' +
+              'rule the learner actually needs; (b) SUBORDINATE clauses (e.g. after "dass", "weil", ' +
+              '"obwohl") require the OPPOSITE — the finite verb moves to the very end of the clause. ' +
+              'For either rule, if the learner\'s word is already the CORRECT word/form but just in ' +
+              'the wrong position, that is a word-order mistake, not a form mistake — say so ' +
+              'explicitly by naming where it belongs AND which rule requires it (e.g. \'After ' +
+              '"dass", the finite verb "war" must move to the end of the clause.\'). NEVER phrase a ' +
+              'point as \'"X" should be "X"\' ' +
               '(the same word on both sides) — if you catch yourself about to write that, it is ' +
               'almost always actually a word-order issue described wrong; fix the phrasing to ' +
               'describe the position, not a form change. A real, confirmed miss of a related shape: ' +
@@ -258,8 +269,17 @@ Deno.serve(async (req: Request) => {
     // invented an agreement reason for a word that hadn't actually
     // changed at all). Catches the same-quoted-substring-twice shape
     // regardless of phrasing, so a prompt-compliance slip still can't
-    // reach the learner as a nonsensical point.
-    const SAME_WORD_POINT = /"([^"]+)"[^".]*\bshould be\b[^".]*"\1"/i;
+    // reach the learner as a nonsensical point. Two real, confirmed gaps
+    // fixed here: (1) this only ever matched double quotes, but the model
+    // routinely uses single quotes instead (unsurprising inside a JSON
+    // string value, where a literal ' needs no escaping but a literal "
+    // does); (2) the gap between the repeated word excluded ANY quote
+    // character at all, so a point mentioning a THIRD quoted word in
+    // between ("'die' before 'Bedürfnisse' should be 'die' because
+    // 'Bedürfnisse' is plural") couldn't match either — only a period
+    // (keeping the check within one point/sentence) is excluded from the
+    // gap now, not quotes generally.
+    const SAME_WORD_POINT = /["']([^"']+)["'][^.]*\bshould be\b[^.]*["']\1["']/i;
     let points = Array.isArray(parsed.points)
       ? parsed.points.filter(p => typeof p === 'string' && p.trim() && !SAME_WORD_POINT.test(p))
       : [];

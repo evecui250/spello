@@ -170,7 +170,7 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
           selectedWord
             ? <WordInfoPanel key={selectedWord.word.id} word={selectedWord.word} usedForm={selectedWord.usedForm} />
             : selectedGlossToken && glosses[selectedGlossToken] && (
-              <GlossPopup surfaceForm={selectedGlossToken} lemma={glosses[selectedGlossToken].lemma} gloss={glosses[selectedGlossToken].gloss} />
+              <GlossPopup surfaceForm={selectedGlossToken} gloss={glosses[selectedGlossToken]} />
             )
         )}
 

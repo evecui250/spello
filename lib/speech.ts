@@ -94,6 +94,42 @@ function voiceKey(v: SpeechSynthesisVoice): string {
   return `${v.name}|${v.lang}`;
 }
 
+// Confirmed-bad voices on THIS device, persisted (not just in-memory) —
+// a real report caught the remaining gap after the reference-vs-key
+// exclusion fix above: fixing that made a RETRY correctly avoid a bad
+// voice, but pickGermanVoice's own cache (below) still hands out that
+// same voice as the FIRST choice for every subsequent NEW word for the
+// rest of the session, since a failed-then-retried success never taught
+// it anything — so every single word kept paying the same ~2s fail-then-
+// retry cost forever, reported as "needs several clicks before it
+// speaks." Once a voice actually fails here, it's remembered in
+// localStorage (survives reloads too, so a device with a permanently
+// broken default voice doesn't relearn this every fresh page load) and
+// deprioritized the same way FLAKY_VOICE_NAMES already is — not excluded
+// outright, since if it's the only voice at all it's still better than
+// silence.
+const BAD_VOICE_STORAGE_KEY = 'wb2_bad_tts_voices';
+function loadBadVoiceKeys(): Set<string> {
+  if (typeof localStorage === 'undefined') return new Set();
+  try {
+    const raw = JSON.parse(localStorage.getItem(BAD_VOICE_STORAGE_KEY) || '[]');
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch {
+    return new Set();
+  }
+}
+function markVoiceBad(voice: SpeechSynthesisVoice | null): void {
+  if (!voice || typeof localStorage === 'undefined') return;
+  const bad = loadBadVoiceKeys();
+  const key = voiceKey(voice);
+  if (bad.has(key)) return;
+  bad.add(key);
+  try { localStorage.setItem(BAD_VOICE_STORAGE_KEY, JSON.stringify([...bad])); } catch { /* best-effort */ }
+  // Forces the next non-retry pickGermanVoice() call to re-evaluate
+  // instead of handing back the now-known-bad cached choice.
+  cachedGermanVoice = undefined;
+}
+
 // `exclude`, when given, is skipped entirely — compared by voiceKey (see
 // above), not object identity, so a retry actually gets a different voice
 // when one exists.
@@ -104,10 +140,12 @@ function selectGermanVoice(
   const excludeKey = exclude ? voiceKey(exclude) : null;
   const usable = excludeKey ? voices.filter(v => voiceKey(v) !== excludeKey) : voices;
   const german = usable.filter(v => v.lang?.toLowerCase().startsWith('de'));
-  // Non-flaky candidates first, flaky ones only as a last resort within
-  // each tier — a known-flaky voice is still better than nothing if it's
-  // truly the only one available for this tier.
-  const localGerman = [...german.filter(v => v.localService && !isKnownFlakyVoice(v)), ...german.filter(v => v.localService && isKnownFlakyVoice(v))];
+  const badKeys = loadBadVoiceKeys();
+  const isDeprioritized = (v: SpeechSynthesisVoice) => isKnownFlakyVoice(v) || badKeys.has(voiceKey(v));
+  // Non-flaky/non-confirmed-bad candidates first, deprioritized ones only
+  // as a last resort within each tier — one is still better than nothing
+  // if it's truly the only voice available for this tier.
+  const localGerman = [...german.filter(v => v.localService && !isDeprioritized(v)), ...german.filter(v => v.localService && isDeprioritized(v))];
   // A device with literally no German voice installed at all is the one
   // case iOS's own "falls back to the device's default voice" behavior
   // doesn't reliably cover on every platform — leaving utterance.voice
@@ -254,6 +292,11 @@ function speakWithBrowserVoice(
     // the time this fired — see speechGeneration's own comment. Not a
     // real failure, nothing to report.
     if (speechGeneration !== myGeneration) return;
+    // Learn from this immediately, on the FIRST attempt too, not just
+    // after a retry also fails — see markVoiceBad's own comment for why
+    // waiting until then left every future word paying the same ~2s
+    // fail-then-retry cost forever instead of just once per bad voice.
+    markVoiceBad(voice);
     if (isRetry) { reportTtsError(e.error, voice); onFailure?.(); }
     // A genuine error (not just a silent hang) on the FIRST attempt is
     // still worth one retry — see the onstart-timeout branch below for
@@ -286,6 +329,8 @@ function speakWithBrowserVoice(
     // tab-hide since this was scheduled means there's deliberately
     // nothing left to retry for.
     if (speechGeneration !== myGeneration) return;
+    // Same "learn immediately" reasoning as onerror above.
+    markVoiceBad(voice);
     if (isRetry) { reportTtsError('never started (after retry)', voice); onFailure?.(); return; }
     window.speechSynthesis.cancel();
     speakWithBrowserVoice(text, true, voice, onEnd, onFailure);

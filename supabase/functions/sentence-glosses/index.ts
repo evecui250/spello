@@ -100,6 +100,23 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Sentence too long' }, 400);
     }
     const lang = nativeLanguage === 'zh' ? 'Chinese' : 'English';
+    // Both directions also ask for "article"/"plural" (nouns only) and
+    // verb tenses ("thirdPerson"/"pastTense"/"perfectTense") now -- a real
+    // request: WordInfoPanel already shows this detail for a real corpus
+    // word, but GlossPopup (this endpoint's own display, for a word that
+    // ISN'T in the corpus) only ever had a bare lemma+gloss, no
+    // grammatical detail at all, even when the word is a perfectly
+    // ordinary noun/verb. These fields are optional in the response and
+    // simply omitted for anything they don't apply to (pronouns,
+    // prepositions, etc. never get them, same as a real corpus entry).
+    const grammarFields =
+      'Also include, only when they genuinely apply: for a NOUN, its ' +
+      '"article" (der/die/das) and "plural" form; for a VERB, its 3rd-person-singular present ' +
+      'as "thirdPerson", simple past as "pastTense", and perfect tense (with the correct hat/ist ' +
+      'auxiliary) as "perfectTense" -- for a separable-prefix verb, write these the way they\'d ' +
+      'actually appear in a sentence, prefix split off (e.g. "steht auf", not "aufsteht"). Omit ' +
+      'any of these fields entirely for a word they don\'t apply to (pronouns, prepositions, ' +
+      'adjectives, adverbs, conjunctions never get them).';
     const promptText = direction === 'native-to-de'
       ? `For this ${lang} sentence (a CEFR ${level || 'A1'} learner is about to translate it ` +
         `INTO German): "${sentence}", produce a JSON object mapping EVERY distinct content word ` +
@@ -108,12 +125,14 @@ Deno.serve(async (req: Request) => {
         'German, as "lemma" (the exact uninflected dictionary form: infinitive for verbs, ' +
         'singular nominative for nouns, positive form for adjectives/adverbs), plus that same ' +
         `word's own dictionary/base form in ${lang} as "gloss" (e.g. "packed" -> gloss "pack"). ` +
+        `${grammarFields} ` +
         'Skip only pure grammar words that carry no independent translatable meaning of their ' +
         "own — articles (a/the), personal/demonstrative pronouns (it/this/that), prepositions, " +
         'conjunctions, and punctuation. Quantifiers and determiners such as "all", "every", ' +
         '"some", "many", "each", "several", and "both" DO carry real translatable meaning and ' +
         'must be included, not skipped (e.g. "all" -> lemma "alle"). Respond with exactly this ' +
-        'JSON: {"words": {"word1": {"lemma": "...", "gloss": "..."}, ...}}.'
+        'JSON: {"words": {"word1": {"lemma": "...", "gloss": "...", "article": "...", ' +
+        '"plural": "...", "thirdPerson": "...", "pastTense": "...", "perfectTense": "..."}, ...}}.'
       : `For this German sentence (a CEFR ${level || 'A1'} learner's exercise): ` +
         `"${sentence}", produce a JSON object mapping EVERY distinct word (as it ` +
         'literally appears there, preserving capitalization) to its dictionary/base ' +
@@ -121,12 +140,13 @@ Deno.serve(async (req: Request) => {
         '"rufen"), the singular nominative for nouns (e.g. "Häuser" -> "Haus", ' +
         '"Kindern" -> "Kind"), and the uninflected positive form for adjectives/adverbs ' +
         '(e.g. "schönen" -> "schön") — plus a short (1-4 word) translation of that base ' +
-        `form into ${lang}. Include separable-prefix verbs split apart by German word ` +
-        'order, each part mapping to the SAME full lemma (e.g. a sentence with "sagt ... ' +
-        'ab" for "absagen" should map BOTH "sagt" and "ab" to lemma "absagen", both with ' +
-        'the same translation). Skip bare articles (der/die/das/ein/eine/einen/etc.) and ' +
-        'punctuation. Respond with exactly this JSON: {"words": {"word1": {"lemma": ' +
-        `"...", "gloss": "..."}, ...}}, each gloss in ${lang}.`;
+        `form into ${lang}. ${grammarFields} Include separable-prefix verbs split apart ` +
+        'by German word order, each part mapping to the SAME full lemma (e.g. a sentence with ' +
+        '"sagt ... ab" for "absagen" should map BOTH "sagt" and "ab" to lemma "absagen", both ' +
+        'with the same translation and the same grammar fields). Skip bare articles ' +
+        '(der/die/das/ein/eine/einen/etc.) and punctuation. Respond with exactly this JSON: ' +
+        '{"words": {"word1": {"lemma": "...", "gloss": "...", "article": "...", "plural": "...", ' +
+        `"thirdPerson": "...", "pastTense": "...", "perfectTense": "..."}, ...}}, each gloss in ${lang}.`;
 
     const completion = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -154,7 +174,7 @@ Deno.serve(async (req: Request) => {
 
     const result = await completion.json();
     const raw: string = result.choices?.[0]?.message?.content ?? '{}';
-    let parsed: { words?: Record<string, { lemma?: string; gloss?: string }> } = {};
+    let parsed: { words?: Record<string, { lemma?: string; gloss?: string; article?: string; plural?: string; thirdPerson?: string; pastTense?: string; perfectTense?: string }> } = {};
     try {
       parsed = JSON.parse(raw);
     } catch {

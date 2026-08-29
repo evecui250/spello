@@ -287,6 +287,16 @@ export async function generateWordAudio(id: string, spokenForm: string): Promise
 export interface WordGloss {
   lemma: string;
   gloss: string;
+  // Grammatical detail, only when they genuinely apply (nouns/verbs) —
+  // same fields WordInfoPanel already shows for a real corpus word; a
+  // real request was for GlossPopup (this data's own display, for a word
+  // that ISN'T in the corpus) to show the same level of detail instead of
+  // just a bare lemma+gloss.
+  article?: string;
+  plural?: string;
+  thirdPerson?: string;
+  pastTense?: string;
+  perfectTense?: string;
 }
 
 // Per-word lemma + short translation for every content word in an

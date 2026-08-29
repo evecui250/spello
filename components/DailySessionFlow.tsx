@@ -928,8 +928,7 @@ function SentenceExercise({
             <GlossPopup
               key={`prompt-gloss-${selectedPromptGlossToken}`}
               surfaceForm={selectedPromptGlossToken}
-              lemma={promptGlosses[selectedPromptGlossToken].lemma}
-              gloss={promptGlosses[selectedPromptGlossToken].gloss}
+              gloss={promptGlosses[selectedPromptGlossToken]}
             />
           )}
           <textarea
@@ -1065,7 +1064,7 @@ function SentenceExercise({
               )}
               {selectedWord && <WordInfoPanel key={selectedWord.id} word={selectedWord} />}
               {!selectedWord && selectedGlossToken && glosses[selectedGlossToken] && (
-                <GlossPopup surfaceForm={selectedGlossToken} lemma={glosses[selectedGlossToken].lemma} gloss={glosses[selectedGlossToken].gloss} />
+                <GlossPopup surfaceForm={selectedGlossToken} gloss={glosses[selectedGlossToken]} />
               )}
               <button
                 onClick={onNext}
