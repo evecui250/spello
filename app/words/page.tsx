@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { WORDS, wordsForLevel, Word, Level, glossFor } from '../../lib/words';
 import {
   getMergedProgressAcrossLevels, getSettings, WordProgress, MascotStageId, today,
   getAllCustomWordsForLevel, getAllCustomWordsAcrossLevels, addCustomWord, removeCustomWord,
-  newCustomWordId, isCustomWordId,
+  newCustomWordId, isCustomWordId, PROGRESS_CHANGED_EVENT,
 } from '../../lib/storage';
 import { daysBetween } from '../../lib/srs';
 import { imageUrlForWord } from '../../lib/wordImage';
@@ -16,6 +17,7 @@ import { spokenForm } from '../../lib/speech';
 import SpeakerButton from '../../components/SpeakerButton';
 import DachshundMascot from '../../components/Mascot';
 import WordInfoPanel from '../../components/WordInfoPanel';
+import MistakeRedoCard from '../../components/MistakeRedoCard';
 
 // Same wording as Progress page's STAGE_LABEL — "Introduced" rather than
 // "New" for a word that's actually finished Day 1, so this list's badge
@@ -60,16 +62,21 @@ function searchRank(w: Word, q: string, nativeLanguage: 'en' | 'zh'): number | n
 const BOOK_LEVELS: Level[] = ['A1', 'A2', 'B1', 'B2'];
 type BookFilter = 'all' | Level;
 
-type Familiarity = 'all' | 'new' | 'learning' | 'mastered';
+type Familiarity = 'all' | 'new' | 'learning' | 'mastered' | 'needsPractice';
 
 // "New" = hasn't completed its first learning pass yet (round 4 success),
 // even if attempts are already in progress. "Learning" = has completed at
 // least one pass — spans all 4 mascot stages, including fully mastered
 // words (it's a broad "has this been engaged with" bucket, not mutually
 // exclusive with "Mastered"). "Mastered" is a specific, overlapping
-// drill-down for the fullyMastered subset of "Learning".
+// drill-down for the fullyMastered subset of "Learning". "needsPractice"
+// (the "Mistake Notebook") is its own separate, overlapping dimension —
+// a word's round-1 introduction sentence needed correcting (see
+// WordProgress.lastMistake) — independent of which mascot stage it's
+// since moved on to.
 function matchesFamiliarity(p: WordProgress | undefined, filter: Familiarity): boolean {
   if (filter === 'all') return true;
+  if (filter === 'needsPractice') return !!p?.lastMistake;
   const earned = !!p && p.studiedTimes > 0;
   if (filter === 'new') return !earned;
   if (filter === 'learning') return earned;
@@ -180,6 +187,9 @@ export default function WordsPage() {
   // state above it.
   const [lookupStatus, setLookupStatus] = useState<'idle' | 'loading' | 'not-found' | 'error' | 'limit-reached' | 'unreachable'>('idle');
   const [lookupResult, setLookupResult] = useState<LookupWordResult | null>(null);
+  // Which word's "Needs practice" redo modal is open, if any — see
+  // MistakeRedoCard.
+  const [redoWord, setRedoWord] = useState<Word | null>(null);
 
   // Learner-added words, read fresh from storage — kept as its own STATE
   // (populated only inside an effect below), never read directly during
@@ -198,7 +208,7 @@ export default function WordsPage() {
   useEffect(() => {
     setNativeLanguage(getSettings().nativeLanguage);
     if (!applyParam('level', ['all', ...BOOK_LEVELS], setFilterLevel)) setFilterLevel(getSettings().level);
-    applyParam('familiarity', ['all', 'new', 'learning', 'mastered'], setFilterFamiliarity);
+    applyParam('familiarity', ['all', 'new', 'learning', 'mastered', 'needsPractice'], setFilterFamiliarity);
     applyParam('date', ['all', 'today', '7days', '30days'], setDateFilter);
   }, []);
 
@@ -225,7 +235,14 @@ export default function WordsPage() {
   }, [filterLevel, customWords]);
 
   useEffect(() => {
-    setProgress(getMergedProgressAcrossLevels());
+    const load = () => setProgress(getMergedProgressAcrossLevels());
+    load();
+    // Refreshes after MistakeRedoCard saves a cleared/updated lastMistake
+    // (saveWordProgress dispatches this on every write) — without it, a
+    // word that just got redone perfectly would still show under "Needs
+    // practice" until the next full page load.
+    window.addEventListener(PROGRESS_CHANGED_EVENT, load);
+    return () => window.removeEventListener(PROGRESS_CHANGED_EVENT, load);
   }, []);
 
   const t = today();
@@ -328,6 +345,14 @@ export default function WordsPage() {
               <div className="text-stone-500 text-sm italic">{sentence.sentence}</div>
             </div>
           )}
+          {progress[w.id]?.lastMistake && (
+            <button
+              onClick={() => setRedoWord(w)}
+              className="mt-1 text-xs font-semibold text-amber-700 bg-amber-100 rounded-full px-2.5 py-1 hover:bg-amber-200 transition-colors"
+            >
+              ✎ Needs practice — Redo
+            </button>
+          )}
         </div>
         <WordThumbnail word={w} />
         <span className="shrink-0 w-20 flex flex-col items-center gap-0.5">
@@ -401,6 +426,7 @@ export default function WordsPage() {
           <option value="new">New</option>
           <option value="learning">Learning</option>
           <option value="mastered">Mastered</option>
+          <option value="needsPractice">Needs practice</option>
         </select>
 
         <select
@@ -492,6 +518,27 @@ export default function WordsPage() {
       <div className="flex flex-col gap-2">
         {filtered.map(w => <WordItem key={w.id} w={w} />)}
       </div>
+
+      {/* Portaled straight to <body>, same reasoning as BugReportButton's
+          own modal — escapes any ancestor's backdrop-filter/transform,
+          which would otherwise become the containing block for this fixed
+          overlay. */}
+      {redoWord && progress[redoWord.id]?.lastMistake && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setRedoWord(null)}
+        >
+          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <MistakeRedoCard
+              word={redoWord}
+              mistake={progress[redoWord.id].lastMistake!}
+              level={redoWord.level}
+              onDone={() => setRedoWord(null)}
+            />
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

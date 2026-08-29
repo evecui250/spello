@@ -57,6 +57,18 @@ export interface WordProgress {
   // back to English for any word missing that field, mixing languages on
   // an otherwise all-Chinese summary/list.
   exampleSentence?: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string };
+
+  // Set whenever round 1's translation correction comes back NOT perfect
+  // (see DailySessionFlow's diffAgainstAttempt check) — the "Mistake
+  // Notebook" (Word List's own "Needs practice" filter) surfaces these so
+  // a learner can redo the EXACT SAME prompt rather than a fresh random
+  // one. Cleared the moment a redo of this word comes back perfect (owner
+  // call: reflects CURRENT weak points, not a permanent record of every
+  // mistake ever made) — see MistakeRedoCard. userInput is the learner's
+  // own wrong attempt, kept so the redo view can show what they wrote
+  // last time alongside the correction, same as the in-session correction
+  // screen already does.
+  lastMistake?: { englishPrompt?: string; englishPromptZh?: string; userInput: string; correctedSentence: string; wordForm: string };
 }
 
 export interface Streak {
@@ -570,6 +582,7 @@ function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): Wo
     nextReviewDue,
     mascotStage,
     exampleSentence: p?.exampleSentence,
+    lastMistake: p?.lastMistake,
   };
 }
 

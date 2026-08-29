@@ -3750,6 +3750,65 @@ export function isWordToken(t: string): boolean {
   return /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(t);
 }
 
+// Word-level LCS diff (order-preserving, allows insertions/substitutions/
+// deletions) — case-sensitive on purpose, since German capitalization is
+// a real grammar rule (every noun, not just sentence starts), not
+// cosmetic. Returns one boolean per correctedWords entry: true = matched
+// something the learner actually wrote, in the same relative order; false
+// = added or changed by the correction. Standard LCS-table + forward
+// backtrack; the dp[i][j] === dp[i+1][j+1]+1 check on a match is what
+// keeps the backtrack from greedily accepting a coincidental equal word
+// that isn't actually part of the optimal alignment. Shared by
+// SentenceExercise's own correction display and the Word List's "Needs
+// practice" redo flow (see MistakeRedoCard) via diffAgainstAttempt below.
+export function diffWords(originalWords: string[], correctedWords: string[]): boolean[] {
+  const n = originalWords.length, m = correctedWords.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = originalWords[i] === correctedWords[j]
+        ? dp[i + 1][j + 1] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const matched = new Array(m).fill(false);
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (originalWords[i] === correctedWords[j] && dp[i][j] === dp[i + 1][j + 1] + 1) {
+      matched[j] = true;
+      i++; j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return matched;
+}
+
+// Compares a learner's raw attempt against the AI's corrected sentence,
+// word by word — "Perfect" (no correction actually needed) vs. which
+// specific corrected words are new/changed relative to what they wrote,
+// so the UI can underline just those instead of the whole sentence.
+// Trailing terminal punctuation is ignored on the ORIGINAL side only —
+// correct-sentence's own prompt always adds proper end punctuation even
+// when the learner's attempt omitted it (a real instruction, not a bug),
+// so penalizing that here would make "Perfect" nearly unreachable for
+// anyone who doesn't bother typing a period.
+export function diffAgainstAttempt(originalAttempt: string, correctedSentence: string): { perfect: boolean; tokens: { text: string; changed: boolean }[] } {
+  const strippedOriginal = originalAttempt.trim().replace(/[.!?]+$/, '').trim();
+  const originalWords = tokenize(strippedOriginal).filter(isWordToken);
+  const correctedTokens = tokenize(correctedSentence);
+  const correctedWordIndices: number[] = [];
+  correctedTokens.forEach((t, idx) => { if (isWordToken(t)) correctedWordIndices.push(idx); });
+  const correctedWords = correctedWordIndices.map(idx => correctedTokens[idx]);
+  const matched = diffWords(originalWords, correctedWords);
+  const perfect = matched.length > 0 && originalWords.length === correctedWords.length && matched.every(Boolean);
+  const changedByTokenIdx = new Set(correctedWordIndices.filter((_, wi) => !matched[wi]));
+  const tokens = correctedTokens.map((text, idx) => ({ text, changed: changedByTokenIdx.has(idx) }));
+  return { perfect, tokens };
+}
+
 // --- Clickable words in the round-1 PROMPT sentence (the English/Chinese
 // sentence being translated FROM, not the German being translated TO) —
 // lets a learner tap an unfamiliar prompt word and see its German
