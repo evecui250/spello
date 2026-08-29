@@ -159,7 +159,7 @@ function speakWithBrowserVoice(
   // attempt (original or retry) actually ends up speaking.
   onEnd?: () => void,
 ): void {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  if (typeof window === 'undefined' || !('speechSynthesis' in window) || isPageHidden()) return;
   const myGeneration = ++speechGeneration;
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'de-DE';
@@ -248,6 +248,22 @@ const WORD_REPEAT_GAP_MS = 450;
 
 let currentAudio: HTMLAudioElement | null = null;
 
+// A real report: audio spoke a word from a level the learner wasn't even
+// studying, well after they'd switched to a different app entirely.
+// stopSpeech()'s visibilitychange listener only cancels whatever is
+// ALREADY in flight the moment the tab is hidden — it can't do anything
+// about a call that hasn't happened yet, like the 550ms-delayed
+// post-correct-answer pronunciation this file and DailySessionFlow both
+// schedule, or (the likely actual culprit here) an old, forgotten
+// background tab/session whose own pending speech only got around to
+// firing much later, once the browser eventually let its throttled
+// timers run. Checked at the actual "about to make sound" chokepoints
+// (not just once at the call site) so it catches EVERY path into audio,
+// however stale or delayed the request that triggered it.
+function isPageHidden(): boolean {
+  return typeof document !== 'undefined' && document.visibilityState === 'hidden';
+}
+
 // Plays this word's pre-generated recording ONCE — the same voice for
 // every user on every device — falling back to the browser's built-in
 // text-to-speech (which varies a lot by device/browser) only if the file
@@ -256,7 +272,7 @@ let currentAudio: HTMLAudioElement | null = null;
 // chain below is the only caller that needs it; every other call site
 // just wants "play the word" and leaves it out.
 function speakWordOnce(word: Word, onEnded?: () => void): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || isPageHidden()) return;
   if (currentAudio) {
     currentAudio.pause();
     currentAudio = null;
