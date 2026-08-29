@@ -2,6 +2,7 @@
 
 import { Word } from './words';
 import { supabase } from './supabase';
+import { getSettings } from './storage';
 
 // Nouns are spoken with their article (e.g. "der Tisch") so the learner
 // hears the gender along with the word, not just the bare noun.
@@ -152,12 +153,18 @@ function speakWithBrowserVoice(
   text: string,
   isRetry = false,
   excludeVoice: SpeechSynthesisVoice | null = null,
+  // Fires once this specific utterance actually finishes speaking —
+  // speakWord's repeat-count chain (see WORD_REPEAT_GAP_MS below) needs
+  // this to know when it's safe to start the next repeat, on whichever
+  // attempt (original or retry) actually ends up speaking.
+  onEnd?: () => void,
 ): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   const myGeneration = ++speechGeneration;
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'de-DE';
   utterance.rate = 0.9;
+  if (onEnd) utterance.onend = () => { if (speechGeneration === myGeneration) onEnd(); };
   // See WORD_AUDIO_VOLUME below — on-device testing found the on-device
   // browser voice used for sentences was actually the LOUDER side of the
   // two, not the pre-recorded word clips, so this pulls sentences down to
@@ -210,7 +217,7 @@ function speakWithBrowserVoice(
     if (speechGeneration !== myGeneration) return;
     if (isRetry) { reportTtsError('never started (after retry)', voice); return; }
     window.speechSynthesis.cancel();
-    speakWithBrowserVoice(text, true, voice);
+    speakWithBrowserVoice(text, true, voice, onEnd);
   }, 2000);
   window.speechSynthesis.speak(utterance);
 }
@@ -233,12 +240,22 @@ export function speakText(text: string): void {
 const WORD_AUDIO_VOLUME = 1;
 const SENTENCE_AUDIO_VOLUME = 0.7;
 
+// Pause between repeats of the same word (see speakWord's own
+// wordRepeatCount handling below) — long enough to read as two separate
+// sayings of the word, not one run-on utterance, short enough that
+// hearing it 2-3 times still feels like one quick moment.
+const WORD_REPEAT_GAP_MS = 450;
+
 let currentAudio: HTMLAudioElement | null = null;
 
-// Plays this word's pre-generated recording — the same voice for every user
-// on every device — falling back to the browser's built-in text-to-speech
-// (which varies a lot by device/browser) only if the file is unavailable.
-export function speakWord(word: Word): void {
+// Plays this word's pre-generated recording ONCE — the same voice for
+// every user on every device — falling back to the browser's built-in
+// text-to-speech (which varies a lot by device/browser) only if the file
+// is unavailable. `onEnded`, when given, fires once this one playback
+// actually finishes (whichever path it took) — speakWord's own repeat
+// chain below is the only caller that needs it; every other call site
+// just wants "play the word" and leaves it out.
+function speakWordOnce(word: Word, onEnded?: () => void): void {
   if (typeof window === 'undefined') return;
   if (currentAudio) {
     currentAudio.pause();
@@ -254,9 +271,15 @@ export function speakWord(word: Word): void {
     // must not trigger the (lower-quality, possibly wrong-accent) browser
     // TTS fallback. Only fall back if we're still the current audio.
     if (currentAudio !== audio) return;
-    speakWithBrowserVoice(spokenForm(word));
+    speakWithBrowserVoice(spokenForm(word), false, null, onEnded);
   };
   audio.addEventListener('error', fallback);
+  if (onEnded) {
+    // Only from OUR audio element specifically, and only while it's still
+    // the current one — the same "am I still the one that matters" guard
+    // the AbortError/re-pause handling below already needs.
+    audio.addEventListener('ended', () => { if (currentAudio === audio) onEnded(); });
+  }
   // Guards a real browser race: if stopSpeech()/a newer speakWord() call
   // already paused and cleared `currentAudio` (e.g. the learner navigated
   // away, or the tab was backgrounded — see the visibilitychange listener
@@ -269,6 +292,34 @@ export function speakWord(word: Word): void {
   audio.play().then(() => { if (currentAudio !== audio) audio.pause(); }).catch(fallback);
 }
 
+// A separate counter from speechGeneration (which speakWithBrowserVoice
+// owns entirely for its own retry/supersession logic — folding this into
+// that one would make every fallback-triggered bump inside it look like
+// this chain got superseded too, stopping repeats after the very first
+// fallback). This one only tracks whether a word-repeat chain is still
+// the most recently requested one, so a stray delayed repeat from an
+// OLDER speakWord() call can't fire after a newer speakWord()/
+// stopSpeech() call has already moved on to something else.
+let wordChainGeneration = 0;
+
+// Plays this word as many times in a row as Settings' wordRepeatCount
+// says (default 1, unchanged behavior) — a real request from learners
+// who want to hear a tricky word repeated without tapping the speaker
+// icon over and over. Clamped defensively since this is user-entered
+// data: 0/negative would silently say nothing, and nothing genuinely
+// benefits from more than a handful of repeats in a row.
+export function speakWord(word: Word): void {
+  const myChain = ++wordChainGeneration;
+  const times = Math.max(1, Math.min(5, Math.round(getSettings().wordRepeatCount ?? 1)));
+  let played = 0;
+  const playNext = () => {
+    if (wordChainGeneration !== myChain) return;
+    played++;
+    speakWordOnce(word, played < times ? () => setTimeout(playNext, WORD_REPEAT_GAP_MS) : undefined);
+  };
+  playNext();
+}
+
 // Cancels whatever's currently playing/queued (word clip or browser TTS
 // sentence) — call this on unmount/navigation so an utterance that was
 // still queued up when the learner moved on doesn't keep playing out of
@@ -277,10 +328,11 @@ export function speakWord(word: Word): void {
 // currently-speaking utterance and anything queued behind it.
 export function stopSpeech(): void {
   if (typeof window === 'undefined') return;
-  // See speechGeneration's own comment — marks anything currently in
-  // flight as deliberately superseded, not a failure, before actually
-  // cancelling it.
+  // See speechGeneration's/wordChainGeneration's own comments — marks
+  // anything currently in flight (including a pending word repeat) as
+  // deliberately superseded, not a failure, before actually cancelling it.
   speechGeneration++;
+  wordChainGeneration++;
   if (currentAudio) {
     currentAudio.pause();
     currentAudio = null;

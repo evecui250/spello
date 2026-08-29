@@ -74,6 +74,13 @@ export interface Settings {
   nativeLanguage: 'en' | 'zh';
   level: Level;
   autoPlayAudio: boolean;
+  // How many times in a row speakWord() says a word — default 1, a real
+  // request from learners who want to hear a tricky word repeated without
+  // tapping the speaker icon over and over. Optional (old stored settings
+  // predate this field) — getSettings/getSettingsForLevel's own
+  // {...DEFAULT_SETTINGS, ...raw} merge already backfills it to 1 for
+  // anyone who saved settings before this existed.
+  wordRepeatCount?: number;
   requireArticle: boolean;
   // When true (default), round 1 of a new word is the AI sentence-writing
   // exercise as usual. When false, round 1 instead uses the same
@@ -154,7 +161,7 @@ const STREAK_KEY = 'wb2_streak_global';
 
 const DEFAULT_SETTINGS: Settings = {
   studyBatchSize: 5, dailyReview: 15, language: 'de', nativeLanguage: 'en', level: 'A1',
-  autoPlayAudio: true, requireArticle: false, sentenceWritingMode: true,
+  autoPlayAudio: true, requireArticle: false, sentenceWritingMode: true, wordRepeatCount: 1,
 };
 
 // One-time fix for a data-migration edge case from removing round 5: a word

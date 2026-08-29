@@ -32,6 +32,7 @@ export default function SettingsPage() {
   const [nativeLanguage, setNativeLanguage] = useState<'en' | 'zh'>('en');
   const [level, setLevel] = useState<Level>('A1');
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
+  const [wordRepeatCount, setWordRepeatCount] = useState(1);
   const [requireArticle, setRequireArticle] = useState(false);
   const [sentenceWritingMode, setSentenceWritingMode] = useState(true);
   const [saved, setSaved] = useState(false);
@@ -59,6 +60,7 @@ export default function SettingsPage() {
     setNativeLanguage(s.nativeLanguage);
     setLevel(s.level);
     setAutoPlayAudio(s.autoPlayAudio);
+    setWordRepeatCount(s.wordRepeatCount ?? 1);
     setRequireArticle(s.requireArticle);
     setSentenceWritingMode(s.sentenceWritingMode);
   };
@@ -128,7 +130,7 @@ export default function SettingsPage() {
   // from current state, which is already up to date by the time this runs.
   const persist = (patch: Partial<Settings>) => {
     const next: Settings = {
-      studyBatchSize, dailyReview, language: 'de', nativeLanguage, level, autoPlayAudio, requireArticle,
+      studyBatchSize, dailyReview, language: 'de', nativeLanguage, level, autoPlayAudio, wordRepeatCount, requireArticle,
       sentenceWritingMode, ...patch,
     };
     saveSettings(next);
@@ -398,6 +400,28 @@ export default function SettingsPage() {
             onChange={e => { setAutoPlayAudio(e.target.checked); persist({ autoPlayAudio: e.target.checked }); }}
             className="w-5 h-5 accent-indigo-600"
           />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="block font-semibold text-stone-800">
+              Say each word
+            </label>
+            <p className="text-stone-500 text-sm">Hear it repeated automatically, for tricky words.</p>
+          </div>
+          <select
+            value={wordRepeatCount}
+            onChange={e => {
+              const v = Number(e.target.value);
+              setWordRepeatCount(v);
+              persist({ wordRepeatCount: v });
+            }}
+            className="border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
+          >
+            <option value={1}>1×</option>
+            <option value={2}>2×</option>
+            <option value={3}>3×</option>
+          </select>
         </div>
 
         <div className="flex items-center justify-between">
