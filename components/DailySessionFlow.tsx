@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   getDailySession, saveDailySession, DailySession, SessionPhase,
   getWordProgress, saveWordProgress, getAllProgress, getSettings, saveSettings, today,
-  Round, WordProgress, Settings, MascotStageId, DailyStats,
+  Round, WordProgress, Settings, MascotStageId, DailyStats, ParagraphExercise,
   isStudyGoalDoneToday, isReviewGoalDoneToday, markStudyGoalDone, markReviewGoalDone,
   touchStreak, markCongratsShown, getDailyStats, addEarnedPuppy, addEarnedUpgrade,
   logWordActivity,
@@ -14,7 +14,7 @@ import {
 import {
   wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint, demoteReviewRound,
   buildMcqChoices, buildReverseMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
-  hasEnoughWordsForGame,
+  hasEnoughWordsForGame, buildParagraphBatches, sharedCategoryHint, parseParagraphResponse,
 } from '../lib/practice';
 import { REVIEW_PLAN, recordMilestonePass } from '../lib/srs';
 import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks } from '../lib/words';
@@ -37,7 +37,8 @@ import { imageUrlForWord } from '../lib/wordImage';
 import { WORDS_WITH_IMAGES } from '../lib/wordImageManifest';
 import { scheduleSync } from '../lib/sync';
 import { playCorrectChime } from '../lib/sound';
-import { correctSentence, generateSentence, explainCorrection, getSentenceGlosses, WordGloss, ExplanationResult, DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
+import { correctSentence, generateSentence, generateParagraphExercise, explainCorrection, getSentenceGlosses, WordGloss, ExplanationResult, DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
+import ParagraphExerciseCard from './ParagraphExerciseCard';
 import { supabase } from '../lib/supabase';
 
 // Locates wordForm inside sentence (case-insensitive) so callers can bold
@@ -1321,6 +1322,12 @@ export default function DailySessionFlow() {
   // copy-the-word tiles instead. Reset on a fresh page load, since that's
   // a reasonable point to let it try again.
   const [aiUnreachable, setAiUnreachable] = useState(false);
+  // The bonus paragraph exercise's own generation status -- separate from
+  // `status`/`directSentenceStatus` above since it's a wholly different
+  // phase (study-paragraph) that can't overlap with either of those. Reset
+  // to 'idle' whenever paragraphExerciseIndex advances to a batch that
+  // isn't cached yet (see the effect below).
+  const [paragraphStatus, setParagraphStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'limit-reached' | 'unreachable'>('idle');
   // "Review" = already fully learned, back for spaced repetition. "New" =
   // never touched before today. "Continuing" = mid-ladder from a PREVIOUS
   // day (not brand new, hasn't reached round 4 yet either) — this is the
@@ -2238,13 +2245,76 @@ export default function DailySessionFlow() {
     }
   }
 
-  // The "N words learned" summary's own "Continue" button — study is
-  // always the last block of the day now, so there's nothing left to route
-  // to except the congrats card.
+  // The "N words learned" summary's own "Continue" button — routes to the
+  // bonus paragraph offer when today's batch has enough words for at least
+  // one (see buildParagraphBatches), otherwise straight to congrats same as
+  // before this existed.
   function handleFinishStudy() {
+    if (!session) return;
+    const batches = buildParagraphBatches(wordsById(session.studyWordIds));
+    persistSession({ ...session, phase: batches.length > 0 ? 'study-paragraph-offer' : 'congrats' });
+  }
+
+  function handleSkipParagraph() {
     if (!session) return;
     persistSession({ ...session, phase: 'congrats' });
   }
+
+  function handleStartParagraph() {
+    if (!session) return;
+    persistSession({ ...session, phase: 'study-paragraph', paragraphExerciseIndex: 0 });
+  }
+
+  // Advances past the batch currently showing -- to the next one if there
+  // is one, otherwise congrats (same destination as skipping).
+  function handleParagraphComplete() {
+    if (!session) return;
+    const batches = buildParagraphBatches(wordsById(session.studyWordIds));
+    const nextIndex = (session.paragraphExerciseIndex ?? 0) + 1;
+    if (nextIndex < batches.length) {
+      persistSession({ ...session, paragraphExerciseIndex: nextIndex });
+    } else {
+      persistSession({ ...session, phase: 'congrats' });
+    }
+  }
+
+  // Generates (or reuses a cached) exercise for whichever batch
+  // paragraphExerciseIndex currently points at. Runs once per index --
+  // guarded by paragraphStatus so a re-render mid-flight (e.g. an unrelated
+  // settings change) doesn't fire a second concurrent AI call for the same
+  // batch.
+  useEffect(() => {
+    if (!session || session.phase !== 'study-paragraph') return;
+    const index = session.paragraphExerciseIndex ?? 0;
+    if (session.paragraphExercises?.[index]) {
+      setParagraphStatus('ready');
+      return;
+    }
+    if (paragraphStatus === 'loading') return;
+    const batches = buildParagraphBatches(wordsById(session.studyWordIds));
+    const batch = batches[index];
+    if (!batch) return;
+    setParagraphStatus('loading');
+    const settings = getSettings();
+    generateParagraphExercise(
+      settings.level,
+      batch.map(w => ({ de: w.de, article: w.article, plural: w.plural, type: w.type, thirdPerson: w.thirdPerson, pastTense: w.pastTense, perfectTense: w.perfectTense })),
+      sharedCategoryHint(batch),
+    )
+      .then(({ paragraph, answers }) => {
+        const parsed = parseParagraphResponse(paragraph, answers, batch);
+        if (!parsed) { setParagraphStatus('error'); return; }
+        const current = getDailySession();
+        if (!current) return;
+        persistSession({ ...current, paragraphExercises: { ...current.paragraphExercises, [index]: parsed } });
+        setParagraphStatus('ready');
+      })
+      .catch(e => {
+        if (e instanceof AIUnreachableError) { setParagraphStatus('unreachable'); return; }
+        setParagraphStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.phase, session?.paragraphExerciseIndex]);
 
   // The report card's (review's results screen) own "Continue" button —
   // review runs first in the day, so this is what takes the learner onward
@@ -2524,6 +2594,85 @@ export default function DailySessionFlow() {
             })}
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (session.phase === 'study-paragraph-offer') {
+    const batches = buildParagraphBatches(wordsById(session.studyWordIds));
+    const totalWords = batches.flat().length;
+    return (
+      <div className="text-center py-16">
+        <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+          Bonus: Build a story! 📖
+        </h2>
+        <p className="text-amber-100/80 mb-6 max-w-xs mx-auto">
+          We'll write {batches.length > 1 ? `${batches.length} short German paragraphs` : 'a short German paragraph'} using
+          {' '}{totalWords} of today's new words. Tap each word into the blank where it belongs.
+        </p>
+        <div className="flex flex-col items-center gap-3">
+          <button
+            onClick={handleStartParagraph}
+            className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+          >
+            Let's do it →
+          </button>
+          <button onClick={handleSkipParagraph} className="text-amber-200 underline text-sm">
+            Skip for today
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (session.phase === 'study-paragraph') {
+    const batches = buildParagraphBatches(wordsById(session.studyWordIds));
+    const index = session.paragraphExerciseIndex ?? 0;
+    const batch = batches[index];
+    // Shouldn't happen (offer screen already confirmed batches.length > 0,
+    // and handleParagraphComplete stops advancing once the index runs out)
+    // -- defensive fallback straight past the whole bonus rather than a
+    // blank screen if it somehow does.
+    if (!batch) { handleSkipParagraph(); return null; }
+
+    if (paragraphStatus === 'idle' || paragraphStatus === 'loading') {
+      return (
+        <div className="text-center py-16">
+          <p className="text-amber-100/80 text-sm">Writing your story…</p>
+        </div>
+      );
+    }
+    if (paragraphStatus !== 'ready' || !session.paragraphExercises?.[index]) {
+      return (
+        <div className="text-center py-16 flex flex-col items-center gap-4">
+          <p className="text-amber-100/80 text-sm max-w-xs mx-auto">
+            {paragraphStatus === 'limit-reached'
+              ? "You've used up today's AI bonus stories — come back tomorrow!"
+              : "Couldn't put today's story together right now."}
+          </p>
+          <button
+            onClick={handleSkipParagraph}
+            className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+          >
+            Continue →
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        {batches.length > 1 && (
+          <div className="text-center text-amber-100/70 text-xs font-semibold uppercase tracking-wide mb-3">
+            Story {index + 1} of {batches.length}
+          </div>
+        )}
+        <ParagraphExerciseCard
+          key={index}
+          exercise={session.paragraphExercises[index]}
+          words={batch}
+          onComplete={handleParagraphComplete}
+        />
       </div>
     );
   }

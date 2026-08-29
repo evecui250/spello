@@ -4,7 +4,7 @@ import { WORDS, Word, wordsForLevel, Level, glossFor } from './words';
 import {
   getAllProgress, getSettings, today, Round, WordProgress, MascotStageId,
   getDailySession, saveDailySession, SessionPhase, getWordProgress, saveWordProgress,
-  getMergedProgressAcrossLevels,
+  getMergedProgressAcrossLevels, ParagraphBlank, ParagraphExercise,
 } from './storage';
 import { recordMilestonePass, REVIEW_PLAN, MASTERY_DAYS_AFTER_INTRODUCTION } from './srs';
 
@@ -955,4 +955,66 @@ export function buildMatchingPages(wordIds: string[]): string[][] {
     }
   }
   return pages;
+}
+
+// The end-of-introduction bonus: an AI-written German paragraph using every
+// word in a batch (see buildParagraphBatches), each blanked out and dragged
+// back in by meaning — see generate-paragraph's own comment for the full
+// generation contract. Optional/skippable, never touches mastery/growth
+// scoring, same reinforcement-only status as the matching-quiz recap.
+export const MIN_PARAGRAPH_WORDS = 3;
+export const MAX_PARAGRAPH_WORDS = 5;
+
+// Splits a day's newly-introduced words into paragraph-sized batches: at
+// most MAX_PARAGRAPH_WORDS each (a paragraph naturally sized for a
+// learner's level starts feeling stuffed well before 6+ blanks — see the
+// per-level word-count caps in generate-paragraph), any remainder batch
+// under MIN_PARAGRAPH_WORDS dropped entirely rather than forced into its
+// own too-thin paragraph. A 5-word day is one exercise; a 6-word day is a
+// 5 + a dropped leftover 1 (not a strained 6-blank paragraph, not a padded
+// second exercise); an 8-word day is 5 + 3.
+export function buildParagraphBatches(words: Word[]): Word[][] {
+  const batches: Word[][] = [];
+  for (let i = 0; i < words.length; i += MAX_PARAGRAPH_WORDS) {
+    batches.push(words.slice(i, i + MAX_PARAGRAPH_WORDS));
+  }
+  return batches.filter(b => b.length >= MIN_PARAGRAPH_WORDS);
+}
+
+// If every word in a batch shares the same corpus `category`, surfaced as a
+// hint the AI is encouraged (not required) to build its scene around —
+// most batches won't have this (only ~28% of the corpus has a category
+// tagged at all), so the generator has to be robust to a themeless mix
+// anyway; this just makes the easy case easier when it happens to line up.
+export function sharedCategoryHint(words: Word[]): string | undefined {
+  const first = words[0]?.category;
+  if (!first) return undefined;
+  return words.every(w => w.category === first) ? first : undefined;
+}
+
+// Parses generate-paragraph's raw `{paragraph, answers}` response (see that
+// function's own comment) into the segments/blanks shape the UI wants, and
+// validates it's actually usable: exactly one `[[i]]` placeholder per word,
+// no duplicates, no gaps. Returns null on anything malformed rather than
+// throwing -- a bad AI response should read as "couldn't build today's
+// story" (skippable, see DailySessionFlow), not crash the session.
+export function parseParagraphResponse(paragraph: string, answers: string[], words: Word[]): ParagraphExercise | null {
+  if (!paragraph || !Array.isArray(answers) || answers.length !== words.length) return null;
+  const placeholder = /\[\[(\d+)\]\]/g;
+  const seen = new Set<number>();
+  const segments: string[] = [];
+  const blanks: ParagraphBlank[] = [];
+  let lastEnd = 0;
+  let match: RegExpExecArray | null;
+  while ((match = placeholder.exec(paragraph))) {
+    const idx = Number(match[1]);
+    if (idx < 0 || idx >= words.length || seen.has(idx)) return null;
+    seen.add(idx);
+    segments.push(paragraph.slice(lastEnd, match.index));
+    blanks.push({ wordId: words[idx].id, answer: answers[idx] });
+    lastEnd = match.index + match[0].length;
+  }
+  segments.push(paragraph.slice(lastEnd));
+  if (seen.size !== words.length) return null;
+  return { segments, blanks, tray: shuffled(answers) };
 }

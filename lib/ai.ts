@@ -204,6 +204,39 @@ export async function explainCorrection(
   return { points, spelling };
 }
 
+export interface GeneratedParagraph {
+  paragraph: string; // contains [[0]], [[1]], ... placeholders -- see lib/practice.ts's parseParagraphResponse
+  answers: string[]; // answers[i] is the correct inflected form for placeholder [[i]]
+}
+
+export interface ParagraphWordInput {
+  de: string;
+  article?: string;
+  plural?: string;
+  type: string;
+  thirdPerson?: string;
+  pastTense?: string;
+  perfectTense?: string;
+}
+
+// Generates the bonus end-of-introduction cloze paragraph (see
+// generate-paragraph's own comment for the full contract) for a batch of
+// 3-5 of today's newly-introduced words. Same daily-cap/unreachable
+// handling as every other AI call here -- callers should catch
+// DailyLimitReachedError/AIUnreachableError and let the learner skip
+// today's story rather than block the rest of the session on it.
+export async function generateParagraphExercise(
+  level: string,
+  words: ParagraphWordInput[],
+  themeHint?: string,
+): Promise<GeneratedParagraph> {
+  const { data, error } = await invokeWithTimeout<{ paragraph?: string; answers?: string[]; limitReached?: boolean }>('generate-paragraph', { level, words, themeHint });
+  if (error) rethrow(error);
+  if (data?.limitReached) throw new DailyLimitReachedError();
+  if (!data?.paragraph || !Array.isArray(data.answers)) throw new Error('Malformed AI response');
+  return { paragraph: data.paragraph, answers: data.answers };
+}
+
 export interface WordGloss {
   lemma: string;
   gloss: string;

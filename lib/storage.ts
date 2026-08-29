@@ -992,6 +992,15 @@ export type SessionPhase =
   // reversed checkpoint now completes introduction.
   | 'review-mcq' | 'review-mcq-reversed' | 'review-rounds' | 'review-matching'
   | 'report'
+  // The bonus end-of-introduction cloze-paragraph exercise (see
+  // buildParagraphBatches/ParagraphExercise in lib/practice.ts) -- reached
+  // straight from study-done's Continue button, only when today's batch has
+  // enough newly-introduced words for at least one paragraph.
+  // study-paragraph-offer is the "do it or skip" choice; study-paragraph is
+  // the exercise(s) themselves (one or two, depending on batch size),
+  // cycling via paragraphExerciseIndex below. Either path lands on
+  // 'congrats' next, same as when there's nothing to offer at all.
+  | 'study-paragraph-offer' | 'study-paragraph'
   | 'congrats'
   // The bonus Word Match round after the congrats card, once per day, only
   // reached when there are enough learned words to fill it (see
@@ -1000,6 +1009,26 @@ export type SessionPhase =
   // when the word count gate isn't met yet.
   | 'play'
   | 'done';
+
+// A single blank in the bonus paragraph exercise -- see ParagraphExercise.
+export interface ParagraphBlank {
+  wordId: string;
+  answer: string; // exact inflected form the learner must drop here
+}
+
+// The bonus end-of-introduction cloze paragraph, already parsed from
+// generate-paragraph's raw AI response (see lib/practice.ts's
+// parseParagraphResponse) into a shape the UI can render directly.
+export interface ParagraphExercise {
+  // Paragraph split around its blanks -- segments.length is always
+  // blanks.length + 1 (text before the first blank, between each pair, and
+  // after the last), so the UI can render segments[0], blank 0,
+  // segments[1], blank 1, ... without re-parsing anything.
+  segments: string[];
+  blanks: ParagraphBlank[];
+  // blanks' answers, shuffled -- what the learner actually drags from.
+  tray: string[];
+}
 
 export interface DailySession {
   date: string;
@@ -1084,6 +1113,17 @@ export interface DailySession {
   // persisted before this field existed) falls back to studyWordIds
   // wholesale — the previous, imperfect behavior — rather than crashing.
   studyRound1NeededIds?: string[];
+  // Which paragraph batch (see buildParagraphBatches -- a 6+ word day
+  // splits into more than one) is currently showing during
+  // 'study-paragraph'. paragraphExercises caches each batch's AI-generated
+  // result, keyed by index as a string (plain JSON object keys are always
+  // strings), so leaving mid-story and coming back doesn't burn another AI
+  // call regenerating the same paragraph. Deliberately NOT persisting the
+  // learner's in-progress drag placements themselves -- this is a
+  // skippable, unscored bonus, so a refresh mid-drag just restarts that one
+  // paragraph rather than needing full resume fidelity.
+  paragraphExerciseIndex?: number;
+  paragraphExercises?: Record<string, ParagraphExercise>;
   earnedPuppies: number;
   earnedUpgrades: Partial<Record<MascotStageId, number>>;
   isExtra: boolean; // true for a "Study more"/"Review more" bonus round, so
