@@ -187,6 +187,20 @@ export default function WordsPage() {
   // state above it.
   const [lookupStatus, setLookupStatus] = useState<'idle' | 'loading' | 'not-found' | 'error' | 'limit-reached' | 'unreachable'>('idle');
   const [lookupResult, setLookupResult] = useState<LookupWordResult | null>(null);
+  // Generated the moment a lookup succeeds (not a shared placeholder) --
+  // real bug caught live: a fixed "custom-preview" id for every lookup
+  // meant tapping the preview's speaker on ONE word, then previewing a
+  // DIFFERENT word and tapping again, would incorrectly inherit the
+  // first word's cached audio (fixed by blocking generation for previews
+  // entirely) -- but that just traded one bug for a worse regression: the
+  // preview's speaker became permanently unable to ever get real audio,
+  // stuck on the same flaky browser fallback on every single tap (exactly
+  // what further reports kept catching). A real, unique id per lookup
+  // fixes the actual problem instead: generation is safe again (nothing
+  // to collide with), and handleAddWord below reuses this same id rather
+  // than minting a second one, so a preview that already got its audio
+  // generated doesn't need to regenerate it after adding.
+  const [lookupResultId, setLookupResultId] = useState<string | null>(null);
   // Which word's "Needs practice" redo modal is open, if any — see
   // MistakeRedoCard.
   const [redoWord, setRedoWord] = useState<Word | null>(null);
@@ -275,10 +289,12 @@ export default function WordsPage() {
     if (!term) return;
     setLookupStatus('loading');
     setLookupResult(null);
+    setLookupResultId(null);
     lookupWord(term, addTargetLevel)
       .then(result => {
         if (!result) { setLookupStatus('not-found'); return; }
         setLookupResult(result);
+        setLookupResultId(newCustomWordId());
         setLookupStatus('idle');
       })
       .catch(e => {
@@ -288,10 +304,16 @@ export default function WordsPage() {
   }
 
   function handleAddWord(result: LookupWordResult) {
-    const word: Word = { ...result, id: newCustomWordId(), level: addTargetLevel };
+    // Reuses the id already minted for the preview (see lookupResultId's
+    // own comment) rather than generating a fresh one -- if the learner
+    // already tapped the preview's speaker, this is the SAME id that
+    // audio was cached under, so it's picked up immediately with no
+    // second generation call needed.
+    const word: Word = { ...result, id: lookupResultId ?? newCustomWordId(), level: addTargetLevel };
     addCustomWord(word);
     setCustomWordsVersion(v => v + 1);
     setLookupResult(null);
+    setLookupResultId(null);
     setLookupStatus('idle');
     setSearch('');
     scheduleSync();
@@ -299,9 +321,12 @@ export default function WordsPage() {
     // via the browser-TTS fallback (see lib/speech.ts) the moment it's
     // added regardless of how this turns out; this just upgrades it to a
     // real cached clip a few seconds later, same voice as the curated
-    // corpus, once it's ready. A failure here (network hiccup, daily cap)
-    // silently leaves that fallback as the permanent behavior for this
-    // word — never surfaced as an error, since nothing actually broke.
+    // corpus, once it's ready (or is already there, if the preview's own
+    // speaker already generated it -- generateWordAudio upserts, so
+    // calling it again here is harmless either way). A failure here
+    // (network hiccup, daily cap) silently leaves the browser-TTS
+    // fallback as the permanent behavior for this word — never surfaced
+    // as an error, since nothing actually broke.
     generateWordAudio(word.id, spokenForm(word));
   }
 
@@ -395,7 +420,7 @@ export default function WordsPage() {
         type="search"
         placeholder="Search German or English…"
         value={search}
-        onChange={e => { setSearch(e.target.value); setLookupStatus('idle'); setLookupResult(null); }}
+        onChange={e => { setSearch(e.target.value); setLookupStatus('idle'); setLookupResult(null); setLookupResultId(null); }}
         className="bg-amber-50/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-4 py-2 text-stone-800 placeholder:text-stone-500 focus:outline-none focus:border-amber-300"
       />
 
@@ -478,22 +503,16 @@ export default function WordsPage() {
               )}
             </>
           )}
-          {lookupResult && (
+          {lookupResult && lookupResultId && (
             <>
-              {/* A "custom-" prefixed placeholder id (never actually
-                  persisted unless Add is pressed -- handleAddWord below
-                  generates its own real one) rather than an arbitrary
-                  string: WordInfoPanel's own "My word" vs "from LEVEL"
-                  badge keys off isCustomWordId, and a real lookup preview
-                  should read the same way the saved word actually will.
-                  isPreview also blocks its speaker button from generating
-                  real audio under this shared placeholder id -- a real
-                  bug caught live: a LATER, different preview reusing the
-                  same id would otherwise inherit whatever word's clip got
-                  generated first. */}
+              {/* A real, unique "custom-" id (see lookupResultId's own
+                  comment) rather than a shared placeholder -- generating
+                  real audio for the preview is safe now (nothing to
+                  collide with), and WordInfoPanel's own "My word" vs
+                  "from LEVEL" badge reads correctly since it's already a
+                  genuine custom id. handleAddWord reuses this exact id. */}
               <WordInfoPanel
-                word={{ ...lookupResult, id: 'custom-preview', level: addTargetLevel }}
-                isPreview
+                word={{ ...lookupResult, id: lookupResultId, level: addTargetLevel }}
               />
               <div className="flex gap-2">
                 <button
@@ -503,7 +522,7 @@ export default function WordsPage() {
                   Add to my words
                 </button>
                 <button
-                  onClick={() => { setLookupResult(null); setLookupStatus('idle'); }}
+                  onClick={() => { setLookupResult(null); setLookupResultId(null); setLookupStatus('idle'); }}
                   className="text-stone-500 text-sm px-3 py-2"
                 >
                   Cancel
