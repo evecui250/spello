@@ -581,7 +581,20 @@ function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): Wo
     lastReviewedAt: p?.lastReviewedAt ?? p?.lastPracticed,
     nextReviewDue,
     mascotStage,
-    exampleSentence: p?.exampleSentence,
+    // Migration: exampleSentence and lastMistake are meant to be mutually
+    // exclusive (see lastMistake's own comment) — a word either shows its
+    // real, earned corrected sentence, or stays hidden behind a redo,
+    // never both. A record can carry BOTH here if it was written before
+    // DailySessionFlow's onCorrected was fixed to only set exampleSentence
+    // on a genuinely perfect attempt (it used to set it unconditionally,
+    // even on a wrong first attempt) — a real report caught exactly this:
+    // the Word List's "Practiced sentences" view was still revealing an
+    // old, stale exampleSentence for a word that ALSO had a lastMistake,
+    // leaking the answer before a redo. lastMistake (the more recent,
+    // more authoritative signal — it's only ever set going forward by the
+    // fixed code) wins on read, same one-time self-healing spirit as the
+    // round-3 migration below.
+    exampleSentence: p?.lastMistake ? undefined : p?.exampleSentence,
     lastMistake: p?.lastMistake,
   };
 }
