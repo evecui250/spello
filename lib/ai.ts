@@ -267,6 +267,23 @@ export async function lookupWord(term: string, level: string): Promise<LookupWor
   return data.word;
 }
 
+// Generates and caches a real pronunciation clip for a just-added custom
+// word (see app/words/page.tsx's handleAddWord and generate-word-audio's
+// own comment for the full rationale) — fire-and-forget by design, never
+// awaited in a way that blocks the add itself. Returns false (not a
+// throw) on any failure, including the daily cap, since callers here
+// treat this as a pure best-effort enhancement: the browser-TTS fallback
+// (see lib/speech.ts) already makes the word fully usable regardless.
+export async function generateWordAudio(id: string, spokenForm: string): Promise<boolean> {
+  try {
+    const { data, error } = await invokeWithTimeout<{ ok?: boolean; limitReached?: boolean }>('generate-word-audio', { id, spokenForm });
+    if (error || !data?.ok) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export interface WordGloss {
   lemma: string;
   gloss: string;

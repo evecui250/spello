@@ -10,8 +10,9 @@ import {
 import { daysBetween } from '../../lib/srs';
 import { imageUrlForWord } from '../../lib/wordImage';
 import { WORDS_WITH_IMAGES } from '../../lib/wordImageManifest';
-import { lookupWord, LookupWordResult, DailyLimitReachedError, AIUnreachableError } from '../../lib/ai';
+import { lookupWord, LookupWordResult, DailyLimitReachedError, AIUnreachableError, generateWordAudio } from '../../lib/ai';
 import { scheduleSync } from '../../lib/sync';
+import { spokenForm } from '../../lib/speech';
 import SpeakerButton from '../../components/SpeakerButton';
 import DachshundMascot from '../../components/Mascot';
 import WordInfoPanel from '../../components/WordInfoPanel';
@@ -270,12 +271,21 @@ export default function WordsPage() {
   }
 
   function handleAddWord(result: LookupWordResult) {
-    addCustomWord({ ...result, id: newCustomWordId(), level: addTargetLevel });
+    const word: Word = { ...result, id: newCustomWordId(), level: addTargetLevel };
+    addCustomWord(word);
     setCustomWordsVersion(v => v + 1);
     setLookupResult(null);
     setLookupStatus('idle');
     setSearch('');
     scheduleSync();
+    // Fire-and-forget, deliberately not awaited — the word is fully usable
+    // via the browser-TTS fallback (see lib/speech.ts) the moment it's
+    // added regardless of how this turns out; this just upgrades it to a
+    // real cached clip a few seconds later, same voice as the curated
+    // corpus, once it's ready. A failure here (network hiccup, daily cap)
+    // silently leaves that fallback as the permanent behavior for this
+    // word — never surfaced as an error, since nothing actually broke.
+    generateWordAudio(word.id, spokenForm(word));
   }
 
   function handleRemoveWord(w: Word) {

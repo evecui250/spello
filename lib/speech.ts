@@ -1,8 +1,8 @@
 'use client';
 
 import { Word } from './words';
-import { supabase } from './supabase';
-import { getSettings } from './storage';
+import { supabase, SUPABASE_URL } from './supabase';
+import { getSettings, isCustomWordId } from './storage';
 
 // Nouns are spoken with their article (e.g. "der Tisch") so the learner
 // hears the gender along with the word, not just the bare noun.
@@ -11,8 +11,20 @@ export function spokenForm(word: Word): string {
 }
 
 // Pre-generated recordings (one consistent Standard German voice for every
-// word, every device) live under /public/audio, named by word id.
+// word, every device) live under /public/audio, named by word id -- baked
+// into the app bundle at build time via an offline batch script, which
+// can't apply to a word a learner adds at runtime. A custom word's clip
+// (see generate-word-audio's own comment) instead lives in a real Supabase
+// Storage bucket, uploaded once right when the word is added — this simply
+// points at wherever the file WOULD be; if generation hasn't finished (or
+// was never attempted, or failed) yet, that URL 404s and speakWordOnce's
+// existing fallback chain takes over exactly as it already does for a
+// missing/broken corpus file, so this never needs its own separate
+// "is the audio ready" check.
 export function audioUrlForWord(word: Word): string {
+  if (isCustomWordId(word.id)) {
+    return `${SUPABASE_URL}/storage/v1/object/public/custom-word-audio/${word.id}.mp3`;
+  }
   return `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/audio/${word.id}.mp3`;
 }
 
