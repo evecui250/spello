@@ -14,20 +14,29 @@ interface Props {
   isReview?: boolean;
 }
 
-// The reverse of TranslationChoiceCard: the GERMAN word is shown (with its
-// article, and a speaker button — hearing it pronounced while picking its
-// meaning is the whole point of testing this direction at all), and the
-// learner picks its MEANING from 4 choices (see lib/practice.ts's
-// buildReverseMcqChoices for how those are picked). Deliberately different
-// eyebrow copy from TranslationChoiceCard ("What does this word mean?" vs
-// "Which German word means this?") rather than reusing the same phrase for
-// both directions — two near-identical 4-choice screens are easy to answer
-// on autopilot without registering which direction is actually being
-// tested; distinct framing keeps that a conscious choice each time.
+// The reverse of TranslationChoiceCard: the learner picks the MEANING of a
+// German word from 4 choices (see lib/practice.ts's buildReverseMcqChoices
+// for how those are picked). Audio-first (owner call): the word itself
+// stays HIDDEN and is only spoken aloud, not shown as text, until either
+// the learner answers or explicitly asks to see it instead — listening
+// comprehension is the actual point of this direction, and showing the
+// written word alongside defeats that the same way subtitles undercut
+// listening practice. Deliberately different eyebrow copy from
+// TranslationChoiceCard ("What does this word mean?" vs "Which German
+// word means this?") rather than reusing the same phrase for both
+// directions — two near-identical 4-choice screens are easy to answer on
+// autopilot without registering which direction is actually being tested;
+// distinct framing keeps that a conscious choice each time.
 // Reinforcement only, same as TranslationChoiceCard: never touches
 // mastery/growth scoring or nextReviewDue on its own.
 export default function WordMeaningChoiceCard({ word, correct: correctChoice, choices, onAnswer, isReview }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
+  // The learner's own escape hatch for "I can't listen right now" (no
+  // headphones, a noisy room, sound off) — falls back to exactly the old
+  // show-the-word behavior. Reset alongside `selected` on a fresh question,
+  // not remembered across words — someone who taps it once for a single
+  // noisy moment shouldn't have every later word revealed by default too.
+  const [wordRevealed, setWordRevealed] = useState(false);
 
   // Same reset-on-fresh-question guard as TranslationChoiceCard's own
   // effect — see its comment for why `choices` (always freshly shuffled,
@@ -35,6 +44,16 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
   // `word.id` alone.
   useEffect(() => {
     setSelected(null);
+    setWordRevealed(false);
+  }, [choices]);
+
+  // Plays the word once a fresh question is actually on screen — this is
+  // the ONLY way the learner encounters the word before answering (no
+  // written form shown), so unlike SpeakerButton elsewhere this isn't an
+  // optional nicety, it's the question itself.
+  useEffect(() => {
+    speakWord(word);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [choices]);
 
   const handlePick = (choice: string) => {
@@ -43,6 +62,10 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
   };
 
   const correct = selected !== null && selected === correctChoice;
+  // Revealed once answered regardless — confirming what was actually
+  // just heard (and, on a miss, what it should have been) matters more
+  // once the question is already settled than keeping it hidden does.
+  const showWord = wordRevealed || selected !== null;
 
   useEffect(() => {
     if (selected === null) return;
@@ -73,12 +96,31 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
             </span>
           )}
         </div>
-        <div className="text-center">
-          <span className="text-2xl font-semibold text-slate-700">
-            {spokenForm(word)}
-            <SpeakerButton word={word} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
-          </span>
-        </div>
+        {showWord ? (
+          <div className="text-center">
+            <span className="text-2xl font-semibold text-slate-700">
+              {spokenForm(word)}
+              <SpeakerButton word={word} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2">
+            <button
+              onClick={() => speakWord(word)}
+              aria-label="Play the word again"
+              className="w-16 h-16 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-3xl hover:bg-indigo-200 active:scale-95 transition-all"
+            >
+              🔊
+            </button>
+            <span className="text-xs text-slate-400">Tap to hear it again</span>
+            <button
+              onClick={() => setWordRevealed(true)}
+              className="text-xs text-indigo-500 underline mt-1"
+            >
+              Can't listen right now? Show the word
+            </button>
+          </div>
+        )}
         <div className="flex flex-col gap-2">
           {choices.map(choice => {
             const isCorrectChoice = choice === correctChoice;

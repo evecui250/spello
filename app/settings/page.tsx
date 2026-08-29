@@ -405,9 +405,8 @@ export default function SettingsPage() {
         <div className="flex items-center justify-between">
           <div>
             <label className="block font-semibold text-stone-800">
-              Say each word
+              Audio repetition
             </label>
-            <p className="text-stone-500 text-sm">Hear it repeated automatically, for tricky words.</p>
           </div>
           <select
             value={wordRepeatCount}

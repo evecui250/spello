@@ -491,6 +491,51 @@ function backWeakSuffixLen(word: Word): number | null {
   return null;
 }
 
+// A cheap, well-distributed-enough string hash (FNV-1a) -- not for
+// anything security-sensitive, just needs to be STABLE across renders/
+// reloads for the same word, which a real Math.random() seed can't be.
+function hashString(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+// A tiny deterministic PRNG seeded from that hash -- the same word always
+// produces the same shuffle, so recomputing this (switching tabs and
+// back, any other re-render) always reproduces the exact same reveal
+// instead of a fresh draw that reads as a different card each time.
+function seededRandom(seed: number): () => number {
+  let s = seed || 1;
+  return () => {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    return s / 0x7fffffff;
+  };
+}
+
+// Reveals `revealCount` letters scattered across the word instead of a
+// contiguous front-or-back chunk -- used only when no confident morpheme
+// boundary was found at all (see generateHint's own comment on why a
+// contiguous fallback routinely left nothing but a generic grammatical
+// ending to type). The first letter is always one of the revealed ones,
+// same anchor guarantee the old contiguous fallback gave for free by
+// always starting from position 0.
+function scatteredReveal(word: string, letterIndices: number[], revealCount: number): Set<number> {
+  if (letterIndices.length === 0) return new Set();
+  const anchor = letterIndices[0];
+  const rest = [...letterIndices.slice(1)];
+  const rand = seededRandom(hashString(word));
+  for (let i = rest.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [rest[i], rest[j]] = [rest[j], rest[i]];
+  }
+  const revealed = new Set(rest.slice(0, Math.max(0, revealCount - 1)));
+  revealed.add(anchor);
+  return revealed;
+}
+
 // How many of a word's LETTERS (not raw characters) fall inside a
 // `morphemeLen`-character chunk at the given end.
 function revealCountFor(morphemeLen: number, fromEnd: boolean, letterIndices: number[], n: number): number {
@@ -584,15 +629,26 @@ export function generateHint(word: Word, round: Round): boolean[] {
       if (frontLen !== null) picked = { morphemeLen: frontLen, fromEnd: false };
     }
 
-    const revealCount = picked !== null
-      ? revealCountFor(picked.morphemeLen, picked.fromEnd, letterIndices, n)
-      : Math.max(1, Math.round(letterIndices.length / 2));
-    const fromEnd = picked?.fromEnd ?? false;
-    const revealed = new Set(
-      fromEnd
-        ? (revealCount > 0 ? letterIndices.slice(-revealCount) : [])
-        : letterIndices.slice(0, revealCount),
-    );
+    let revealed: Set<number>;
+    if (picked !== null) {
+      const revealCount = revealCountFor(picked.morphemeLen, picked.fromEnd, letterIndices, n);
+      revealed = new Set(
+        picked.fromEnd
+          ? (revealCount > 0 ? letterIndices.slice(-revealCount) : [])
+          : letterIndices.slice(0, revealCount),
+      );
+    } else {
+      // No confident morpheme boundary anywhere in the word (mostly
+      // verbs/adjectives/adverbs, which never get a noun's compound-tail
+      // treatment) -- a real audit found the OLD plain front-half reveal
+      // routinely left nothing but the grammatical ending to actually
+      // type ("kümmern" -> "kümm___", "möchten" -> "möch___",
+      // "trocken" -> "troc___"), which tests recall of a generic suffix
+      // dozens of other words share, not the word itself. Scattering
+      // which half is revealed instead of always the front forces
+      // recall of the word as a whole.
+      revealed = scatteredReveal(word.de, letterIndices, Math.max(1, Math.round(letterIndices.length / 2)));
+    }
     base = Array.from({ length: n }, (_, i) => !revealed.has(i));
   }
 
