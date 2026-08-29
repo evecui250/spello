@@ -273,7 +273,13 @@ async function generateOnce(
             'requirement). It must be a coherent, natural, meaningful everyday scene -- never a ' +
             'string of sentences stitched together just to fit the words in. Keep the tone warm, ' +
             'wholesome and appropriate for all ages: no violence, death, danger, illness, conflict, ' +
-            'or anything upsetting or controversial. ' +
+            'or anything upsetting or controversial. Make it a plain, made-up, generic everyday ' +
+            'scene (a family, friends, a normal day, a hobby, a trip) -- NOT tied to any real event. ' +
+            'Never mention politics, religion, or any other sensitive/divisive topic. Never name a ' +
+            'real person, company, brand, or organization -- use invented or generic names only ' +
+            '(e.g. "Anna", "Herr Schmidt", "das Café", never a real celebrity, politician, or ' +
+            'company). Never state or imply any historical fact, date, or claim -- nothing depends ' +
+            'on getting real-world facts right, so simply don\'t reference real history at all. ' +
             (themeHint ? `If it fits naturally, build the scene around the theme "${themeHint}". ` : '') +
             `The paragraph must use EVERY ONE of these ${count} words exactly once, each in its ` +
             'most natural inflected/conjugated form for its place in the sentence (nouns may need ' +

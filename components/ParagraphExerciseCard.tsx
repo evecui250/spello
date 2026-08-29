@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
-import { Word, glossFor } from '../lib/words';
+import { useEffect, useMemo, useState } from 'react';
+import { Word, glossFor, resolveClickedWord, tokenize, isWordToken } from '../lib/words';
 import { ParagraphExercise } from '../lib/storage';
 import { getSettings } from '../lib/storage';
 import { playCorrectChime } from '../lib/sound';
+import { getSentenceGlosses, WordGloss } from '../lib/ai';
 import SpeakerButton from './SpeakerButton';
+import WordInfoPanel from './WordInfoPanel';
+import GlossPopup from './GlossPopup';
 
 interface Props {
   exercise: ParagraphExercise;
@@ -25,12 +28,48 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
   const [blankTray, setBlankTray] = useState<(number | null)[]>(() => exercise.blanks.map(() => null));
   const [selectedTray, setSelectedTray] = useState<number | null>(null);
   const [checked, setChecked] = useState(false);
+  // Two separate "what's selected" slots, same split as SentenceExercise's
+  // own correction rendering: a real corpus match gets the rich
+  // WordInfoPanel (meaning, level/book, plural or verb forms, and the
+  // exact inflected form used here); anything else falls back to
+  // GlossPopup's lighter lemma+gloss-only card. Only one is ever non-null
+  // at a time.
+  const [selectedWord, setSelectedWord] = useState<{ word: Word; usedForm?: string } | null>(null);
+  const [selectedGlossToken, setSelectedGlossToken] = useState<string | null>(null);
+  const [glosses, setGlosses] = useState<Record<string, WordGloss>>({});
 
-  const wordById = new Map(words.map(w => [w.id, w]));
+  const wordById = useMemo(() => new Map(words.map(w => [w.id, w])), [words]);
   const usedIndices = new Set(blankTray.filter((i): i is number => i !== null));
   const allFilled = blankTray.every(i => i !== null);
   const results = checked ? blankTray.map((trayIdx, blankIdx) => trayIdx !== null && exercise.tray[trayIdx] === exercise.blanks[blankIdx].answer) : null;
   const allCorrect = results?.every(Boolean) ?? false;
+
+  // The finished, CORRECT paragraph (blanks filled with their real
+  // answers, not whatever the learner has tentatively placed) -- used only
+  // to fetch a lemma+gloss map for the surrounding non-blank text, so
+  // every ordinary word the AI wrote (not just the batch's own 5 target
+  // words) is clickable too, same as a corrected sentence elsewhere in the
+  // app. Stable across re-renders since it depends only on the exercise
+  // itself, never on in-progress placement.
+  const fullCorrectText = useMemo(
+    () => exercise.segments.reduce((acc, seg, i) => acc + seg + (exercise.blanks[i]?.answer ?? ''), ''),
+    [exercise],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const settings = getSettings();
+    getSentenceGlosses(words[0]?.id ?? '', fullCorrectText, settings.level, settings.nativeLanguage, 'de-to-native')
+      .then(map => { if (!cancelled) setGlosses(map); })
+      .catch(() => {
+        // Best-effort, same as every other sentence-glosses caller --
+        // surrounding words just aren't clickable yet if this fails, the
+        // exercise itself (and each blank's own always-available corpus
+        // info) is unaffected.
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullCorrectText]);
 
   const handleTrayTap = (trayIdx: number) => {
     if (checked || usedIndices.has(trayIdx)) return;
@@ -38,7 +77,6 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
   };
 
   const handleBlankTap = (blankIdx: number) => {
-    if (checked) return;
     if (blankTray[blankIdx] !== null) {
       setBlankTray(arr => arr.map((v, i) => (i === blankIdx ? null : v)));
       return;
@@ -48,10 +86,59 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
     setSelectedTray(null);
   };
 
+  const handleBlankInfoTap = (blankIdx: number) => {
+    const w = wordById.get(exercise.blanks[blankIdx].wordId);
+    if (!w) return;
+    setSelectedGlossToken(null);
+    setSelectedWord(prev => (prev?.word.id === w.id ? null : { word: w, usedForm: exercise.blanks[blankIdx].answer }));
+  };
+
   const handleCheck = () => {
     setChecked(true);
     const correct = blankTray.every((trayIdx, blankIdx) => trayIdx !== null && exercise.tray[trayIdx] === exercise.blanks[blankIdx].answer);
     if (correct) playCorrectChime();
+  };
+
+  // Renders one segment of surrounding (non-blank) paragraph text as
+  // clickable word tokens -- same resolveClickedWord-then-gloss-fallback
+  // chain as SentenceExercise's own corrected-sentence rendering, minus
+  // the separable-prefix repair heuristic (unnecessary here: separable
+  // verbs are always forced into perfect tense server-side, so a prefix
+  // can never legitimately turn up split across the text -- see
+  // generate-paragraph's own comment). No targetWordDe is passed for the
+  // same reason.
+  const renderSegment = (segment: string, key: string) => {
+    const lemmaMap = Object.fromEntries(Object.entries(glosses).map(([k, v]) => [k, v.lemma]));
+    return tokenize(segment).map((text, i) => {
+      if (!isWordToken(text)) return <span key={`${key}-${i}`}>{text}</span>;
+      const match = resolveClickedWord(text, lemmaMap);
+      const gloss = !match ? glosses[text] : undefined;
+      if (match) {
+        return (
+          <button
+            key={`${key}-${i}`}
+            type="button"
+            onClick={() => { setSelectedGlossToken(null); setSelectedWord(prev => (prev?.word.id === match.id ? null : { word: match })); }}
+            className="hover:bg-indigo-100 rounded px-0.5 -mx-0.5 transition-colors"
+          >
+            {text}
+          </button>
+        );
+      }
+      if (gloss) {
+        return (
+          <button
+            key={`${key}-${i}`}
+            type="button"
+            onClick={() => { setSelectedWord(null); setSelectedGlossToken(prev => (prev === text ? null : text)); }}
+            className="hover:bg-indigo-100 rounded px-0.5 -mx-0.5 transition-colors"
+          >
+            {text}
+          </button>
+        );
+      }
+      return <span key={`${key}-${i}`}>{text}</span>;
+    });
   };
 
   return (
@@ -64,7 +151,7 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
         <div className="text-lg leading-relaxed text-slate-700">
           {exercise.segments.map((segment, i) => (
             <span key={i}>
-              {segment}
+              {renderSegment(segment, `s${i}`)}
               {i < exercise.blanks.length && (
                 <BlankSlot
                   filled={blankTray[i] !== null ? exercise.tray[blankTray[i] as number] : null}
@@ -72,12 +159,20 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
                   checked={checked}
                   correct={results ? results[i] : null}
                   correctAnswer={exercise.blanks[i].answer}
-                  onTap={() => handleBlankTap(i)}
+                  onTap={() => (checked ? handleBlankInfoTap(i) : handleBlankTap(i))}
                 />
               )}
             </span>
           ))}
         </div>
+
+        {(selectedWord || selectedGlossToken) && (
+          selectedWord
+            ? <WordInfoPanel key={selectedWord.word.id} word={selectedWord.word} usedForm={selectedWord.usedForm} />
+            : selectedGlossToken && glosses[selectedGlossToken] && (
+              <GlossPopup surfaceForm={selectedGlossToken} lemma={glosses[selectedGlossToken].lemma} gloss={glosses[selectedGlossToken].gloss} />
+            )
+        )}
 
         {!checked && (
           <div className="flex flex-wrap gap-2 justify-center pt-1 border-t border-amber-100/60">
@@ -156,7 +251,7 @@ function BlankSlot({
 }) {
   let cls = 'border-slate-300 bg-white/60 text-slate-400';
   if (checked) {
-    cls = correct ? 'border-green-400 bg-green-100 text-green-700' : 'border-red-400 bg-red-100 text-red-700';
+    cls = correct ? 'border-green-400 bg-green-100 text-green-700 hover:bg-green-200' : 'border-red-400 bg-red-100 text-red-700 hover:bg-red-200';
   } else if (filled !== null) {
     cls = 'border-indigo-400 bg-indigo-50 text-indigo-700';
   } else if (selectable) {
@@ -165,7 +260,6 @@ function BlankSlot({
   return (
     <button
       onClick={onTap}
-      disabled={checked}
       className={`inline-flex items-center justify-center mx-1 px-2 py-0.5 rounded-lg border-2 font-semibold align-baseline ${cls}`}
     >
       {checked ? correctAnswer : (filled ?? '____')}

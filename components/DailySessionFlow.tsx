@@ -17,7 +17,7 @@ import {
   hasEnoughWordsForGame, buildParagraphBatches, sharedCategoryHint, parseParagraphResponse,
 } from '../lib/practice';
 import { REVIEW_PLAN, recordMilestonePass } from '../lib/srs';
-import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks } from '../lib/words';
+import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks, tokenize, isWordToken } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
 import SpeakerButton from './SpeakerButton';
@@ -220,16 +220,6 @@ function splitOnTranslationForm(translation: string, word: Word, nativeLanguage:
     }
   }
   return null;
-}
-
-// Splits into alternating word / non-word (whitespace, punctuation) tokens,
-// covering German letters (umlauts, ß) as "word" characters.
-function tokenize(s: string): string[] {
-  return s.match(/[A-Za-zÀ-ÖØ-öø-ÿß']+|[^A-Za-zÀ-ÖØ-öø-ÿß']+/g) ?? [];
-}
-
-function isWordToken(t: string): boolean {
-  return /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(t);
 }
 
 // A render-ready span for the PROMPT sentence's Chinese path: same shape

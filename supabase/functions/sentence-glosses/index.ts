@@ -92,7 +92,11 @@ Deno.serve(async (req: Request) => {
     if (!wordId || !sentence) {
       return json({ error: 'Missing wordId or sentence' }, 400);
     }
-    if (sentence.length > 300) {
+    // Raised from 300 -- the bonus paragraph exercise (ParagraphExerciseCard)
+    // now also calls this, for a whole ~B2-length paragraph (up to ~100
+    // words) rather than one correction/prompt sentence, which stayed well
+    // under 300 anyway (bounded by generate-sentence's own WORD_RANGE).
+    if (sentence.length > 1200) {
       return json({ error: 'Sentence too long' }, 400);
     }
     const lang = nativeLanguage === 'zh' ? 'Chinese' : 'English';
@@ -135,7 +139,10 @@ Deno.serve(async (req: Request) => {
         response_format: { type: 'json_object' },
         messages: [{ role: 'system', content: promptText }],
         temperature: 0.2,
-        max_tokens: 500,
+        // Raised alongside the length cap above -- a full paragraph's worth
+        // of distinct content words needs more room than one sentence ever
+        // did.
+        max_tokens: 1500,
       }),
     });
 

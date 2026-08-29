@@ -3737,6 +3737,19 @@ export function resolveClickedWord(
   return (lemma ? findWordByLemma(lemma) : undefined) ?? findWordByGermanForm(token);
 }
 
+// Splits into alternating word / non-word (whitespace, punctuation) tokens,
+// covering German letters (umlauts, ß) as "word" characters. Shared by
+// every clickable-German-text renderer (SentenceExercise's correction, the
+// bonus paragraph exercise) — moved here rather than staying private to
+// DailySessionFlow so a second caller doesn't need its own copy.
+export function tokenize(s: string): string[] {
+  return s.match(/[A-Za-zÀ-ÖØ-öø-ÿß']+|[^A-Za-zÀ-ÖØ-öø-ÿß']+/g) ?? [];
+}
+
+export function isWordToken(t: string): boolean {
+  return /[A-Za-zÀ-ÖØ-öø-ÿß]/.test(t);
+}
+
 // --- Clickable words in the round-1 PROMPT sentence (the English/Chinese
 // sentence being translated FROM, not the German being translated TO) —
 // lets a learner tap an unfamiliar prompt word and see its German
