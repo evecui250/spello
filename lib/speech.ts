@@ -3,6 +3,20 @@
 import { Word } from './words';
 import { supabase, SUPABASE_URL } from './supabase';
 import { getSettings, isCustomWordId } from './storage';
+import { generateWordAudio } from './ai';
+
+// Real gap a report caught: a custom word added BEFORE generate-word-audio
+// existed (or whose original add-time generation attempt simply failed —
+// see app/words/page.tsx's handleAddWord, fire-and-forget there too) has
+// no real clip and never will, permanently stuck on the browser-TTS
+// fallback with all its known flakiness. Self-heals instead of needing a
+// separate backfill script: see speakWordOnce's fallback below, which
+// kicks off generation right when it discovers a custom word's clip isn't
+// there — this exact play still uses the fallback (the file can't be
+// ready in time), but the NEXT play of the same word picks up the real
+// clip once it lands. Throttled to once per word per page load so rapid
+// repeat taps on a persistently-failing word don't spam the API.
+const audioGenerationAttempted = new Set<string>();
 
 // Nouns are spoken with their article (e.g. "der Tisch") so the learner
 // hears the gender along with the word, not just the bare noun.
@@ -313,6 +327,10 @@ function speakWordOnce(word: Word, onEnded?: () => void, onFailure?: () => void)
     // must not trigger the (lower-quality, possibly wrong-accent) browser
     // TTS fallback. Only fall back if we're still the current audio.
     if (currentAudio !== audio) return;
+    if (isCustomWordId(word.id) && !audioGenerationAttempted.has(word.id)) {
+      audioGenerationAttempted.add(word.id);
+      generateWordAudio(word.id, spokenForm(word));
+    }
     speakWithBrowserVoice(spokenForm(word), false, null, onEnded, onFailure);
   };
   audio.addEventListener('error', fallback);
