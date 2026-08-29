@@ -1,7 +1,7 @@
 'use client';
 
 import { Word, glossFor } from '../lib/words';
-import { getSettings } from '../lib/storage';
+import { getSettings, isCustomWordId } from '../lib/storage';
 import SpeakerButton from './SpeakerButton';
 
 interface Props {
@@ -30,8 +30,15 @@ export default function WordInfoPanel({ word, usedForm }: Props) {
           {word.article ? `${word.article} ` : ''}{word.de}
           <SpeakerButton word={word} className="ml-1.5 align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-base" />
         </span>
-        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-stone-500 bg-stone-100 rounded-full px-2 py-0.5">
-          from {word.level.replace('_old', '')}
+        {/* A custom (AI-looked-up) word isn't actually FROM the curated
+            book it's filed under -- "from B2" there would misleadingly
+            claim it's part of the official B2 corpus, which is exactly
+            what a real report caught. isCustomWordId also covers the Word
+            List's own lookup PREVIEW (see app/words/page.tsx), which is
+            given a real "custom-" id before it's ever actually saved, for
+            precisely this reason. */}
+        <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 ${isCustomWordId(word.id) ? 'text-indigo-600 bg-indigo-100' : 'text-stone-500 bg-stone-100'}`}>
+          {isCustomWordId(word.id) ? 'My word' : `from ${word.level.replace('_old', '')}`}
         </span>
       </div>
       <div className="text-stone-600 text-sm">{glossFor(word, settings.nativeLanguage)}</div>

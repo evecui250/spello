@@ -1449,13 +1449,20 @@ export default function DailySessionFlow() {
       setSettings(next);
       scheduleSync();
     }
-    supabase.from('bug_reports').insert({
-      user_id: null,
-      email: null,
-      message: 'Auto-detected: could not reach the AI service (correct-sentence/generate-sentence timed out or failed at the network level, not just an API error). Sentence-writing mode was automatically turned off on this device.',
-      page_path: window.location.pathname,
-      user_agent: navigator.userAgent,
-    }).then(() => {}, () => {});
+    // Real gap a report caught (see lib/speech.ts's reportTtsError, which
+    // had the identical mistake): this always filed as "(signed out)" even
+    // for a genuinely signed-in learner, because it hardcoded user_id/email
+    // to null instead of reading the real session — unlike BugReportButton's
+    // manual flow, which does.
+    supabase.auth.getSession().then(({ data }) => {
+      supabase.from('bug_reports').insert({
+        user_id: data.session?.user.id ?? null,
+        email: data.session?.user.email ?? null,
+        message: 'Auto-detected: could not reach the AI service (correct-sentence/generate-sentence timed out or failed at the network level, not just an API error). Sentence-writing mode was automatically turned off on this device.',
+        page_path: window.location.pathname,
+        user_agent: navigator.userAgent,
+      }).then(() => {}, () => {});
+    }, () => {});
   }
 
   // Fetches a correct example sentence with no user attempt involved (see

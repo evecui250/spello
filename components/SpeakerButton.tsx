@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Word } from '../lib/words';
 import { speakWord } from '../lib/speech';
 import SpeakerIcon from './SpeakerIcon';
@@ -9,15 +10,39 @@ interface Props {
   className?: string;
 }
 
+// A real report caught this: tapping the button for a word with no
+// pre-recorded clip of its own (a learner-added custom word — see
+// lib/storage.ts's custom-words section) can silently fail if the
+// browser-TTS fallback it leans on every single time also doesn't cooperate
+// (a known, already-diagnosed speechSynthesis flake — see lib/speech.ts's
+// reportTtsError) — total silence, with nothing on screen telling the
+// learner whether their tap even registered. speakWord's onFailure now
+// fires exactly once when it's genuinely given up (not for a routine
+// supersession/page-hidden case, which isn't a failure at all), briefly
+// swapping the icon to a crossed-out speaker rather than leaving it a
+// total mystery.
+const FAILURE_DISPLAY_MS = 2000;
+
 export default function SpeakerButton({ word, className }: Props) {
+  const [failed, setFailed] = useState(false);
+
+  const handleClick = () => {
+    setFailed(false);
+    speakWord(word, () => {
+      setFailed(true);
+      setTimeout(() => setFailed(false), FAILURE_DISPLAY_MS);
+    });
+  };
+
   return (
     <button
       type="button"
-      onClick={() => speakWord(word)}
-      aria-label={`Play pronunciation of ${word.de}`}
-      className={className ?? 'text-indigo-400 hover:text-indigo-600 transition-colors'}
+      onClick={handleClick}
+      aria-label={failed ? `Couldn't play pronunciation of ${word.de} — tap to try again` : `Play pronunciation of ${word.de}`}
+      title={failed ? "Couldn't play — tap to try again" : undefined}
+      className={(className ?? 'text-indigo-400 hover:text-indigo-600 transition-colors') + (failed ? ' text-red-400' : '')}
     >
-      <SpeakerIcon />
+      <SpeakerIcon muted={failed} />
     </button>
   );
 }

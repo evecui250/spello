@@ -117,13 +117,20 @@ function reportTtsError(detail: string, voice?: SpeechSynthesisVoice | null): vo
     : 'voice=none';
   const diagnostics = `voices=${synth.getVoices().length}, speaking=${synth.speaking}, ` +
     `pending=${synth.pending}, paused=${synth.paused}, ${voiceInfo}`;
-  supabase.from('bug_reports').insert({
-    user_id: null,
-    email: null,
-    message: `Auto-detected: speechSynthesis error while speaking a sentence/word (${detail}). [${diagnostics}]`,
-    page_path: window.location.pathname,
-    user_agent: navigator.userAgent,
-  }).then(() => {}, () => {});
+  // Real gap a report caught: this always filed as "(signed out)" even
+  // for a genuinely signed-in learner, because it hardcoded user_id/email
+  // to null instead of reading the real session — unlike BugReportButton's
+  // manual flow, which does. Same fix as reportChimeError/
+  // handleAiUnreachable's own copies of this mistake.
+  supabase.auth.getSession().then(({ data }) => {
+    supabase.from('bug_reports').insert({
+      user_id: data.session?.user.id ?? null,
+      email: data.session?.user.email ?? null,
+      message: `Auto-detected: speechSynthesis error while speaking a sentence/word (${detail}). [${diagnostics}]`,
+      page_path: window.location.pathname,
+      user_agent: navigator.userAgent,
+    }).then(() => {}, () => {});
+  }, () => {});
 }
 
 // Bumped by every call that means "whatever was queued before no longer
@@ -158,6 +165,13 @@ function speakWithBrowserVoice(
   // this to know when it's safe to start the next repeat, on whichever
   // attempt (original or retry) actually ends up speaking.
   onEnd?: () => void,
+  // Fires exactly once, at whichever point this gives up for good (same
+  // two spots reportTtsError already fires from) — lets a caller show
+  // something on screen instead of the total silence a failure otherwise
+  // looks like (see SpeakerButton). Never fires for isPageHidden/no-
+  // speechSynthesis-support below: those aren't failures the learner is
+  // even looking at the button to see, just a deliberate no-op.
+  onFailure?: () => void,
 ): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window) || isPageHidden()) return;
   const myGeneration = ++speechGeneration;
@@ -183,7 +197,7 @@ function speakWithBrowserVoice(
     // the time this fired — see speechGeneration's own comment. Not a
     // real failure, nothing to report.
     if (speechGeneration !== myGeneration) return;
-    if (isRetry) reportTtsError(e.error, voice);
+    if (isRetry) { reportTtsError(e.error, voice); onFailure?.(); }
     // A genuine error (not just a silent hang) on the FIRST attempt is
     // still worth one retry — see the onstart-timeout branch below for
     // why a retry, not an immediate report.
@@ -215,9 +229,9 @@ function speakWithBrowserVoice(
     // tab-hide since this was scheduled means there's deliberately
     // nothing left to retry for.
     if (speechGeneration !== myGeneration) return;
-    if (isRetry) { reportTtsError('never started (after retry)', voice); return; }
+    if (isRetry) { reportTtsError('never started (after retry)', voice); onFailure?.(); return; }
     window.speechSynthesis.cancel();
-    speakWithBrowserVoice(text, true, voice, onEnd);
+    speakWithBrowserVoice(text, true, voice, onEnd, onFailure);
   }, 2000);
   window.speechSynthesis.speak(utterance);
 }
@@ -271,7 +285,7 @@ function isPageHidden(): boolean {
 // actually finishes (whichever path it took) — speakWord's own repeat
 // chain below is the only caller that needs it; every other call site
 // just wants "play the word" and leaves it out.
-function speakWordOnce(word: Word, onEnded?: () => void): void {
+function speakWordOnce(word: Word, onEnded?: () => void, onFailure?: () => void): void {
   if (typeof window === 'undefined' || isPageHidden()) return;
   if (currentAudio) {
     currentAudio.pause();
@@ -287,7 +301,7 @@ function speakWordOnce(word: Word, onEnded?: () => void): void {
     // must not trigger the (lower-quality, possibly wrong-accent) browser
     // TTS fallback. Only fall back if we're still the current audio.
     if (currentAudio !== audio) return;
-    speakWithBrowserVoice(spokenForm(word), false, null, onEnded);
+    speakWithBrowserVoice(spokenForm(word), false, null, onEnded, onFailure);
   };
   audio.addEventListener('error', fallback);
   if (onEnded) {
@@ -324,14 +338,22 @@ let wordChainGeneration = 0;
 // icon over and over. Clamped defensively since this is user-entered
 // data: 0/negative would silently say nothing, and nothing genuinely
 // benefits from more than a handful of repeats in a row.
-export function speakWord(word: Word): void {
+// onFailure (optional, additive — every existing call site keeps working
+// unchanged without it) fires once if this word never actually managed to
+// play at all, on any repeat — see SpeakerButton's own use of it to show
+// something other than total silence, which is the exact "I don't hear
+// anything" shape a real report caught. A word with a pre-recorded
+// clip essentially never hits this (only if that file AND the browser TTS
+// fallback both fail); a learner-added custom word has no clip of its own
+// at all, so it leans on the fallback's own reliability every single time.
+export function speakWord(word: Word, onFailure?: () => void): void {
   const myChain = ++wordChainGeneration;
   const times = Math.max(1, Math.min(5, Math.round(getSettings().wordRepeatCount ?? 1)));
   let played = 0;
   const playNext = () => {
     if (wordChainGeneration !== myChain) return;
     played++;
-    speakWordOnce(word, played < times ? () => setTimeout(playNext, WORD_REPEAT_GAP_MS) : undefined);
+    speakWordOnce(word, played < times ? () => setTimeout(playNext, WORD_REPEAT_GAP_MS) : undefined, onFailure);
   };
   playNext();
 }

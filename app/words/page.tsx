@@ -408,8 +408,14 @@ export default function WordsPage() {
       {/* "Look up & add" — only offered once the search itself has come up
           empty in the book(s) actually being browsed (see
           searchMatchesAnything's own comment) — a learner who already has
-          matches to look at shouldn't be nudged to add a duplicate. */}
-      {searchMatchesAnything === false && (
+          matches to look at shouldn't be nudged to add a duplicate. Real
+          bug: `search.trim() !== ''` is missing from searchMatchesAnything
+          itself for exactly this reason (an EMPTY search also short-
+          circuits it to false), so an empty search box showed this offer
+          too ('No match for "" in B2') — checked explicitly here instead
+          of folding it into that flag, so the flag can stay a plain
+          "would a lookup add value" answer. */}
+      {search.trim() !== '' && !searchMatchesAnything && (
         <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex flex-col gap-2.5">
           {!lookupResult && (
             <>
@@ -438,8 +444,14 @@ export default function WordsPage() {
           )}
           {lookupResult && (
             <>
+              {/* A "custom-" prefixed placeholder id (never actually
+                  persisted unless Add is pressed -- handleAddWord below
+                  generates its own real one) rather than an arbitrary
+                  string: WordInfoPanel's own "My word" vs "from LEVEL"
+                  badge keys off isCustomWordId, and a real lookup preview
+                  should read the same way the saved word actually will. */}
               <WordInfoPanel
-                word={{ ...lookupResult, id: '__preview__', level: addTargetLevel }}
+                word={{ ...lookupResult, id: 'custom-preview', level: addTargetLevel }}
               />
               <div className="flex gap-2">
                 <button
