@@ -384,8 +384,8 @@ function speakWithBrowserVoice(
 // full AI-corrected example sentence, as opposed to a single vocabulary
 // word) — always the free on-device browser voice, no pre-generated
 // recording exists to try first.
-export function speakText(text: string): void {
-  speakWithBrowserVoice(text);
+export function speakText(text: string, onFailure?: () => void): void {
+  speakWithBrowserVoice(text, 0, null, undefined, onFailure);
 }
 
 // Real-world testing found the on-device browser voice (sentences) came

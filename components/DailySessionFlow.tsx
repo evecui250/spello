@@ -1853,11 +1853,20 @@ export default function DailySessionFlow() {
     // this with correct=true (see this function's own params — there's no
     // real pass/fail for a translation attempt, just a correction), so it
     // must NOT get this generic chime: that would fire on every attempt,
-    // "perfect" or not (confirmed real). The sentence-writing case already
-    // has its own chime, gated on the correction actually being perfect
-    // (see SentenceExercise's own effect); the direct-sentence (copy
-    // mode) case never had a real attempt to judge at all, so no chime.
-    const isSentenceOrDirectSubmission = currentRound === 1 && !!extra?.exampleSentence;
+    // "perfect" or not. The sentence-writing case already has its own
+    // chime, gated on the correction actually being perfect (see
+    // SentenceExercise's own effect); the direct-sentence (copy mode)
+    // case never had a real attempt to judge at all, so no chime. Real
+    // bug caught live: checking only `exampleSentence` here missed the
+    // IMPERFECT half of a real sentence-writing submission entirely
+    // (extra carries `lastMistake` then, not `exampleSentence`, which is
+    // only ever set on a perfect one) — so an imperfect attempt fell
+    // through to fire this generic chime anyway (audibly wrong: chiming
+    // on a WRONG answer) AND scheduled a redundant playWord() call
+    // racing against SentenceExercise's own already-correctly-silent
+    // effect for that same submission, which real reports connect to the
+    // sentence's speaker button going completely unresponsive afterward.
+    const isSentenceOrDirectSubmission = currentRound === 1 && !!(extra?.exampleSentence || extra?.lastMistake);
     if (correct && !isSentenceOrDirectSubmission) {
       playCorrectChime();
       clearTimeout(pendingWordAudioTimer.current);
