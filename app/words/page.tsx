@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { WORDS, wordsForLevel, Word, Level, glossFor } from '../../lib/words';
 import {
   getMergedProgressAcrossLevels, getSettings, WordProgress, MascotStageId, today,
@@ -17,7 +16,6 @@ import { spokenForm } from '../../lib/speech';
 import SpeakerButton from '../../components/SpeakerButton';
 import DachshundMascot from '../../components/Mascot';
 import WordInfoPanel from '../../components/WordInfoPanel';
-import MistakeRedoCard from '../../components/MistakeRedoCard';
 
 // Same wording as Progress page's STAGE_LABEL — "Introduced" rather than
 // "New" for a word that's actually finished Day 1, so this list's badge
@@ -62,25 +60,16 @@ function searchRank(w: Word, q: string, nativeLanguage: 'en' | 'zh'): number | n
 const BOOK_LEVELS: Level[] = ['A1', 'A2', 'B1', 'B2'];
 type BookFilter = 'all' | Level;
 
-type Familiarity = 'all' | 'new' | 'learning' | 'mastered' | 'practicedSentences';
+type Familiarity = 'all' | 'new' | 'learning' | 'mastered';
 
 // "New" = hasn't completed its first learning pass yet (round 4 success),
 // even if attempts are already in progress. "Learning" = has completed at
 // least one pass — spans all 4 mascot stages, including fully mastered
 // words (it's a broad "has this been engaged with" bucket, not mutually
 // exclusive with "Mastered"). "Mastered" is a specific, overlapping
-// drill-down for the fullyMastered subset of "Learning". "practicedSentences"
-// (the "Mistake Notebook") is its own separate, overlapping dimension —
-// every word whose round-1 introduction sentence was actually attempted,
-// whether it came back perfect (exampleSentence set) or still needs a
-// redo (WordProgress.lastMistake set) — independent of which mascot stage
-// it's since moved on to. The two are mutually exclusive on any given
-// word (see DailySessionFlow's onCorrected and MistakeRedoCard, which
-// only ever set one or the other), so this is really "either" rather
-// than a genuine overlap the way "Mastered" is with "Learning".
+// drill-down for the fullyMastered subset of "Learning".
 function matchesFamiliarity(p: WordProgress | undefined, filter: Familiarity): boolean {
   if (filter === 'all') return true;
-  if (filter === 'practicedSentences') return !!p?.lastMistake || !!p?.exampleSentence;
   const earned = !!p && p.studiedTimes > 0;
   if (filter === 'new') return !earned;
   if (filter === 'learning') return earned;
@@ -154,29 +143,29 @@ export default function WordsPage() {
   const [search, setSearch] = useState('');
   const [filterFamiliarity, setFilterFamiliarity] = useState<Familiarity>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
-  // Which vocabulary book to browse — defaults to Settings' own active
-  // level (so the page looks exactly as it always has until the learner
-  // deliberately switches it), but "All books" and any OTHER level can be
-  // browsed too. progress below is the merge of EVERY level's own store
-  // (see getMergedProgressAcrossLevels) rather than just the currently
-  // active one — each level keeps a fully separate local profile (see
+  // Which vocabulary book to browse — defaults to "All books" regardless
+  // of Settings' active level, but any single level can still be browsed
+  // too. progress below is the merge of EVERY level's own store (see
+  // getMergedProgressAcrossLevels) rather than just the currently active
+  // one — each level keeps a fully separate local profile (see
   // lib/storage.ts), so reading only the active one used to silently hide
   // real progress on a word studied under a different level (e.g.
   // browsing A1 while B2 is active showed every A1 word as "New" even
   // with real history). Same helper Progress page's own "All books" view
   // uses, so the two always agree with each other.
   //
-  // Both filterLevel and nativeLanguage start at DEFAULT_SETTINGS' own
-  // values (not a lazy getSettings() read) and get corrected in the
-  // effect below instead — confirmed real: reading real localStorage
-  // directly in a useState initializer or the render body renders
-  // DIFFERENT word-list text on this static-export page's build-time
-  // prerender (no window, so DEFAULT_SETTINGS) than on the client's first
-  // real render (real localStorage) whenever a learner's actual settings
-  // differ from the defaults, which is exactly what a React hydration-
-  // mismatch error is — the effect's update happens safely AFTER
-  // hydration instead.
-  const [filterLevel, setFilterLevel] = useState<BookFilter>('A1');
+  // nativeLanguage starts at DEFAULT_SETTINGS' own value (not a lazy
+  // getSettings() read) and gets corrected in the effect below instead —
+  // confirmed real: reading real localStorage directly in a useState
+  // initializer or the render body renders DIFFERENT word-list text on
+  // this static-export page's build-time prerender (no window, so
+  // DEFAULT_SETTINGS) than on the client's first real render (real
+  // localStorage) whenever a learner's actual settings differ from the
+  // defaults, which is exactly what a React hydration-mismatch error is —
+  // the effect's update happens safely AFTER hydration instead. filterLevel
+  // has no such mismatch risk since its default ('all') doesn't depend on
+  // localStorage at all.
+  const [filterLevel, setFilterLevel] = useState<BookFilter>('all');
   const [nativeLanguage, setNativeLanguage] = useState<'en' | 'zh'>('en');
   // Bumped on every add/remove so the `words` memo below (which reads
   // custom words fresh from storage each time, not from React state)
@@ -205,18 +194,6 @@ export default function WordsPage() {
   // than minting a second one, so a preview that already got its audio
   // generated doesn't need to regenerate it after adding.
   const [lookupResultId, setLookupResultId] = useState<string | null>(null);
-  // Which word's "Needs practice" redo modal is open, if any — see
-  // MistakeRedoCard. Captures the mistake itself ONCE, at the moment
-  // "Redo" is tapped, rather than reading it live from `progress` on
-  // every render — real bug caught live: the modal's own visibility used
-  // to be gated on `progress[w.id]?.lastMistake` still being set, which a
-  // SUCCESSFUL redo immediately clears — the instant that happened, the
-  // whole modal (including the "Perfect!" message it was about to show)
-  // unmounted before the learner could ever see it, leaving only the
-  // chime as evidence anything happened. Keeping the snapshot here
-  // instead means the modal's own lifecycle is independent of the data
-  // it's busy updating.
-  const [redoTarget, setRedoTarget] = useState<{ word: Word; mistake: NonNullable<WordProgress['lastMistake']> } | null>(null);
 
   // Learner-added words, read fresh from storage — kept as its own STATE
   // (populated only inside an effect below), never read directly during
@@ -234,8 +211,8 @@ export default function WordsPage() {
 
   useEffect(() => {
     setNativeLanguage(getSettings().nativeLanguage);
-    if (!applyParam('level', ['all', ...BOOK_LEVELS], setFilterLevel)) setFilterLevel(getSettings().level);
-    applyParam('familiarity', ['all', 'new', 'learning', 'mastered', 'practicedSentences'], setFilterFamiliarity);
+    applyParam('level', ['all', ...BOOK_LEVELS], setFilterLevel);
+    applyParam('familiarity', ['all', 'new', 'learning', 'mastered'], setFilterFamiliarity);
     applyParam('date', ['all', 'today', '7days', '30days'], setDateFilter);
   }, []);
 
@@ -264,10 +241,6 @@ export default function WordsPage() {
   useEffect(() => {
     const load = () => setProgress(getMergedProgressAcrossLevels());
     load();
-    // Refreshes after MistakeRedoCard saves a cleared/updated lastMistake
-    // (saveWordProgress dispatches this on every write) — without it, a
-    // word that just got redone perfectly would still show under "Needs
-    // practice" until the next full page load.
     window.addEventListener(PROGRESS_CHANGED_EVENT, load);
     return () => window.removeEventListener(PROGRESS_CHANGED_EVENT, load);
   }, []);
@@ -284,18 +257,7 @@ export default function WordsPage() {
     })
     .map(w => ({ w, rank: search ? searchRank(w, q, nativeLanguage) : 0 }))
     .filter((x): x is { w: Word; rank: number } => x.rank !== null)
-    .sort((a, b) => {
-      // "Practiced sentences" puts imperfect ones (still needing a redo)
-      // first, ahead of already-perfect ones — the whole point of this
-      // view is prompting a learner toward what still needs fixing, not
-      // burying it under everything they already got right.
-      if (filterFamiliarity === 'practicedSentences') {
-        const aImperfect = !!progress[a.w.id]?.lastMistake;
-        const bImperfect = !!progress[b.w.id]?.lastMistake;
-        if (aImperfect !== bImperfect) return aImperfect ? -1 : 1;
-      }
-      return a.rank - b.rank;
-    })
+    .sort((a, b) => a.rank - b.rank)
     .map(x => x.w);
 
   // Whether the search itself (ignoring the familiarity/date filters,
@@ -362,7 +324,9 @@ export default function WordsPage() {
   }
 
   function WordItem({ w }: { w: Word }) {
-    const sentence = progress[w.id]?.exampleSentence;
+    // exampleSentence/lastMistake display moved to the dedicated Mistake
+    // Notebook page (see app/mistakes/page.tsx) — this list stays focused
+    // on familiarity/mastery, not sentence-level detail.
     return (
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex items-center gap-3">
         <div className="min-w-0 flex-1">
@@ -384,24 +348,6 @@ export default function WordsPage() {
             </span>
           )}
           <div className="text-stone-500 text-sm">{glossFor(w, nativeLanguage)}</div>
-          {sentence && (
-            <div className="mt-0.5 flex flex-col gap-0.5">
-              {sentence.englishPrompt && (
-                <div className="text-stone-400 text-xs">
-                  {nativeLanguage === 'zh' ? (sentence.englishPromptZh ?? w.exercisePromptZh ?? sentence.englishPrompt) : sentence.englishPrompt}
-                </div>
-              )}
-              <div className="text-stone-500 text-sm italic">{sentence.sentence}</div>
-            </div>
-          )}
-          {progress[w.id]?.lastMistake && (
-            <button
-              onClick={() => setRedoTarget({ word: w, mistake: progress[w.id].lastMistake! })}
-              className="mt-1 text-xs font-semibold text-amber-700 bg-amber-100 rounded-full px-2.5 py-1 hover:bg-amber-200 transition-colors"
-            >
-              ✎ Needs practice — Redo
-            </button>
-          )}
         </div>
         <WordThumbnail word={w} />
         <span className="shrink-0 w-20 flex flex-col items-center gap-0.5">
@@ -475,7 +421,6 @@ export default function WordsPage() {
           <option value="new">New</option>
           <option value="learning">Learning</option>
           <option value="mastered">Mastered</option>
-          <option value="practicedSentences">Practiced sentences</option>
         </select>
 
         <select
@@ -561,27 +506,6 @@ export default function WordsPage() {
       <div className="flex flex-col gap-2">
         {filtered.map(w => <WordItem key={w.id} w={w} />)}
       </div>
-
-      {/* Portaled straight to <body>, same reasoning as BugReportButton's
-          own modal — escapes any ancestor's backdrop-filter/transform,
-          which would otherwise become the containing block for this fixed
-          overlay. */}
-      {redoTarget && createPortal(
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setRedoTarget(null)}
-        >
-          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <MistakeRedoCard
-              word={redoTarget.word}
-              mistake={redoTarget.mistake}
-              level={redoTarget.word.level}
-              onDone={() => setRedoTarget(null)}
-            />
-          </div>
-        </div>,
-        document.body,
-      )}
     </div>
   );
 }

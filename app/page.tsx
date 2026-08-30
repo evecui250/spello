@@ -12,6 +12,8 @@ import { SYNCED_EVENT } from '../lib/sync';
 import Logo from '../components/Logo';
 import { CheckCircleIcon } from '../components/icons';
 import { THEME_CONFIG } from '../components/AppBackground';
+import Image from 'next/image';
+import Link from 'next/link';
 
 // Once today's main goal is done, "Study more" pulls a smaller bonus round
 // instead of the user's full daily pace — repeatable as many times as there
@@ -177,6 +179,24 @@ export default function HomePage() {
           </button>
         )}
       </div>
+
+      <Link
+        href="/mistakes"
+        className="flex items-center gap-3 bg-amber-50/40 backdrop-blur-sm border border-amber-100/30 rounded-2xl px-4 py-3 hover:bg-amber-50/55 transition-colors"
+      >
+        <Image
+          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/mistake_notebook_icon.webp`}
+          alt=""
+          width={44}
+          height={44}
+          unoptimized
+          className="rounded-xl shrink-0"
+        />
+        <div className="flex flex-col">
+          <span className="font-semibold text-amber-50">Mistake Notebook</span>
+          <span className="text-xs text-amber-100/70">Redo sentences until they're perfect</span>
+        </div>
+      </Link>
     </div>
   );
 }
