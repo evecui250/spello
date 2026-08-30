@@ -9,6 +9,21 @@ import { useEffect, useRef, useState } from 'react';
 // timing) and reports exactly what happened, so a real answer ("voice X
 // starts instantly, voice Y never starts") can come back instead of
 // another round of speculation.
+//
+// v2 finding (from the FIRST live report on a real device): every single
+// voice showed "never started" here, even though the real app eventually
+// works after a second click. The reason: v1's runTest deliberately
+// omitted speechSynthesis.resume() to keep the test "raw" — but lib/
+// speech.ts's real production code calls resume() before EVERY speak(),
+// unconditionally, specifically because some engines get stuck paused.
+// Testing without it wasn't neutral, it was testing a strictly worse,
+// unrealistic path than the app actually takes. Fixed here to match
+// production (resume() + cancel-if-speaking before every speak()), and
+// each voice is now tested TWICE in a row (matching the real "click
+// once, fails, click again, works" report) to see directly whether the
+// first call on a fresh page always eats the failure while the second
+// recovers -- which would point at a one-time "prime the engine" fix
+// rather than anything about voice choice at all.
 
 type TestStatus = 'idle' | 'testing' | 'started' | 'never-started' | 'error';
 
@@ -21,6 +36,10 @@ interface TestResult {
 const TEST_PHRASE = 'Das ist ein Test.';
 const NEVER_STARTED_AFTER_MS = 5000;
 
+// Matches lib/speech.ts's speakWithBrowserVoice exactly: cancel only if
+// something's actually in-flight (an unconditional cancel is its own
+// known Chromium flake), then resume() unconditionally right before
+// speak() (the standard unstick for an engine stuck paused).
 function runTest(
   voice: SpeechSynthesisVoice | null,
   onUpdate: (r: TestResult) => void,
@@ -51,11 +70,9 @@ function runTest(
     settled = true;
     onUpdate({ status: 'never-started', ms: NEVER_STARTED_AFTER_MS });
   }, NEVER_STARTED_AFTER_MS);
-  // No cancel-before-speak, no retry, no voice-selection logic at all —
-  // deliberately the rawest possible call, so a result here reflects the
-  // browser/voice itself, not any of this app's own retry machinery on
-  // top of it.
   try {
+    if (synth.speaking || synth.pending) synth.cancel();
+    synth.resume();
     synth.speak(utterance);
   } catch (err) {
     if (!settled) {
@@ -65,13 +82,30 @@ function runTest(
   }
 }
 
+// Runs the exact same voice twice in a row, ~400ms apart -- directly
+// tests the "first call on a fresh page always fails, second succeeds"
+// pattern from the original real-world report, rather than assuming it.
+function runTestTwice(
+  voice: SpeechSynthesisVoice | null,
+  onUpdate1: (r: TestResult) => void,
+  onUpdate2: (r: TestResult) => void,
+): void {
+  runTest(voice, (r) => {
+    onUpdate1(r);
+    if (r.status === 'testing') return;
+    setTimeout(() => {
+      onUpdate2({ status: 'testing' });
+      runTest(voice, onUpdate2);
+    }, 400);
+  });
+}
+
 // Real app usage never calls speak() in isolation for a custom word — it
 // first tries a pre-recorded <audio> element, which 404s, THEN falls back
 // to speak(). This replicates that exact sequence (real failed network
 // audio load immediately before the speech call) to test whether that
 // transition specifically — not the voice choice itself — is what's
-// putting the engine into a bad state, since a raw/isolated test of every
-// voice found none of them broken on their own.
+// putting the engine into a bad state.
 function runTestAfter404(
   voice: SpeechSynthesisVoice | null,
   onUpdate: (r: TestResult) => void,
@@ -91,6 +125,24 @@ function runTestAfter404(
   audio.play().catch(() => { /* the addEventListener('error', ...) above handles it */ });
 }
 
+// Tests whether a single, silent "priming" cancel() -- with no utterance
+// at all, well before the learner ever taps anything real -- is enough to
+// pre-emptively unstick a fresh page's speechSynthesis engine, so the
+// learner's actual first tap never has to eat the fail-then-retry cost at
+// all. If this reliably succeeds on its ONE real speak() attempt (where
+// the plain per-voice test above fails on its first), that's the fix to
+// ship: call this once on page load, silently, before anything else.
+function runTestWithPriming(
+  voice: SpeechSynthesisVoice | null,
+  onUpdate: (r: TestResult) => void,
+): void {
+  onUpdate({ status: 'testing' });
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+  setTimeout(() => runTest(voice, onUpdate), 250);
+}
+
 function StatusBadge({ result }: { result: TestResult }) {
   if (result.status === 'idle') return <span className="text-stone-400 text-xs">Not tested yet</span>;
   if (result.status === 'testing') return <span className="text-indigo-500 text-xs">Testing…</span>;
@@ -102,6 +154,7 @@ function StatusBadge({ result }: { result: TestResult }) {
 export default function TtsDebugPage() {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [results, setResults] = useState<Record<string, TestResult>>({});
+  const [results2, setResults2] = useState<Record<string, TestResult>>({});
   const [after404Voice, setAfter404Voice] = useState('');
   const loadedRef = useRef(false);
 
@@ -138,26 +191,39 @@ export default function TtsDebugPage() {
 
   const test = (key: string, voice: SpeechSynthesisVoice | null) => {
     setResults(r => ({ ...r, [key]: { status: 'testing' } }));
-    runTest(voice, result => setResults(r => ({ ...r, [key]: result })));
+    setResults2(r => ({ ...r, [key]: { status: 'idle' } }));
+    runTestTwice(
+      voice,
+      result => setResults(r => ({ ...r, [key]: result })),
+      result => setResults2(r => ({ ...r, [key]: result })),
+    );
   };
 
   const VoiceRow = ({ voice, keyPrefix }: { voice: SpeechSynthesisVoice; keyPrefix: string }) => {
     const key = `${keyPrefix}-${voice.name}-${voice.lang}`;
     const result = results[key] ?? { status: 'idle' as const };
+    const result2 = results2[key] ?? { status: 'idle' as const };
     return (
       <div data-voice-row={key} className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="font-semibold text-stone-800 truncate">{voice.name}</div>
           <div className="text-stone-500 text-xs">{voice.lang} · {voice.localService ? 'local' : 'network'}</div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <StatusBadge result={result} />
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-stone-400 w-8 text-right">1st:</span>
+            <StatusBadge result={result} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-stone-400 w-8 text-right">2nd:</span>
+            <StatusBadge result={result2} />
+          </div>
           <button
             onClick={() => test(key, voice)}
             disabled={result.status === 'testing'}
-            className="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
+            className="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 mt-1"
           >
-            Test
+            Test twice
           </button>
         </div>
       </div>
@@ -170,10 +236,12 @@ export default function TtsDebugPage() {
         Audio Diagnostics
       </h1>
       <p className="text-amber-100/80 text-sm">
-        Tap "Test" next to each voice below — each one plays "{TEST_PHRASE}" using ONLY that exact
-        voice, with no retry or fallback logic at all. Tell me exactly which ones say
-        "✓ Started" immediately and which say "✗ Never started" or "✗ Error" — that tells us which
-        specific voice(s) on your device are actually broken, instead of guessing.
+        Tap "Test twice" next to each voice — it plays "{TEST_PHRASE}" twice in a row, back to
+        back, the same way a real word sometimes needs a second click. Tell me the pattern you
+        see: does the 1st attempt fail and the 2nd succeed every time? Only sometimes? Never?
+        That tells us whether this is "the engine needs one throwaway attempt to wake up" (fixable
+        by priming it silently before you ever tap anything) rather than anything about which
+        voice is picked.
       </p>
 
       {voices.length === 0 && (
@@ -205,7 +273,10 @@ export default function TtsDebugPage() {
           <div className="flex items-center gap-3 shrink-0">
             <StatusBadge result={results['strategy-novoice'] ?? { status: 'idle' }} />
             <button
-              onClick={() => test('strategy-novoice', null)}
+              onClick={() => {
+                setResults(r => ({ ...r, 'strategy-novoice': { status: 'testing' } }));
+                runTest(null, result => setResults(r => ({ ...r, 'strategy-novoice': result })));
+              }}
               disabled={results['strategy-novoice']?.status === 'testing'}
               className="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
             >
@@ -220,8 +291,7 @@ export default function TtsDebugPage() {
               <div className="font-semibold text-stone-800">Right after a failed audio load</div>
               <div className="text-stone-500 text-xs">
                 Real custom words first try a pre-recorded clip that doesn't exist yet, THEN fall back
-                to this — replicates that exact sequence instead of testing speech alone, in case the
-                failed load itself (not the voice) is what's putting things in a bad state.
+                to this — replicates that exact sequence instead of testing speech alone.
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -249,11 +319,49 @@ export default function TtsDebugPage() {
             </div>
           </div>
         )}
+
+        {germanVoices.length > 0 && (
+          <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex flex-col gap-3">
+            <div>
+              <div className="font-semibold text-stone-800">Priming cancel(), then speak once</div>
+              <div className="text-stone-500 text-xs">
+                A silent, empty cancel() first (no utterance), a brief pause, then ONE real speak()
+                attempt — reload this page first so it's a genuinely fresh session, then test. If
+                this succeeds where a fresh voice's own "1st" attempt above fails, priming the
+                engine once on page load (before you ever tap anything) would fix the real delay.
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={after404Voice}
+                onChange={e => setAfter404Voice(e.target.value)}
+                className="min-w-0 flex-1 bg-white/80 border border-stone-200 rounded-lg px-2 py-1.5 text-xs text-stone-800"
+              >
+                {germanVoices.map(v => (
+                  <option key={`sel2-${v.name}-${v.lang}`} value={`${v.name}|${v.lang}`}>{v.name}</option>
+                ))}
+              </select>
+              <StatusBadge result={results['strategy-priming'] ?? { status: 'idle' }} />
+              <button
+                onClick={() => {
+                  const voice = germanVoices.find(v => `${v.name}|${v.lang}` === after404Voice) ?? null;
+                  setResults(r => ({ ...r, 'strategy-priming': { status: 'testing' } }));
+                  runTestWithPriming(voice, result => setResults(r => ({ ...r, 'strategy-priming': result })));
+                }}
+                disabled={results['strategy-priming']?.status === 'testing'}
+                className="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 shrink-0"
+              >
+                Test
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <p className="text-amber-100/60 text-xs mt-2">
-        This page doesn't fix anything by itself — it's just measuring. Once you tell me which
-        voice(s) actually work, I can make the app always pick one of those first on your device.
+        This page doesn't fix anything by itself — it's just measuring. Once you tell me the
+        pattern (especially 1st-vs-2nd on the voice list, and whether priming works on a fresh
+        reload), I can build the real fix instead of guessing again.
       </p>
     </div>
   );
