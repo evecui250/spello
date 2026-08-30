@@ -116,8 +116,15 @@ Deno.serve(async (req: Request) => {
               'in exactly one bucket, never both, and never silently dropped: ' +
               '\n\n' +
               '1) SPELLING — the exact same word, just misspelled (letters added/dropped/swapped/' +
-              'transposed), with no actual difference in grammatical form or meaning (e.g. ' +
-              '"Testergbnis"/"Testergebnis", "Dokter"/"Doktor", "geziegt"/"gezeigt"). Put every one ' +
+              'transposed), with NO actual difference in grammatical form or meaning (e.g. ' +
+              '"Testergbnis"/"Testergebnis", "Dokter"/"Doktor", "geziegt"/"gezeigt"). If the word ' +
+              'ALSO changed grammatical form on top of the misspelling — most commonly singular to ' +
+              'plural, e.g. attempt "Ergenbnis" (a typo for "Ergebnis") but the correction needs ' +
+              '"Ergebnisse" (plural) — that is NOT pure spelling: the number itself is a genuine ' +
+              'grammar difference (bucket 2 below), so it needs its own grammar point (e.g. \'"für ' +
+              'bessere Ergebnisse" needs the plural "Ergebnisse", not singular "Ergebnis"\') even ' +
+              'though the base word also happens to be misspelled — do not let the typo cause the ' +
+              'plural requirement to go unmentioned entirely. Put every one ' +
               'of these in the "spelling" array as {"wrong": "...", "correct": "..."} using the exact ' +
               'substrings verbatim as they appear in the attempt and correction respectively — do ' +
               'not paraphrase them, and do not also make a grammar point about them. Capitalization ' +
@@ -140,7 +147,13 @@ Deno.serve(async (req: Request) => {
               'article AND a wrong adjective ending AND a wrong possessive-pronoun case, all in the ' +
               'same sentence), give each its own point, up to the cap; "fewer is better" means never ' +
               'padding the list with a minor or borderline point just to fill it out, not skipping a ' +
-              'second or third issue that is actually there to keep the list short. If there is ' +
+              'second or third issue that is actually there to keep the list short. This applies even ' +
+              'when both changed words sit right next to each other in the SAME noun phrase and share ' +
+              'the same underlying cause — a real, confirmed miss: the attempt had "einen neue ' +
+              'Projekt" and the correction was "ein neues Projekt" (Projekt is neuter), and only the ' +
+              'article ("einen" -> "ein") was ever mentioned — the adjective ending ("neue" -> ' +
+              '"neues", the SAME neuter agreement applied to a different word) needs its own point ' +
+              'too, not just the article. If there is ' +
               'truly only one real grammar issue, return exactly one point. Covers: article/case ' +
               '(der/die/das, den/dem/der agreement), adjective endings, verb tense/conjugation, ' +
               'preposition choice, a word-class mix-up (e.g. using a verb form where a noun was ' +

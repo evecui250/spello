@@ -159,7 +159,19 @@ Deno.serve(async (req: Request) => {
                   'simply missing from what they wrote (not mistranslated, just never attempted ' +
                   'at all), ADD it into your corrected sentence so the output conveys the FULL ' +
                   'meaning of the English sentence — never silently drop a concept just because ' +
-                  'the learner did. You MAY keep a word choice that is a ' +
+                  'the learner did. This applies just as much to a MAIN VERB the English sentence ' +
+                  'has TWO of (not just a modifier) — a sentence like "The company DECIDED to ' +
+                  'commission a new project" expresses two distinct actions (deciding, then ' +
+                  'commissioning), and the corrected sentence must convey BOTH, even if the ' +
+                  "learner's attempt at the first one (e.g. a garbled attempt at \"entschieden\") " +
+                  'was too broken to fix cleanly — a real, confirmed miss: an attempt garbled both ' +
+                  'verbs of exactly this sentence, and the correction kept only "beauftragt" ' +
+                  '(commissioned), silently dropping "decided" entirely instead of producing ' +
+                  'something like "Das Unternehmen hat sich entschieden, ein neues Projekt zu ' +
+                  'beauftragen" or "...hat entschieden, ... zu beauftragen". Before finalizing your ' +
+                  'output, count how many distinct verbs/actions the English sentence actually has ' +
+                  'and confirm your German sentence expresses every one of them, not just whichever ' +
+                  'one contains the target word. You MAY keep a word choice that is a ' +
                   'genuinely valid synonym correctly conveying the same meaning (different ' +
                   'learners can validly translate the same sentence differently — real synonyms, ' +
                   'word order) — but every word in your output must actually mean what the ' +
