@@ -277,6 +277,21 @@ export default function WordsPage() {
 
   const earned = (p?: WordProgress) => !!p && p.studiedTimes > 0;
 
+  // Auto-fires the AI lookup once a search comes up empty locally, instead
+  // of making the learner notice there's no match and tap a button to
+  // start it — debounced 600ms past the last keystroke so a word typed
+  // out letter by letter doesn't fire a real AI call (and eat into the
+  // daily cap) for every incomplete prefix along the way. Guards on
+  // lookupStatus/lookupResult too, or a successful result flipping status
+  // back to 'idle' would immediately re-trigger itself in a loop.
+  useEffect(() => {
+    const term = search.trim();
+    if (!term || searchMatchesAnything || lookupStatus !== 'idle' || lookupResult) return;
+    const timer = setTimeout(() => handleLookup(), 600);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, searchMatchesAnything, lookupStatus, lookupResult]);
+
   function handleLookup() {
     const term = search.trim();
     if (!term) return;
@@ -453,31 +468,35 @@ export default function WordsPage() {
           circuits it to false), so an empty search box showed this offer
           too ('No match for "" in B2') — checked explicitly here instead
           of folding it into that flag, so the flag can stay a plain
-          "would a lookup add value" answer. */}
+          "would a lookup add value" answer. The lookup itself now fires
+          automatically (see the debounced effect above) rather than
+          waiting on a button tap, and the wording below no longer names a
+          specific book -- the old "No match for X in B2" was wrong on
+          "All books"/"My words" (the search actually ran across every
+          book, not just the one a new word would be filed under). */}
       {search.trim() !== '' && !searchMatchesAnything && (
         <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex flex-col gap-2.5">
           {!lookupResult && (
             <>
-              <p className="text-stone-600 text-sm">
-                No match for "{search.trim()}" in {addTargetLevel}.
-              </p>
-              <button
-                onClick={handleLookup}
-                disabled={lookupStatus === 'loading'}
-                className="self-start bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50"
-              >
-                {lookupStatus === 'loading' ? 'Looking up…' : `Look up "${search.trim()}" & add it`}
-              </button>
+              {(lookupStatus === 'idle' || lookupStatus === 'loading') && (
+                <p className="text-stone-600 text-sm flex items-center gap-2">
+                  <span className="inline-block w-3.5 h-3.5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin shrink-0" />
+                  Searching for "{search.trim()}"…
+                </p>
+              )}
               {lookupStatus === 'not-found' && (
-                <p className="text-stone-500 text-xs">
-                  Couldn't find a German word or translation for that — check the spelling, or try a different word.
+                <p className="text-stone-500 text-sm">
+                  Couldn't find a German word or translation for "{search.trim()}" — check the spelling, or try a different word.
                 </p>
               )}
               {lookupStatus === 'limit-reached' && (
-                <p className="text-amber-600 text-xs">Used up today's AI lookups — come back tomorrow.</p>
+                <p className="text-amber-600 text-sm">Used up today's AI lookups — come back tomorrow.</p>
               )}
               {(lookupStatus === 'error' || lookupStatus === 'unreachable') && (
-                <p className="text-red-500 text-xs">Couldn't look that up right now — try again.</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-red-500 text-sm">Couldn't look that up right now.</p>
+                  <button onClick={handleLookup} className="text-indigo-600 text-sm font-semibold underline shrink-0">Try again</button>
+                </div>
               )}
             </>
           )}
