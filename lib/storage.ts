@@ -1193,7 +1193,13 @@ export interface ParagraphExercise {
   segments: string[];
   blanks: ParagraphBlank[];
   // blanks' answers, shuffled -- what the learner actually drags from.
-  tray: string[];
+  // Carries wordId alongside each answer (not just the bare string) so
+  // the UI can show a "meaning" lookup per tray chip without ambiguity --
+  // two different words can coincidentally need the identical inflected
+  // form (see parseParagraphResponse's own comment), so matching a tray
+  // slot back to its word by STRING equality alone could resolve the
+  // wrong one.
+  tray: { answer: string; wordId: string }[];
 }
 
 export interface DailySession {

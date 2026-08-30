@@ -41,7 +41,7 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
   const wordById = useMemo(() => new Map(words.map(w => [w.id, w])), [words]);
   const usedIndices = new Set(blankTray.filter((i): i is number => i !== null));
   const allFilled = blankTray.every(i => i !== null);
-  const results = checked ? blankTray.map((trayIdx, blankIdx) => trayIdx !== null && exercise.tray[trayIdx] === exercise.blanks[blankIdx].answer) : null;
+  const results = checked ? blankTray.map((trayIdx, blankIdx) => trayIdx !== null && exercise.tray[trayIdx].answer === exercise.blanks[blankIdx].answer) : null;
   const allCorrect = results?.every(Boolean) ?? false;
 
   // The finished, CORRECT paragraph (blanks filled with their real
@@ -59,14 +59,21 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
   useEffect(() => {
     let cancelled = false;
     const settings = getSettings();
-    getSentenceGlosses(words[0]?.id ?? '', fullCorrectText, settings.level, settings.nativeLanguage, 'de-to-native')
-      .then(map => { if (!cancelled) setGlosses(map); })
-      .catch(() => {
-        // Best-effort, same as every other sentence-glosses caller --
-        // surrounding words just aren't clickable yet if this fails, the
-        // exercise itself (and each blank's own always-available corpus
-        // info) is unaffected.
-      });
+    const fetchGlosses = (attempt: number) => {
+      getSentenceGlosses(words[0]?.id ?? '', fullCorrectText, settings.level, settings.nativeLanguage, 'de-to-native')
+        .then(map => { if (!cancelled) setGlosses(map); })
+        .catch(() => {
+          // One retry before giving up -- a real report ("some words
+          // still aren't clickable") is at least partly explained by this
+          // call having zero retry at all before, unlike every other AI
+          // call in the app. Still best-effort beyond that: surrounding
+          // words just aren't clickable if both attempts fail, the
+          // exercise itself (and each blank's own always-available corpus
+          // info) is unaffected either way.
+          if (attempt === 0 && !cancelled) fetchGlosses(1);
+        });
+    };
+    fetchGlosses(0);
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullCorrectText]);
@@ -93,9 +100,22 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
     setSelectedWord(prev => (prev?.word.id === w.id ? null : { word: w, usedForm: exercise.blanks[blankIdx].answer }));
   };
 
+  // Separate from handleBlankInfoTap/tap-to-place -- a real request: the
+  // tray chips (this batch's own newly-learned words, easy to still be
+  // shaky on) had no way to check meaning before placing them at all,
+  // since a tap there is already spoken for (selecting which word to
+  // drop next). A dedicated small button per chip avoids overloading
+  // that gesture.
+  const handleTrayInfoTap = (trayIdx: number) => {
+    const w = wordById.get(exercise.tray[trayIdx].wordId);
+    if (!w) return;
+    setSelectedGlossToken(null);
+    setSelectedWord(prev => (prev?.word.id === w.id ? null : { word: w, usedForm: exercise.tray[trayIdx].answer }));
+  };
+
   const handleCheck = () => {
     setChecked(true);
-    const correct = blankTray.every((trayIdx, blankIdx) => trayIdx !== null && exercise.tray[trayIdx] === exercise.blanks[blankIdx].answer);
+    const correct = blankTray.every((trayIdx, blankIdx) => trayIdx !== null && exercise.tray[trayIdx].answer === exercise.blanks[blankIdx].answer);
     if (correct) playCorrectChime();
   };
 
@@ -154,7 +174,7 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
               {renderSegment(segment, `s${i}`)}
               {i < exercise.blanks.length && (
                 <BlankSlot
-                  filled={blankTray[i] !== null ? exercise.tray[blankTray[i] as number] : null}
+                  filled={blankTray[i] !== null ? exercise.tray[blankTray[i] as number].answer : null}
                   selectable={!checked && blankTray[i] === null && selectedTray !== null}
                   checked={checked}
                   correct={results ? results[i] : null}
@@ -176,19 +196,32 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
 
         {!checked && (
           <div className="flex flex-wrap gap-2 justify-center pt-1 border-t border-amber-100/60">
-            {exercise.tray.map((answer, trayIdx) =>
+            {exercise.tray.map(({ answer }, trayIdx) =>
               usedIndices.has(trayIdx) ? null : (
-                <button
-                  key={trayIdx}
-                  onClick={() => handleTrayTap(trayIdx)}
-                  className={`px-4 py-2 rounded-xl font-medium border-2 transition-all ${
-                    selectedTray === trayIdx
-                      ? 'border-indigo-500 bg-indigo-100 text-indigo-700 scale-105'
-                      : 'border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400'
-                  }`}
-                >
-                  {answer}
-                </button>
+                <div key={trayIdx} className="relative">
+                  <button
+                    onClick={() => handleTrayTap(trayIdx)}
+                    className={`px-4 py-2 rounded-xl font-medium border-2 transition-all ${
+                      selectedTray === trayIdx
+                        ? 'border-indigo-500 bg-indigo-100 text-indigo-700 scale-105'
+                        : 'border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400'
+                    }`}
+                  >
+                    {answer}
+                  </button>
+                  {/* Separate from the button above on purpose -- tapping
+                      the chip itself selects it for placement, so "show
+                      meaning" needs its own small target rather than
+                      overloading that same tap. */}
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleTrayInfoTap(trayIdx); }}
+                    aria-label="Show meaning"
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-indigo-500 text-white text-[10px] font-bold flex items-center justify-center hover:bg-indigo-600 shadow-sm"
+                  >
+                    i
+                  </button>
+                </div>
               ),
             )}
           </div>

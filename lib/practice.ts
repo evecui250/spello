@@ -1039,5 +1039,5 @@ export function parseParagraphResponse(paragraph: string, answers: string[], wor
   }
   segments.push(paragraph.slice(lastEnd));
   if (seen.size !== words.length) return null;
-  return { segments, blanks, tray: shuffled(answers) };
+  return { segments, blanks, tray: shuffled(blanks.map(b => ({ answer: b.answer, wordId: b.wordId }))) };
 }
