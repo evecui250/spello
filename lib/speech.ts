@@ -251,9 +251,25 @@ let speechGeneration = 0;
 // nothing until the page reloads — no error event, nothing. resume() is
 // the standard, harmless-elsewhere unstick for that; calling it right
 // before every speak() costs nothing on a browser that was never stuck.
+// Confirmed real, repeatedly, on two different engines (Mac Chrome and
+// iOS Safari) and independent of voice choice (the diagnostic page's own
+// "test twice" — same voice both times, no rotation — shows the exact
+// same pattern): the first speechSynthesis attempt in a session reliably
+// fails, and neither priming (an earlier throwaway speak() call) nor
+// simply waiting longer before the first real attempt changed that. What
+// DOES reliably work, every time it's been tried: a genuinely separate
+// SECOND attempt. The one retry this already had wasn't enough — real
+// reports show the button turning red (both the original attempt and
+// its one retry exhausted) followed by a manual second tap succeeding,
+// meaning that manual tap was effectively a THIRD attempt. Raised to 2
+// retries (3 attempts total) so that third attempt happens automatically
+// instead of requiring the learner to notice a failure and retry it
+// themselves.
+const MAX_RETRIES = 2;
+
 function speakWithBrowserVoice(
   text: string,
-  isRetry = false,
+  attempt = 0,
   excludeVoice: SpeechSynthesisVoice | null = null,
   // Fires once this specific utterance actually finishes speaking —
   // speakWord's repeat-count chain (see WORD_REPEAT_GAP_MS below) needs
@@ -282,8 +298,11 @@ function speakWithBrowserVoice(
   // A retry always re-picks live (bypassing the cache) and explicitly
   // excludes whatever voice the failed attempt used — see
   // selectGermanVoice's own comment for why reusing that same voice
-  // object here would just reproduce the same silent hang.
-  const voice = isRetry
+  // object here would just reproduce the same silent hang. (In practice
+  // this doesn't even seem to be what's fixing anything — see MAX_RETRIES'
+  // own comment — but there's no reason to stop excluding a voice that
+  // JUST failed regardless.)
+  const voice = attempt > 0
     ? selectGermanVoice(window.speechSynthesis.getVoices(), excludeVoice)
     : pickGermanVoice();
   if (voice) utterance.voice = voice;
@@ -293,14 +312,16 @@ function speakWithBrowserVoice(
     // real failure, nothing to report.
     if (speechGeneration !== myGeneration) return;
     // Learn from this immediately, on the FIRST attempt too, not just
-    // after a retry also fails — see markVoiceBad's own comment for why
-    // waiting until then left every future word paying the same ~2s
-    // fail-then-retry cost forever instead of just once per bad voice.
+    // after every retry is also exhausted — see markVoiceBad's own
+    // comment for why waiting until then left every future word paying
+    // the same fail-then-retry cost forever instead of just once per bad
+    // voice.
     markVoiceBad(voice);
-    if (isRetry) { reportTtsError(e.error, voice); onFailure?.(); }
-    // A genuine error (not just a silent hang) on the FIRST attempt is
-    // still worth one retry — see the onstart-timeout branch below for
-    // why a retry, not an immediate report.
+    if (attempt >= MAX_RETRIES) { reportTtsError(e.error, voice); onFailure?.(); }
+    // Not yet out of retries — same as the onstart-timeout branch below,
+    // deliberately does NOT retry from here directly. The timeout below
+    // still fires (since `started` never became true) and drives the
+    // actual retry, so there's exactly one place that ever schedules one.
   };
   // Only cancel when something is actually in-flight -- calling cancel()
   // unconditionally right before speak(), even with nothing queued, is a
@@ -349,11 +370,11 @@ function speakWithBrowserVoice(
     if (speechGeneration !== myGeneration) return;
     // Same "learn immediately" reasoning as onerror above.
     markVoiceBad(voice);
-    if (isRetry) { reportTtsError('never started (after retry)', voice); onFailure?.(); return; }
+    if (attempt >= MAX_RETRIES) { reportTtsError('never started (after retry)', voice); onFailure?.(); return; }
     window.speechSynthesis.cancel();
     setTimeout(() => {
       if (speechGeneration !== myGeneration) return;
-      speakWithBrowserVoice(text, true, voice, onEnd, onFailure);
+      speakWithBrowserVoice(text, attempt + 1, voice, onEnd, onFailure);
     }, 200);
   }, 3500);
   window.speechSynthesis.speak(utterance);
@@ -435,7 +456,7 @@ function speakWordOnce(word: Word, onEnded?: () => void, onFailure?: () => void,
       audioGenerationAttempted.add(word.id);
       generateWordAudio(word.id, spokenForm(word));
     }
-    speakWithBrowserVoice(spokenForm(word), false, null, onEnded, onFailure);
+    speakWithBrowserVoice(spokenForm(word), 0, null, onEnded, onFailure);
   };
   audio.addEventListener('error', fallback);
   if (onEnded) {
@@ -513,36 +534,6 @@ export function stopSpeech(): void {
     currentAudio = null;
   }
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-}
-
-// Real, empirically confirmed pattern (a live test: opening a fresh tab
-// on iOS Safari, the FIRST speechSynthesis.speak() call anywhere in that
-// browser session reliably never starts, while every call after that —
-// even in a totally different tab — works immediately) rather than a
-// guess: the underlying platform speech engine needs one throwaway call
-// to actually wake up. This spends that one "free" failure on a silent,
-// inaudible utterance the learner never notices, called once from the
-// FIRST tap anywhere in the app (see SpeechPrimer) — so their own first
-// REAL tap on a word's audio button is already the "second" speak() call
-// globally, which the same test showed succeeds. Deliberately fire-and-
-// forget: no onstart/onerror handling, since whether this specific
-// utterance itself succeeds or fails is irrelevant — only that a speak()
-// call happened at all. A genuinely silent (volume 0) utterance risks
-// some engines skipping the real synthesis work entirely (defeating the
-// whole point), so this uses a barely-audible-in-theory, effectively
-// inaudible-in-practice low volume instead of true silence.
-let primed = false;
-export function primeSpeechSynthesis(): void {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window) || primed) return;
-  primed = true;
-  try {
-    const utterance = new SpeechSynthesisUtterance('.');
-    utterance.volume = 0.01;
-    utterance.rate = 10;
-    window.speechSynthesis.speak(utterance);
-  } catch {
-    // Nothing to do — this is a best-effort warm-up, not a real feature.
-  }
 }
 
 // Covers a gap SpeechCleanup (app/layout.tsx) can't: that component only
