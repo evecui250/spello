@@ -297,6 +297,10 @@ export interface WordGloss {
   thirdPerson?: string;
   pastTense?: string;
   perfectTense?: string;
+  // Same idea as Word.prepositionNote (lib/words.ts) — a fixed/idiomatic
+  // preposition (+ case) this word is commonly used with, only when one
+  // genuinely applies. Omitted for most words.
+  prepositionNote?: string;
 }
 
 // Per-word lemma + short translation for every content word in an

@@ -111,31 +111,38 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
             </span>
           )}
         </div>
-        {showWord ? (
-          <div className="text-center">
-            <span className="text-2xl font-semibold text-slate-700">
-              {spokenForm(word)}
-              <SpeakerButton word={word} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
-            </span>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2">
-            <button
-              onClick={() => speakWord(word)}
-              aria-label="Play the word again"
-              className="w-16 h-16 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-3xl hover:bg-indigo-200 active:scale-95 transition-all"
-            >
-              🔊
-            </button>
-            <span className="text-xs text-slate-400">Tap to hear it again</span>
-            <button
-              onClick={() => { setWordRevealed(true); onReveal?.(); }}
-              className="text-xs text-indigo-500 underline mt-1"
-            >
-              Can't listen right now? Show the word
-            </button>
-          </div>
-        )}
+        {/* Fixed height regardless of which branch renders — the pre-answer
+            audio prompt (icon + two lines of helper text) is taller than
+            the post-answer revealed word, and letting the card's own
+            height follow that difference made it visibly shrink the
+            instant an answer was picked. */}
+        <div className="min-h-[132px] flex flex-col items-center justify-center gap-2">
+          {showWord ? (
+            <div className="text-center">
+              <span className="text-2xl font-semibold text-slate-700">
+                {spokenForm(word)}
+                <SpeakerButton word={word} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
+              </span>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => speakWord(word)}
+                aria-label="Play the word again"
+                className="w-16 h-16 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-3xl hover:bg-indigo-200 active:scale-95 transition-all"
+              >
+                🔊
+              </button>
+              <span className="text-xs text-slate-400">Tap to hear it again</span>
+              <button
+                onClick={() => { setWordRevealed(true); onReveal?.(); }}
+                className="text-xs text-indigo-500 underline mt-1"
+              >
+                Can't listen right now? Show the word
+              </button>
+            </>
+          )}
+        </div>
         <div className="flex flex-col gap-2">
           {choices.map(choice => {
             const isCorrectChoice = choice === correctChoice;

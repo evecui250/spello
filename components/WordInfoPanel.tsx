@@ -65,6 +65,11 @@ export default function WordInfoPanel({ word, usedForm, isPreview }: Props) {
           {word.perfectTense && <div>perfect: <span className="font-semibold text-stone-700">{word.perfectTense}</span></div>}
         </div>
       )}
+      {word.prepositionNote && (
+        <div className="text-xs text-stone-500">
+          Usually with: <span className="font-semibold text-stone-700">{word.prepositionNote}</span>
+        </div>
+      )}
     </div>
   );
 }

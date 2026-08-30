@@ -58,7 +58,10 @@ function searchRank(w: Word, q: string, nativeLanguage: 'en' | 'zh'): number | n
 // level picker) — excludes the still-unused 'C1'/'C2' Level values, which
 // aren't a book a learner can pick yet.
 const BOOK_LEVELS: Level[] = ['A1', 'A2', 'B1', 'B2'];
-type BookFilter = 'all' | Level;
+// 'myWords' isn't a real Level — it's a cross-book view of only the
+// learner's own added words, same custom-word pool 'all' already merges
+// in per-level, just with the curated corpus left out entirely.
+type BookFilter = 'all' | Level | 'myWords';
 
 type Familiarity = 'all' | 'new' | 'learning' | 'mastered';
 
@@ -211,29 +214,33 @@ export default function WordsPage() {
 
   useEffect(() => {
     setNativeLanguage(getSettings().nativeLanguage);
-    applyParam('level', ['all', ...BOOK_LEVELS], setFilterLevel);
+    applyParam('level', ['all', 'myWords', ...BOOK_LEVELS], setFilterLevel);
     applyParam('familiarity', ['all', 'new', 'learning', 'mastered'], setFilterFamiliarity);
     applyParam('date', ['all', 'today', '7days', '30days'], setDateFilter);
   }, []);
 
   useEffect(() => {
-    setCustomWords(filterLevel === 'all' ? getAllCustomWordsAcrossLevels() : Object.values(getAllCustomWordsForLevel(filterLevel)));
+    setCustomWords(filterLevel === 'all' || filterLevel === 'myWords' ? getAllCustomWordsAcrossLevels() : Object.values(getAllCustomWordsForLevel(filterLevel)));
   }, [filterLevel, customWordsVersion]);
 
   // Which book a newly-added word (see AddWordCard below) actually belongs
   // to — whichever specific book is being browsed, or the learner's own
-  // active study level when browsing "All books" (so it's never left
-  // ambiguous which book a lookup result would be filed under).
-  const addTargetLevel: Level = filterLevel === 'all' ? getSettings().level : filterLevel;
+  // active study level when browsing "All books"/"My words" (so it's never
+  // left ambiguous which book a lookup result would be filed under).
+  const addTargetLevel: Level = filterLevel === 'all' || filterLevel === 'myWords' ? getSettings().level : filterLevel;
 
   // Learner-added words merge in alongside the curated corpus — same
   // "count exactly the same" treatment as the study/review pipeline (see
   // lib/practice.ts's allWordsForLevel), so this page (the only place a
   // learner can see/manage them) shows the true combined list rather than
-  // silently hiding half of it.
+  // silently hiding half of it. "My words" is the one exception — just the
+  // custom pool, curated corpus left out entirely, since its whole point
+  // is isolating what the learner added themselves.
   const words = useMemo(() => {
     const pool = filterLevel === 'all'
       ? [...WORDS.filter(w => (BOOK_LEVELS as string[]).includes(w.level)), ...customWords]
+      : filterLevel === 'myWords'
+      ? customWords
       : [...wordsForLevel(filterLevel), ...customWords];
     return [...pool].sort((a, b) => a.de.localeCompare(b.de, 'de'));
   }, [filterLevel, customWords]);
@@ -335,9 +342,10 @@ export default function WordsPage() {
           </span>
           <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
           {w.plural && <span className="text-stone-500 text-sm ml-2">· {w.plural}</span>}
-          {/* Only shown when browsing "All books" — a mixed-book list
-              needs a way to tell at a glance which one each row is from. */}
-          {filterLevel === 'all' && (
+          {/* Only shown when browsing a mixed-book view — "All books" or
+              "My words" — where a row's own book isn't otherwise implied
+              by the filter itself. */}
+          {(filterLevel === 'all' || filterLevel === 'myWords') && (
             <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-stone-500 bg-stone-100 rounded-full px-2 py-0.5 align-middle">
               {w.level}
             </span>
@@ -409,6 +417,7 @@ export default function WordsPage() {
           className="min-w-0 bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-stone-800 focus:outline-none focus:border-amber-300"
         >
           <option value="all">All books</option>
+          <option value="myWords">My words</option>
           {BOOK_LEVELS.map(lvl => <option key={lvl} value={lvl}>{lvl}</option>)}
         </select>
 

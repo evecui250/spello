@@ -49,6 +49,11 @@ export default function GlossPopup({ gloss }: Props) {
           {gloss.perfectTense && <div>perfect: <span className="font-semibold text-stone-700">{gloss.perfectTense}</span></div>}
         </div>
       )}
+      {gloss.prepositionNote && (
+        <div className="text-xs text-stone-500">
+          Usually with: <span className="font-semibold text-stone-700">{gloss.prepositionNote}</span>
+        </div>
+      )}
     </div>
   );
 }

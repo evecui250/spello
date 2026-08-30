@@ -53,6 +53,14 @@ export interface Word {
   // should read either of these two fields; everywhere else should call it
   // instead of reaching for `.en`/`.zh` directly.
   zh?: string;
+  // A genuinely fixed/idiomatic preposition (+ case, for a verb) this word
+  // is commonly used with -- e.g. "am Bahnhof" for a place noun, or "sich
+  // über etw. (Akk.) erkundigen" for a verb with a governed preposition
+  // (Rektion). Only populated where one actually exists and is worth
+  // teaching (most words don't have one) -- added later via a batch pass
+  // (scripts/generate-preposition-notes.py), so absent for any word that
+  // pass hasn't reached yet.
+  prepositionNote?: string;
   type: WordType;
   category?: string;
   level: Level;

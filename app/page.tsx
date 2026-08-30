@@ -180,22 +180,23 @@ export default function HomePage() {
         )}
       </div>
 
+      {/* Sized and shaped to read as a secondary companion to Start, not a
+          competing action — same 260px cap and pill shape, smaller icon
+          and single-line copy, rather than the wider rounded-2xl card this
+          started as (which sat noticeably bigger than Start above it). */}
       <Link
         href="/mistakes"
-        className="flex items-center gap-3 bg-amber-50/40 backdrop-blur-sm border border-amber-100/30 rounded-2xl px-4 py-3 hover:bg-amber-50/55 transition-colors"
+        className="w-full max-w-[260px] flex items-center gap-2.5 bg-amber-50/40 backdrop-blur-sm border border-amber-100/30 rounded-full pl-2 pr-4 py-2 hover:bg-amber-50/55 transition-colors"
       >
         <Image
           src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/mistake_notebook_icon.webp`}
           alt=""
-          width={44}
-          height={44}
+          width={32}
+          height={32}
           unoptimized
-          className="rounded-xl shrink-0"
+          className="rounded-full shrink-0"
         />
-        <div className="flex flex-col">
-          <span className="font-semibold text-amber-50">Mistake Notebook</span>
-          <span className="text-xs text-amber-100/70">Redo sentences until they're perfect</span>
-        </div>
+        <span className="text-sm font-semibold text-amber-50">Mistake Notebook</span>
       </Link>
     </div>
   );

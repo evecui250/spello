@@ -116,7 +116,15 @@ Deno.serve(async (req: Request) => {
       'auxiliary) as "perfectTense" -- for a separable-prefix verb, write these the way they\'d ' +
       'actually appear in a sentence, prefix split off (e.g. "steht auf", not "aufsteht"). Omit ' +
       'any of these fields entirely for a word they don\'t apply to (pronouns, prepositions, ' +
-      'adjectives, adverbs, conjunctions never get them).';
+      'adjectives, adverbs, conjunctions never get them). Additionally, ONLY when this word has ' +
+      'a genuinely fixed, idiomatic preposition (and case, for a verb) that\'s actually worth ' +
+      'teaching -- a place NOUN with a strongly-associated locational preposition (e.g. Bahnhof ' +
+      '-> "am Bahnhof (at the train station)"), or a VERB/ADJECTIVE with a governed preposition ' +
+      '(Rektion, e.g. erkundigen -> "sich über etw. (Akk.) erkundigen (to inquire about sth.)", ' +
+      'warten -> "warten auf etw./jmdn. (Akk.) (to wait for)") -- include it as "prepositionNote", ' +
+      'a short self-contained phrase (German usage + a brief English gloss in parentheses). Leave ' +
+      'this field out entirely for the many ordinary words that have no such fixed usage worth ' +
+      'flagging -- most nouns/verbs should NOT get this field, only genuinely idiomatic ones.';
     const promptText = direction === 'native-to-de'
       ? `For this ${lang} sentence (a CEFR ${level || 'A1'} learner is about to translate it ` +
         `INTO German): "${sentence}", produce a JSON object mapping EVERY distinct content word ` +
@@ -132,7 +140,8 @@ Deno.serve(async (req: Request) => {
         '"some", "many", "each", "several", and "both" DO carry real translatable meaning and ' +
         'must be included, not skipped (e.g. "all" -> lemma "alle"). Respond with exactly this ' +
         'JSON: {"words": {"word1": {"lemma": "...", "gloss": "...", "article": "...", ' +
-        '"plural": "...", "thirdPerson": "...", "pastTense": "...", "perfectTense": "..."}, ...}}.'
+        '"plural": "...", "thirdPerson": "...", "pastTense": "...", "perfectTense": "...", ' +
+        '"prepositionNote": "..."}, ...}}.'
       : `For this German sentence (a CEFR ${level || 'A1'} learner's exercise): ` +
         `"${sentence}", produce a JSON object mapping EVERY distinct word (as it ` +
         'literally appears there, preserving capitalization) to its dictionary/base ' +
@@ -146,7 +155,8 @@ Deno.serve(async (req: Request) => {
         'with the same translation and the same grammar fields). Skip bare articles ' +
         '(der/die/das/ein/eine/einen/etc.) and punctuation. Respond with exactly this JSON: ' +
         '{"words": {"word1": {"lemma": "...", "gloss": "...", "article": "...", "plural": "...", ' +
-        `"thirdPerson": "...", "pastTense": "...", "perfectTense": "..."}, ...}}, each gloss in ${lang}.`;
+        `"thirdPerson": "...", "pastTense": "...", "perfectTense": "...", "prepositionNote": "..."}, ` +
+        `...}}, each gloss in ${lang}.`;
 
     const completion = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -174,7 +184,7 @@ Deno.serve(async (req: Request) => {
 
     const result = await completion.json();
     const raw: string = result.choices?.[0]?.message?.content ?? '{}';
-    let parsed: { words?: Record<string, { lemma?: string; gloss?: string; article?: string; plural?: string; thirdPerson?: string; pastTense?: string; perfectTense?: string }> } = {};
+    let parsed: { words?: Record<string, { lemma?: string; gloss?: string; article?: string; plural?: string; thirdPerson?: string; pastTense?: string; perfectTense?: string; prepositionNote?: string }> } = {};
     try {
       parsed = JSON.parse(raw);
     } catch {
