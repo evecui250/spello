@@ -143,6 +143,54 @@ function runTestWithPriming(
   setTimeout(() => runTest(voice, onUpdate), 250);
 }
 
+// A real, important discrepancy: this page's own "test twice" (run on a
+// FRESH page load) found one retry enough, but a real report on the
+// deployed 3-retry chain showed ALL 3 attempts failing for an
+// AI-corrected sentence — which only ever gets spoken partway through a
+// real session, after several OTHER words have already been played.
+// This replicates that: 5 real, sequential word-like utterances first
+// (waiting for each to actually finish or time out, same gap the real
+// app uses between repeats), THEN runs the normal single-attempt test —
+// checking whether accumulated session activity, not a fresh page's
+// "first call ever," is what actually degrades things.
+function runTestAfterSessionActivity(
+  voice: SpeechSynthesisVoice | null,
+  onUpdate: (r: TestResult) => void,
+): void {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    onUpdate({ status: 'error', detail: 'speechSynthesis not supported' });
+    return;
+  }
+  onUpdate({ status: 'testing' });
+  const synth = window.speechSynthesis;
+  const dummyPhrases = ['eins', 'zwei', 'drei', 'vier', 'fünf'];
+  let i = 0;
+  const speakNext = () => {
+    if (i >= dummyPhrases.length) {
+      runTest(voice, onUpdate);
+      return;
+    }
+    const u = new SpeechSynthesisUtterance(dummyPhrases[i]);
+    u.lang = 'de-DE';
+    if (voice) u.voice = voice;
+    i++;
+    let settled = false;
+    const proceed = () => {
+      if (settled) return;
+      settled = true;
+      setTimeout(speakNext, 300);
+    };
+    u.onend = proceed;
+    u.onerror = proceed;
+    // A hung dummy phrase must not block the rest of the warm-up chain
+    // forever — same 3500ms budget the real retry chain gives each
+    // attempt before moving on.
+    setTimeout(proceed, 3500);
+    try { synth.speak(u); } catch { proceed(); }
+  };
+  speakNext();
+}
+
 function StatusBadge({ result }: { result: TestResult }) {
   if (result.status === 'idle') return <span className="text-stone-400 text-xs">Not tested yet</span>;
   if (result.status === 'testing') return <span className="text-indigo-500 text-xs">Testing…</span>;
@@ -374,6 +422,44 @@ export default function TtsDebugPage() {
                   runTestWithPriming(voice, result => setResults(r => ({ ...r, 'strategy-priming': result })));
                 }}
                 disabled={results['strategy-priming']?.status === 'testing'}
+                className="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 shrink-0"
+              >
+                Test
+              </button>
+            </div>
+          </div>
+        )}
+
+        {germanVoices.length > 0 && (
+          <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex flex-col gap-3">
+            <div>
+              <div className="font-semibold text-stone-800">After real session activity (5 words first)</div>
+              <div className="text-stone-500 text-xs">
+                Speaks 5 short words first, one after another, waiting for each to actually finish —
+                the same way a real study round plays several words before a sentence correction ever
+                comes up — THEN runs the normal test. If this fails where the fresh voice tests above
+                succeed, the problem is accumulated session activity degrading things, not a fresh
+                page's "first call ever."
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={after404Voice}
+                onChange={e => setAfter404Voice(e.target.value)}
+                className="min-w-0 flex-1 bg-white/80 border border-stone-200 rounded-lg px-2 py-1.5 text-xs text-stone-800"
+              >
+                {germanVoices.map(v => (
+                  <option key={`sel3-${v.name}-${v.lang}`} value={`${v.name}|${v.lang}`}>{v.name}</option>
+                ))}
+              </select>
+              <StatusBadge result={results['strategy-session'] ?? { status: 'idle' }} />
+              <button
+                onClick={() => {
+                  const voice = germanVoices.find(v => `${v.name}|${v.lang}` === after404Voice) ?? null;
+                  setResults(r => ({ ...r, 'strategy-session': { status: 'testing' } }));
+                  runTestAfterSessionActivity(voice, result => setResults(r => ({ ...r, 'strategy-session': result })));
+                }}
+                disabled={results['strategy-session']?.status === 'testing'}
                 className="bg-indigo-600 text-white text-sm px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 shrink-0"
               >
                 Test
