@@ -59,13 +59,16 @@ ACCENT_INSTRUCTIONS = (
     "word stress throughout -- never American- or English-influenced "
     "pronunciation, even for words whose spelling happens to resemble an "
     "English word (e.g. pronounce them fully as German words, not as their "
-    "English look-alikes). In particular, a German 'v' is pronounced like an "
+    "English look-alikes). In particular: a German 'v' is pronounced like an "
     "English 'f' in native German words and prefixes (e.g. 'verbittern', "
     "'vergessen', 'Vater' all start with an f-sound) -- never voice it like "
     "an English 'v', except in obvious foreign loanwords that keep the "
-    "/v/ sound (e.g. 'Vase', 'Video'). Speak at a normal, brisk conversational "
-    "pace, as a short standalone dictionary-style pronunciation clip -- do "
-    "not pause or add any silence before or after the word."
+    "/v/ sound (e.g. 'Vase', 'Video'). And a German 'w' is pronounced like "
+    "an English 'v' (e.g. 'Wasser', 'wichtig', 'wollen' all start with a "
+    "v-sound) -- never like an English 'w'. Speak at a normal, brisk "
+    "conversational pace, as a short standalone dictionary-style "
+    "pronunciation clip -- do not pause or add any silence before or "
+    "after the word."
 )
 
 ENTRY_RE = re.compile(
