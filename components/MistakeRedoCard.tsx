@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Word, Level, glossFor, diffAgainstAttempt, resolveClickedWord, isWordToken } from '../lib/words';
+import { Word, Level, glossFor, diffAgainstAttempt, resolveClickedWord, isWordToken, findWordByEnglishForm, segmentChineseForClicks, applyGlossFallback, tokenize } from '../lib/words';
 import { WordProgress, getSettings, getWordProgress, saveWordProgress } from '../lib/storage';
 import { correctSentence, explainCorrection, getSentenceGlosses, WordGloss, ExplanationResult, DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
 import { scheduleSync } from '../lib/sync';
@@ -37,11 +37,19 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
   const [glosses, setGlosses] = useState<Record<string, WordGloss>>({});
   const [selectedWord, setSelectedWord] = useState<Word | null>(null);
   const [selectedGlossToken, setSelectedGlossToken] = useState<string | null>(null);
+  // Same idea as glosses/selectedWord above, but for the PROMPT sentence
+  // (a hint while still attempting the translation) — kept fully separate
+  // so tapping a word in one sentence never disturbs whatever's showing
+  // for the other, same as the real correction card.
+  const [promptGlosses, setPromptGlosses] = useState<Record<string, WordGloss>>({});
+  const [selectedPromptWord, setSelectedPromptWord] = useState<Word | null>(null);
+  const [selectedPromptGlossToken, setSelectedPromptGlossToken] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<ExplanationResult | null>(null);
   const [explanationStatus, setExplanationStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached'>('idle');
   const nativeLanguage = getSettings().nativeLanguage;
 
   const diff = result ? diffAgainstAttempt(input, result.sentence) : null;
+  const promptOnScreen = nativeLanguage === 'zh' ? (mistake.englishPromptZh ?? mistake.englishPrompt) : mistake.englishPrompt;
 
   // Same best-effort per-word lemma+gloss fetch as the real correction
   // card, so every content word in the correction (not just ones already
@@ -55,6 +63,19 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
+
+  // Prompt words are clickable from the moment the card opens (unlike the
+  // correction, which only exists after a check) — same 'native-to-de'
+  // direction as SentenceExercise's own prompt-gloss fetch.
+  useEffect(() => {
+    if (!promptOnScreen) return;
+    let cancelled = false;
+    getSentenceGlosses(word.id, promptOnScreen, level, nativeLanguage, 'native-to-de')
+      .then(words => { if (!cancelled) setPromptGlosses(words); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promptOnScreen]);
 
   const handleSubmit = () => {
     if (!input.trim() || status === 'loading') return;
@@ -119,14 +140,73 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
       <div className="bg-indigo-50 rounded-xl px-3 py-2">
         <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate to German</div>
         <div className="text-stone-700 italic">
-          {nativeLanguage === 'zh' ? (mistake.englishPromptZh ?? mistake.englishPrompt) : mistake.englishPrompt}
+          {promptOnScreen && nativeLanguage === 'zh'
+            ? applyGlossFallback(segmentChineseForClicks(promptOnScreen, word), promptGlosses).map((span, i) => {
+              if (span.word) {
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => { setSelectedPromptGlossToken(null); setSelectedPromptWord(prev => (prev?.id === span.word!.id ? null : span.word!)); }}
+                    className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors not-italic"
+                  >
+                    {span.text}
+                  </button>
+                );
+              }
+              if (span.gloss) {
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => { setSelectedPromptWord(null); setSelectedPromptGlossToken(prev => (prev === span.text ? null : span.text)); }}
+                    className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors not-italic"
+                  >
+                    {span.text}
+                  </button>
+                );
+              }
+              return <span key={i}>{span.text}</span>;
+            })
+            : promptOnScreen && tokenize(promptOnScreen).map((text, i, tokens) => {
+              const nextWordToken = tokens.slice(i + 1).find(isWordToken);
+              const match = /[A-Za-z]/.test(text) ? findWordByEnglishForm(text, word, nextWordToken) : undefined;
+              const gloss = !match ? promptGlosses[text] : undefined;
+              if (match) {
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => { setSelectedPromptGlossToken(null); setSelectedPromptWord(prev => (prev?.id === match.id ? null : match)); }}
+                    className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                  >
+                    {text}
+                  </button>
+                );
+              }
+              if (gloss) {
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => { setSelectedPromptWord(null); setSelectedPromptGlossToken(prev => (prev === text ? null : text)); }}
+                    className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                  >
+                    {text}
+                  </button>
+                );
+              }
+              return <span key={i}>{text}</span>;
+            })}
         </div>
       </div>
-
-      {!result && (
-        <div className="text-xs text-stone-500">
-          Last time: <span className="italic">{mistake.userInput}</span>
-        </div>
+      {selectedPromptWord && <WordInfoPanel key={`prompt-${selectedPromptWord.id}`} word={selectedPromptWord} />}
+      {!selectedPromptWord && selectedPromptGlossToken && promptGlosses[selectedPromptGlossToken] && (
+        <GlossPopup
+          key={`prompt-gloss-${selectedPromptGlossToken}`}
+          surfaceForm={selectedPromptGlossToken}
+          gloss={promptGlosses[selectedPromptGlossToken]}
+        />
       )}
 
       {/* Stays visible (disabled once checked) rather than disappearing —

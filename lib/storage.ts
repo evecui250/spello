@@ -1,6 +1,6 @@
 'use client';
 
-import { Level, LEVEL_ORDER, Word } from './words';
+import { Level, LEVEL_ORDER, Word, WORDS } from './words';
 
 // Round 5 was removed — completing round 4 (full recall, no hints) once is
 // now the pass condition, both for a word's first climb in Study and for a
@@ -217,6 +217,53 @@ function migrateOrphanedRound4(): void {
   localStorage.setItem(ROUND5_REMOVAL_FLAG, '1');
 }
 
+const ORPHANED_LEVEL_PROGRESS_FLAG = 'wb2_migrated_orphan_progress_v1';
+
+// A curated word's `level` field isn't permanently fixed — every A1/A2/B1
+// expansion retagged existing B2 words in place (same id, corrected
+// level — see the word-corpus-schema notes on that history). A word
+// studied BEFORE its own retag left its lastMistake/exampleSentence
+// filed under the OLD level's progress bucket, which no longer contains
+// that word at all once retagged — invisible to the Mistake Notebook
+// (which only shows words actually IN the current level's list) even
+// though a raw progress scan still finds the record. That's exactly the
+// "Home says 1 to redo, the page shows nothing" bug a real report caught
+// (word w2202, "versorgen", now B2, with a stray lastMistake still filed
+// under A1's own progress bucket). Drops (doesn't migrate forward) any
+// such orphan: the record's own English prompt/corrected sentence may
+// not even match what that word would generate today under its new
+// level, so silently moving it into a different book's notebook would be
+// a more confusing surprise than just dropping one stale entry. Custom
+// (learner-added) words are never affected — they're absent from WORDS
+// entirely, so levelById.get() returns undefined and the check no-ops.
+function migrateOrphanedLevelProgress(): void {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem(ORPHANED_LEVEL_PROGRESS_FLAG)) return;
+  const levelById = new Map(WORDS.map(w => [w.id, w.level]));
+  for (const level of LEVEL_ORDER) {
+    const key = namespacedKey(KEYS.progress, level);
+    const raw = localStorage.getItem(key);
+    if (!raw) continue;
+    try {
+      const data = JSON.parse(raw) as Record<string, WordProgress>;
+      let changed = false;
+      for (const id of Object.keys(data)) {
+        const actualLevel = levelById.get(id);
+        if (actualLevel && actualLevel !== level && (data[id].lastMistake || data[id].exampleSentence)) {
+          const { lastMistake, exampleSentence, ...rest } = data[id];
+          data[id] = rest;
+          changed = true;
+        }
+      }
+      if (changed) localStorage.setItem(key, JSON.stringify(data));
+    } catch {
+      // Malformed record — leave untouched, same as every other place that
+      // parses this key defensively.
+    }
+  }
+  localStorage.setItem(ORPHANED_LEVEL_PROGRESS_FLAG, '1');
+}
+
 // Raw key name, not a namespaced one — avoids infinite recursion through
 // namespacedKey's own migration call.
 function namespacedKey(base: string, level: Level): string {
@@ -226,6 +273,7 @@ function namespacedKey(base: string, level: Level): string {
 export function getActiveLevel(): Level {
   if (typeof window === 'undefined') return 'A1';
   migrateOrphanedRound4();
+  migrateOrphanedLevelProgress();
   return (localStorage.getItem(ACTIVE_LEVEL_KEY) as Level) || 'A1';
 }
 
@@ -234,6 +282,7 @@ export function getActiveLevel(): Level {
 // before anything has called getActiveLevel() yet.
 function levelKey(base: string, level?: Level): string {
   migrateOrphanedRound4();
+  migrateOrphanedLevelProgress();
   return namespacedKey(base, level ?? getActiveLevel());
 }
 

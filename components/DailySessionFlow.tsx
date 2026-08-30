@@ -17,7 +17,7 @@ import {
   hasEnoughWordsForGame, buildParagraphBatches, sharedCategoryHint, parseParagraphResponse,
 } from '../lib/practice';
 import { REVIEW_PLAN, recordMilestonePass } from '../lib/srs';
-import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks, tokenize, isWordToken, diffAgainstAttempt } from '../lib/words';
+import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks, tokenize, isWordToken, diffAgainstAttempt, applyGlossFallback } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
 import SpeakerButton from './SpeakerButton';
@@ -222,46 +222,9 @@ function splitOnTranslationForm(translation: string, word: Word, nativeLanguage:
   return null;
 }
 
-// A render-ready span for the PROMPT sentence's Chinese path: same shape
-// as ChineseClickSpan (see lib/words.ts), plus an optional `gloss` for a
-// word segmentChineseForClicks didn't recognize as a corpus entry, but
-// promptGlosses (an AI call over this exact sentence — see the effect
-// above) did. segmentChineseForClicks already merges every unmatched
-// stretch into one plain-text span (punctuation and non-corpus words
-// alike) rather than one span per character — this walks each of THOSE
-// spans a second time, greedily matching the LONGEST promptGlosses key at
-// each position (glosses' own keys are already exact substrings of this
-// specific sentence, so this never mis-segments the way matching against
-// a huge global term list could). A corpus match (span.word already set)
-// always wins outright and is never touched — this only ever fills in the
-// gaps a corpus lookup left as plain, unclickable text.
-interface GlossSpan { text: string; word?: Word; gloss?: WordGloss }
-function applyGlossFallback(spans: { text: string; word?: Word }[], glosses: Record<string, WordGloss>): GlossSpan[] {
-  const keys = Object.keys(glosses).sort((a, b) => [...b].length - [...a].length);
-  if (keys.length === 0) return spans;
-  const out: GlossSpan[] = [];
-  for (const span of spans) {
-    if (span.word) { out.push(span); continue; }
-    const chars = [...span.text];
-    let i = 0;
-    while (i < chars.length) {
-      const matchedKey = keys.find(key => {
-        const klen = [...key].length;
-        return klen > 0 && i + klen <= chars.length && chars.slice(i, i + klen).join('') === key;
-      });
-      if (matchedKey) {
-        out.push({ text: matchedKey, gloss: glosses[matchedKey] });
-        i += [...matchedKey].length;
-      } else {
-        const prev = out[out.length - 1];
-        if (prev && !prev.word && !prev.gloss) prev.text += chars[i];
-        else out.push({ text: chars[i] });
-        i += 1;
-      }
-    }
-  }
-  return out;
-}
+// applyGlossFallback/GlossSpan moved to lib/words.ts so MistakeRedoCard
+// (the Mistake Notebook's redo flow) can share the exact same
+// prompt-word-clickability logic as this file's own SentenceExercise.
 
 // diffWords/diffAgainstAttempt moved to lib/words.ts so the Word List's
 // "Needs practice" redo flow (see MistakeRedoCard) can share the exact

@@ -1,3 +1,5 @@
+import type { WordGloss } from './ai';
+
 export type WordType = 'noun' | 'verb' | 'adjective' | 'adverb' | 'conjunction' | 'preposition' | 'phrase' | 'other';
 
 // CEFR level a word is drawn from. Each level's study pool is exclusive —
@@ -4233,4 +4235,48 @@ export function segmentChineseForClicks(text: string, targetWord?: Word): Chines
     else merged.push({ ...span });
   }
   return merged;
+}
+
+// A render-ready span for the PROMPT sentence's Chinese path: same shape
+// as ChineseClickSpan above, plus an optional `gloss` for a word
+// segmentChineseForClicks didn't recognize as a corpus entry, but a
+// sentence-glosses AI call over this exact sentence did.
+// segmentChineseForClicks already merges every unmatched stretch into one
+// plain-text span (punctuation and non-corpus words alike) rather than
+// one span per character — this walks each of THOSE spans a second time,
+// greedily matching the LONGEST gloss key at each position (the glosses'
+// own keys are already exact substrings of this specific sentence, so
+// this never mis-segments the way matching against a huge global term
+// list could). A corpus match (span.word already set) always wins
+// outright and is never touched — this only ever fills in the gaps a
+// corpus lookup left as plain, unclickable text. Shared by
+// DailySessionFlow's SentenceExercise and MistakeRedoCard (the Mistake
+// Notebook's redo flow) so both get the exact same prompt-word
+// clickability instead of two copies drifting apart.
+export interface GlossSpan { text: string; word?: Word; gloss?: WordGloss }
+export function applyGlossFallback(spans: { text: string; word?: Word }[], glosses: Record<string, WordGloss>): GlossSpan[] {
+  const keys = Object.keys(glosses).sort((a, b) => [...b].length - [...a].length);
+  if (keys.length === 0) return spans;
+  const out: GlossSpan[] = [];
+  for (const span of spans) {
+    if (span.word) { out.push(span); continue; }
+    const chars = [...span.text];
+    let i = 0;
+    while (i < chars.length) {
+      const matchedKey = keys.find(key => {
+        const klen = [...key].length;
+        return klen > 0 && i + klen <= chars.length && chars.slice(i, i + klen).join('') === key;
+      });
+      if (matchedKey) {
+        out.push({ text: matchedKey, gloss: glosses[matchedKey] });
+        i += [...matchedKey].length;
+      } else {
+        const prev = out[out.length - 1];
+        if (prev && !prev.word && !prev.gloss) prev.text += chars[i];
+        else out.push({ text: chars[i] });
+        i += 1;
+      }
+    }
+  }
+  return out;
 }
