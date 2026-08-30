@@ -180,7 +180,7 @@ const WORDS_PART_1: Word[] = [
   { id: 'w093', de: 'Formular', article: 'das', plural: 'Formulare', en: 'form', zh: '表格', type: 'noun', category: 'Behörde', level: 'A1', exercisePrompt: "I need a form today.", exercisePromptZh: "我今天需要一个表格。" },
   { id: 'w094', de: 'Frau', article: 'die', plural: 'Frauen', en: 'woman / wife', zh: '女人／妻子', type: 'noun', category: 'Person', level: 'A1', highFrequency: true },
   { id: 'w095', de: 'Freizeit', article: 'die', plural: '', en: 'free time', zh: '空闲时间', type: 'noun', category: 'Freizeit', level: 'A1', exercisePrompt: "I like my free time.", exercisePromptZh: "我喜欢我的空闲时间。" },
-  { id: 'w096', de: 'Freund', article: 'der', plural: 'Freunde', en: 'friend', zh: '朋友', type: 'noun', category: 'Soziales', level: 'A1', exercisePrompt: "I have a friend.", exercisePromptZh: "我有一个朋友。" },
+  { id: 'w096', de: 'Freund', article: 'der', plural: 'Freunde', en: 'friend / boyfriend', zh: '朋友／男朋友', type: 'noun', category: 'Soziales', level: 'A1', exercisePrompt: "I have a friend.", exercisePromptZh: "我有一个朋友。" },
   { id: 'w097', de: 'Frühstück', article: 'das', plural: 'Frühstücke', en: 'breakfast', zh: '早餐', type: 'noun', category: 'Essen', level: 'A1', exercisePrompt: "I eat breakfast in the morning.", exercisePromptZh: "我早上吃早餐。" },
 
   // G
@@ -273,7 +273,7 @@ const WORDS_PART_1: Word[] = [
   { id: 'w178', de: 'Platz', article: 'der', plural: 'Plätze', en: 'square / seat', zh: '广场／座位', type: 'noun', category: 'Alltag', level: 'A1', exercisePrompt: "I have a green seat.", exercisePromptZh: "我有一个绿色的座位。" },
   { id: 'w179', de: 'Politik', article: 'die', plural: '', en: 'politics', zh: '政治', type: 'noun', category: 'Politik', level: 'B1', exercisePrompt: "My brother studies politics at the university.", exercisePromptZh: "我哥哥在大学学习政治。" },
   { id: 'w180', de: 'Post', article: 'die', plural: '', en: 'post office / mail', zh: '邮局／邮件', type: 'noun', category: 'Kommunikation', level: 'A1', exercisePrompt: "I go to the post office.", exercisePromptZh: "我去邮局。" },
-  { id: 'w181', de: 'Preis', article: 'der', plural: 'Preise', en: 'price', zh: '价格', type: 'noun', category: 'Finanzen', level: 'A1', exercisePrompt: "The price is very cheap.", exercisePromptZh: "这个价格非常便宜。" },
+  { id: 'w181', de: 'Preis', article: 'der', plural: 'Preise', en: 'price / prize', zh: '价格／奖品', type: 'noun', category: 'Finanzen', level: 'A1', exercisePrompt: "The price is very cheap.", exercisePromptZh: "这个价格非常便宜。" },
   { id: 'w182', de: 'Problem', article: 'das', plural: 'Probleme', en: 'problem', zh: '问题', type: 'noun', category: 'Alltag', level: 'A1', exercisePrompt: "I have a problem today.", exercisePromptZh: "我今天有一个问题。" },
   { id: 'w183', de: 'Prüfung', article: 'die', plural: 'Prüfungen', en: 'exam', zh: '考试', type: 'noun', category: 'Bildung', level: 'A1', exercisePrompt: "I have an exam today.", exercisePromptZh: "我今天有一个考试。" },
 
