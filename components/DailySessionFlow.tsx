@@ -1255,7 +1255,7 @@ export default function DailySessionFlow() {
   // translate-and-correct flow. Non-blocking — if the fetch fails, the
   // copy-the-word interaction still proceeds, just without a sentence
   // saved for this word today (same as any other bootstrap-style word).
-  const [directSentence, setDirectSentence] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string } | null>(null);
+  const [directSentence, setDirectSentence] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; at?: string } | null>(null);
   const [directSentenceStatus, setDirectSentenceStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'unreachable'>('idle');
   // Set the first time any AI call fails with AIUnreachableError (a real
   // network-level failure to reach the Edge Function — see lib/ai.ts) —
@@ -1452,7 +1452,7 @@ export default function DailySessionFlow() {
         }
         const result = await correctSentence(word.id, word.de, settings.level, englishPrompt);
         if (cancelled) return;
-        setDirectSentence({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt, englishPromptZh });
+        setDirectSentence({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt, englishPromptZh, at: new Date().toISOString() });
         setDirectSentenceStatus('ready');
       } catch (e) {
         if (cancelled) return;
@@ -2963,6 +2963,7 @@ export default function DailySessionFlow() {
               // no way to resurface for a redo at all; MistakeRedoCard is
               // what clears it again on a later perfect redo.
               const perfect = diffAgainstAttempt(userInput, correction.sentence).perfect;
+              const at = new Date().toISOString();
               submitResult(true, {
                 // Real bug caught live: this used to set exampleSentence
                 // to the correction UNCONDITIONALLY, even on a wrong first
@@ -2972,13 +2973,14 @@ export default function DailySessionFlow() {
                 // learner actually gets it right themselves. Only ever
                 // set on a genuinely perfect attempt now; a redo (see
                 // MistakeRedoCard) is what fills it in later once earned.
-                ...(perfect ? { exampleSentence: correction } : {}),
+                ...(perfect ? { exampleSentence: { ...correction, at } } : {}),
                 lastMistake: perfect ? undefined : {
                   englishPrompt: correction.englishPrompt,
                   englishPromptZh: correction.englishPromptZh,
                   userInput,
                   correctedSentence: correction.sentence,
                   wordForm: correction.wordForm,
+                  at,
                 },
               }, { ...correction, userInput });
             }}

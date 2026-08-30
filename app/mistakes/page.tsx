@@ -16,10 +16,22 @@ import MistakeRedoCard from '../../components/MistakeRedoCard';
 // be scoped to just one.
 const BOOK_LEVELS: Level[] = ['A1', 'A2', 'B1', 'B2'];
 
+// Falls back to lastPracticed (date-only) for a record saved before the
+// `at` timestamp existed, so an old entry still sorts sensibly (as
+// "oldest") instead of crashing or floating to a random position -- both
+// an ISO datetime and a plain YYYY-MM-DD date string sort correctly
+// against each other lexicographically, and a totally blank fallback
+// sorts before both (oldest of all).
+function sortKey(p: WordProgress | undefined, kind: 'mistake' | 'correct'): string {
+  const at = kind === 'mistake' ? p?.lastMistake?.at : p?.exampleSentence?.at;
+  return at ?? p?.lastPracticed ?? '';
+}
+
 export default function MistakesPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress>>({});
   const [customWords, setCustomWords] = useState<Word[]>([]);
   const [nativeLanguage, setNativeLanguage] = useState<'en' | 'zh'>('en');
+  const [tab, setTab] = useState<'mistakes' | 'correct'>('mistakes');
   // Snapshotted once, at the moment "Redo" is tapped — see Word List's own
   // identical redoTarget for why (a successful redo clears lastMistake the
   // instant it saves, which would otherwise unmount the modal showing the
@@ -43,13 +55,13 @@ export default function MistakesPage() {
   const mistakeWords = useMemo(
     () => words
       .filter(w => !!progress[w.id]?.lastMistake)
-      .sort((a, b) => a.de.localeCompare(b.de, 'de')),
+      .sort((a, b) => sortKey(progress[b.id], 'mistake').localeCompare(sortKey(progress[a.id], 'mistake'))),
     [words, progress],
   );
   const perfectWords = useMemo(
     () => words
       .filter(w => !!progress[w.id]?.exampleSentence)
-      .sort((a, b) => a.de.localeCompare(b.de, 'de')),
+      .sort((a, b) => sortKey(progress[b.id], 'correct').localeCompare(sortKey(progress[a.id], 'correct'))),
     [words, progress],
   );
 
@@ -91,37 +103,42 @@ export default function MistakesPage() {
     );
   }
 
+  const activeWords = tab === 'mistakes' ? mistakeWords : perfectWords;
+
   return (
-    <div className="flex flex-col gap-5 pb-4">
+    <div className="flex flex-col gap-4 pb-4">
       <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
         Mistake Notebook
       </h1>
 
-      <div className="flex flex-col gap-2">
-        <h2 className="text-amber-100 font-semibold text-sm uppercase tracking-wide">
-          Mistake sentences {mistakeWords.length > 0 && `(${mistakeWords.length})`}
-        </h2>
-        {mistakeWords.length === 0 ? (
-          <p className="text-emerald-100/70 text-sm">Nothing to redo right now — nice work.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {mistakeWords.map(w => <WordRow key={w.id} w={w} />)}
-          </div>
-        )}
+      {/* Two panels, not two stacked sections — a word moves from Mistakes
+          to Correct the instant a redo comes back perfect (see
+          PROGRESS_CHANGED_EVENT above), so switching tabs is how a
+          learner actually watches their own backlog shrink. */}
+      <div className="flex gap-1 bg-black/20 rounded-full p-1 self-start">
+        <button
+          onClick={() => setTab('mistakes')}
+          className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${tab === 'mistakes' ? 'bg-amber-50 text-stone-800' : 'text-amber-100/70 hover:text-amber-50'}`}
+        >
+          Mistakes{mistakeWords.length > 0 && ` (${mistakeWords.length})`}
+        </button>
+        <button
+          onClick={() => setTab('correct')}
+          className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${tab === 'correct' ? 'bg-amber-50 text-stone-800' : 'text-amber-100/70 hover:text-amber-50'}`}
+        >
+          Correct{perfectWords.length > 0 && ` (${perfectWords.length})`}
+        </button>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <h2 className="text-amber-100 font-semibold text-sm uppercase tracking-wide">
-          Perfect sentences {perfectWords.length > 0 && `(${perfectWords.length})`}
-        </h2>
-        {perfectWords.length === 0 ? (
-          <p className="text-emerald-100/70 text-sm">None yet — these fill in as you nail a word's sentence on the first try.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {perfectWords.map(w => <WordRow key={w.id} w={w} />)}
-          </div>
-        )}
-      </div>
+      {activeWords.length === 0 ? (
+        <p className="text-emerald-100/70 text-sm">
+          {tab === 'mistakes' ? 'Nothing to redo right now — nice work.' : "None yet — these fill in as you nail a word's sentence."}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {activeWords.map(w => <WordRow key={w.id} w={w} />)}
+        </div>
+      )}
 
       {redoTarget && createPortal(
         <div

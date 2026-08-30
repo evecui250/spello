@@ -46,10 +46,11 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
         // a while (the learner may pause to think), and other progress
         // writes elsewhere shouldn't be clobbered by a stale snapshot.
         const current = getWordProgress(word.id);
+        const at = new Date().toISOString();
         saveWordProgress({
           ...current,
           exampleSentence: perfect
-            ? { sentence: correction.sentence, wordForm: correction.wordForm, englishPrompt: mistake.englishPrompt, englishPromptZh: mistake.englishPromptZh }
+            ? { sentence: correction.sentence, wordForm: correction.wordForm, englishPrompt: mistake.englishPrompt, englishPromptZh: mistake.englishPromptZh, at }
             : current.exampleSentence,
           lastMistake: perfect ? undefined : {
             englishPrompt: mistake.englishPrompt,
@@ -57,6 +58,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
             userInput: input.trim(),
             correctedSentence: correction.sentence,
             wordForm: correction.wordForm,
+            at,
           },
         });
         scheduleSync();

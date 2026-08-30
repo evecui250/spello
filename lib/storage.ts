@@ -56,7 +56,11 @@ export interface WordProgress {
   // Chinese version from the word's own corpus data, which silently falls
   // back to English for any word missing that field, mixing languages on
   // an otherwise all-Chinese summary/list.
-  exampleSentence?: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string };
+  // `at`: ISO timestamp of when this was set -- powers the Mistake
+  // Notebook's "latest to oldest" ordering, which lastPracticed (date-only)
+  // can't express on its own (multiple words redone the same day would
+  // otherwise have no real ordering between them).
+  exampleSentence?: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; at?: string };
 
   // Set whenever round 1's translation correction comes back NOT perfect
   // (see DailySessionFlow's diffAgainstAttempt check) — the "Mistake
@@ -68,7 +72,7 @@ export interface WordProgress {
   // own wrong attempt, kept so the redo view can show what they wrote
   // last time alongside the correction, same as the in-session correction
   // screen already does.
-  lastMistake?: { englishPrompt?: string; englishPromptZh?: string; userInput: string; correctedSentence: string; wordForm: string };
+  lastMistake?: { englishPrompt?: string; englishPromptZh?: string; userInput: string; correctedSentence: string; wordForm: string; at?: string };
 }
 
 export interface Streak {

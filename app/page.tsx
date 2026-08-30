@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  getAllProgress, getSettings, today,
+  getAllProgress, getSettings, today, getMergedProgressAcrossLevels, PROGRESS_CHANGED_EVENT,
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
   getTheme, Theme, THEME_CHANGED_EVENT,
 } from '../lib/storage';
@@ -12,7 +12,6 @@ import { SYNCED_EVENT } from '../lib/sync';
 import Logo from '../components/Logo';
 import { CheckCircleIcon } from '../components/icons';
 import { THEME_CONFIG } from '../components/AppBackground';
-import Image from 'next/image';
 import Link from 'next/link';
 
 // Once today's main goal is done, "Study more" pulls a smaller bonus round
@@ -37,6 +36,7 @@ export default function HomePage() {
   const [previewReviewCount, setPreviewReviewCount] = useState(0);
   const [totalStudyCount, setTotalStudyCount] = useState(0);
   const [totalReviewCount, setTotalReviewCount] = useState(0);
+  const [mistakeCount, setMistakeCount] = useState(0);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -83,11 +83,20 @@ export default function HomePage() {
         setTotalStudyCount(ds.studyWordIds.length);
         setTotalReviewCount(ds.reviewWordIds.length);
       }
+      // Same cross-level merge the Mistake Notebook page itself reads from
+      // (see getMergedProgressAcrossLevels), not just the active level's
+      // own progress — a mistake made under a different book should still
+      // count here.
+      setMistakeCount(Object.values(getMergedProgressAcrossLevels()).filter(p => !!p.lastMistake).length);
       setReady(true);
     };
     load();
     window.addEventListener(SYNCED_EVENT, load);
-    return () => window.removeEventListener(SYNCED_EVENT, load);
+    window.addEventListener(PROGRESS_CHANGED_EVENT, load);
+    return () => {
+      window.removeEventListener(SYNCED_EVENT, load);
+      window.removeEventListener(PROGRESS_CHANGED_EVENT, load);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -180,29 +189,22 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* Pulled out of the centered column entirely (owner call) — just the
-          icon plus a small caption, tucked in the corner rather than
-          competing with Start as a second centered element. Removing it
-          from that flex flow also means the logo/Start pair above centers
-          on the page by itself again, undisturbed by a third sibling. */}
+      {/* Same shape/size/motion as Start (owner call) — a fixed emerald
+          gradient rather than THEME_CONFIG's own (which changes per
+          theme and is already "claimed" by Start), so the two stay
+          visually related without becoming the same button. */}
       <Link
         href="/mistakes"
-        className="absolute bottom-3 right-3 flex flex-col items-center gap-1 hover:opacity-80 transition-opacity"
+        className="group relative w-full max-w-[260px] rounded-full px-5 py-4 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_16px_rgba(19,78,58,0.35)] hover:shadow-[0_8px_24px_rgba(19,78,58,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
+        style={{ backgroundImage: 'linear-gradient(135deg, #4a9b6e 0%, #2f7a52 50%, #1d5c3c 100%)' }}
       >
-        <Image
-          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/mistake_notebook_icon.webp`}
-          alt=""
-          width={56}
-          height={56}
-          unoptimized
-          className="rounded-2xl shrink-0"
-        />
-        <span
-          className="text-[11px] font-semibold text-amber-50 text-center leading-tight"
-          style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}
-        >
+        <span className="text-lg font-extrabold text-amber-50 tracking-wide">
           Mistake Notebook
         </span>
+        <span className="text-xs font-medium text-amber-100/75 text-center">
+          {mistakeCount > 0 ? `${mistakeCount} to redo` : 'All caught up'}
+        </span>
+        <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />
       </Link>
     </div>
   );
