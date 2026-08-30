@@ -2,19 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { WORDS, Word, Level, glossFor } from '../../lib/words';
+import { wordsForLevel, Word, glossFor } from '../../lib/words';
 import {
-  getMergedProgressAcrossLevels, getSettings, WordProgress,
-  getAllCustomWordsAcrossLevels, PROGRESS_CHANGED_EVENT,
+  getAllProgress, getSettings, WordProgress,
+  getAllCustomWordsForLevel, PROGRESS_CHANGED_EVENT,
 } from '../../lib/storage';
 import SpeakerButton from '../../components/SpeakerButton';
 import MistakeRedoCard from '../../components/MistakeRedoCard';
-
-// Same "curated corpus + learner-added words, across every book" pool
-// Word List's own "All books" view builds — a mistake or a perfect
-// sentence can come from any level, so this notebook was never going to
-// be scoped to just one.
-const BOOK_LEVELS: Level[] = ['A1', 'A2', 'B1', 'B2'];
 
 // Falls back to lastPracticed (date-only) for a record saved before the
 // `at` timestamp existed, so an old entry still sorts sensibly (as
@@ -38,18 +32,24 @@ export default function MistakesPage() {
   // result before the learner ever sees it).
   const [redoTarget, setRedoTarget] = useState<{ word: Word; mistake: NonNullable<WordProgress['lastMistake']> } | null>(null);
 
+  // Scoped to the current book only (not merged across every level) — per
+  // feedback, this notebook should reflect whichever book the learner is
+  // actually studying right now, same as the Home button that links here.
+  const level = getSettings().level;
+
   useEffect(() => {
     setNativeLanguage(getSettings().nativeLanguage);
-    setCustomWords(getAllCustomWordsAcrossLevels());
-    const load = () => setProgress(getMergedProgressAcrossLevels());
+    setCustomWords(Object.values(getAllCustomWordsForLevel(level)));
+    const load = () => setProgress(getAllProgress());
     load();
     window.addEventListener(PROGRESS_CHANGED_EVENT, load);
     return () => window.removeEventListener(PROGRESS_CHANGED_EVENT, load);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const words = useMemo(
-    () => [...WORDS.filter(w => (BOOK_LEVELS as string[]).includes(w.level)), ...customWords],
-    [customWords],
+    () => [...wordsForLevel(level), ...customWords],
+    [customWords, level],
   );
 
   const mistakeWords = useMemo(
@@ -76,9 +76,6 @@ export default function MistakesPage() {
             {w.article ? `${w.article} ` : ''}{w.de}
           </span>
           <SpeakerButton word={w} className="text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-stone-500 bg-stone-100 rounded-full px-2 py-0.5">
-            {w.level}
-          </span>
           <span className="text-stone-500 text-sm">{glossFor(w, nativeLanguage)}</span>
         </div>
         {sentence && (

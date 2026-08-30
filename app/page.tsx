@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  getAllProgress, getSettings, today, getMergedProgressAcrossLevels, PROGRESS_CHANGED_EVENT,
+  getAllProgress, getSettings, today, PROGRESS_CHANGED_EVENT,
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
   getTheme, Theme, THEME_CHANGED_EVENT,
 } from '../lib/storage';
@@ -37,6 +37,11 @@ export default function HomePage() {
   const [totalStudyCount, setTotalStudyCount] = useState(0);
   const [totalReviewCount, setTotalReviewCount] = useState(0);
   const [mistakeCount, setMistakeCount] = useState(0);
+  // Whether the current book has ANY sentence-notebook activity at all
+  // (mistakes or perfects) — an A1 learner who hasn't reached round-1
+  // sentence writing yet has neither, and the button shouldn't appear at
+  // all until there's something for it to show.
+  const [hasNotebookActivity, setHasNotebookActivity] = useState(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -83,11 +88,13 @@ export default function HomePage() {
         setTotalStudyCount(ds.studyWordIds.length);
         setTotalReviewCount(ds.reviewWordIds.length);
       }
-      // Same cross-level merge the Mistake Notebook page itself reads from
-      // (see getMergedProgressAcrossLevels), not just the active level's
-      // own progress — a mistake made under a different book should still
-      // count here.
-      setMistakeCount(Object.values(getMergedProgressAcrossLevels()).filter(p => !!p.lastMistake).length);
+      // Scoped to the current book only (not merged across every level) —
+      // per feedback, the notebook button should reflect whichever book
+      // the learner is actually studying right now, same as Start's own
+      // counts above.
+      const allProgress = Object.values(progress);
+      setMistakeCount(allProgress.filter(p => !!p.lastMistake).length);
+      setHasNotebookActivity(allProgress.some(p => !!p.lastMistake || !!p.exampleSentence));
       setReady(true);
     };
     load();
@@ -187,25 +194,30 @@ export default function HomePage() {
             <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />
           </button>
         )}
-      </div>
 
-      {/* Same shape/size/motion as Start (owner call) — a fixed emerald
-          gradient rather than THEME_CONFIG's own (which changes per
-          theme and is already "claimed" by Start), so the two stay
-          visually related without becoming the same button. */}
-      <Link
-        href="/mistakes"
-        className="group relative w-full max-w-[260px] rounded-full px-5 py-4 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_16px_rgba(19,78,58,0.35)] hover:shadow-[0_8px_24px_rgba(19,78,58,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
-        style={{ backgroundImage: 'linear-gradient(135deg, #4a9b6e 0%, #2f7a52 50%, #1d5c3c 100%)' }}
-      >
-        <span className="text-lg font-extrabold text-amber-50 tracking-wide">
-          Mistake Notebook
-        </span>
-        <span className="text-xs font-medium text-amber-100/75 text-center">
-          {mistakeCount > 0 ? `${mistakeCount} to redo` : 'All caught up'}
-        </span>
-        <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />
-      </Link>
+        {/* Same shape/size/motion as Start, and the SAME theme gradient
+            too (not a fixed color of its own) — just darkened a bit via
+            filter so it reads as a related-but-secondary action rather
+            than a second, differently-branded button. Hidden entirely
+            until this book has any sentence-notebook activity at all (an
+            A1 learner who hasn't reached round-1 sentence writing yet has
+            nothing here to show). */}
+        {hasNotebookActivity && (
+          <Link
+            href="/mistakes"
+            className="group relative w-full max-w-[260px] rounded-full px-5 py-4 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_16px_rgba(90,58,26,0.35)] hover:shadow-[0_8px_24px_rgba(90,58,26,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
+            style={{ backgroundImage: THEME_CONFIG[theme].buttonGradient, filter: 'brightness(0.78) saturate(0.9)' }}
+          >
+            <span className="text-lg font-extrabold text-amber-50 tracking-wide">
+              Mistake Notebook
+            </span>
+            <span className="text-xs font-medium text-amber-100/75 text-center">
+              {mistakeCount > 0 ? `${mistakeCount} to redo` : 'All caught up'}
+            </span>
+            <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+          </Link>
+        )}
+      </div>
     </div>
   );
 }
