@@ -515,6 +515,36 @@ export function stopSpeech(): void {
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
 }
 
+// Real, empirically confirmed pattern (a live test: opening a fresh tab
+// on iOS Safari, the FIRST speechSynthesis.speak() call anywhere in that
+// browser session reliably never starts, while every call after that —
+// even in a totally different tab — works immediately) rather than a
+// guess: the underlying platform speech engine needs one throwaway call
+// to actually wake up. This spends that one "free" failure on a silent,
+// inaudible utterance the learner never notices, called once from the
+// FIRST tap anywhere in the app (see SpeechPrimer) — so their own first
+// REAL tap on a word's audio button is already the "second" speak() call
+// globally, which the same test showed succeeds. Deliberately fire-and-
+// forget: no onstart/onerror handling, since whether this specific
+// utterance itself succeeds or fails is irrelevant — only that a speak()
+// call happened at all. A genuinely silent (volume 0) utterance risks
+// some engines skipping the real synthesis work entirely (defeating the
+// whole point), so this uses a barely-audible-in-theory, effectively
+// inaudible-in-practice low volume instead of true silence.
+let primed = false;
+export function primeSpeechSynthesis(): void {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window) || primed) return;
+  primed = true;
+  try {
+    const utterance = new SpeechSynthesisUtterance('.');
+    utterance.volume = 0.01;
+    utterance.rate = 10;
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    // Nothing to do — this is a best-effort warm-up, not a real feature.
+  }
+}
+
 // Covers a gap SpeechCleanup (app/layout.tsx) can't: that component only
 // calls stopSpeech() on an in-app ROUTE change, but a learner backgrounding
 // the tab/app (switching apps, locking the phone, switching browser tabs)

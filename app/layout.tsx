@@ -7,6 +7,7 @@ import AppBackground from '../components/AppBackground';
 import SyncGate from '../components/SyncGate';
 import ChunkErrorRecovery from '../components/ChunkErrorRecovery';
 import SpeechCleanup from '../components/SpeechCleanup';
+import SpeechPrimer from '../components/SpeechPrimer';
 import PwaRegister from '../components/PwaRegister';
 import UsagePing from '../components/UsagePing';
 import FontScaleEffect from '../components/FontScaleEffect';
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ChunkErrorRecovery />
         <SyncGate />
         <SpeechCleanup />
+        <SpeechPrimer />
         <PwaRegister />
         <UsagePing />
         <FontScaleEffect />
