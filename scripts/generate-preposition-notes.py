@@ -76,28 +76,69 @@ def parse_words(level_filter=None):
 
 
 SYSTEM_PROMPT = (
-    "You are a German pedagogy expert helping build a vocabulary app. You will get a JSON "
-    "array of entries, each with an id, the German word (de), its word type (noun/verb/"
-    "adjective), optional article, and its English gloss (en). For each entry, decide "
-    "whether it has a genuinely FIXED, idiomatic preposition (and case, for a verb/"
-    "adjective) that's actually worth teaching a learner -- NOT every word has one, and "
-    "most don't. Include a result ONLY when one of these genuinely applies:\n"
-    "- A place/location NOUN with a strongly-associated locational preposition (e.g. "
-    '"Bahnhof" -> "am Bahnhof (at the train station)", "Schule" -> "in der Schule (at '
-    'school)").\n'
-    "- A VERB or ADJECTIVE with a governed preposition (Rektion) that a learner needs to "
-    'memorize alongside the word (e.g. "erkundigen" -> "sich über etw. (Akk.) erkundigen '
-    '(to inquire about sth.)", "warten" -> "warten auf etw./jmdn. (Akk.) (to wait for)", '
-    '"stolz" -> "stolz auf etw./jmdn. (Akk.) (proud of)").\n'
-    "Do NOT include a result for a word with no such fixed idiom (an ordinary concrete "
-    'noun like "Tisch" or "Buch", a verb with no governed preposition, etc.) -- when in '
-    "doubt, leave it out rather than force a weak/uncommon example. For each entry you DO "
-    "include, return a short, self-contained \"note\": the German usage phrase, followed by "
-    "a brief English gloss in parentheses -- e.g. \"am Bahnhof (at the train station)\".\n"
+    "You are a strict German pedagogy expert helping build a vocabulary app. You will get a "
+    "JSON array of entries, each with an id, the German word (de), its word type (noun/verb/"
+    "adjective), optional article, and its English gloss (en). For each entry, decide whether "
+    "it has a genuinely FIXED, idiomatic preposition (and case) that a learner needs to "
+    "memorize ALONGSIDE the word -- most words do NOT qualify, and a false positive is worse "
+    "than a missed one, so when in doubt leave it out.\n"
+    "\n"
+    "HARD REQUIREMENT: the note you return MUST literally contain a real German preposition "
+    "(an, auf, aus, bei, durch, für, gegen, hinter, in, mit, nach, neben, über, um, unter, "
+    "von, vor, zu, zwischen, außer, statt, trotz, während, wegen, ohne, entlang, gemäß, laut, "
+    "seit, bis, or a contraction like am/im/beim/zum/zur/vom/ins/ans). If the correct usage "
+    "has NO preposition at all (a plain transitive verb with just a direct object, or a verb "
+    "governing a bare dative/accusative with no preposition), that word does NOT qualify --\n"
+    "REJECT it, don't invent one and don't return the bare verb alone.\n"
+    "\n"
+    "Only two categories genuinely qualify:\n"
+    "1. A place/location NOUN with ONE STRONGLY-CONVENTIONALIZED preposition that's specific "
+    'to that word (not just "any noun + in/an" works) -- e.g. "Bahnhof" -> "am Bahnhof (at the '
+    'train station)" (idiomatic "am", not "in dem"), "Schule" -> "in der Schule (at school)" '
+    "(idiomatic for attending, not just physical location). An ordinary place noun where any "
+    'preposition would work equally unremarkably (e.g. "Einbahnstraße" -> "in der '
+    'Einbahnstraße" -- any street works with "in der", nothing special) does NOT qualify.\n'
+    "2. A VERB or ADJECTIVE whose preposition is GOVERNED (Rektion) -- the preposition is "
+    'part of the verb/adjective\'s own grammar, not just describing location. Correct: '
+    '"erkundigen" -> "sich über etw. (Akk.) erkundigen", "warten" -> "warten auf etw./jmdn. '
+    '(Akk.)", "stolz" -> "stolz auf etw. (Akk.)", "gehören" -> "gehören zu etw. (Dat.)", '
+    '"gelten" -> "gelten für etw. (Akk.)". REJECTED (verified wrong -- do not repeat these '
+    'mistakes): "anrufen" (plain accusative object, jmdn. anrufen -- no preposition), '
+    '"beachten" (plain accusative object -- no preposition), "befinden" (sich befinden -- no '
+    'preposition, just reflexive), "begegnen" (jmdm. begegnen -- bare dative, no preposition), '
+    '"begrüßen" (plain accusative object -- no preposition), "empfehlen" (jmdm. etw. '
+    'empfehlen -- bare dative+accusative, no preposition), "entgegenkommen" (jmdm. '
+    'entgegenkommen -- bare dative, no preposition), "ablehnen" (etw. ablehnen -- plain '
+    'accusative object, NOT "ablehnen von").\n'
+    "\n"
+    'For each entry you DO include, return a "note": the exact German usage phrase containing '
+    'a real preposition, followed by a brief English gloss in parentheses -- e.g. "am Bahnhof '
+    '(at the train station)".\n'
     'Respond with exactly this JSON: {"results": [{"id": "...", "note": "..."}, ...]}, '
-    "including ONLY entries that genuinely qualify (omit every entry that doesn't, don't "
-    "pad the array to match the input length)."
+    "including ONLY entries that genuinely qualify per the hard requirement above -- omit "
+    "every entry that doesn't, don't pad the array to match the input length."
 )
+
+
+# Mechanical safety net on top of the prompt: a "prepositionNote" that
+# doesn't actually contain one of these (as a whole word, case-sensitive
+# where it matters -- "In" the middle of a sentence is still lowercase in
+# German) is a hallucination (the model returning the bare verb/phrase
+# with no real preposition, as happened before this check existed:
+# "anrufen (to call, phone)" had no preposition anywhere in it) and gets
+# dropped regardless of what the model claims.
+REAL_PREPOSITIONS = {
+    'an', 'auf', 'aus', 'bei', 'durch', 'für', 'gegen', 'hinter', 'in', 'mit',
+    'nach', 'neben', 'über', 'um', 'unter', 'von', 'vor', 'zu', 'zwischen',
+    'außer', 'statt', 'trotz', 'während', 'wegen', 'ohne', 'entlang',
+    'gemäß', 'laut', 'seit', 'bis',
+    'am', 'im', 'beim', 'zum', 'zur', 'vom', 'ins', 'ans',
+}
+
+
+def has_real_preposition(note):
+    tokens = re.findall(r"[A-Za-zÄÖÜäöüß]+", note.lower())
+    return any(t in REAL_PREPOSITIONS for t in tokens)
 
 
 def call_openai(batch):
@@ -126,14 +167,25 @@ def call_openai(batch):
             raw = result['choices'][0]['message']['content']
             parsed = json.loads(raw)
             results = parsed.get('results', [])
-            by_id = {r['id']: r for r in results if 'id' in r and r.get('note')}
+            by_id = {
+                r['id']: r for r in results
+                if 'id' in r and r.get('note') and has_real_preposition(r['note'])
+            }
             return by_id, None
         except urllib.error.HTTPError as e:
-            if e.code == 429 and rate_limit_retries < 8:
-                rate_limit_retries += 1
-                time.sleep(min(2 ** rate_limit_retries, 30))
-                continue
-            return {}, f"HTTP {e.code}: {e.read()[:300]}"
+            body_text = e.read()
+            if e.code == 429:
+                try:
+                    err = json.loads(body_text).get('error', {})
+                    if err.get('type') == 'insufficient_quota' or err.get('code') == 'insufficient_quota':
+                        return {}, 'INSUFFICIENT_QUOTA'
+                except Exception:
+                    pass
+                if rate_limit_retries < 8:
+                    rate_limit_retries += 1
+                    time.sleep(min(2 ** rate_limit_retries, 30))
+                    continue
+            return {}, f"HTTP {e.code}: {body_text[:300]}"
         except Exception as e:
             if rate_limit_retries < 3:
                 rate_limit_retries += 1
@@ -172,11 +224,21 @@ def main():
     batches = list(chunks(targets, BATCH_SIZE))
     start = time.time()
     done_batches = 0
+    stop_all = False
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures = {pool.submit(call_openai, b): b for b in batches}
         for fut in as_completed(futures):
+            if stop_all:
+                fut.cancel()
+                continue
             batch = futures[fut]
             by_id, err = fut.result()
+            if err == 'INSUFFICIENT_QUOTA':
+                print('\nOUT OF OPENAI CREDIT -- stopping.', file=sys.stderr)
+                stop_all = True
+                for other in futures:
+                    other.cancel()
+                break
             if err:
                 print(f"Batch error ({[w['id'] for w in batch]}): {err}", file=sys.stderr)
                 continue
@@ -194,6 +256,8 @@ def main():
         json.dump(results, f, ensure_ascii=False, indent=1)
     found = sum(1 for v in results.values() if v.get('note'))
     print(f"Done. {found} words got a preposition note out of {len(results)} checked.", file=sys.stderr)
+    if stop_all:
+        sys.exit(2)
 
 
 if __name__ == '__main__':
