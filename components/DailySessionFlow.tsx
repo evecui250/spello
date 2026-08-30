@@ -1357,16 +1357,25 @@ export default function DailySessionFlow() {
   // call — may fail silently too. It's still worth attempting, since it
   // catches every failure mode short of a full domain-level block.
   const aiUnreachableReportedRef = useRef(false);
+  // Real bug caught live: this used to ALSO permanently write
+  // sentenceWritingMode: false into Settings the very first time a SINGLE
+  // AI call failed at the network level — not just falling back for the
+  // rest of THIS session (which the local aiUnreachable state below
+  // already does correctly on its own), but durably overriding the
+  // learner's own preference from then on, surviving every future
+  // session/refresh until they noticed and manually turned it back on in
+  // Settings. One failed request is nowhere near enough evidence that AI
+  // is durably unreachable for this device — a refresh/navigation that
+  // simply interrupts an in-flight request surfaces as exactly this same
+  // error, and refreshing mid-exercise must never have a persistent,
+  // surprising side effect like silently changing a saved preference.
+  // The local, per-session fallback below is sufficient: if AI truly
+  // stays unreachable, every future session just gracefully degrades the
+  // same way again, without ever touching the learner's actual settings.
   function handleAiUnreachable() {
     if (aiUnreachableReportedRef.current) return;
     aiUnreachableReportedRef.current = true;
     setAiUnreachable(true);
-    if (settings) {
-      const next = { ...settings, sentenceWritingMode: false };
-      saveSettings(next);
-      setSettings(next);
-      scheduleSync();
-    }
     // Real gap a report caught (see lib/speech.ts's reportTtsError, which
     // had the identical mistake): this always filed as "(signed out)" even
     // for a genuinely signed-in learner, because it hardcoded user_id/email
@@ -1376,7 +1385,7 @@ export default function DailySessionFlow() {
       supabase.from('bug_reports').insert({
         user_id: data.session?.user.id ?? null,
         email: data.session?.user.email ?? null,
-        message: 'Auto-detected: could not reach the AI service (correct-sentence/generate-sentence timed out or failed at the network level, not just an API error). Sentence-writing mode was automatically turned off on this device.',
+        message: 'Auto-detected: could not reach the AI service (correct-sentence/generate-sentence timed out or failed at the network level, not just an API error). Falling back to copy-the-word for the rest of this session.',
         page_path: window.location.pathname,
         user_agent: navigator.userAgent,
       }).then(() => {}, () => {});
