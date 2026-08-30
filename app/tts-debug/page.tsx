@@ -230,11 +230,36 @@ export default function TtsDebugPage() {
     );
   };
 
+  // A real report came back showing BOTH the 1st and 2nd attempt failing
+  // for every single voice — resume() didn't help, repeating didn't help,
+  // meaning speechSynthesis.speak() is producing zero effect at all on
+  // that device, not just being flaky. That points away from "voice/retry
+  // logic" entirely and toward the surrounding environment — an installed
+  // (home-screen/standalone) PWA has real, separate speechSynthesis bugs
+  // on iOS Safari that a normal browser tab of the exact same page
+  // doesn't have. Surfacing this directly (rather than asking the learner
+  // to describe their own setup in words) turns "what browser/mode are
+  // you using" into something they can just read off the page.
+  const isStandalone = typeof window !== 'undefined' && (
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    (navigator as unknown as { standalone?: boolean }).standalone === true
+  );
+  const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
         Audio Diagnostics
       </h1>
+
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex flex-col gap-1 text-xs text-stone-700">
+        <div className="font-semibold text-stone-800 text-sm mb-1">Device info (please copy this to me)</div>
+        <div>Running as: <span className="font-semibold">{isStandalone ? 'Installed app (added to home screen / standalone)' : 'Browser tab'}</span></div>
+        <div>speechSynthesis supported: <span className="font-semibold">{speechSupported ? 'yes' : 'no'}</span></div>
+        <div>Voices found: <span className="font-semibold">{voices.length}</span></div>
+        <div className="break-all">Browser: <span className="font-semibold">{typeof navigator !== 'undefined' ? navigator.userAgent : ''}</span></div>
+      </div>
+
       <p className="text-amber-100/80 text-sm">
         Tap "Test twice" next to each voice — it plays "{TEST_PHRASE}" twice in a row, back to
         back, the same way a real word sometimes needs a second click. Tell me the pattern you
