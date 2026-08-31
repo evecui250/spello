@@ -264,6 +264,60 @@ function migrateOrphanedLevelProgress(): void {
   localStorage.setItem(ORPHANED_LEVEL_PROGRESS_FLAG, '1');
 }
 
+const MISFILED_CUSTOM_WORDS_FLAG = 'wb2_migrated_misfiled_custom_words_v1';
+
+// One-time repair for words added before addCustomWord's own fix (see its
+// comment): a custom word whose `level` field says e.g. 'B2' but was
+// actually filed under a different level's storage bucket (whichever
+// level happened to be active at add-time) — invisible when browsing its
+// claimed book, silently surfaced during the wrong level's study/review
+// instead. Relocates both the word entry AND any progress already
+// recorded against it (moving only the word and leaving progress behind
+// would make real study history vanish the moment the word lands in its
+// correct book) to the bucket its own `level` field actually claims.
+function migrateMisfiledCustomWords(): void {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem(MISFILED_CUSTOM_WORDS_FLAG)) return;
+  for (const storedUnderLevel of LEVEL_ORDER) {
+    const wordsKey = namespacedKey(KEYS.customWords, storedUnderLevel);
+    const rawWords = localStorage.getItem(wordsKey);
+    if (!rawWords) continue;
+    let words: Record<string, Word>;
+    try {
+      words = JSON.parse(rawWords);
+    } catch {
+      continue;
+    }
+    let changed = false;
+    for (const [id, word] of Object.entries(words)) {
+      const claimedLevel = word.level;
+      if (!claimedLevel || claimedLevel === storedUnderLevel || !LEVEL_ORDER.includes(claimedLevel)) continue;
+
+      delete words[id];
+      changed = true;
+
+      const targetKey = namespacedKey(KEYS.customWords, claimedLevel);
+      const targetWords = JSON.parse(localStorage.getItem(targetKey) || '{}') as Record<string, Word>;
+      targetWords[id] = word;
+      localStorage.setItem(targetKey, JSON.stringify(targetWords));
+
+      const progressKey = namespacedKey(KEYS.progress, storedUnderLevel);
+      const progressData = JSON.parse(localStorage.getItem(progressKey) || '{}') as Record<string, WordProgress>;
+      if (progressData[id]) {
+        const movedProgress = progressData[id];
+        delete progressData[id];
+        localStorage.setItem(progressKey, JSON.stringify(progressData));
+        const targetProgressKey = namespacedKey(KEYS.progress, claimedLevel);
+        const targetProgress = JSON.parse(localStorage.getItem(targetProgressKey) || '{}') as Record<string, WordProgress>;
+        targetProgress[id] = movedProgress;
+        localStorage.setItem(targetProgressKey, JSON.stringify(targetProgress));
+      }
+    }
+    if (changed) localStorage.setItem(wordsKey, JSON.stringify(words));
+  }
+  localStorage.setItem(MISFILED_CUSTOM_WORDS_FLAG, '1');
+}
+
 // Raw key name, not a namespaced one — avoids infinite recursion through
 // namespacedKey's own migration call.
 function namespacedKey(base: string, level: Level): string {
@@ -274,6 +328,7 @@ export function getActiveLevel(): Level {
   if (typeof window === 'undefined') return 'A1';
   migrateOrphanedRound4();
   migrateOrphanedLevelProgress();
+  migrateMisfiledCustomWords();
   return (localStorage.getItem(ACTIVE_LEVEL_KEY) as Level) || 'A1';
 }
 
@@ -283,6 +338,7 @@ export function getActiveLevel(): Level {
 function levelKey(base: string, level?: Level): string {
   migrateOrphanedRound4();
   migrateOrphanedLevelProgress();
+  migrateMisfiledCustomWords();
   return namespacedKey(base, level ?? getActiveLevel());
 }
 
@@ -796,24 +852,44 @@ export function getAllCustomWordsAcrossLevels(): Word[] {
   return all;
 }
 
+// Files under word.level's OWN bucket -- NOT whichever level happens to be
+// active right now. Real, confirmed bug: this used to call the active-
+// level getAllCustomWords()/saveAllCustomWords() unconditionally, so a
+// word added while browsing/filtering a book other than the currently
+// active one (e.g. looked up under the "B2" filter while A1 is the active
+// study level) got its `level` field correctly set to 'B2' by the caller,
+// but was silently FILED under A1's storage instead -- invisible when
+// actually browsing "B2" (allWordsForLevel('B2') reads B2's own bucket),
+// and unexpectedly surfaced during A1 study/review instead. See
+// migrateMisfiledCustomWords for the one-time repair of words already
+// added before this fix.
 export function addCustomWord(word: Word): void {
-  const all = getAllCustomWords();
+  const all = getAllCustomWordsForLevel(word.level);
   all[word.id] = word;
-  saveAllCustomWords(all);
+  saveAllCustomWordsForLevel(word.level, all);
   notifyProgressChanged();
 }
 
 // Also drops any progress recorded against it — an abandoned/mistaken add
 // shouldn't leave an orphaned progress record behind (nothing else could
 // ever reach it again to clean it up once the word itself is gone).
+// Searches every level's own bucket for the id (rather than trusting the
+// word's own `level` field, or whichever level happens to be active)
+// since ids are globally unique (see newCustomWordId's prefix) and a word
+// added before the addCustomWord fix above may still be misfiled under a
+// different level than its own `level` field claims.
 export function removeCustomWord(id: string): void {
-  const words = getAllCustomWords();
-  delete words[id];
-  saveAllCustomWords(words);
-  const progress = getAllProgress();
-  if (progress[id]) {
-    delete progress[id];
-    saveAllProgress(progress);
+  for (const level of LEVEL_ORDER) {
+    const words = getAllCustomWordsForLevel(level);
+    if (!(id in words)) continue;
+    delete words[id];
+    saveAllCustomWordsForLevel(level, words);
+    const progress = getAllProgressForLevel(level);
+    if (progress[id]) {
+      delete progress[id];
+      saveAllProgressForLevel(level, progress);
+    }
+    break;
   }
   notifyProgressChanged();
 }
