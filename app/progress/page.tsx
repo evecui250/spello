@@ -147,18 +147,18 @@ export default function ProgressPage() {
         <GoalDaysBadge variant="streak" count={streakCount} size={112} label="day streak" />
       </div>
 
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
         <div className="flex items-center justify-between gap-2 mb-1">
-          <h2 className="font-semibold text-stone-800">Words breakdown</h2>
+          <h2 className="font-semibold text-ink">Words breakdown</h2>
           {studiedLevels.length > 1 && (
-            <div className="flex bg-stone-200/60 rounded-full p-0.5 text-xs font-medium shrink-0">
+            <div className="flex bg-paper-dim/60 rounded-full p-0.5 text-xs font-medium shrink-0">
               {(['current', 'all'] as Scope[]).map(s => (
                 <button
                   key={s}
                   type="button"
                   onClick={() => { setScope(s); setOpenStage(null); }}
                   className={`px-2.5 py-1 rounded-full transition-colors ${
-                    scope === s ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500'
+                    scope === s ? 'bg-white text-ink shadow-sm' : 'text-ink-soft'
                   }`}
                 >
                   {s === 'current' ? 'This book' : 'All books'}
@@ -167,23 +167,23 @@ export default function ProgressPage() {
             </div>
           )}
         </div>
-        <p className="text-stone-500 text-sm mb-1">
+        <p className="text-ink-soft text-sm mb-1">
           {scope === 'all'
             ? `${totalWords} words total across ${activeLevels.length} vocabulary book${activeLevels.length === 1 ? '' : 's'}.`
             : `${totalWords} words total in this vocabulary book.`}
         </p>
         {introducedCount > 0 && (
-          <p className="text-stone-400 text-xs mb-1">Tap a mascot below to see its words.</p>
+          <p className="text-ink-soft text-xs mb-1">Tap a mascot below to see its words.</p>
         )}
         {bootstrapWords.length > 0 && (
-          <p className="text-stone-500 text-sm mb-4">
+          <p className="text-ink-soft text-sm mb-4">
             {bootstrapRemaining > 0
               ? `${bootstrapRemaining} more word${bootstrapRemaining === 1 ? '' : 's'} to unlock sentence translation.`
               : 'Sentence translation unlocked!'}
           </p>
         )}
         {introducedCount === 0 && (
-          <p className="text-stone-500 text-sm mb-3">Study a few words to start growing your first dachshund.</p>
+          <p className="text-ink-soft text-sm mb-3">Study a few words to start growing your first dachshund.</p>
         )}
         {/* Each bar's height is relative to whichever stage currently has the
             most words, not to a fixed total — so distribution 2-4-4-8 and
@@ -192,7 +192,7 @@ export default function ProgressPage() {
         <div className="flex items-end justify-around gap-3">
           {bars.map(b => (
             <div key={b.id} className="flex flex-col items-center justify-end flex-1 gap-1">
-              <span className="text-sm font-semibold text-stone-700">{b.total}</span>
+              <span className="text-sm font-semibold text-ink">{b.total}</span>
               {/* A genuinely empty stage renders no bar at all. The real
                   cause of the reported "clipped at the bottom" look,
                   finally pinned down from an actual screenshot: a small
@@ -227,10 +227,10 @@ export default function ProgressPage() {
                 type="button"
                 disabled={!clickable}
                 onClick={() => setOpenStage(b.id)}
-                className={`flex flex-col items-center gap-1 flex-1 rounded-lg py-1 transition-colors ${clickable ? 'hover:bg-stone-100 active:scale-95' : ''}`}
+                className={`flex flex-col items-center gap-1 flex-1 rounded-lg py-1 transition-colors ${clickable ? 'hover:bg-paper-dim active:scale-95' : ''}`}
               >
                 <DachshundMascot stage={b.id} className="w-10 h-10" />
-                <span className="text-[10px] font-medium text-stone-500">{STAGE_LABEL[b.id]}</span>
+                <span className="text-[10px] font-medium text-ink-soft">{STAGE_LABEL[b.id]}</span>
               </button>
             );
           })}
@@ -245,11 +245,11 @@ export default function ProgressPage() {
           onClick={() => setOpenStage(null)}
         >
           <div
-            className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-amber-50 rounded-2xl shadow-xl p-5 flex flex-col gap-3"
+            className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-3"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-stone-800 flex items-center gap-2">
+              <h2 className="font-bold text-ink flex items-center gap-2">
                 <DachshundMascot stage={openStage} className="w-8 h-8" />
                 {stageCounts[openStage]} {STAGE_LABEL[openStage]}
               </h2>
@@ -257,7 +257,7 @@ export default function ProgressPage() {
                 type="button"
                 onClick={() => setOpenStage(null)}
                 aria-label="Close"
-                className="text-stone-400 hover:text-stone-600 text-xl leading-none"
+                className="text-ink-soft hover:text-ink text-xl leading-none"
               >
                 ×
               </button>
@@ -268,8 +268,8 @@ export default function ProgressPage() {
                   .sort((a, b) => LEVEL_ORDER.indexOf(a[0] as Level) - LEVEL_ORDER.indexOf(b[0] as Level))
                   .map(([lvl, count]) => (
                     <div key={lvl} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2">
-                      <span className="text-stone-700 font-medium">{lvl}</span>
-                      <span className="text-stone-500 text-sm">{count} word{count === 1 ? '' : 's'}</span>
+                      <span className="text-ink font-medium">{lvl}</span>
+                      <span className="text-ink-soft text-sm">{count} word{count === 1 ? '' : 's'}</span>
                     </div>
                   ))}
               </div>
@@ -283,10 +283,10 @@ export default function ProgressPage() {
                   .sort((a, b) => a.de.localeCompare(b.de, 'de'))
                   .map(w => (
                     <div key={w.id} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2 gap-2">
-                      <span className="text-stone-700 font-medium truncate">
+                      <span className="text-ink font-medium truncate">
                         {w.article ? `${w.article} ` : ''}{w.de}
                       </span>
-                      <span className="text-stone-500 text-sm text-right truncate">{glossFor(w, getSettings().nativeLanguage)}</span>
+                      <span className="text-ink-soft text-sm text-right truncate">{glossFor(w, getSettings().nativeLanguage)}</span>
                     </div>
                   ))}
               </div>

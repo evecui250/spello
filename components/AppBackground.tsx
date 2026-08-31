@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getTheme, Theme, THEME_CHANGED_EVENT } from '../lib/storage';
+import { getTheme, Theme, THEME_CHANGED_EVENT, getCardMode, CardMode, CARD_MODE_CHANGED_EVENT } from '../lib/storage';
 
 // The app's persistent backdrop — same structural idea across every theme
 // (a soft gradient, one or two glow highlights, a drifting mist band, and
@@ -45,6 +45,22 @@ interface ThemeConfig {
   // the text itself is dark (Vanilla), where a soft light halo is what
   // actually helps instead.
   subtitleShadow: string;
+  // Night card-mode's dusked version of `gradient` — only set for
+  // Citrus/Meadow/Bubblegum/Vanilla, the deliberately BRIGHT trio (plus
+  // Vanilla). The other 6 themes are already dark/moody, so a dark card
+  // floating on them at night already reads as one coherent scene;
+  // undefined here means AppBackground just keeps using `gradient`
+  // as-is. Same hue family as the day version, just late in the day, so
+  // switching Day->Night still feels like nightfall on the sky you
+  // picked rather than a jump to an unrelated theme.
+  gradientNight?: string;
+  // Vanilla-only: its day mode is the one theme with DARK-on-light header
+  // text (see subtitleClass's own comment — its day sky is uniformly
+  // pale). Once gradientNight dusks that sky dark, dark text would no
+  // longer be legible, so night mode needs to flip back to the same
+  // light-on-dark treatment every other theme already uses.
+  subtitleClassNight?: string;
+  subtitleShadowNight?: string;
 }
 
 // Ordered darkest -> brightest (object key order = Settings' picker order,
@@ -154,6 +170,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     stageColors: ['#ffd699', '#f2a35c', '#d9773f', '#8a3d1a'],
     buttonGradient: 'linear-gradient(135deg, #d9622a 0%, #b8431a 50%, #8a2f10 100%)',
     gradient: 'from-[#ffb347] via-[#ff7043] to-[#b8390f]',
+    gradientNight: 'from-[#7A4A1F] to-[#3D1608]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.22),transparent_65%)', className: '-top-6 left-[15%] w-3/5 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(255,214,102,0.18),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
@@ -169,6 +186,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     stageColors: ['#a8d6a0', '#7ab86a', '#4a8f45', '#2a5c30'],
     buttonGradient: 'linear-gradient(135deg, #4a9b5e 0%, #2f7a45 50%, #1d5c30 100%)',
     gradient: 'from-[#5ec8e8] via-[#8bd450] to-[#1f6b3a]',
+    gradientNight: 'from-[#1F3D4A] to-[#12331D]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.22),transparent_65%)', className: '-top-6 left-[12%] w-3/5 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(255,244,168,0.16),transparent_65%)', className: '-top-4 right-[8%] w-2/5 h-1/2' },
@@ -184,6 +202,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     stageColors: ['#f0a8d9', '#d975b8', '#b8489a', '#6e2a5c'],
     buttonGradient: 'linear-gradient(135deg, #d94fb0 0%, #b8318f 50%, #862368 100%)',
     gradient: 'from-[#ff8fd6] via-[#e85fc2] to-[#9c2f8a]',
+    gradientNight: 'from-[#5C2F52] to-[#331C30]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.24),transparent_65%)', className: '-top-6 left-[15%] w-3/5 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(255,214,245,0.18),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
@@ -204,9 +223,14 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
     // full-opacity dark color would read as.
     subtitleClass: 'text-amber-900/55',
     subtitleShadow: '0 1px 2px rgba(255,255,255,0.4)',
+    // Night flips back to light-on-dark, same as every other theme — see
+    // ThemeConfig's own comment on why Vanilla specifically needs this.
+    subtitleClassNight: 'text-amber-100/75',
+    subtitleShadowNight: '0 1px 3px rgba(0,0,0,0.4)',
     stageColors: ['#f5e6b8', '#e0c078', '#c19648', '#8a6a2e'],
     buttonGradient: 'linear-gradient(135deg, #d9a860 0%, #b8823a 50%, #8a5f22 100%)',
     gradient: 'from-[#f2d38a] via-[#e8b855] to-[#c48f3a]',
+    gradientNight: 'from-[#4A3A1F] to-[#2E2010]',
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.18),transparent_65%)', className: '-top-6 left-[15%] w-3/5 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(255,244,214,0.12),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
@@ -238,6 +262,12 @@ export default function AppBackground() {
   // app to avoid a static-export/client hydration mismatch. A one-frame
   // flash to the real theme on load is a fair trade for that.
   const [theme, setTheme] = useState<Theme>('forest');
+  // Same pre-hydration-default reasoning as theme above — the card
+  // surfaces this drives (see globals.css's [data-card-mode="dark"])
+  // aren't wired into any component yet, but the sky itself (this
+  // component) already reacts, per real feedback that a still-fully-
+  // bright sky under a dimmed card looked mismatched.
+  const [cardMode, setCardMode] = useState<CardMode>('light');
 
   useEffect(() => {
     const load = () => setTheme(getTheme());
@@ -246,10 +276,35 @@ export default function AppBackground() {
     return () => window.removeEventListener(THEME_CHANGED_EVENT, load);
   }, []);
 
+  useEffect(() => {
+    const load = () => setCardMode(getCardMode());
+    load();
+    window.addEventListener(CARD_MODE_CHANGED_EVENT, load);
+    return () => window.removeEventListener(CARD_MODE_CHANGED_EVENT, load);
+  }, []);
+
+  // Mirrors both onto <html> as data attributes so plain CSS (globals.css)
+  // can theme every future card via [data-app-theme]/[data-card-mode]
+  // selectors without threading theme/cardMode through every component —
+  // 'forest'/'light' are the unmarked defaults (matching getTheme()'s own
+  // "forest is the default" and getCardMode()'s "light is the default"),
+  // so those two specifically clear the attribute instead of setting it.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'forest') root.removeAttribute('data-app-theme');
+    else root.setAttribute('data-app-theme', theme);
+  }, [theme]);
+  useEffect(() => {
+    const root = document.documentElement;
+    if (cardMode === 'light') root.removeAttribute('data-card-mode');
+    else root.setAttribute('data-card-mode', cardMode);
+  }, [cardMode]);
+
   const cfg = THEME_CONFIG[theme];
+  const gradient = cardMode === 'dark' && cfg.gradientNight ? cfg.gradientNight : cfg.gradient;
 
   return (
-    <div aria-hidden className={`fixed inset-0 -z-10 overflow-hidden bg-gradient-to-b ${cfg.gradient}`}>
+    <div aria-hidden className={`fixed inset-0 -z-10 overflow-hidden bg-gradient-to-b ${gradient}`}>
       {cfg.glows.map((g, i) => (
         <div key={i} className={`absolute ${g.className}`} style={{ backgroundImage: g.style.replace(/_/g, ' ') }} />
       ))}

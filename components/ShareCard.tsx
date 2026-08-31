@@ -92,7 +92,7 @@ export default function ShareCard() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-4 font-semibold text-stone-700 hover:bg-amber-50 transition-colors"
+        className="text-center bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-4 font-semibold text-ink hover:bg-paper transition-colors"
       >
         Share Spello
       </button>
@@ -106,27 +106,27 @@ export default function ShareCard() {
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-amber-50 rounded-2xl shadow-xl p-5 flex flex-col gap-3"
+            className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-3"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-stone-800">Share Spello</h2>
+              <h2 className="font-bold text-ink">Share Spello</h2>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close"
-                className="text-stone-400 hover:text-stone-600 text-xl leading-none"
+                className="text-ink-soft hover:text-ink text-xl leading-none"
               >
                 ×
               </button>
             </div>
-            <p className="text-stone-500 text-sm">Studying together helps it stick — send a friend the link.</p>
+            <p className="text-ink-soft text-sm">Studying together helps it stick — send a friend the link.</p>
 
             <div className="flex gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={handleShare}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold text-sm hover:bg-indigo-700 active:scale-95 transition-all"
+                className="bg-accent text-white px-4 py-2 rounded-xl font-semibold text-sm hover:bg-accent-deep active:scale-95 transition-all"
               >
                 {shareSupported ? 'Share' : copied ? '✓ Link copied' : 'Copy link'}
               </button>
@@ -134,7 +134,7 @@ export default function ShareCard() {
                 <button
                   type="button"
                   onClick={handleInstall}
-                  className="bg-amber-100 text-amber-800 px-4 py-2 rounded-xl font-semibold text-sm hover:bg-amber-200 active:scale-95 transition-all"
+                  className="bg-paper-dim text-accent-deep px-4 py-2 rounded-xl font-semibold text-sm hover:bg-gold active:scale-95 transition-all"
                 >
                   Install app
                 </button>
@@ -142,14 +142,14 @@ export default function ShareCard() {
             </div>
 
             {isIosSafariNotStandalone && (
-              <p className="text-stone-500 text-sm bg-indigo-50 rounded-lg px-3 py-2">
+              <p className="text-ink-soft text-sm bg-accent/10 rounded-lg px-3 py-2">
                 On iPhone/iPad: tap the Share icon (□↑) in Safari, then &quot;Add to Home Screen&quot; — it&apos;ll open full-screen like an app from then on.
               </p>
             )}
 
             {qrDataUrl && (
               <div className="flex flex-col items-center gap-1.5 pt-1">
-                <p className="text-stone-400 text-xs">Or have a friend scan this</p>
+                <p className="text-ink-soft text-xs">Or have a friend scan this</p>
                 {/* eslint-disable-next-line @next/next/no-img-element -- on-device generated data: URI, no remote source to optimize */}
                 <img src={qrDataUrl} alt="QR code linking to Spello" className="w-40 h-40 rounded-lg" />
               </div>

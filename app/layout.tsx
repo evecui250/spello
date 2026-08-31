@@ -1,5 +1,6 @@
 'use client';
 
+import { Fraunces, Karla, IBM_Plex_Mono } from 'next/font/google';
 import '../styles/globals.css';
 import NavBar from '../components/NavBar';
 import StudyRoadmap from '../components/StudyRoadmap';
@@ -11,10 +12,21 @@ import PwaRegister from '../components/PwaRegister';
 import UsagePing from '../components/UsagePing';
 import FontScaleEffect from '../components/FontScaleEffect';
 
+// Self-hosted at build time (next/font downloads once and serves from
+// Spello's own static export, unlike a <link> to Google Fonts) — Fraunces
+// is the warm serif used for headings/display moments, Karla the body
+// sans, IBM Plex Mono reserved for small data-ish labels (counts,
+// timers). Exposed as CSS variables here and consumed in globals.css,
+// rather than each font's own className, so a single place (globals.css)
+// controls exactly which elements get which face.
+const fraunces = Fraunces({ subsets: ['latin'], variable: '--font-fraunces', display: 'swap' });
+const karla = Karla({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-karla', display: 'swap' });
+const plexMono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['500', '600'], variable: '--font-plex-mono', display: 'swap' });
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
   return (
-    <html lang="de">
+    <html lang="de" className={`${fraunces.variable} ${karla.variable} ${plexMono.variable}`}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />

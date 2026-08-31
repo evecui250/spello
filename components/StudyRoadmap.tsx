@@ -88,7 +88,7 @@ export default function StudyRoadmap() {
         <div className="absolute left-8 right-8 top-[22px] h-0.5 bg-white/15 rounded-full" />
         <div
           className="absolute left-8 top-[22px] h-0.5 rounded-full transition-all duration-500"
-          style={{ width: `calc((100% - 4rem) * ${activeIndex / (STAGES.length - 1)})`, backgroundImage: cfg.buttonGradient }}
+          style={{ width: `calc((100% - 4rem) * ${activeIndex / (STAGES.length - 1)})`, backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
         />
         <div className="relative flex items-start justify-between">
           {STAGES.map((s, i) => {
@@ -98,10 +98,10 @@ export default function StudyRoadmap() {
               <div key={s.id} className="flex flex-col items-center gap-1">
                 <div
                   className={`w-4 h-4 rounded-full border-2 border-white/70 transition-all ${isActive ? 'scale-125' : ''}`}
-                  style={reached ? { backgroundImage: cfg.buttonGradient } : { backgroundColor: 'rgba(255,255,255,0.2)' }}
+                  style={reached ? { backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' } : { backgroundColor: 'rgba(255,255,255,0.2)' }}
                 />
                 <span
-                  className={`text-[11px] font-semibold ${isActive ? 'text-amber-100' : 'text-amber-100/55'}`}
+                  className={`text-[11px] font-semibold ${isActive ? 'text-on-bg' : 'text-on-bg/55'}`}
                 >
                   {s.label}
                 </span>

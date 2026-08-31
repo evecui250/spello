@@ -19,7 +19,7 @@ export default function NavBar() {
     // not here. See that file for the matching bottom padding on <main>
     // so content never renders underneath it. Active
     // state is just a lighter tint of the bar's own background (bg-
-    // white/10) plus brighter text (text-amber-50, the same warm off-
+    // white/10) plus brighter text (text-on-bg, the same warm off-
     // white every page heading already uses) — no separate accent color,
     // so it reads as "part of this bar" rather than a foreign highlight.
     // pb-[env(safe-area-inset-bottom)] gives room for the home-indicator
@@ -36,7 +36,7 @@ export default function NavBar() {
               key={l.href}
               href={l.href}
               className={`flex-1 flex items-center justify-center py-5 text-sm font-semibold whitespace-nowrap transition-colors ${
-                active ? 'bg-white/10 text-amber-50' : 'text-emerald-100/55 hover:text-emerald-50'
+                active ? 'bg-white/10 text-on-bg' : 'text-on-bg/55 hover:text-on-bg'
               }`}
             >
               {l.label}

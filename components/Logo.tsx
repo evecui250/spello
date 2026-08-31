@@ -30,7 +30,7 @@ export default function Logo({ size = 32, variant = 'icon', className }: Props) 
           style={{ width: size, height: 'auto' }}
         />
         <span
-          className="font-extrabold text-amber-100 tracking-tight -mt-1"
+          className="font-extrabold text-on-bg tracking-tight -mt-1"
           style={{ fontSize: Math.round(size * 0.19), textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}
         >
           spello

@@ -273,35 +273,35 @@ export default function WordMatchGame({ source, onQuit }: Props) {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Word Match</h1>
+        <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Word Match</h1>
         {onQuit ? (
-          <button type="button" onClick={onQuit} className="text-sm font-semibold text-amber-100/80 hover:text-amber-100 underline">
+          <button type="button" onClick={onQuit} className="text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
             Finish for today →
           </button>
         ) : (
-          <Link href="/" className="text-sm font-semibold text-amber-100/80 hover:text-amber-100 underline">
+          <Link href="/" className="text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
             ← Home
           </Link>
         )}
       </div>
 
       {phase === 'intro' && (
-        <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-4 items-center text-center">
-          <h2 className="text-lg font-bold text-stone-800">Match words against the clock</h2>
+        <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-4 items-center text-center">
+          <h2 className="text-lg font-bold text-ink">Match words against the clock</h2>
           {canPlay ? (
             <>
-              <p className="text-stone-400 text-xs">{GAME_DURATION}s per game · {PAIRS_PER_ROUND} pairs per board</p>
+              <p className="text-ink-soft text-xs">{GAME_DURATION}s per game · {PAIRS_PER_ROUND} pairs per board</p>
               <button
                 type="button"
                 onClick={startGame}
                 className="w-full max-w-[220px] text-white py-3.5 rounded-full font-bold text-lg shadow-md active:scale-95 transition-all"
-                style={{ backgroundImage: cfg.buttonGradient }}
+                style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
               >
                 Start
               </button>
             </>
           ) : (
-            <p className="text-amber-700 bg-amber-100/70 rounded-xl px-4 py-3 text-sm">
+            <p className="text-accent-deep bg-paper-dim/70 rounded-xl px-4 py-3 text-sm">
               Learn at least {GAME_MIN_WORDS_REQUIRED} words first to unlock this
               game — you have {learnedWords.length} so far.
             </p>
@@ -310,22 +310,22 @@ export default function WordMatchGame({ source, onQuit }: Props) {
       )}
 
       {phase === 'playing' && (
-        <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-4">
+        <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5 flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <div className={`font-bold text-lg text-stone-800 transition-transform ${justScored ? 'scale-125' : ''}`}>
+            <div className={`font-bold text-lg text-ink transition-transform ${justScored ? 'scale-125' : ''}`}>
               {matchedCount} matched
             </div>
-            <div className="font-semibold text-sm text-stone-500">
+            <div className="font-semibold text-sm text-ink-soft">
               {timeLeft}s
             </div>
           </div>
           {/* Same color throughout the countdown, however little time is
               left — no red/urgent recoloring, which read as stressful
               rather than motivating. */}
-          <div className="w-full h-2.5 rounded-full bg-stone-200/70 overflow-hidden">
+          <div className="w-full h-2.5 rounded-full bg-paper-dim/70 overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-1000 ease-linear"
-              style={{ width: `${timerFraction * 100}%`, backgroundImage: cfg.buttonGradient }}
+              style={{ width: `${timerFraction * 100}%`, backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
             />
           </div>
 
@@ -339,19 +339,19 @@ export default function WordMatchGame({ source, onQuit }: Props) {
               const isMatched = matchedIds.has(w.id);
               const isSelected = selectedGerman === w.id;
               const isWrong = wrongFlash?.german === w.id;
-              let germanCls = 'border-2 border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400';
-              if (isMatched) germanCls = 'border-2 border-green-400 bg-green-100 text-green-700 opacity-0 scale-90 pointer-events-none';
-              else if (isWrong) germanCls = 'border-2 border-red-400 bg-red-100 text-red-700';
-              else if (isSelected) germanCls = 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700';
+              let germanCls = 'border-2 border-accent/30 bg-white/80 text-ink hover:border-accent/70';
+              if (isMatched) germanCls = 'border-2 border-good-deep bg-good/25 text-good-deep opacity-0 scale-90 pointer-events-none';
+              else if (isWrong) germanCls = 'border-2 border-clay bg-clay/20 text-clay';
+              else if (isSelected) germanCls = 'border-2 border-accent bg-accent/10 text-accent-deep';
 
               const text = shuffledEn[i];
               const enIsMatched = roundWords.some(rw => matchedIds.has(rw.id) && glossFor(rw, nativeLanguage) === text);
               const enIsSelected = selectedEnglish === text;
               const enIsWrong = wrongFlash?.english === text;
-              let enCls = 'border-2 border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400';
-              if (enIsMatched) enCls = 'border-2 border-green-400 bg-green-100 text-green-700 opacity-0 scale-90 pointer-events-none';
-              else if (enIsWrong) enCls = 'border-2 border-red-400 bg-red-100 text-red-700';
-              else if (enIsSelected) enCls = 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700';
+              let enCls = 'border-2 border-accent/30 bg-white/80 text-ink hover:border-accent/70';
+              if (enIsMatched) enCls = 'border-2 border-good-deep bg-good/25 text-good-deep opacity-0 scale-90 pointer-events-none';
+              else if (enIsWrong) enCls = 'border-2 border-clay bg-clay/20 text-clay';
+              else if (enIsSelected) enCls = 'border-2 border-accent bg-accent/10 text-accent-deep';
 
               return (
                 <Fragment key={w.id}>
@@ -377,14 +377,14 @@ export default function WordMatchGame({ source, onQuit }: Props) {
       )}
 
       {phase === 'over' && (
-        <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-3 items-center text-center">
-          <h2 className="text-lg font-bold text-stone-800">Time&apos;s up!</h2>
-          <div className="text-3xl font-extrabold text-indigo-700">{matchedCount} pairs matched</div>
+        <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-3 items-center text-center">
+          <h2 className="text-lg font-bold text-ink">Time&apos;s up!</h2>
+          <div className="text-3xl font-extrabold text-accent-deep">{matchedCount} pairs matched</div>
           <button
             type="button"
             onClick={startGame}
             className="w-full max-w-[220px] text-white py-3.5 rounded-full font-bold text-lg shadow-md active:scale-95 transition-all mt-2"
-            style={{ backgroundImage: cfg.buttonGradient }}
+            style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
           >
             Play again
           </button>
@@ -392,7 +392,7 @@ export default function WordMatchGame({ source, onQuit }: Props) {
             <button
               type="button"
               onClick={onQuit}
-              className="text-stone-500 hover:text-stone-700 text-sm font-medium underline transition-colors"
+              className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
             >
               Finish for today
             </button>

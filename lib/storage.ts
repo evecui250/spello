@@ -931,6 +931,29 @@ export function saveFontScale(scale: FontScale): void {
   window.dispatchEvent(new Event(FONT_SCALE_CHANGED_EVENT));
 }
 
+// --- Card mode (same per-device, un-synced, not-level-namespaced shape as
+// Theme/FontScale above) — 'dark' dims every card's paper surface to a
+// warm dark parchment regardless of which background theme is active
+// (see AppBackground's own gradientNight for the sky half of this), for
+// reading comfortably at night without switching to a whole different
+// theme. ---
+export type CardMode = 'light' | 'dark';
+const CARD_MODE_KEY = 'wb2_card_mode';
+export const CARD_MODE_CHANGED_EVENT = 'wb2-card-mode-changed';
+const VALID_CARD_MODES: CardMode[] = ['light', 'dark'];
+
+export function getCardMode(): CardMode {
+  if (typeof window === 'undefined') return 'light';
+  const raw = localStorage.getItem(CARD_MODE_KEY);
+  return (VALID_CARD_MODES as string[]).includes(raw ?? '') ? (raw as CardMode) : 'light';
+}
+
+export function saveCardMode(mode: CardMode): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(CARD_MODE_KEY, mode);
+  window.dispatchEvent(new Event(CARD_MODE_CHANGED_EVENT));
+}
+
 // --- Correct-answer chime (same per-device, un-synced, not-level-
 // namespaced shape as Theme/FontScale above) — which of lib/sound.ts's
 // CHIME_OPTIONS plays on a correct answer. No CHANGED_EVENT of its own

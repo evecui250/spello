@@ -5,6 +5,7 @@ import { Word } from '../lib/words';
 import { speakWord, spokenForm } from '../lib/speech';
 import { playCorrectChime } from '../lib/sound';
 import SpeakerButton from './SpeakerButton';
+import { SpeakerIcon } from './icons';
 
 interface Props {
   word: Word;
@@ -102,11 +103,11 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-5">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-medium text-indigo-600">What does this word mean?</div>
+          <div className="text-sm font-medium text-accent-deep">What does this word mean?</div>
           {isReview && (
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 shrink-0">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-accent-deep bg-paper-dim rounded-full px-2 py-0.5 shrink-0">
               Review
             </span>
           )}
@@ -119,9 +120,9 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
         <div className="min-h-[132px] flex flex-col items-center justify-center gap-2">
           {showWord ? (
             <div className="text-center">
-              <span className="text-2xl font-semibold text-slate-700">
+              <span className="text-2xl font-semibold text-ink">
                 {spokenForm(word)}
-                <SpeakerButton word={word} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
+                <SpeakerButton word={word} className="ml-1.5 text-accent-deep hover:text-ink transition-colors align-middle" />
               </span>
             </div>
           ) : (
@@ -129,14 +130,14 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
               <button
                 onClick={() => speakWord(word)}
                 aria-label="Play the word again"
-                className="w-16 h-16 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-3xl hover:bg-indigo-200 active:scale-95 transition-all"
+                className="w-16 h-16 rounded-full bg-accent/15 text-accent-deep flex items-center justify-center hover:bg-accent/25 active:scale-95 transition-all"
               >
-                🔊
+                <SpeakerIcon className="w-7 h-7" />
               </button>
-              <span className="text-xs text-slate-400">Tap to hear it again</span>
+              <span className="text-xs text-ink-soft">Tap to hear it again</span>
               <button
                 onClick={() => { setWordRevealed(true); onReveal?.(); }}
-                className="text-xs text-indigo-500 underline mt-1"
+                className="text-xs text-accent underline mt-1"
               >
                 Can't listen right now? Show the word
               </button>
@@ -147,11 +148,11 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
           {choices.map(choice => {
             const isCorrectChoice = choice === correctChoice;
             const isPicked = choice === selected;
-            let cls = 'border-2 border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400 hover:bg-white';
+            let cls = 'border-2 border-accent/30 bg-white/80 text-ink hover:border-accent/70 hover:bg-white';
             if (selected !== null) {
-              if (isCorrectChoice) cls = 'border-2 border-green-400 bg-green-100 text-green-700';
-              else if (isPicked) cls = 'border-2 border-red-400 bg-red-100 text-red-700';
-              else cls = 'border-2 border-indigo-200 bg-white/60 text-slate-400 opacity-60';
+              if (isCorrectChoice) cls = 'border-2 border-good-deep bg-good/25 text-good-deep';
+              else if (isPicked) cls = 'border-2 border-clay bg-clay/20 text-clay';
+              else cls = 'border-2 border-accent/30 bg-white/60 text-ink-soft opacity-60';
             }
             return (
               <button
@@ -168,7 +169,7 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
         {selected !== null && (
           <button
             onClick={() => onAnswer(correct)}
-            className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+            className="w-full bg-accent text-white py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
           >
             Next →
           </button>

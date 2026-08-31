@@ -1,5 +1,166 @@
 @import "tailwindcss";
 
+/* ---- Waldtagebuch design tokens ----
+   Tailwind v4 is CSS-first here (no tailwind.config.*), so declaring
+   these inside @theme both sets the real default (Forest) values AND
+   makes Tailwind generate real utilities (bg-paper, text-ink, bg-accent,
+   etc.) from them. The per-theme/day-night overrides below are plain CSS
+   custom-property reassignments, not more @theme blocks — Tailwind's
+   generated utilities just read var(--color-paper) etc. under the hood,
+   so they cascade correctly with zero extra Tailwind config. Every value
+   here is taken directly from the approved Waldtagebuch preview
+   (https://claude.ai/code/artifact/27b8f3ac-81c8-4f5d-86ba-9323edf10768),
+   not re-derived, so the real app matches it exactly. */
+@theme {
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-sans: var(--font-karla), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  --color-paper: #F3EAD8;
+  --color-paper-dim: #EAE0C8;
+  --color-paper-line: #DCCFAE;
+  --color-ink: #26211A;
+  --color-ink-soft: #786B54;
+  --color-accent: #C9863F;
+  --color-accent-deep: #A2672E;
+  --color-good: #7FAE8E;
+  --color-good-deep: #5E8F71;
+  --color-clay: #B6573A;
+  --color-gold: #E8C76A;
+  /* Header/link text sitting directly on the dark sky background (not on
+     a card) — Tailwind's opacity modifier (text-on-bg/70) covers the
+     "softer" variant instead of a second token. */
+  --color-on-bg: #F3EAD8;
+}
+
+/* Base typography — global, so this lands app-wide the moment this file
+   ships, well ahead of any component being individually restyled. */
+body { font-family: var(--font-sans); }
+h1, h2, h3 { font-family: var(--font-display); }
+
+/* Stellar/Ocean/Ember/Lavender/Sunset are the moody-dark theme family
+   (see AppBackground.tsx's own grouping comment) — their paper needs
+   real body/tint, not a pale near-white, or it blazes against a
+   near-black sky. Forest (the @theme default above) keeps the original
+   approved tone; Citrus/Meadow/Bubblegum/Vanilla are the deliberately
+   bright family and already read correctly with the default-ish
+   treatment, so only these five get their own paper tone. */
+[data-app-theme="stellar"] {
+  --color-paper: #E6DFD3; --color-paper-dim: #D9CFBE; --color-paper-line: #C4B79E;
+  --color-ink: #2C2620; --color-ink-soft: #746A57;
+  --color-accent: #7B6FC0; --color-accent-deep: #5B4F96;
+  --color-good: #6FA88E; --color-good-deep: #4F8A72;
+  --color-clay: #A85A46; --color-gold: #E8C76A;
+  --color-on-bg: #EDEBFB;
+}
+[data-app-theme="ocean"] {
+  --color-paper: #E2E6DE; --color-paper-dim: #D4DACB; --color-paper-line: #BFC7AC;
+  --color-ink: #24291F; --color-ink-soft: #666B58;
+  --color-accent: #3D7F8C; --color-accent-deep: #285A66;
+  --color-good: #5FA890; --color-good-deep: #438874;
+  --color-clay: #B0553C; --color-gold: #E8C76A;
+  --color-on-bg: #E3F6F6;
+}
+[data-app-theme="ember"] {
+  --color-paper: #EEDFC9; --color-paper-dim: #E2CDAE; --color-paper-line: #CFB289;
+  --color-ink: #2E2114; --color-ink-soft: #7A6449;
+  --color-accent: #A35A24; --color-accent-deep: #74390F;
+  --color-good: #7FA36B; --color-good-deep: #5F864E;
+  --color-clay: #A03D26; --color-gold: #E8C76A;
+  --color-on-bg: #FBEADB;
+}
+[data-app-theme="lavender"] {
+  --color-paper: #EAE2DA; --color-paper-dim: #DDD1C2; --color-paper-line: #C8B8A2;
+  --color-ink: #2B241C; --color-ink-soft: #736556;
+  --color-accent: #8A68A8; --color-accent-deep: #613F80;
+  --color-good: #7FAE96; --color-good-deep: #5E8F79;
+  --color-clay: #A85A46; --color-gold: #E8C76A;
+  --color-on-bg: #F2E9FB;
+}
+[data-app-theme="sunset"] {
+  --color-paper: #EEE0CC; --color-paper-dim: #E2D0AF; --color-paper-line: #CDB587;
+  --color-ink: #2E2314; --color-ink-soft: #776148;
+  --color-accent: #B8542A; --color-accent-deep: #832E14;
+  --color-good: #85A87C; --color-good-deep: #648A5D;
+  --color-clay: #9C3626; --color-gold: #E8C76A;
+  --color-on-bg: #FCE9DA;
+}
+[data-app-theme="citrus"] {
+  --color-paper: #FBEFDD; --color-paper-dim: #F2DFC0; --color-paper-line: #E4C79A;
+  --color-ink: #3A2412; --color-ink-soft: #8A6A48;
+  --color-accent: #B8431A; --color-accent-deep: #8A2F10;
+  --color-good: #588A49; --color-good-deep: #416B37;
+  --color-clay: #9C2E1A; --color-gold: #C9861A;
+  --color-on-bg: #FFF6E8;
+}
+[data-app-theme="meadow"] {
+  --color-paper: #EAF7E4; --color-paper-dim: #DAEED0; --color-paper-line: #C3DFB6;
+  --color-ink: #1E3320; --color-ink-soft: #5A7A5E;
+  --color-accent: #2F7A45; --color-accent-deep: #1D5C30;
+  --color-good: #4F9B5A; --color-good-deep: #397A42;
+  --color-clay: #A8402A; --color-gold: #E8C76A;
+  --color-on-bg: #F3FFF0;
+}
+[data-app-theme="bubblegum"] {
+  --color-paper: #FBEAF4; --color-paper-dim: #F2D9E9; --color-paper-line: #E6BEDA;
+  --color-ink: #3A1A30; --color-ink-soft: #7A5670;
+  --color-accent: #B8318F; --color-accent-deep: #862368;
+  --color-good: #7FAE8E; --color-good-deep: #5E8F71;
+  --color-clay: #B6573A; --color-gold: #E8C76A;
+  --color-on-bg: #FFF0FA;
+}
+[data-app-theme="vanilla"] {
+  --color-paper: #FBF6EA; --color-paper-dim: #F3EAD4; --color-paper-line: #E3D3AE;
+  --color-ink: #3A2B14; --color-ink-soft: #7A6440;
+  --color-accent: #B8823A; --color-accent-deep: #8A5F22;
+  --color-good: #6E9B5E; --color-good-deep: #557A48;
+  --color-clay: #A8402A; --color-gold: #C9A227;
+  /* The one theme where header text on the BACKGROUND (not on a card)
+     needs to be dark, not light — its day sky is uniformly pale. Cards
+     stay unaffected (--color-ink above is already dark for other
+     reasons). */
+  --color-on-bg: #3A2B14;
+}
+[data-app-theme="vanilla"][data-card-mode="dark"] {
+  /* Once night mode dusks vanilla's sky dark (see AppBackground's
+     gradientNight), header text needs to flip back to light, matching
+     every other theme's night sky. */
+  --color-on-bg: #F3EAD8;
+}
+
+/* Night cards — independent of which sky is active (a card is a thing
+   you stare at for minutes at a time; the sky behind it is decorative).
+   One warm, dim parchment substitute for all ten skies, rather than a
+   separate dark variant per theme — accent/good/clay/gold intentionally
+   stay exactly as the active sky already defines them above, so buttons
+   keep their real color identity and only the reading surface itself
+   dims. Placed last so it wins over whichever [data-app-theme] block is
+   also active on the same root element. */
+[data-card-mode="dark"] {
+  --color-paper: #241E19; --color-paper-dim: #2E2620; --color-paper-line: #453A30;
+  --color-ink: #EDE3D2; --color-ink-soft: #A99A82;
+}
+
+/* Shared card/button surfaces for the next (per-page) restyle pass to
+   consume — not yet referenced by any component. */
+.card-surface {
+  background: color-mix(in srgb, var(--color-paper) 75%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid color-mix(in srgb, var(--color-paper-line) 60%, transparent);
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+.btn-primary {
+  background-color: var(--color-accent);
+  color: var(--color-paper);
+  font-weight: 600;
+  border-radius: 0.75rem;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+.btn-primary:hover { background-color: var(--color-accent-deep); }
+.btn-primary:active { transform: scale(0.97); }
+
 /* Installed as a standalone home-screen PWA (apple-mobile-web-app-capable,
    see app/layout.tsx), iOS Safari drops the address bar that normally lets
    a user "un-stick" a zoomed page -- two related quirks that only bite in

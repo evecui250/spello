@@ -272,7 +272,7 @@ function renderDiffedWord(word: string, changed: boolean[]): React.ReactNode {
     const text = word.slice(i, j);
     runs.push(
       changed[i]
-        ? <span key={i} className="underline decoration-violet-500 decoration-2 underline-offset-2 font-bold">{text}</span>
+        ? <span key={i} className="underline decoration-accent decoration-2 underline-offset-2 font-bold">{text}</span>
         : text,
     );
     i = j;
@@ -287,7 +287,7 @@ function renderDiffedWord(word: string, changed: boolean[]): React.ReactNode {
 function SpellingMistakesLine({ mistakes }: { mistakes: { wrong: string; correct: string }[] }) {
   if (mistakes.length === 0) return null;
   return (
-    <div className="text-sm text-indigo-800">
+    <div className="text-sm text-ink">
       <span className="font-semibold">Spelling: </span>
       {mistakes.map(({ wrong, correct }, i) => {
         const { aChanged, bChanged } = diffChars(wrong, correct);
@@ -357,9 +357,9 @@ function MilestoneBar({ activeChunk, wordId }: { activeChunk: 1 | 2 | 3 | 4; wor
         <div
           key={chunk}
           className={`h-2 flex-1 rounded-full transition-colors duration-300 ${
-            chunk <= earned ? 'bg-emerald-400'
-              : chunk === activeChunk ? 'bg-amber-400'
-                : 'bg-indigo-100'
+            chunk <= earned ? 'bg-good-deep'
+              : chunk === activeChunk ? 'bg-accent'
+                : 'bg-accent/15'
           }`}
         />
       ))}
@@ -461,7 +461,7 @@ function WordGrammarInfo({ word }: { word: Word }) {
   // happened to set (fine in the two ORIGINAL spots that were already
   // text-center containers, but left-aligned once also placed inside the
   // round 2+/review context block, which isn't).
-  const cls = 'text-xs text-stone-400 mt-0.5 text-center';
+  const cls = 'text-xs text-ink-soft mt-0.5 text-center';
   if (word.type === 'noun') {
     // Plural only shows when the corpus actually has one (a handful of
     // nouns — e.g. uncountable ones — are stored with an empty plural on
@@ -490,9 +490,9 @@ function WordGrammarInfo({ word }: { word: Word }) {
 function SentenceWordHeader({ word }: { word: Word }) {
   return (
     <div className="text-center -mt-1">
-      <div className="text-2xl font-bold text-indigo-800 tracking-wide break-words">
+      <div className="text-2xl font-bold text-ink tracking-wide break-words">
         {word.article ? `${word.article} ` : ''}{word.de}{' '}
-        <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
+        <SpeakerButton word={word} className="align-middle text-accent hover:text-accent-deep transition-colors text-xl" />
       </div>
       <WordGrammarInfo word={word} />
     </div>
@@ -764,41 +764,41 @@ function SentenceExercise({
     <div className="flex flex-col gap-3">
       <SentenceWordHeader word={word} />
       {promptStatus === 'loading' && (
-        <p className="text-stone-500 text-sm text-center py-4">Preparing a sentence…</p>
+        <p className="text-ink-soft text-sm text-center py-4">Preparing a sentence…</p>
       )}
       {promptStatus === 'error' && (
         <div className="flex flex-col gap-2">
-          <p className="text-red-600 text-sm text-center">Couldn't prepare a sentence — check your connection and try again.</p>
+          <p className="text-clay text-sm text-center">Couldn't prepare a sentence — check your connection and try again.</p>
           <button
             onClick={() => setPromptRetry(k => k + 1)}
-            className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+            className="w-full bg-accent text-white py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
           >
             Retry
           </button>
         </div>
       )}
       {promptStatus === 'limit-reached' && (
-        <p className="text-amber-700 text-sm text-center py-4">
+        <p className="text-accent-deep text-sm text-center py-4">
           You've used up today's practice limit — come back tomorrow for more!
         </p>
       )}
       {promptStatus === 'unreachable' && (
-        <p className="text-amber-700 text-sm text-center py-4">
+        <p className="text-accent-deep text-sm text-center py-4">
           Can't reach our AI service right now (this can happen depending on your network) —
           switched off sentence-writing mode. You can turn it back on anytime in Settings.
         </p>
       )}
       {promptStatus === 'ready' && promptSentence && (
         <>
-          <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
-            <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate to German</div>
+          <div className="bg-accent/10 rounded-xl px-3 py-2 text-center">
+            <div className="text-xs uppercase tracking-wide text-accent mb-1">Translate to German</div>
             {/* No visual affordance otherwise marks which words are
                 clickable (hover alone isn't discoverable on a touch
                 screen, which this PWA mostly runs on) — a persistent,
                 short reminder rather than a one-time tip, since there's
                 nothing else teaching this. */}
-            <p className="text-[11px] text-indigo-400/80 mb-1">Tip: tap a word for a hint</p>
-            <div className="text-stone-700 italic">
+            <p className="text-[11px] text-accent/80 mb-1">Tip: tap a word for a hint</p>
+            <div className="text-ink italic">
               {/* Tap a word for a hint — its German dictionary-form
                   translation, regardless of this word's own tense/case
                   here ("reads" and "read" both just show "lesen"). English
@@ -828,7 +828,7 @@ function SentenceExercise({
                         // Clicking the already-selected word again hides its
                         // hint instead of just re-showing the same panel.
                         onClick={() => { setSelectedPromptGlossToken(null); setSelectedPromptWord(prev => (prev?.id === span.word!.id ? null : span.word!)); }}
-                        className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                        className="hover:bg-accent/70 rounded px-0.5 -mx-0.5 transition-colors"
                       >
                         {span.text}
                       </button>
@@ -840,7 +840,7 @@ function SentenceExercise({
                         key={i}
                         type="button"
                         onClick={() => { setSelectedPromptWord(null); setSelectedPromptGlossToken(prev => (prev === span.text ? null : span.text)); }}
-                        className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                        className="hover:bg-accent/70 rounded px-0.5 -mx-0.5 transition-colors"
                       >
                         {span.text}
                       </button>
@@ -864,7 +864,7 @@ function SentenceExercise({
                         key={i}
                         type="button"
                         onClick={() => { setSelectedPromptGlossToken(null); setSelectedPromptWord(prev => (prev?.id === match.id ? null : match)); }}
-                        className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                        className="hover:bg-accent/70 rounded px-0.5 -mx-0.5 transition-colors"
                       >
                         {text}
                       </button>
@@ -876,7 +876,7 @@ function SentenceExercise({
                         key={i}
                         type="button"
                         onClick={() => { setSelectedPromptWord(null); setSelectedPromptGlossToken(prev => (prev === text ? null : text)); }}
-                        className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                        className="hover:bg-accent/70 rounded px-0.5 -mx-0.5 transition-colors"
                       >
                         {text}
                       </button>
@@ -907,7 +907,7 @@ function SentenceExercise({
             disabled={status === 'loading' || status === 'limit-reached' || !!correction}
             placeholder="Your best attempt is fine — mixing in English is OK too."
             rows={2}
-            className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 resize-none disabled:opacity-60"
+            className="w-full border-2 border-paper-line rounded-xl px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent/50 resize-none disabled:opacity-60"
           />
           {/* No German keyboard on hand? There's no web API to switch the
               OS's on-screen keyboard layout — this row of ä/ö/ü/ß buttons
@@ -915,22 +915,22 @@ function SentenceExercise({
               once corrected, same as the textarea being disabled then. */}
           {!correction && <SpecialCharButtons inputRef={textareaRef} />}
           {status === 'error' && (
-            <p className="text-red-600 text-sm text-center">Couldn't get a correction — check your connection and try again.</p>
+            <p className="text-clay text-sm text-center">Couldn't get a correction — check your connection and try again.</p>
           )}
           {status === 'limit-reached' && (
-            <p className="text-amber-700 text-sm text-center">
+            <p className="text-accent-deep text-sm text-center">
               You've used up today's practice limit — come back tomorrow for more!
             </p>
           )}
           {status === 'unreachable' && (
-            <p className="text-amber-700 text-sm text-center">
+            <p className="text-accent-deep text-sm text-center">
               Can't reach our AI service right now (this can happen depending on your network) —
               switched off sentence-writing mode. You can turn it back on anytime in Settings.
             </p>
           )}
           {correction && correctionDiff ? (
             <>
-              <div className="relative text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
+              <div className="relative text-center py-3 rounded-xl font-semibold bg-good/25 border border-good px-4">
                 {/* Upper-right corner of the panel, not inline with the
                     rest of the content — a grammar explanation is a
                     secondary, optional action on top of the correction,
@@ -942,16 +942,16 @@ function SentenceExercise({
                     onClick={handleExplain}
                     disabled={explanationStatus === 'loading'}
                     aria-label="Explain the grammar"
-                    className="absolute top-2 right-2 text-indigo-500 text-xs font-semibold bg-white/70 hover:bg-white hover:text-indigo-700 rounded-full px-2 py-0.5 transition-colors disabled:opacity-50"
+                    className="absolute top-2 right-2 text-accent text-xs font-semibold bg-white/70 hover:bg-white hover:text-accent-deep rounded-full px-2 py-0.5 transition-colors disabled:opacity-50"
                   >
                     {explanationStatus === 'loading' ? '…' : 'Why?'}
                   </button>
                 )}
-                <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium flex items-center justify-center gap-1.5">
+                <div className="text-xs uppercase tracking-wide text-good-deep mb-1 font-medium flex items-center justify-center gap-1.5">
                   {correctionDiff.perfect ? '✓ Perfect!' : 'Correction'}
-                  <TextSpeakerButton text={correction.sentence} className="text-green-500 hover:text-green-700 transition-colors normal-case" />
+                  <TextSpeakerButton text={correction.sentence} className="text-good hover:text-good-deep transition-colors normal-case" />
                 </div>
-                <div className="text-lg text-green-800">
+                <div className="text-lg text-good-deep">
                   {correctionDiff.tokens.map(({ text, changed }, i) => {
                     // Every token is already either a whole word or a whole
                     // non-word (punctuation/whitespace) run — see tokenize's
@@ -980,14 +980,14 @@ function SentenceExercise({
                     // green correction box — amber (and red, tried earlier)
                     // both looked alarming/urgent here, which isn't the tone
                     // a correction should have.
-                    const underline = changed ? ' underline decoration-violet-500 decoration-2 underline-offset-2' : '';
+                    const underline = changed ? ' underline decoration-accent decoration-2 underline-offset-2' : '';
                     if (match) {
                       return (
                         <button
                           key={i}
                           type="button"
                           onClick={() => { setSelectedGlossToken(null); setSelectedWord(prev => (prev?.id === match.id ? null : match)); }}
-                          className={`hover:bg-green-200/70 rounded px-0.5 -mx-0.5 transition-colors${underline}`}
+                          className={`hover:bg-good/70 rounded px-0.5 -mx-0.5 transition-colors${underline}`}
                         >
                           {text}
                         </button>
@@ -999,7 +999,7 @@ function SentenceExercise({
                           key={i}
                           type="button"
                           onClick={() => { setSelectedWord(null); setSelectedGlossToken(prev => (prev === text ? null : text)); }}
-                          className={`hover:bg-green-200/70 rounded px-0.5 -mx-0.5 transition-colors${underline}`}
+                          className={`hover:bg-good/70 rounded px-0.5 -mx-0.5 transition-colors${underline}`}
                         >
                           {text}
                         </button>
@@ -1010,20 +1010,20 @@ function SentenceExercise({
                 </div>
               </div>
               {!correctionDiff.perfect && explanation && (
-                <div className="flex flex-col gap-1.5 -mt-2 bg-indigo-50 rounded-lg px-4 py-2">
+                <div className="flex flex-col gap-1.5 -mt-2 bg-accent/10 rounded-lg px-4 py-2">
                   <SpellingMistakesLine mistakes={explanation.spelling} />
                   {explanation.points.length > 0 && (
-                    <ul className="list-disc pl-5 flex flex-col gap-1 text-sm text-indigo-800">
+                    <ul className="list-disc pl-5 flex flex-col gap-1 text-sm text-ink">
                       {explanation.points.map((point, i) => <li key={i}>{point}</li>)}
                     </ul>
                   )}
                 </div>
               )}
               {!correctionDiff.perfect && explanationStatus === 'error' && (
-                <p className="text-red-500 text-xs -mt-2">Couldn't load an explanation — try again.</p>
+                <p className="text-clay text-xs -mt-2">Couldn't load an explanation — try again.</p>
               )}
               {!correctionDiff.perfect && explanationStatus === 'limit-reached' && (
-                <p className="text-amber-600 text-xs -mt-2">Used up today's practice limit — come back tomorrow.</p>
+                <p className="text-accent-deep text-xs -mt-2">Used up today's practice limit — come back tomorrow.</p>
               )}
               {selectedWord && <WordInfoPanel key={selectedWord.id} word={selectedWord} />}
               {!selectedWord && selectedGlossToken && glosses[selectedGlossToken] && (
@@ -1031,7 +1031,7 @@ function SentenceExercise({
               )}
               <button
                 onClick={onNext}
-                className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+                className="w-full bg-accent text-white py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
               >
                 Next →
               </button>
@@ -1040,7 +1040,7 @@ function SentenceExercise({
             <button
               onClick={handleSubmit}
               disabled={!input.trim() || status === 'loading' || status === 'limit-reached'}
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
+              className="w-full bg-accent text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-accent-deep active:scale-95 transition-all"
             >
               {status === 'loading' ? 'Checking…' : 'Check'}
             </button>
@@ -1100,23 +1100,23 @@ function ReferenceSentence({ example, word, masked = false }: {
   // unbolded translation) for the one call site that doesn't pass one.
   const translationParts = translation && word ? splitOnTranslationForm(translation, word, nativeLanguage) : null;
   return (
-    <div className="text-center bg-indigo-50 rounded-xl px-3 py-2">
+    <div className="text-center bg-accent/10 rounded-xl px-3 py-2">
       {/* No "Example sentence"/"In context" label any more — confirmed
           real feedback that it read as clutter once the sentence itself
           was already doing that job. The speaker button now sits inline
           at the END of the German sentence instead of its own header row
           above it — confirmed real that the old row-above placement took
           up a lot of vertical space for a single icon. */}
-      <div className="text-stone-700 italic">
+      <div className="text-ink italic">
         {parts ? (
           <>
             {parts.before}
             {masked ? (
-              <span className="inline-block px-2 rounded bg-indigo-200/70 text-transparent select-none not-italic" aria-hidden>
+              <span className="inline-block px-2 rounded bg-accent/70 text-transparent select-none not-italic" aria-hidden>
                 ____
               </span>
             ) : (
-              <span className="font-bold text-indigo-700 not-italic">{parts.match}</span>
+              <span className="font-bold text-accent-deep not-italic">{parts.match}</span>
             )}
             {parts.after}
           </>
@@ -1128,14 +1128,14 @@ function ReferenceSentence({ example, word, masked = false }: {
             space keeps the icon glued to the sentence's last word so it
             only ever wraps together with it, never dangling alone. */}
         {' '}
-        <TextSpeakerButton text={example.sentence} className="text-indigo-400 hover:text-indigo-600 transition-colors align-middle not-italic" />
+        <TextSpeakerButton text={example.sentence} className="text-accent hover:text-accent-deep transition-colors align-middle not-italic" />
       </div>
       {translation && (
-        <div className="text-stone-500 text-sm mt-1">
+        <div className="text-ink-soft text-sm mt-1">
           {translationParts ? (
             <>
               {translationParts.before}
-              <span className="font-bold text-indigo-700">{translationParts.match}</span>
+              <span className="font-bold text-accent-deep">{translationParts.match}</span>
               {translationParts.after}
             </>
           ) : translation}
@@ -2398,8 +2398,8 @@ export default function DailySessionFlow() {
   if (!session) {
     return (
       <div className="text-center py-16">
-        <p className="text-emerald-100/70 mb-6">No session started yet today.</p>
-        <Link href="/" className="text-amber-200 underline">Back to Home</Link>
+        <p className="text-on-bg/70 mb-6">No session started yet today.</p>
+        <Link href="/" className="text-on-bg underline">Back to Home</Link>
       </div>
     );
   }
@@ -2464,10 +2464,10 @@ export default function DailySessionFlow() {
     const todaysWords = wordsById(session.studyWordIds);
     return (
       <div className="text-center py-16">
-        <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+        <h2 className="text-2xl font-bold text-on-bg mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           Study complete!
         </h2>
-        <p className="text-amber-100/80 mb-6">
+        <p className="text-on-bg/80 mb-6">
           Today {session.studyWordIds.length} word{session.studyWordIds.length === 1 ? '' : 's'} learned.
         </p>
         {/* Moved up here (right under the summary line) rather than below
@@ -2479,47 +2479,47 @@ export default function DailySessionFlow() {
         <div className="flex flex-col items-center gap-3 mb-6">
           <button
             onClick={handleFinishStudy}
-            className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+            className="bg-accent text-white px-8 py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
           >
             Continue →
           </button>
-          <Link href="/" className="text-amber-200 underline text-sm">Back to Home</Link>
+          <Link href="/" className="text-on-bg underline text-sm">Back to Home</Link>
         </div>
         {session.earnedPuppies > 0 && (
-          <div className="mx-auto mb-6 max-w-xs bg-amber-50/75 backdrop-blur-sm border border-amber-100/50 rounded-2xl px-5 py-4 flex flex-col items-center gap-1.5">
+          <div className="mx-auto mb-6 max-w-xs bg-paper/75 backdrop-blur-sm border border-paper-line/50 rounded-2xl px-5 py-4 flex flex-col items-center gap-1.5">
             <DachshundMascot stage="puppy" className="w-20 h-20" />
-            <p className="text-slate-700 font-semibold">
+            <p className="text-ink font-semibold">
               {session.earnedPuppies} pupp{session.earnedPuppies === 1 ? 'y' : 'ies'} earned today!
             </p>
           </div>
         )}
         {todaysWords.length > 0 && (
           <div className="mx-auto mb-6 max-w-sm flex flex-col gap-2 text-left">
-            <div className="text-amber-100/70 text-xs font-semibold uppercase tracking-wide text-center mb-1">
+            <div className="text-on-bg/70 text-xs font-semibold uppercase tracking-wide text-center mb-1">
               Words introduced today
             </div>
             {todaysWords.map(w => {
               const sentence = getWordProgress(w.id).exampleSentence;
               return (
-                <div key={w.id} className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3">
+                <div key={w.id} className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-stone-800">
+                    <span className="font-semibold text-ink">
                       {w.article ? `${w.article} ` : ''}{w.de}
-                      <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
+                      <SpeakerButton word={w} className="ml-1.5 text-accent-deep hover:text-ink transition-colors align-middle" />
                     </span>
-                    <span className="shrink-0 text-[10px] font-medium text-stone-500 bg-slate-100 rounded-full px-2 py-0.5">
+                    <span className="shrink-0 text-[10px] font-medium text-ink-soft bg-paper-dim rounded-full px-2 py-0.5">
                       Introduced
                     </span>
                   </div>
-                  <div className="text-stone-500 text-sm">{glossFor(w, getSettings().nativeLanguage)}</div>
+                  <div className="text-ink-soft text-sm">{glossFor(w, getSettings().nativeLanguage)}</div>
                   {sentence && (
-                    <div className="mt-1.5 pt-1.5 border-t border-amber-100/60 flex flex-col gap-0.5">
+                    <div className="mt-1.5 pt-1.5 border-t border-paper-line/60 flex flex-col gap-0.5">
                       {sentence.englishPrompt && (
-                        <div className="text-stone-500 text-xs">
+                        <div className="text-ink-soft text-xs">
                           {getSettings().nativeLanguage === 'zh' ? (sentence.englishPromptZh ?? w.exercisePromptZh ?? sentence.englishPrompt) : sentence.englishPrompt}
                         </div>
                       )}
-                      <div className="text-stone-700 text-sm italic">{sentence.sentence}</div>
+                      <div className="text-ink text-sm italic">{sentence.sentence}</div>
                     </div>
                   )}
                 </div>
@@ -2536,21 +2536,21 @@ export default function DailySessionFlow() {
     const totalWords = batches.flat().length;
     return (
       <div className="text-center py-16">
-        <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
-          Bonus: Build a story! 📖
+        <h2 className="text-2xl font-bold text-on-bg mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+          Bonus: Build a story!
         </h2>
-        <p className="text-amber-100/80 mb-6 max-w-xs mx-auto">
+        <p className="text-on-bg/80 mb-6 max-w-xs mx-auto">
           We'll write {batches.length > 1 ? `${batches.length} short German paragraphs` : 'a short German paragraph'} using
           {' '}{totalWords} of today's new words. Tap each word into the blank where it belongs.
         </p>
         <div className="flex flex-col items-center gap-3">
           <button
             onClick={handleStartParagraph}
-            className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+            className="bg-accent text-white px-8 py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
           >
             Let's do it →
           </button>
-          <button onClick={handleSkipParagraph} className="text-amber-200 underline text-sm">
+          <button onClick={handleSkipParagraph} className="text-on-bg underline text-sm">
             Skip for today
           </button>
         </div>
@@ -2571,21 +2571,21 @@ export default function DailySessionFlow() {
     if (paragraphStatus === 'idle' || paragraphStatus === 'loading') {
       return (
         <div className="text-center py-16">
-          <p className="text-amber-100/80 text-sm">Writing your story…</p>
+          <p className="text-on-bg/80 text-sm">Writing your story…</p>
         </div>
       );
     }
     if (paragraphStatus !== 'ready' || !session.paragraphExercises?.[index]) {
       return (
         <div className="text-center py-16 flex flex-col items-center gap-4">
-          <p className="text-amber-100/80 text-sm max-w-xs mx-auto">
+          <p className="text-on-bg/80 text-sm max-w-xs mx-auto">
             {paragraphStatus === 'limit-reached'
               ? "You've used up today's AI bonus stories — come back tomorrow!"
               : "Couldn't put today's story together right now."}
           </p>
           <button
             onClick={handleSkipParagraph}
-            className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+            className="bg-accent text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
           >
             Continue →
           </button>
@@ -2596,7 +2596,7 @@ export default function DailySessionFlow() {
     return (
       <div>
         {batches.length > 1 && (
-          <div className="text-center text-amber-100/70 text-xs font-semibold uppercase tracking-wide mb-3">
+          <div className="text-center text-on-bg/70 text-xs font-semibold uppercase tracking-wide mb-3">
             Story {index + 1} of {batches.length}
           </div>
         )}
@@ -2619,7 +2619,7 @@ export default function DailySessionFlow() {
     const reviewedWords = wordsById(session.reviewWordIds);
     return (
       <div className="text-center py-16">
-        <h2 className="text-2xl font-bold text-amber-50 mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+        <h2 className="text-2xl font-bold text-on-bg mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           {session.reviewWordIds.length} word{session.reviewWordIds.length === 1 ? '' : 's'} reviewed today
         </h2>
         {/* Moved up from below the word list -- same reasoning as
@@ -2627,7 +2627,7 @@ export default function DailySessionFlow() {
             scroll past every reviewed word just to move on. */}
         <button
           onClick={handleContinueFromReport}
-          className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all mb-6"
+          className="bg-accent text-white px-8 py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all mb-6"
         >
           Continue →
         </button>
@@ -2637,21 +2637,21 @@ export default function DailySessionFlow() {
               const progress = getWordProgress(w.id);
               const sentence = progress.exampleSentence;
               return (
-                <div key={w.id} className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
+                <div key={w.id} className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <span className="font-semibold text-stone-800">
+                    <span className="font-semibold text-ink">
                       {w.article ? `${w.article} ` : ''}{w.de}
                     </span>
-                    <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
-                    <div className="text-stone-500 text-sm">{glossFor(w, getSettings().nativeLanguage)}</div>
+                    <SpeakerButton word={w} className="ml-1.5 text-accent-deep hover:text-ink transition-colors align-middle" />
+                    <div className="text-ink-soft text-sm">{glossFor(w, getSettings().nativeLanguage)}</div>
                     {sentence && (
-                      <div className="mt-1.5 pt-1.5 border-t border-amber-100/60 flex flex-col gap-0.5">
+                      <div className="mt-1.5 pt-1.5 border-t border-paper-line/60 flex flex-col gap-0.5">
                         {sentence.englishPrompt && (
-                          <div className="text-stone-500 text-xs">
+                          <div className="text-ink-soft text-xs">
                             {getSettings().nativeLanguage === 'zh' ? (sentence.englishPromptZh ?? w.exercisePromptZh ?? sentence.englishPrompt) : sentence.englishPrompt}
                           </div>
                         )}
-                        <div className="text-stone-700 text-sm italic">{sentence.sentence}</div>
+                        <div className="text-ink text-sm italic">{sentence.sentence}</div>
                       </div>
                     )}
                   </div>
@@ -2716,50 +2716,50 @@ export default function DailySessionFlow() {
     const snap = cardHistory[historyIndex];
     return (
       <div className="flex flex-col gap-5">
-        <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5 min-h-[30rem]">
+        <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-5 min-h-[30rem]">
           <div>
-            <div className="text-sm font-medium text-indigo-600 mb-1">
+            <div className="text-sm font-medium text-accent-deep mb-1">
               {CHUNK_LABELS[snap.activeChunk]}
             </div>
             <MilestoneBar activeChunk={snap.activeChunk} wordId={snap.word.id} />
           </div>
 
           <div className="text-center">
-            <div className="text-2xl font-semibold text-slate-700">{glossFor(snap.word, getSettings().nativeLanguage)}</div>
+            <div className="text-2xl font-semibold text-ink">{glossFor(snap.word, getSettings().nativeLanguage)}</div>
           </div>
 
           {snap.sentence && snap.sentence.isDirect ? (
             <div className="flex flex-col gap-3">
               <div className="text-center -mt-1">
-                <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
-                <div className="text-2xl font-bold text-indigo-800 tracking-wide break-words">
+                <div className="text-xs uppercase tracking-wide text-ink-soft mb-1">Copy this word</div>
+                <div className="text-2xl font-bold text-ink tracking-wide break-words">
                   {snap.word.article ? `${snap.word.article} ` : ''}{snap.word.de}
                 </div>
                 <WordGrammarInfo word={snap.word} />
               </div>
               <ReferenceSentence example={snap.sentence} word={snap.word} />
-              <div className={`text-center py-3 rounded-xl font-semibold text-lg ${snap.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              <div className={`text-center py-3 rounded-xl font-semibold text-lg ${snap.correct ? 'bg-good/25 text-good-deep' : 'bg-clay/20 text-clay'}`}>
                 {snap.correct ? '✓ Correct!' : '✗ Wrong that time'}
               </div>
             </div>
           ) : snap.sentence ? (
             <div className="flex flex-col gap-3">
               <SentenceWordHeader word={snap.word} />
-              <div className="bg-indigo-50 rounded-xl px-3 py-2 text-center">
-                <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate to German</div>
-                <div className="text-stone-700 italic">
+              <div className="bg-accent/10 rounded-xl px-3 py-2 text-center">
+                <div className="text-xs uppercase tracking-wide text-accent mb-1">Translate to German</div>
+                <div className="text-ink italic">
                   {getSettings().nativeLanguage === 'zh' ? (snap.sentence.englishPromptZh ?? snap.word.exercisePromptZh ?? snap.sentence.englishPrompt) : snap.sentence.englishPrompt}
                 </div>
               </div>
-              <div className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-500">
+              <div className="w-full border-2 border-paper-line rounded-xl px-3 py-2 text-ink-soft">
                 {snap.sentence.userInput}
               </div>
-              <div className="text-center py-3 rounded-xl font-semibold bg-green-50 border border-green-200 px-4">
-                <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium flex items-center justify-center gap-1.5">
+              <div className="text-center py-3 rounded-xl font-semibold bg-good/25 border border-good px-4">
+                <div className="text-xs uppercase tracking-wide text-good-deep mb-1 font-medium flex items-center justify-center gap-1.5">
                   Correction
-                  <TextSpeakerButton text={snap.sentence.sentence} className="text-green-500 hover:text-green-700 transition-colors normal-case" />
+                  <TextSpeakerButton text={snap.sentence.sentence} className="text-good hover:text-good-deep transition-colors normal-case" />
                 </div>
-                <div className="text-lg text-green-800">
+                <div className="text-lg text-good-deep">
                   {tokenize(snap.sentence.sentence).map((text, i) => <span key={i}>{text}</span>)}
                 </div>
               </div>
@@ -2767,11 +2767,11 @@ export default function DailySessionFlow() {
           ) : (
             <div className="flex flex-col gap-3">
               <div className="text-center -mt-1">
-                <div className="text-2xl font-bold text-indigo-800 tracking-wide break-words">
+                <div className="text-2xl font-bold text-ink tracking-wide break-words">
                   {snap.word.article ? `${snap.word.article} ` : ''}{snap.word.de}
                 </div>
               </div>
-              <div className={`text-center py-3 rounded-xl font-semibold text-lg ${snap.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              <div className={`text-center py-3 rounded-xl font-semibold text-lg ${snap.correct ? 'bg-good/25 text-good-deep' : 'bg-clay/20 text-clay'}`}>
                 {snap.correct ? '✓ Correct!' : '✗ Wrong that time'}
               </div>
               {/* Same round 2+/review context block the live card showed —
@@ -2794,13 +2794,13 @@ export default function DailySessionFlow() {
             <button
               onClick={() => setHistoryIndex(i => Math.max(0, (i ?? 0) - 1))}
               disabled={historyIndex === 0}
-              className="flex-1 bg-white text-indigo-700 border-2 border-indigo-100 py-2.5 rounded-xl font-semibold disabled:opacity-40 hover:enabled:bg-indigo-50 transition-all"
+              className="flex-1 bg-white text-accent-deep border-2 border-paper-line py-2.5 rounded-xl font-semibold disabled:opacity-40 hover:enabled:bg-accent/10 transition-all"
             >
               ← Previous
             </button>
             <button
               onClick={() => setHistoryIndex(i => (i !== null && i < newestHistoryIndex ? i + 1 : null))}
-              className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+              className="flex-1 bg-accent text-white py-2.5 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
             >
               Next →
             </button>
@@ -2814,7 +2814,7 @@ export default function DailySessionFlow() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between text-xs text-emerald-100/70">
+        <div className="flex items-center justify-between text-xs text-on-bg/70">
           <span>
             {roundMode === 'study'
               ? `${completedCount} / ${totalWords} new words learned today`
@@ -2823,7 +2823,7 @@ export default function DailySessionFlow() {
           {newestHistoryIndex >= 0 && (
             <button
               onClick={() => setHistoryIndex(newestHistoryIndex)}
-              className="text-amber-200 hover:text-amber-100 underline font-medium"
+              className="text-on-bg/75 hover:text-on-bg underline font-medium"
             >
               ← Previous
             </button>
@@ -2835,16 +2835,16 @@ export default function DailySessionFlow() {
               go" (that's what amber means on MilestoneBar), so it should
               read the same way here for consistency. */}
           <div
-            className="h-full bg-emerald-400 rounded-full transition-[width] duration-500 ease-out"
+            className="h-full bg-good-deep rounded-full transition-[width] duration-500 ease-out"
             style={{ width: `${progressPct}%` }}
           />
         </div>
       </div>
 
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5 min-h-[30rem]">
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-5 min-h-[30rem]">
         <div>
           <div className="flex items-center justify-between mb-1">
-            <div className="text-sm font-medium text-indigo-600">
+            <div className="text-sm font-medium text-accent-deep">
               {CHUNK_LABELS[activeChunk]}
             </div>
             {/* A labeled switch, not a pill that just names the current
@@ -2866,8 +2866,8 @@ export default function DailySessionFlow() {
                 title={settings.sentenceWritingMode ? 'Sentence writing: on — tap to switch to copy mode' : 'Sentence writing: off — tap to turn on'}
                 className="flex items-center gap-1.5 shrink-0"
               >
-                <span className="text-[10px] font-semibold text-indigo-600">Writing</span>
-                <span className={`relative inline-block w-7 h-4 rounded-full transition-colors ${settings.sentenceWritingMode ? 'bg-indigo-600' : 'bg-stone-300'}`}>
+                <span className="text-[10px] font-semibold text-accent-deep">Writing</span>
+                <span className={`relative inline-block w-7 h-4 rounded-full transition-colors ${settings.sentenceWritingMode ? 'bg-accent' : 'bg-paper-dim'}`}>
                   <span
                     className="absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform"
                     style={{ transform: settings.sentenceWritingMode ? 'translateX(0.75rem)' : 'translateX(0)' }}
@@ -2881,7 +2881,7 @@ export default function DailySessionFlow() {
 
         <div className="text-center">
           <RoundWordImage word={word} />
-          <div className="text-2xl font-semibold text-slate-700">{glossFor(word, getSettings().nativeLanguage)}</div>
+          <div className="text-2xl font-semibold text-ink">{glossFor(word, getSettings().nativeLanguage)}</div>
         </div>
 
         {/* Context for every round 2+/review card, not just round 1 —
@@ -2975,16 +2975,16 @@ export default function DailySessionFlow() {
                 that already has a saved sentence (see the gate above). */}
             {currentRound === 1 && (
               <div className="text-center -mt-1">
-                <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Copy this word</div>
-                <div className="text-2xl font-bold text-indigo-800 tracking-wide break-words">
-                  {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-xl" />
+                <div className="text-xs uppercase tracking-wide text-ink-soft mb-1">Copy this word</div>
+                <div className="text-2xl font-bold text-ink tracking-wide break-words">
+                  {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-accent hover:text-accent-deep transition-colors text-xl" />
                 </div>
                 <WordGrammarInfo word={word} />
               </div>
             )}
 
             {useDirectSentence && directSentenceStatus === 'loading' && (
-              <p className="text-stone-400 text-xs text-center">Preparing an example sentence…</p>
+              <p className="text-ink-soft text-xs text-center">Preparing an example sentence…</p>
             )}
             {useDirectSentence && directSentenceStatus === 'ready' && directSentence && (
               <ReferenceSentence example={directSentence} word={word} />
@@ -2995,7 +2995,7 @@ export default function DailySessionFlow() {
                 instant aiUnreachable flips, before its own local status
                 message ever gets a chance to render). */}
             {aiUnreachable && (
-              <p className="text-amber-700 text-xs text-center px-2">
+              <p className="text-accent-deep text-xs text-center px-2">
                 Can't reach our AI service right now (this can happen depending on your network) —
                 switched off sentence-writing mode. You can turn it back on anytime in Settings.
               </p>
@@ -3004,7 +3004,7 @@ export default function DailySessionFlow() {
             {word.type === 'noun' && word.article && (
               needsArticle ? (
                 <div className="text-center -mb-2">
-                  <div className="text-xs uppercase tracking-wide text-slate-400 mb-1">Article — der / die / das</div>
+                  <div className="text-xs uppercase tracking-wide text-ink-soft mb-1">Article — der / die / das</div>
                   <LetterInputRow
                     ref={articleRowRef}
                     chars={word.article ? [...word.article] : ['_', '_', '_']}
@@ -3022,7 +3022,7 @@ export default function DailySessionFlow() {
                 </div>
               ) : (
                 <div className="flex justify-center gap-2">
-                  <span className="bg-indigo-100 text-indigo-700 font-bold px-4 py-1 rounded-full text-lg">{word.article}</span>
+                  <span className="bg-accent/15 text-accent-deep font-bold px-4 py-1 rounded-full text-lg">{word.article}</span>
                 </div>
               )
             )}
@@ -3071,7 +3071,7 @@ export default function DailySessionFlow() {
                 <button
                   onClick={handleSubmit}
                   disabled={!wordComplete}
-                  className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
+                  className="w-full bg-accent text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-accent-deep active:scale-95 transition-all"
                 >
                   Check
                 </button>
@@ -3081,33 +3081,33 @@ export default function DailySessionFlow() {
                   // button occupies (see below), so advancing to a new
                   // round-2+ card let React reuse that SAME DOM node
                   // rather than mount a fresh one: the node's className
-                  // morphed from Next's bg-indigo-600 straight to Hint's
+                  // morphed from Next's bg-accent straight to Hint's
                   // transparent background, and since both classNames
                   // include a transition, the browser animated that
                   // color change -- a real, confirmed "purple blink"
                   // right after tapping Next. A distinct key tells React
                   // these are different elements, forcing a clean
                   // unmount/remount instead of an in-place style morph.
-                  <button key="hint" onClick={handleHint} className="w-full text-slate-400 py-1 text-sm font-medium hover:text-slate-600 transition-colors">
+                  <button key="hint" onClick={handleHint} className="w-full text-ink-soft py-1 text-sm font-medium hover:text-ink transition-colors">
                     Hint
                   </button>
                 )}
               </div>
             ) : (
               <div className="flex flex-col gap-3 min-h-48 mt-auto">
-                <div className={`text-center py-3 px-2 rounded-xl font-semibold text-lg break-words ${feedback ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                <div className={`text-center py-3 px-2 rounded-xl font-semibold text-lg break-words ${feedback ? 'bg-good/25 text-good-deep' : 'bg-clay/20 text-clay'}`}>
                   {feedback ? '✓ Correct!' : (
                     <>
                       ✗ The answer is:{' '}
                       <span className="">{word.article ? `${word.article} ` : ''}{word.de}</span>{' '}
-                      <SpeakerButton word={word} className="align-middle text-red-600 hover:text-red-800 transition-colors" />
+                      <SpeakerButton word={word} className="align-middle text-clay/75 hover:text-clay transition-colors" />
                     </>
                   )}
                 </div>
                 <button
                   key="next"
                   onClick={handleNext}
-                  className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+                  className="w-full bg-accent text-white py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
                 >
                   Next →
                 </button>

@@ -223,36 +223,36 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
       onClick={onClose}
     >
       <div
-        className="bg-amber-50 rounded-2xl p-5 max-w-sm w-full flex flex-col gap-4 shadow-xl"
+        className="bg-paper rounded-2xl p-5 max-w-sm w-full flex flex-col gap-4 shadow-xl"
         onClick={e => e.stopPropagation()}
       >
-        <div className="rounded-xl overflow-hidden border border-indigo-100 bg-indigo-50 aspect-square flex items-center justify-center">
+        <div className="rounded-xl overflow-hidden border border-paper-line bg-accent/10 aspect-square flex items-center justify-center">
           {imgUrl ? (
             // The image is generated locally on-device (canvas → blob URL),
             // so a plain <img> is fine here — no remote source to optimize.
             // eslint-disable-next-line @next/next/no-img-element
             <img src={imgUrl} alt="Daily goal complete" className="w-full h-full object-contain" />
           ) : (
-            <span className="text-indigo-300 text-sm">Preparing image…</span>
+            <span className="text-accent text-sm">Preparing image…</span>
           )}
         </div>
         <div className="flex gap-2">
           <button
             onClick={handleShare}
             disabled={!imgUrl}
-            className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-40"
+            className="flex-1 bg-accent text-white py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all disabled:opacity-40"
           >
             Share
           </button>
           <button
             onClick={handleSave}
             disabled={!imgUrl}
-            className="flex-1 bg-indigo-50 text-indigo-700 py-3 rounded-xl font-semibold hover:bg-indigo-100 active:scale-95 transition-all disabled:opacity-40"
+            className="flex-1 bg-accent/10 text-accent-deep py-3 rounded-xl font-semibold hover:bg-accent/15 active:scale-95 transition-all disabled:opacity-40"
           >
             Save image
           </button>
         </div>
-        <button onClick={onClose} className="text-center text-slate-400 text-sm hover:text-slate-600 transition-colors">
+        <button onClick={onClose} className="text-center text-ink-soft text-sm hover:text-ink transition-colors">
           Close
         </button>
       </div>

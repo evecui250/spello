@@ -139,7 +139,7 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
             key={`${key}-${i}`}
             type="button"
             onClick={() => { setSelectedGlossToken(null); setSelectedWord(prev => (prev?.word.id === match.id ? null : { word: match })); }}
-            className="hover:bg-indigo-100 rounded px-0.5 -mx-0.5 transition-colors"
+            className="hover:bg-accent/15 rounded px-0.5 -mx-0.5 transition-colors"
           >
             {text}
           </button>
@@ -151,7 +151,7 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
             key={`${key}-${i}`}
             type="button"
             onClick={() => { setSelectedWord(null); setSelectedGlossToken(prev => (prev === text ? null : text)); }}
-            className="hover:bg-indigo-100 rounded px-0.5 -mx-0.5 transition-colors"
+            className="hover:bg-accent/15 rounded px-0.5 -mx-0.5 transition-colors"
           >
             {text}
           </button>
@@ -163,12 +163,12 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
-        <div className="text-sm font-medium text-indigo-600">
-          {checked ? (allCorrect ? 'Perfect! 🎉' : 'Here\'s how it fits together') : 'Tap a word, then tap where it belongs'}
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-5">
+        <div className="text-sm font-medium text-accent-deep">
+          {checked ? (allCorrect ? 'Perfect!' : 'Here\'s how it fits together') : 'Tap a word, then tap where it belongs'}
         </div>
 
-        <div className="text-lg leading-relaxed text-slate-700">
+        <div className="text-lg leading-relaxed text-ink">
           {exercise.segments.map((segment, i) => (
             <span key={i}>
               {renderSegment(segment, `s${i}`)}
@@ -195,7 +195,7 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
         )}
 
         {!checked && (
-          <div className="flex flex-wrap gap-2 justify-center pt-1 border-t border-amber-100/60">
+          <div className="flex flex-wrap gap-2 justify-center pt-1 border-t border-paper-line/60">
             {exercise.tray.map(({ answer }, trayIdx) =>
               usedIndices.has(trayIdx) ? null : (
                 <div key={trayIdx} className="relative">
@@ -203,8 +203,8 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
                     onClick={() => handleTrayTap(trayIdx)}
                     className={`px-4 py-2 rounded-xl font-medium border-2 transition-all ${
                       selectedTray === trayIdx
-                        ? 'border-indigo-500 bg-indigo-100 text-indigo-700 scale-105'
-                        : 'border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400'
+                        ? 'border-accent bg-accent/15 text-accent-deep scale-105'
+                        : 'border-accent/30 bg-white/80 text-ink hover:border-accent/70'
                     }`}
                   >
                     {answer}
@@ -217,7 +217,7 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
                     type="button"
                     onClick={(e) => { e.stopPropagation(); handleTrayInfoTap(trayIdx); }}
                     aria-label="Show meaning"
-                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-indigo-500 text-white text-[10px] font-bold flex items-center justify-center hover:bg-indigo-600 shadow-sm"
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-accent text-white text-[10px] font-bold flex items-center justify-center hover:bg-accent shadow-sm"
                   >
                     i
                   </button>
@@ -231,7 +231,7 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
           <button
             onClick={handleCheck}
             disabled={!allFilled}
-            className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-40 disabled:hover:bg-indigo-600"
+            className="w-full bg-accent text-white py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all disabled:opacity-40 disabled:hover:bg-accent"
           >
             Check
           </button>
@@ -239,20 +239,20 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
 
         {checked && (
           <>
-            <div className="flex flex-col gap-2 pt-1 border-t border-amber-100/60">
+            <div className="flex flex-col gap-2 pt-1 border-t border-paper-line/60">
               {exercise.blanks.map((blank, i) => {
                 const w = wordById.get(blank.wordId);
                 if (!w) return null;
                 return (
                   <div key={i} className="flex items-center justify-between gap-3 bg-white/70 rounded-xl px-4 py-2.5">
                     <div>
-                      <span className="font-semibold text-stone-800">
+                      <span className="font-semibold text-ink">
                         {w.article ? `${w.article} ` : ''}{w.de}
-                        <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
+                        <SpeakerButton word={w} className="ml-1.5 text-accent-deep hover:text-ink transition-colors align-middle" />
                       </span>
-                      <div className="text-stone-500 text-sm">{glossFor(w, getSettings().nativeLanguage)}</div>
+                      <div className="text-ink-soft text-sm">{glossFor(w, getSettings().nativeLanguage)}</div>
                     </div>
-                    <span className={`shrink-0 text-lg ${results?.[i] ? 'text-green-600' : 'text-red-500'}`}>
+                    <span className={`shrink-0 text-lg ${results?.[i] ? 'text-good-deep' : 'text-clay'}`}>
                       {results?.[i] ? '✓' : '✗'}
                     </span>
                   </div>
@@ -261,7 +261,7 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
             </div>
             <button
               onClick={onComplete}
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+              className="w-full bg-accent text-white py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
             >
               Continue →
             </button>
@@ -282,13 +282,13 @@ function BlankSlot({
   correctAnswer: string;
   onTap: () => void;
 }) {
-  let cls = 'border-slate-300 bg-white/60 text-slate-400';
+  let cls = 'border-paper-line bg-white/60 text-ink-soft';
   if (checked) {
-    cls = correct ? 'border-green-400 bg-green-100 text-green-700 hover:bg-green-200' : 'border-red-400 bg-red-100 text-red-700 hover:bg-red-200';
+    cls = correct ? 'border-good-deep bg-good/25 text-good-deep hover:bg-good/35' : 'border-clay bg-clay/20 text-clay hover:bg-clay/30';
   } else if (filled !== null) {
-    cls = 'border-indigo-400 bg-indigo-50 text-indigo-700';
+    cls = 'border-accent/70 bg-accent/10 text-accent-deep';
   } else if (selectable) {
-    cls = 'border-indigo-400 bg-indigo-50/60 text-indigo-400 animate-pulse';
+    cls = 'border-accent/70 bg-accent/60 text-accent animate-pulse';
   }
   return (
     <button

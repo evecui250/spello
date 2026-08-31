@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getSettings, saveSettings, switchToLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
 import { Level, wordsForLevel, LEVEL_SOURCE } from '../../lib/words';
@@ -45,6 +45,7 @@ export default function SettingsPage() {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [showPaceInfo, setShowPaceInfo] = useState(false);
   const [theme, setTheme] = useState<Theme>('forest');
+  const [cardMode, setCardMode] = useState<CardMode>('light');
   const [fontScale, setFontScale] = useState<FontScale>('default');
   const [soundName, setSoundName] = useState('Triad Bloom');
   // Collapsed by default -- the whole point of grouping Theme/Font
@@ -69,6 +70,7 @@ export default function SettingsPage() {
 
   useEffect(loadFromStorage, []);
   useEffect(() => setTheme(getTheme()), []);
+  useEffect(() => setCardMode(getCardMode()), []);
   useEffect(() => setFontScale(getFontScale()), []);
   useEffect(() => {
     const choice = getSoundChoice();
@@ -83,6 +85,11 @@ export default function SettingsPage() {
   const handleThemeChange = (t: Theme) => {
     setTheme(t);
     saveTheme(t);
+  };
+
+  const handleCardModeChange = (m: CardMode) => {
+    setCardMode(m);
+    saveCardMode(m);
   };
 
   useEffect(() => {
@@ -175,27 +182,27 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Settings</h1>
-        <span className={`text-sm font-medium text-emerald-300 transition-opacity ${saved ? 'opacity-100' : 'opacity-0'}`}>
+        <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Settings</h1>
+        <span className={`text-sm font-medium text-good transition-opacity ${saved ? 'opacity-100' : 'opacity-0'}`}>
           ✓ Saved
         </span>
       </div>
 
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6">
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6">
         <AccountPanel onSync={loadFromStorage} />
       </div>
 
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm overflow-hidden">
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm overflow-hidden">
         <button
           type="button"
           onClick={() => setAppearanceOpen(v => !v)}
           aria-expanded={appearanceOpen}
-          className="w-full flex items-center justify-between gap-3 p-6 text-left hover:bg-amber-100/40 active:bg-amber-100/60 transition-colors"
+          className="w-full flex items-center justify-between gap-3 p-6 text-left hover:bg-paper-dim/40 active:bg-paper-dim/60 transition-colors"
         >
           <div>
-            <span className="block font-semibold text-stone-800">Appearance</span>
+            <span className="block font-semibold text-ink">Appearance</span>
             {!appearanceOpen && (
-              <span className="block text-stone-500 text-sm mt-0.5">
+              <span className="block text-ink-soft text-sm mt-0.5">
                 {theme[0].toUpperCase()}{theme.slice(1)} theme · {FONT_LABEL[fontScale]} text · {soundName} sound
               </span>
             )}
@@ -205,16 +212,16 @@ export default function SettingsPage() {
               interactive on this page) makes it look like a real control,
               not decoration. */}
           <span
-            className={`shrink-0 w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-base font-bold transition-transform ${appearanceOpen ? 'rotate-180' : ''}`}
+            className={`shrink-0 w-8 h-8 rounded-full bg-accent/15 text-accent-deep flex items-center justify-center text-base font-bold transition-transform ${appearanceOpen ? 'rotate-180' : ''}`}
           >
             ▾
           </span>
         </button>
         {appearanceOpen && (
-          <div className="px-6 pb-6 flex flex-col gap-6 border-t border-amber-100/60 pt-5">
+          <div className="px-6 pb-6 flex flex-col gap-6 border-t border-paper-line/60 pt-5">
             <div>
-              <label className="block font-semibold text-stone-800 mb-1">Theme</label>
-              <p className="text-stone-500 text-sm mb-3">Changes the app's background.</p>
+              <label className="block font-semibold text-ink mb-1">Theme</label>
+              <p className="text-ink-soft text-sm mb-3">Changes the app's background.</p>
               <div className="grid grid-cols-5 gap-x-2 gap-y-3">
                 {(Object.keys(THEME_CONFIG) as Theme[]).map(t => {
                   const cfg = THEME_CONFIG[t];
@@ -228,10 +235,10 @@ export default function SettingsPage() {
                     >
                       <span
                         className={`w-9 h-9 rounded-full bg-gradient-to-b ${cfg.gradient} transition-all ${
-                          isSelected ? 'ring-2 ring-offset-2 ring-offset-amber-50 ring-indigo-500 scale-110' : 'ring-1 ring-black/10'
+                          isSelected ? 'ring-2 ring-offset-2 ring-offset-amber-50 ring-accent scale-110' : 'ring-1 ring-black/10'
                         }`}
                       />
-                      <span className={`text-[11px] font-medium capitalize ${isSelected ? 'text-indigo-700' : 'text-stone-500'}`}>
+                      <span className={`text-[11px] font-medium capitalize ${isSelected ? 'text-accent-deep' : 'text-ink-soft'}`}>
                         {t}
                       </span>
                     </button>
@@ -241,8 +248,33 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="block font-semibold text-stone-800 mb-1">Font size</label>
-              <p className="text-stone-500 text-sm mb-3">Changes the text size everywhere in the app.</p>
+              <label className="block font-semibold text-ink mb-1">Cards</label>
+              <p className="text-ink-soft text-sm mb-3">Dims every card for reading comfortably at night.</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { value: 'light', label: 'Day' },
+                  { value: 'dark', label: 'Night' },
+                ] as { value: CardMode; label: string }[]).map(opt => {
+                  const isSelected = cardMode === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleCardModeChange(opt.value)}
+                      className={`rounded-xl py-3 border-2 font-medium text-sm transition-colors ${
+                        isSelected ? 'border-accent bg-accent/10 text-accent-deep' : 'border-paper-line text-ink-soft'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-ink mb-1">Font size</label>
+              <p className="text-ink-soft text-sm mb-3">Changes the text size everywhere in the app.</p>
               <div className="grid grid-cols-3 gap-2">
                 {([
                   { value: 'small', label: 'Small', sample: 'text-sm' },
@@ -256,11 +288,11 @@ export default function SettingsPage() {
                       type="button"
                       onClick={() => handleFontScaleChange(opt.value)}
                       className={`flex flex-col items-center gap-1 rounded-xl py-3 border-2 transition-colors ${
-                        isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-stone-200'
+                        isSelected ? 'border-accent bg-accent/10' : 'border-paper-line'
                       }`}
                     >
-                      <span className={`font-bold text-stone-800 ${opt.sample}`}>Aa</span>
-                      <span className={`text-xs font-medium ${isSelected ? 'text-indigo-700' : 'text-stone-500'}`}>{opt.label}</span>
+                      <span className={`font-bold text-ink ${opt.sample}`}>Aa</span>
+                      <span className={`text-xs font-medium ${isSelected ? 'text-accent-deep' : 'text-ink-soft'}`}>{opt.label}</span>
                     </button>
                   );
                 })}
@@ -268,35 +300,35 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="block font-semibold text-stone-800 mb-1">Correct-answer sound</label>
-              <p className="text-stone-500 text-sm mb-3">Plays when you spell, match, or translate a word correctly. Tap one to hear it.</p>
+              <label className="block font-semibold text-ink mb-1">Correct-answer sound</label>
+              <p className="text-ink-soft text-sm mb-3">Plays when you spell, match, or translate a word correctly. Tap one to hear it.</p>
               <SoundPicker onChange={id => setSoundName(CHIME_OPTIONS.find(o => o.id === id)?.name ?? 'Triad Bloom')} />
             </div>
           </div>
         )}
       </div>
 
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-6">
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-6">
         <div>
-          <label className="block font-semibold text-stone-800 mb-1">Level</label>
+          <label className="block font-semibold text-ink mb-1">Level</label>
           <select
             value={level}
             onChange={e => handleLevelChange(e.target.value as Level)}
-            className="w-full border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
+            className="w-full border-2 border-accent/70 rounded-lg px-3 py-2 text-ink focus:outline-none focus:border-accent"
           >
             <option value="A1">A1</option>
             <option value="A2">A2</option>
             <option value="B1">B1</option>
             <option value="B2">B2</option>
           </select>
-          <p className="text-stone-500 text-sm mt-1">This vocabulary book has {wordsForLevel(level).length} words for {level}.</p>
+          <p className="text-ink-soft text-sm mt-1">This vocabulary book has {wordsForLevel(level).length} words for {level}.</p>
           {LEVEL_SOURCE[level] && (
-            <p className="text-stone-400 text-xs mt-0.5">{LEVEL_SOURCE[level]}</p>
+            <p className="text-ink-soft text-xs mt-0.5">{LEVEL_SOURCE[level]}</p>
           )}
         </div>
 
         <div>
-          <label className="block font-semibold text-stone-800 mb-1">Learn with</label>
+          <label className="block font-semibold text-ink mb-1">Learn with</label>
           <select
             value={nativeLanguage}
             onChange={e => {
@@ -304,16 +336,16 @@ export default function SettingsPage() {
               setNativeLanguage(v);
               persist({ nativeLanguage: v });
             }}
-            className="w-full border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
+            className="w-full border-2 border-accent/70 rounded-lg px-3 py-2 text-ink focus:outline-none focus:border-accent"
           >
             <option value="en">English</option>
             <option value="zh">中文 (Chinese)</option>
           </select>
-          <p className="text-stone-500 text-sm mt-1">Word meanings and example sentences are shown in this language.</p>
+          <p className="text-ink-soft text-sm mt-1">Word meanings and example sentences are shown in this language.</p>
         </div>
 
         <div>
-          <label className="block font-semibold text-stone-800 mb-1">
+          <label className="block font-semibold text-ink mb-1">
             New words per day
           </label>
           <div className="flex items-center gap-4">
@@ -324,14 +356,14 @@ export default function SettingsPage() {
                 setStudyBatchSize(v);
                 persist({ studyBatchSize: v });
               }}
-              className="flex-1 accent-indigo-600"
+              className="flex-1 accent-accent"
             />
-            <span className="w-8 text-center font-bold text-stone-800">{studyBatchSize}</span>
+            <span className="w-8 text-center font-bold text-ink">{studyBatchSize}</span>
           </div>
         </div>
 
         <div>
-          <label className="block font-semibold text-stone-800 mb-1">
+          <label className="block font-semibold text-ink mb-1">
             Max review words per day
           </label>
           <div className="flex items-center gap-4">
@@ -342,18 +374,18 @@ export default function SettingsPage() {
                 setDailyReview(v);
                 persist({ dailyReview: v });
               }}
-              className="flex-1 accent-indigo-600"
+              className="flex-1 accent-accent"
             />
-            <span className="w-8 text-center font-bold text-stone-800">{dailyReview}</span>
+            <span className="w-8 text-center font-bold text-ink">{dailyReview}</span>
           </div>
           {dailyReview !== recommendedReview && (
-            <div className="flex items-center justify-between gap-2 mt-2 bg-amber-100/60 rounded-lg px-3 py-2 text-sm">
-              <span className="text-stone-800">
+            <div className="flex items-center justify-between gap-2 mt-2 bg-paper-dim/60 rounded-lg px-3 py-2 text-sm">
+              <span className="text-ink">
                 Recommended: <strong>{recommendedReview}</strong> for a {studyBatchSize}/day study pace
               </span>
               <button
                 onClick={() => { setDailyReview(recommendedReview); persist({ dailyReview: recommendedReview }); }}
-                className="shrink-0 bg-indigo-600 text-white px-3 py-1 rounded-lg font-semibold text-xs hover:bg-indigo-700 active:scale-95 transition-all"
+                className="shrink-0 bg-accent text-white px-3 py-1 rounded-lg font-semibold text-xs hover:bg-accent-deep active:scale-95 transition-all"
               >
                 Use {recommendedReview}
               </button>
@@ -362,14 +394,14 @@ export default function SettingsPage() {
         </div>
 
         <div className="relative">
-          <div className="bg-amber-100/60 rounded-xl px-4 py-3 text-sm text-stone-800 flex items-center justify-between gap-3">
+          <div className="bg-paper-dim/60 rounded-xl px-4 py-3 text-sm text-ink flex items-center justify-between gap-3">
             <span className="font-semibold shrink-0 inline-flex items-center gap-1.5">
               At this pace
               <button
                 type="button"
                 onClick={() => setShowPaceInfo(v => !v)}
                 aria-label="How mastery works"
-                className="w-4 h-4 rounded-full bg-stone-400/70 text-white text-[10px] font-bold leading-none flex items-center justify-center hover:bg-stone-500/70 transition-colors"
+                className="w-4 h-4 rounded-full bg-ink-soft/70 text-white text-[10px] font-bold leading-none flex items-center justify-center hover:bg-ink-soft/70 transition-colors"
               >
                 ?
               </button>
@@ -379,7 +411,7 @@ export default function SettingsPage() {
             </span>
           </div>
           {showPaceInfo && (
-            <div className="absolute top-full left-0 mt-2 z-10 w-full bg-amber-50/95 backdrop-blur-sm border border-amber-100 rounded-xl px-4 py-3 text-sm text-stone-700 shadow-lg">
+            <div className="absolute top-full left-0 mt-2 z-10 w-full bg-paper/95 backdrop-blur-sm border border-paper-line rounded-xl px-4 py-3 text-sm text-ink shadow-lg">
               Each word follows a fixed schedule instead of a score: review
               it 1 day after you learn it, 3 days after that, then 5 days
               after that — three reviews, about 9 days total, and
@@ -390,7 +422,7 @@ export default function SettingsPage() {
 
         <div className="flex items-center justify-between">
           <div>
-            <label className="block font-semibold text-stone-800">
+            <label className="block font-semibold text-ink">
               Auto-play pronunciation
             </label>
           </div>
@@ -398,13 +430,13 @@ export default function SettingsPage() {
             type="checkbox"
             checked={autoPlayAudio}
             onChange={e => { setAutoPlayAudio(e.target.checked); persist({ autoPlayAudio: e.target.checked }); }}
-            className="w-5 h-5 accent-indigo-600"
+            className="w-5 h-5 accent-accent"
           />
         </div>
 
         <div className="flex items-center justify-between">
           <div>
-            <label className="block font-semibold text-stone-800">
+            <label className="block font-semibold text-ink">
               Audio repetition
             </label>
           </div>
@@ -415,7 +447,7 @@ export default function SettingsPage() {
               setWordRepeatCount(v);
               persist({ wordRepeatCount: v });
             }}
-            className="border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
+            className="border-2 border-accent/70 rounded-lg px-3 py-2 text-ink focus:outline-none focus:border-accent"
           >
             <option value={1}>1×</option>
             <option value={2}>2×</option>
@@ -425,7 +457,7 @@ export default function SettingsPage() {
 
         <div className="flex items-center justify-between">
           <div>
-            <label className="block font-semibold text-stone-800">
+            <label className="block font-semibold text-ink">
               Practice articles
             </label>
           </div>
@@ -433,13 +465,13 @@ export default function SettingsPage() {
             type="checkbox"
             checked={requireArticle}
             onChange={e => { setRequireArticle(e.target.checked); persist({ requireArticle: e.target.checked }); }}
-            className="w-5 h-5 accent-indigo-600"
+            className="w-5 h-5 accent-accent"
           />
         </div>
 
         <div className="flex items-center justify-between">
           <div>
-            <label className="block font-semibold text-stone-800">
+            <label className="block font-semibold text-ink">
               Sentence writing mode
             </label>
           </div>
@@ -447,7 +479,7 @@ export default function SettingsPage() {
             type="checkbox"
             checked={sentenceWritingMode}
             onChange={e => { setSentenceWritingMode(e.target.checked); persist({ sentenceWritingMode: e.target.checked }); }}
-            className="w-5 h-5 accent-indigo-600 shrink-0 ml-3"
+            className="w-5 h-5 accent-accent shrink-0 ml-3"
           />
         </div>
       </div>
@@ -455,7 +487,7 @@ export default function SettingsPage() {
       <div className="grid grid-cols-2 gap-3">
         <Link
           href="/welcome"
-          className="text-center bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-4 font-semibold text-stone-700 hover:bg-amber-50 transition-colors"
+          className="text-center bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-4 font-semibold text-ink hover:bg-paper transition-colors"
         >
           View welcome guide
         </Link>
@@ -471,17 +503,17 @@ export default function SettingsPage() {
       <button
         type="button"
         onClick={() => setResetModalOpen(true)}
-        className="text-center bg-red-50/80 backdrop-blur-sm rounded-2xl border border-red-100 shadow-sm p-4 font-semibold text-red-700 hover:bg-red-100/60 transition-colors"
+        className="text-center bg-clay/80 backdrop-blur-sm rounded-2xl border border-clay shadow-sm p-4 font-semibold text-clay hover:bg-clay/60 transition-colors"
       >
         Reset account
       </button>
 
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm">
-        <Link href="/terms" className="text-amber-200 hover:text-amber-100 underline">Terms of Service</Link>
-        <Link href="/privacy" className="text-amber-200 hover:text-amber-100 underline">Privacy Policy</Link>
+        <Link href="/terms" className="text-on-bg/75 hover:text-on-bg underline">Terms of Service</Link>
+        <Link href="/privacy" className="text-on-bg/75 hover:text-on-bg underline">Privacy Policy</Link>
         <BugReportButton />
         {signedInEmail === ADMIN_EMAIL && (
-          <Link href="/admin" className="text-amber-200 hover:text-amber-100 underline">Admin</Link>
+          <Link href="/admin" className="text-on-bg/75 hover:text-on-bg underline">Admin</Link>
         )}
       </div>
 
@@ -496,41 +528,41 @@ export default function SettingsPage() {
           onClick={() => setResetModalOpen(false)}
         >
           <div
-            className="w-full max-w-sm bg-amber-50 rounded-2xl shadow-xl p-5 flex flex-col gap-3"
+            className="w-full max-w-sm bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-3"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-red-700">Reset</h2>
+              <h2 className="font-bold text-clay">Reset</h2>
               <button
                 type="button"
                 onClick={() => setResetModalOpen(false)}
                 aria-label="Close"
-                className="text-stone-400 hover:text-stone-600 text-xl leading-none"
+                className="text-ink-soft hover:text-ink text-xl leading-none"
               >
                 ×
               </button>
             </div>
 
             <div>
-              <p className="text-stone-500 text-sm mb-2">
+              <p className="text-ink-soft text-sm mb-2">
                 Erase all word progress for the {level} level to start over from scratch. Other levels, and your account-wide streak/goal days, are untouched.
               </p>
               <button
                 onClick={handleClearAll}
-                className="w-full bg-red-50 text-red-700 border-2 border-red-100 py-3 rounded-xl font-semibold hover:bg-red-100 active:scale-95 transition-all"
+                className="w-full bg-clay/20 text-clay border-2 border-clay py-3 rounded-xl font-semibold hover:bg-clay/30 active:scale-95 transition-all"
               >
                 {cleared ? '✓ Cleared!' : `Clear all progress (${level})`}
               </button>
             </div>
 
-            <div className="border-t border-red-200/50 pt-3">
-              <p className="text-stone-500 text-sm mb-2">
+            <div className="border-t border-clay/50 pt-3">
+              <p className="text-ink-soft text-sm mb-2">
                 Or start over completely — every level's progress, streaks, and settings, as if you
                 just signed up. You'll stay signed in with the same email.
               </p>
               <button
                 onClick={handleResetEverything}
-                className="w-full bg-red-100 text-red-800 border-2 border-red-200 py-3 rounded-xl font-semibold hover:bg-red-200 active:scale-95 transition-all"
+                className="w-full bg-clay/20 text-clay border-2 border-clay py-3 rounded-xl font-semibold hover:bg-clay/30 active:scale-95 transition-all"
               >
                 Reset entire account
               </button>

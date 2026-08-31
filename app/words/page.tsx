@@ -350,45 +350,45 @@ export default function WordsPage() {
     // Notebook page (see app/mistakes/page.tsx) — this list stays focused
     // on familiarity/mastery, not sentence-level detail.
     return (
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex items-center gap-3">
+      <div className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3 flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <span className="font-semibold text-stone-800">
+          <span className="font-semibold text-ink">
             {w.article ? `${w.article} ` : ''}{w.de}
           </span>
-          <SpeakerButton word={w} className="ml-1.5 text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
-          {w.plural && <span className="text-stone-500 text-sm ml-2">· {w.plural}</span>}
+          <SpeakerButton word={w} className="ml-1.5 text-accent-deep hover:text-ink transition-colors align-middle" />
+          {w.plural && <span className="text-ink-soft text-sm ml-2">· {w.plural}</span>}
           {/* Only shown when browsing a mixed-book view — "All books" or
               "My words" — where a row's own book isn't otherwise implied
               by the filter itself. */}
           {(filterLevel === 'all' || filterLevel === 'myWords') && (
-            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-stone-500 bg-stone-100 rounded-full px-2 py-0.5 align-middle">
+            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-ink-soft bg-paper-dim rounded-full px-2 py-0.5 align-middle">
               {w.level}
             </span>
           )}
           {isCustomWordId(w.id) && (
-            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-indigo-600 bg-indigo-100 rounded-full px-2 py-0.5 align-middle">
+            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-accent-deep bg-accent/15 rounded-full px-2 py-0.5 align-middle">
               My word
             </span>
           )}
-          <div className="text-stone-500 text-sm">{glossFor(w, nativeLanguage)}</div>
+          <div className="text-ink-soft text-sm">{glossFor(w, nativeLanguage)}</div>
         </div>
         <WordThumbnail word={w} />
         <span className="shrink-0 w-20 flex flex-col items-center gap-0.5">
           {earned(progress[w.id]) ? (
             <>
               <DachshundMascot stage={progress[w.id].mascotStage ?? 'puppy'} className="w-11 h-11" />
-              <span className="text-[10px] font-medium text-stone-500 whitespace-nowrap">
+              <span className="text-[10px] font-medium text-ink-soft whitespace-nowrap">
                 {STAGE_LABEL[progress[w.id].mascotStage ?? 'puppy']}
               </span>
               {!progress[w.id].fullyMastered && (
-                <span className="text-[10px] text-stone-400 whitespace-nowrap">
+                <span className="text-[10px] text-ink-soft whitespace-nowrap">
                   {reviewLabel(progress[w.id].nextReviewDue)}
                 </span>
               )}
             </>
           ) : (
-            <span className="flex items-center justify-center px-2.5 py-1.5 rounded-full bg-slate-100">
-              <span className="text-xs font-medium text-stone-500">New</span>
+            <span className="flex items-center justify-center px-2.5 py-1.5 rounded-full bg-paper-dim">
+              <span className="text-xs font-medium text-ink-soft">New</span>
             </span>
           )}
         </span>
@@ -396,7 +396,7 @@ export default function WordsPage() {
           <button
             onClick={() => handleRemoveWord(w)}
             aria-label={`Remove ${w.de} from your words`}
-            className="shrink-0 self-start text-stone-300 hover:text-red-500 transition-colors text-lg leading-none px-1"
+            className="shrink-0 self-start text-ink-soft hover:text-clay transition-colors text-lg leading-none px-1"
           >
             ×
           </button>
@@ -407,14 +407,14 @@ export default function WordsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Word List</h1>
+      <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Word List</h1>
 
       <input
         type="search"
         placeholder="Search German or English…"
         value={search}
         onChange={e => { setSearch(e.target.value); setLookupStatus('idle'); setLookupResult(null); setLookupResultId(null); }}
-        className="bg-amber-50/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-4 py-2 text-stone-800 placeholder:text-stone-500 focus:outline-none focus:border-amber-300"
+        className="bg-paper/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-4 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent"
       />
 
       {/* A fixed 3-column grid (not flex-wrap) — each select always takes
@@ -429,7 +429,7 @@ export default function WordsPage() {
         <select
           value={filterLevel}
           onChange={e => setFilterLevel(e.target.value as BookFilter)}
-          className="min-w-0 bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-stone-800 focus:outline-none focus:border-amber-300"
+          className="min-w-0 bg-paper/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
         >
           <option value="all">All books</option>
           <option value="myWords">My words</option>
@@ -439,7 +439,7 @@ export default function WordsPage() {
         <select
           value={filterFamiliarity}
           onChange={e => setFilterFamiliarity(e.target.value as Familiarity)}
-          className="min-w-0 bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-stone-800 focus:outline-none focus:border-amber-300"
+          className="min-w-0 bg-paper/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
         >
           <option value="all">All words</option>
           <option value="new">New</option>
@@ -450,7 +450,7 @@ export default function WordsPage() {
         <select
           value={dateFilter}
           onChange={e => setDateFilter(e.target.value as DateFilter)}
-          className="min-w-0 bg-amber-50/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-stone-800 focus:outline-none focus:border-amber-300"
+          className="min-w-0 bg-paper/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
         >
           <option value="all">All days</option>
           <option value="today">Today</option>
@@ -475,27 +475,27 @@ export default function WordsPage() {
           "All books"/"My words" (the search actually ran across every
           book, not just the one a new word would be filed under). */}
       {search.trim() !== '' && !searchMatchesAnything && (
-        <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex flex-col gap-2.5">
+        <div className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3 flex flex-col gap-2.5">
           {!lookupResult && (
             <>
               {(lookupStatus === 'idle' || lookupStatus === 'loading') && (
-                <p className="text-stone-600 text-sm flex items-center gap-2">
-                  <span className="inline-block w-3.5 h-3.5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin shrink-0" />
+                <p className="text-ink-soft text-sm flex items-center gap-2">
+                  <span className="inline-block w-3.5 h-3.5 border-2 border-accent/50 border-t-indigo-600 rounded-full animate-spin shrink-0" />
                   Searching for "{search.trim()}"…
                 </p>
               )}
               {lookupStatus === 'not-found' && (
-                <p className="text-stone-500 text-sm">
+                <p className="text-ink-soft text-sm">
                   Couldn't find a German word or translation for "{search.trim()}" — check the spelling, or try a different word.
                 </p>
               )}
               {lookupStatus === 'limit-reached' && (
-                <p className="text-amber-600 text-sm">Used up today's AI lookups — come back tomorrow.</p>
+                <p className="text-accent-deep text-sm">Used up today's AI lookups — come back tomorrow.</p>
               )}
               {(lookupStatus === 'error' || lookupStatus === 'unreachable') && (
                 <div className="flex items-center gap-2">
-                  <p className="text-red-500 text-sm">Couldn't look that up right now.</p>
-                  <button onClick={handleLookup} className="text-indigo-600 text-sm font-semibold underline shrink-0">Try again</button>
+                  <p className="text-clay text-sm">Couldn't look that up right now.</p>
+                  <button onClick={handleLookup} className="text-accent-deep text-sm font-semibold underline shrink-0">Try again</button>
                 </div>
               )}
             </>
@@ -514,13 +514,13 @@ export default function WordsPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => handleAddWord(lookupResult)}
-                  className="flex-1 bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+                  className="flex-1 bg-accent text-white text-sm px-4 py-2 rounded-lg font-semibold hover:bg-accent-deep active:scale-95 transition-all"
                 >
                   Add to my words
                 </button>
                 <button
                   onClick={() => { setLookupResult(null); setLookupResultId(null); setLookupStatus('idle'); }}
-                  className="text-stone-500 text-sm px-3 py-2"
+                  className="text-ink-soft text-sm px-3 py-2"
                 >
                   Cancel
                 </button>
@@ -530,7 +530,7 @@ export default function WordsPage() {
         </div>
       )}
 
-      <p className="text-emerald-100/70 text-sm">{filtered.length} words</p>
+      <p className="text-on-bg/70 text-sm">{filtered.length} words</p>
       <div className="flex flex-col gap-2">
         {filtered.map(w => <WordItem key={w.id} w={w} />)}
       </div>

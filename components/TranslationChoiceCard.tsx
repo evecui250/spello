@@ -78,17 +78,17 @@ export default function TranslationChoiceCard({ word, correct: correctChoice, ch
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-6 flex flex-col gap-5">
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-5">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-medium text-indigo-600">Which German word means this?</div>
+          <div className="text-sm font-medium text-accent-deep">Which German word means this?</div>
           {isReview && (
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 shrink-0">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-accent-deep bg-paper-dim rounded-full px-2 py-0.5 shrink-0">
               Review
             </span>
           )}
         </div>
         <div className="text-center">
-          <span className="text-2xl font-semibold text-slate-700">{glossFor(word, getSettings().nativeLanguage)}</span>
+          <span className="text-2xl font-semibold text-ink">{glossFor(word, getSettings().nativeLanguage)}</span>
         </div>
         <div className="flex flex-col gap-2">
           {choices.map(choice => {
@@ -96,15 +96,15 @@ export default function TranslationChoiceCard({ word, correct: correctChoice, ch
             const isPicked = choice === selected;
             // A real bg-white fill (not just a faint border on the card's
             // own translucent background) — confirmed real: against a
-            // bright theme, the card's bg-amber-50/75 lets enough of a
+            // bright theme, the card's bg-paper/75 lets enough of a
             // vivid backdrop bleed through that a border-only button all
             // but disappeared. The fill keeps it visible regardless of
             // theme.
-            let cls = 'border-2 border-indigo-200 bg-white/80 text-slate-700 hover:border-indigo-400 hover:bg-white';
+            let cls = 'border-2 border-accent/30 bg-white/80 text-ink hover:border-accent/70 hover:bg-white';
             if (selected !== null) {
-              if (isCorrectChoice) cls = 'border-2 border-green-400 bg-green-100 text-green-700';
-              else if (isPicked) cls = 'border-2 border-red-400 bg-red-100 text-red-700';
-              else cls = 'border-2 border-indigo-200 bg-white/60 text-slate-400 opacity-60';
+              if (isCorrectChoice) cls = 'border-2 border-good-deep bg-good/25 text-good-deep';
+              else if (isPicked) cls = 'border-2 border-clay bg-clay/20 text-clay';
+              else cls = 'border-2 border-accent/30 bg-white/60 text-ink-soft opacity-60';
             }
             return (
               <button
@@ -121,7 +121,7 @@ export default function TranslationChoiceCard({ word, correct: correctChoice, ch
         {selected !== null && (
           <button
             onClick={() => onAnswer(correct)}
-            className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+            className="w-full bg-accent text-white py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
           >
             Next →
           </button>

@@ -95,3 +95,13 @@ export function ArrowRightIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function SpeakerIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M4 9v6h3.5l4.5 4V5l-4.5 4H4z" fill="currentColor" stroke="none" />
+      <path d="M15.3 8.7a4.8 4.8 0 0 1 0 6.6" />
+      <path d="M17.6 6.2a8.2 8.2 0 0 1 0 11.6" />
+    </svg>
+  );
+}

@@ -24,34 +24,34 @@ interface Props {
 // on) since there's no corpus id to look a pre-generated audio file up by.
 export default function GlossPopup({ gloss }: Props) {
   return (
-    <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3 flex flex-col gap-1.5">
-      <span className="text-lg font-bold text-indigo-800">
+    <div className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3 flex flex-col gap-1.5">
+      <span className="text-lg font-bold text-ink">
         {gloss.article ? `${gloss.article} ` : ''}{gloss.lemma}
         <button
           type="button"
           onClick={() => speakText(gloss.lemma)}
           aria-label={`Play pronunciation of ${gloss.lemma}`}
-          className="ml-1.5 align-middle text-indigo-400 hover:text-indigo-600 transition-colors"
+          className="ml-1.5 align-middle text-accent hover:text-accent-deep transition-colors"
         >
           <SpeakerIcon />
         </button>
       </span>
-      <div className="text-stone-600 text-sm">{gloss.gloss}</div>
+      <div className="text-ink-soft text-sm">{gloss.gloss}</div>
       {gloss.plural && (
-        <div className="text-xs text-stone-500">
-          Plural: <span className="font-semibold text-stone-700">die {gloss.plural}</span>
+        <div className="text-xs text-ink-soft">
+          Plural: <span className="font-semibold text-ink">die {gloss.plural}</span>
         </div>
       )}
       {(gloss.thirdPerson || gloss.pastTense || gloss.perfectTense) && (
-        <div className="text-xs text-stone-500 flex flex-col gap-0.5">
-          {gloss.thirdPerson && <div>er/sie/es: <span className="font-semibold text-stone-700">{gloss.thirdPerson}</span></div>}
-          {gloss.pastTense && <div>simple past: <span className="font-semibold text-stone-700">{gloss.pastTense}</span></div>}
-          {gloss.perfectTense && <div>perfect: <span className="font-semibold text-stone-700">{gloss.perfectTense}</span></div>}
+        <div className="text-xs text-ink-soft flex flex-col gap-0.5">
+          {gloss.thirdPerson && <div>er/sie/es: <span className="font-semibold text-ink">{gloss.thirdPerson}</span></div>}
+          {gloss.pastTense && <div>simple past: <span className="font-semibold text-ink">{gloss.pastTense}</span></div>}
+          {gloss.perfectTense && <div>perfect: <span className="font-semibold text-ink">{gloss.perfectTense}</span></div>}
         </div>
       )}
       {gloss.prepositionNote && (
-        <div className="text-xs text-stone-500">
-          Usually with: <span className="font-semibold text-stone-700">{gloss.prepositionNote}</span>
+        <div className="text-xs text-ink-soft">
+          Usually with: <span className="font-semibold text-ink">{gloss.prepositionNote}</span>
         </div>
       )}
     </div>

@@ -70,28 +70,28 @@ export default function MistakesPage() {
     const sentence = p?.exampleSentence;
     const mistake = p?.lastMistake;
     return (
-      <div className="bg-amber-50/75 backdrop-blur-sm rounded-xl border border-amber-100/50 shadow-sm px-4 py-3">
+      <div className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold text-stone-800">
+          <span className="font-semibold text-ink">
             {w.article ? `${w.article} ` : ''}{w.de}
           </span>
-          <SpeakerButton word={w} className="text-indigo-600 hover:text-indigo-800 transition-colors align-middle" />
-          <span className="text-stone-500 text-sm">{glossFor(w, nativeLanguage)}</span>
+          <SpeakerButton word={w} className="text-accent-deep hover:text-ink transition-colors align-middle" />
+          <span className="text-ink-soft text-sm">{glossFor(w, nativeLanguage)}</span>
         </div>
         {sentence && (
           <div className="mt-1 flex flex-col gap-0.5">
             {sentence.englishPrompt && (
-              <div className="text-stone-400 text-xs">
+              <div className="text-ink-soft text-xs">
                 {nativeLanguage === 'zh' ? (sentence.englishPromptZh ?? w.exercisePromptZh ?? sentence.englishPrompt) : sentence.englishPrompt}
               </div>
             )}
-            <div className="text-stone-500 text-sm italic">{sentence.sentence}</div>
+            <div className="text-ink-soft text-sm italic">{sentence.sentence}</div>
           </div>
         )}
         {mistake && (
           <button
             onClick={() => setRedoTarget({ word: w, mistake })}
-            className="mt-2 text-xs font-semibold text-amber-700 bg-amber-100 rounded-full px-2.5 py-1 hover:bg-amber-200 transition-colors"
+            className="mt-2 text-xs font-semibold text-accent-deep bg-paper-dim rounded-full px-2.5 py-1 hover:bg-gold transition-colors"
           >
             ✎ Redo this sentence
           </button>
@@ -104,7 +104,7 @@ export default function MistakesPage() {
 
   return (
     <div className="flex flex-col gap-4 pb-4">
-      <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+      <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
         Mistake Notebook
       </h1>
 
@@ -115,20 +115,20 @@ export default function MistakesPage() {
       <div className="flex gap-1 bg-black/20 rounded-full p-1 self-start">
         <button
           onClick={() => setTab('mistakes')}
-          className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${tab === 'mistakes' ? 'bg-amber-50 text-stone-800' : 'text-amber-100/70 hover:text-amber-50'}`}
+          className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${tab === 'mistakes' ? 'bg-paper text-ink' : 'text-on-bg/70 hover:text-on-bg'}`}
         >
           Mistakes{mistakeWords.length > 0 && ` (${mistakeWords.length})`}
         </button>
         <button
           onClick={() => setTab('correct')}
-          className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${tab === 'correct' ? 'bg-amber-50 text-stone-800' : 'text-amber-100/70 hover:text-amber-50'}`}
+          className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${tab === 'correct' ? 'bg-paper text-ink' : 'text-on-bg/70 hover:text-on-bg'}`}
         >
           Correct{perfectWords.length > 0 && ` (${perfectWords.length})`}
         </button>
       </div>
 
       {activeWords.length === 0 ? (
-        <p className="text-emerald-100/70 text-sm">
+        <p className="text-on-bg/70 text-sm">
           {tab === 'mistakes' ? 'Nothing to redo right now — nice work.' : "None yet — these fill in as you nail a word's sentence."}
         </p>
       ) : (

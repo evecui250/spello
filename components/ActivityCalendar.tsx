@@ -14,13 +14,13 @@ import CongratsModal from './CongratsModal';
 // own "✓ Correct!" feedback color, partial days use a faint version of the
 // bronze/amber tone the cream card backgrounds already lean on, so neither
 // mark fights with the page around it.
-const FULL_CLASSES = 'bg-green-200/70 text-green-800';
-const PARTIAL_CLASSES = 'bg-amber-200/70 text-amber-800';
+const FULL_CLASSES = 'bg-good/70 text-good-deep';
+const PARTIAL_CLASSES = 'bg-gold/70 text-accent-deep';
 // Darker than a typical muted label (stone-400) so the date digits stay
 // easy to read at a glance, without going all the way to the near-black
 // headings use — this is still a secondary/quiet element on the card.
-const EMPTY_CLASSES = 'text-stone-600';
-const TODAY_RING = 'ring-2 ring-indigo-300 ring-offset-1 ring-offset-amber-50';
+const EMPTY_CLASSES = 'text-ink-soft';
+const TODAY_RING = 'ring-2 ring-accent ring-offset-1 ring-offset-amber-50';
 
 const WEEKDAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTH_NAMES = [
@@ -149,13 +149,13 @@ export default function ActivityCalendar() {
   const isCurrentMonth = year === new Date().getFullYear() && month === new Date().getMonth();
 
   return (
-    <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5">
+    <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
       <div className="flex items-center justify-between gap-2 mb-3">
-        <h2 className="font-semibold text-stone-800">Activity</h2>
+        <h2 className="font-semibold text-ink">Activity</h2>
         <button
           type="button"
           onClick={() => setExpanded(e => !e)}
-          className="text-xs font-semibold text-stone-500 hover:text-stone-700 transition-colors flex items-center gap-0.5"
+          className="text-xs font-semibold text-ink-soft hover:text-ink transition-colors flex items-center gap-0.5"
         >
           {expanded ? 'Show less' : 'Show month'}
           <span aria-hidden className="inline-block text-[10px] leading-none">{expanded ? '▲' : '▼'}</span>
@@ -169,11 +169,11 @@ export default function ActivityCalendar() {
               type="button"
               onClick={() => setWeekOffset(w => w + 1)}
               aria-label="Previous week"
-              className="px-2 py-1 text-stone-400 hover:text-stone-600 transition-colors text-lg leading-none"
+              className="px-2 py-1 text-ink-soft hover:text-ink transition-colors text-lg leading-none"
             >
               ‹
             </button>
-            <span className="text-sm font-semibold text-stone-700">
+            <span className="text-sm font-semibold text-ink">
               {MONTH_NAMES[rowMonth.getMonth()]} {rowMonth.getFullYear()}
             </span>
             <button
@@ -181,7 +181,7 @@ export default function ActivityCalendar() {
               onClick={() => setWeekOffset(w => Math.max(0, w - 1))}
               aria-label="Next week"
               disabled={weekOffset === 0}
-              className="px-2 py-1 text-stone-400 hover:text-stone-600 disabled:opacity-30 disabled:hover:text-stone-400 transition-colors text-lg leading-none"
+              className="px-2 py-1 text-ink-soft hover:text-ink disabled:opacity-30 disabled:hover:text-ink-soft transition-colors text-lg leading-none"
             >
               ›
             </button>
@@ -199,7 +199,7 @@ export default function ActivityCalendar() {
               const dateStr = localDateString(d);
               return (
                 <div key={dateStr} className="flex flex-col items-center gap-1">
-                  <span className="text-xs font-medium text-stone-500">{WEEKDAY_LETTERS[mondayIndex(d)]}</span>
+                  <span className="text-xs font-medium text-ink-soft">{WEEKDAY_LETTERS[mondayIndex(d)]}</span>
                   <DayCircle date={d.getDate()} state={stateFor(dateStr)} isToday={dateStr === t} dim={dateStr > t} onClick={() => setSelectedDate(dateStr)} />
                 </div>
               );
@@ -213,24 +213,24 @@ export default function ActivityCalendar() {
               type="button"
               onClick={() => setViewDate(new Date(year, month - 1, 1))}
               aria-label="Previous month"
-              className="px-2 py-1 text-stone-400 hover:text-stone-600 transition-colors text-lg leading-none"
+              className="px-2 py-1 text-ink-soft hover:text-ink transition-colors text-lg leading-none"
             >
               ‹
             </button>
-            <span className="text-sm font-semibold text-stone-700">{MONTH_NAMES[month]} {year}</span>
+            <span className="text-sm font-semibold text-ink">{MONTH_NAMES[month]} {year}</span>
             <button
               type="button"
               onClick={() => setViewDate(new Date(year, month + 1, 1))}
               aria-label="Next month"
               disabled={isCurrentMonth}
-              className="px-2 py-1 text-stone-400 hover:text-stone-600 disabled:opacity-30 disabled:hover:text-stone-400 transition-colors text-lg leading-none"
+              className="px-2 py-1 text-ink-soft hover:text-ink disabled:opacity-30 disabled:hover:text-ink-soft transition-colors text-lg leading-none"
             >
               ›
             </button>
           </div>
           <div className="grid grid-cols-7 gap-2">
             {WEEKDAY_LETTERS.map((l, i) => (
-              <span key={i} className="text-xs font-medium text-stone-500 text-center">{l}</span>
+              <span key={i} className="text-xs font-medium text-ink-soft text-center">{l}</span>
             ))}
             {cells.map((d, i) => {
               if (!d) return <div key={i} />;
@@ -241,9 +241,9 @@ export default function ActivityCalendar() {
         </div>
       )}
 
-      <div className="flex items-center gap-4 justify-center text-[11px] text-stone-500 pt-3">
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-200/70 inline-block" />Goal met</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-200/70 inline-block" />Finished review</span>
+      <div className="flex items-center gap-4 justify-center text-[11px] text-ink-soft pt-3">
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-good/70 inline-block" />Goal met</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-gold/70 inline-block" />Finished review</span>
       </div>
 
       {selectedDate && createPortal(
@@ -276,16 +276,16 @@ function DayDetailPopup({ dateStr, isFullDay, onClose }: { dateStr: string; isFu
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-amber-50 rounded-2xl shadow-xl p-5 flex flex-col gap-3"
+        className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-3"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-stone-800">{label}</h2>
+          <h2 className="font-bold text-ink">{label}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-stone-400 hover:text-stone-600 text-xl leading-none"
+            className="text-ink-soft hover:text-ink text-xl leading-none"
           >
             ×
           </button>
@@ -294,37 +294,37 @@ function DayDetailPopup({ dateStr, isFullDay, onClose }: { dateStr: string; isFu
           <button
             type="button"
             onClick={() => setShowCard(true)}
-            className="self-start text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-full px-3 py-1.5 transition-colors"
+            className="self-start text-xs font-semibold text-accent-deep hover:text-ink bg-accent/10 hover:bg-accent/15 rounded-full px-3 py-1.5 transition-colors"
           >
             View card
           </button>
         )}
         {learned.length === 0 && reviewed.length === 0 ? (
-          <p className="text-stone-500 text-sm">No activity that day.</p>
+          <p className="text-ink-soft text-sm">No activity that day.</p>
         ) : (
           <>
             {learned.length > 0 && (
               <div className="flex flex-col gap-1.5">
-                <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wide">
+                <h3 className="text-xs font-semibold text-ink-soft uppercase tracking-wide">
                   {learned.length} word{learned.length === 1 ? '' : 's'} learned
                 </h3>
                 {learned.map(w => (
                   <div key={w.id} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2 gap-2">
-                    <span className="text-stone-700 font-medium truncate">{w.article ? `${w.article} ` : ''}{w.de}</span>
-                    <span className="text-stone-500 text-sm text-right truncate">{glossFor(w, nativeLanguage)}</span>
+                    <span className="text-ink font-medium truncate">{w.article ? `${w.article} ` : ''}{w.de}</span>
+                    <span className="text-ink-soft text-sm text-right truncate">{glossFor(w, nativeLanguage)}</span>
                   </div>
                 ))}
               </div>
             )}
             {reviewed.length > 0 && (
               <div className="flex flex-col gap-1.5">
-                <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wide">
+                <h3 className="text-xs font-semibold text-ink-soft uppercase tracking-wide">
                   {reviewed.length} word{reviewed.length === 1 ? '' : 's'} reviewed
                 </h3>
                 {reviewed.map(w => (
                   <div key={w.id} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2 gap-2">
-                    <span className="text-stone-700 font-medium truncate">{w.article ? `${w.article} ` : ''}{w.de}</span>
-                    <span className="text-stone-500 text-sm text-right truncate">{glossFor(w, nativeLanguage)}</span>
+                    <span className="text-ink font-medium truncate">{w.article ? `${w.article} ` : ''}{w.de}</span>
+                    <span className="text-ink-soft text-sm text-right truncate">{glossFor(w, nativeLanguage)}</span>
                   </div>
                 ))}
               </div>

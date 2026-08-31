@@ -78,17 +78,17 @@ export default function AccountPanel({ onSync }: Props) {
     return (
       <div className="flex items-center justify-between">
         <div>
-          <div className="font-semibold text-stone-800">Signed in</div>
-          <p className="text-stone-500 text-sm">{email} — progress syncs automatically.</p>
+          <div className="font-semibold text-ink">Signed in</div>
+          <p className="text-ink-soft text-sm">{email} — progress syncs automatically.</p>
           {aiStats && aiStats.calls > 0 && (
-            <p className="text-stone-400 text-xs mt-1">
+            <p className="text-ink-soft text-xs mt-1">
               AI sentence corrections used: {aiStats.calls} ({(aiStats.inputTokens + aiStats.outputTokens).toLocaleString()} tokens)
             </p>
           )}
         </div>
         <button
           onClick={handleSignOut}
-          className="text-sm font-semibold text-red-600 hover:text-red-800 transition-colors"
+          className="text-sm font-semibold text-clay/75 hover:text-clay transition-colors"
         >
           Sign out
         </button>
@@ -98,21 +98,21 @@ export default function AccountPanel({ onSync }: Props) {
 
   return (
     <div>
-      <label className="block font-semibold text-stone-800 mb-1">Sign in</label>
-      <p className="text-stone-500 text-sm mb-3">
+      <label className="block font-semibold text-ink mb-1">Sign in</label>
+      <p className="text-ink-soft text-sm mb-3">
         Sign in with a magic link — this keeps your progress synced across devices and unlocks
         the AI sentence-writing exercises.
       </p>
       {status === 'sent' ? (
-        <div className="bg-green-50 border border-green-100 rounded-lg px-3 py-2 flex flex-col gap-1.5">
-          <p className="text-green-700 text-sm">✓ Check {inputEmail} for a sign-in link.</p>
-          <p className="text-stone-500 text-xs">
+        <div className="bg-good/25 border border-good rounded-lg px-3 py-2 flex flex-col gap-1.5">
+          <p className="text-good-deep text-sm">✓ Check {inputEmail} for a sign-in link.</p>
+          <p className="text-ink-soft text-xs">
             Don&apos;t see it? Check your spam/junk folder — it can take a minute to arrive.
           </p>
           <button
             onClick={handleSendLink}
             disabled={resendCooldown > 0}
-            className="self-start text-xs font-semibold text-indigo-600 hover:text-indigo-800 disabled:text-stone-400 disabled:cursor-default transition-colors"
+            className="self-start text-xs font-semibold text-accent-deep hover:text-ink disabled:text-ink-soft disabled:cursor-default transition-colors"
           >
             {resendCooldown > 0 ? `Resend link (${resendCooldown}s)` : 'Resend link'}
           </button>
@@ -125,19 +125,19 @@ export default function AccountPanel({ onSync }: Props) {
             value={inputEmail}
             onChange={e => setInputEmail(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSendLink()}
-            className="flex-1 border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-500"
+            className="flex-1 border-2 border-accent/70 rounded-lg px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent"
           />
           <button
             onClick={handleSendLink}
             disabled={!inputEmail.trim() || status === 'sending'}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
+            className="bg-accent text-white px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-40 hover:bg-accent-deep active:scale-95 transition-all"
           >
             {status === 'sending' ? 'Sending…' : 'Send link'}
           </button>
         </div>
       )}
       {status === 'error' && (
-        <p className="text-red-600 text-sm mt-2">
+        <p className="text-clay text-sm mt-2">
           Couldn't send the link{errorMessage ? `: ${errorMessage}` : ''} — try again in a bit.
         </p>
       )}

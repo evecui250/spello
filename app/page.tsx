@@ -175,20 +175,20 @@ export default function HomePage() {
 
       <div className="w-full flex flex-col items-center gap-3">
         {nothingLeftAtAll ? (
-          <div className="w-full max-w-[260px] rounded-full border bg-amber-50/40 backdrop-blur-sm border-amber-100/30 opacity-80 flex items-center justify-center gap-2 px-6 py-4">
-            <CheckCircleIcon className="w-6 h-6 text-emerald-600" />
-            <span className="font-semibold text-stone-800">All done today</span>
+          <div className="w-full max-w-[260px] rounded-full border bg-paper/40 backdrop-blur-sm border-paper-line/30 opacity-80 flex items-center justify-center gap-2 px-6 py-4">
+            <CheckCircleIcon className="w-6 h-6 text-good-deep" />
+            <span className="font-semibold text-ink">All done today</span>
           </div>
         ) : (
           <button
             onClick={handleClick}
             className="group relative w-full max-w-[260px] rounded-full px-5 py-4 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_16px_rgba(90,58,26,0.35)] hover:shadow-[0_8px_24px_rgba(90,58,26,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
-            style={{ backgroundImage: THEME_CONFIG[theme].buttonGradient }}
+            style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
           >
-            <span className="text-lg font-extrabold text-amber-50 tracking-wide">
+            <span className="text-lg font-extrabold text-on-bg tracking-wide">
               {label}
             </span>
-            <span className="text-xs font-medium text-amber-100/75 text-center">
+            <span className="text-xs font-medium text-on-bg/75 text-center">
               {subtitle}
             </span>
             <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />
@@ -206,12 +206,12 @@ export default function HomePage() {
           <Link
             href="/mistakes"
             className="group relative w-full max-w-[260px] rounded-full px-5 py-4 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_16px_rgba(90,58,26,0.35)] hover:shadow-[0_8px_24px_rgba(90,58,26,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
-            style={{ backgroundImage: THEME_CONFIG[theme].buttonGradient, filter: 'brightness(0.78) saturate(0.9)' }}
+            style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)', filter: 'brightness(0.78) saturate(0.9)' }}
           >
-            <span className="text-lg font-extrabold text-amber-50 tracking-wide">
+            <span className="text-lg font-extrabold text-on-bg tracking-wide">
               Mistake Notebook
             </span>
-            <span className="text-xs font-medium text-amber-100/75 text-center">
+            <span className="text-xs font-medium text-on-bg/75 text-center">
               {mistakeCount > 0 ? `${mistakeCount} to redo` : 'All caught up'}
             </span>
             <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />

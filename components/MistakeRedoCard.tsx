@@ -128,18 +128,18 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
   }
 
   return (
-    <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl shadow-sm border border-amber-100/50 p-5 flex flex-col gap-3">
+    <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-5 flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-lg font-bold text-indigo-800">
+        <span className="text-lg font-bold text-ink">
           {word.article ? `${word.article} ` : ''}{word.de}
-          <SpeakerButton word={word} className="ml-1.5 align-middle text-indigo-400 hover:text-indigo-600 transition-colors text-base" />
+          <SpeakerButton word={word} className="ml-1.5 align-middle text-accent hover:text-accent-deep transition-colors text-base" />
         </span>
-        <span className="text-stone-600 text-sm">{glossFor(word, nativeLanguage)}</span>
+        <span className="text-ink-soft text-sm">{glossFor(word, nativeLanguage)}</span>
       </div>
 
-      <div className="bg-indigo-50 rounded-xl px-3 py-2">
-        <div className="text-xs uppercase tracking-wide text-indigo-400 mb-1">Translate to German</div>
-        <div className="text-stone-700 italic">
+      <div className="bg-accent/10 rounded-xl px-3 py-2">
+        <div className="text-xs uppercase tracking-wide text-accent mb-1">Translate to German</div>
+        <div className="text-ink italic">
           {promptOnScreen && nativeLanguage === 'zh'
             ? applyGlossFallback(segmentChineseForClicks(promptOnScreen, word), promptGlosses).map((span, i) => {
               if (span.word) {
@@ -148,7 +148,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
                     key={i}
                     type="button"
                     onClick={() => { setSelectedPromptGlossToken(null); setSelectedPromptWord(prev => (prev?.id === span.word!.id ? null : span.word!)); }}
-                    className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors not-italic"
+                    className="hover:bg-accent/70 rounded px-0.5 -mx-0.5 transition-colors not-italic"
                   >
                     {span.text}
                   </button>
@@ -160,7 +160,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
                     key={i}
                     type="button"
                     onClick={() => { setSelectedPromptWord(null); setSelectedPromptGlossToken(prev => (prev === span.text ? null : span.text)); }}
-                    className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors not-italic"
+                    className="hover:bg-accent/70 rounded px-0.5 -mx-0.5 transition-colors not-italic"
                   >
                     {span.text}
                   </button>
@@ -178,7 +178,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
                     key={i}
                     type="button"
                     onClick={() => { setSelectedPromptGlossToken(null); setSelectedPromptWord(prev => (prev?.id === match.id ? null : match)); }}
-                    className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                    className="hover:bg-accent/70 rounded px-0.5 -mx-0.5 transition-colors"
                   >
                     {text}
                   </button>
@@ -190,7 +190,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
                     key={i}
                     type="button"
                     onClick={() => { setSelectedPromptWord(null); setSelectedPromptGlossToken(prev => (prev === text ? null : text)); }}
-                    className="hover:bg-indigo-200/70 rounded px-0.5 -mx-0.5 transition-colors"
+                    className="hover:bg-accent/70 rounded px-0.5 -mx-0.5 transition-colors"
                   >
                     {text}
                   </button>
@@ -225,58 +225,58 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
         disabled={status === 'loading' || !!result}
         rows={2}
         placeholder="Type your German translation…"
-        className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 resize-none disabled:opacity-60"
+        className="w-full border-2 border-paper-line rounded-xl px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent/50 resize-none disabled:opacity-60"
       />
 
       {!result && (
         <>
-          {status === 'error' && <p className="text-red-500 text-xs">Couldn't check that — try again.</p>}
-          {status === 'limit-reached' && <p className="text-amber-600 text-xs">Used up today's practice limit — come back tomorrow.</p>}
-          {status === 'unreachable' && <p className="text-amber-600 text-xs">Can't reach our AI service right now.</p>}
+          {status === 'error' && <p className="text-clay text-xs">Couldn't check that — try again.</p>}
+          {status === 'limit-reached' && <p className="text-accent-deep text-xs">Used up today's practice limit — come back tomorrow.</p>}
+          {status === 'unreachable' && <p className="text-accent-deep text-xs">Can't reach our AI service right now.</p>}
           <div className="flex gap-2">
             <button
               onClick={handleSubmit}
               disabled={!input.trim() || status === 'loading'}
-              className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-40"
+              className="flex-1 bg-accent text-white py-2.5 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all disabled:opacity-40"
             >
               {status === 'loading' ? 'Checking…' : 'Check'}
             </button>
-            <button onClick={onDone} className="text-stone-500 text-sm px-3">Close</button>
+            <button onClick={onDone} className="text-ink-soft text-sm px-3">Close</button>
           </div>
         </>
       )}
 
       {result && diff && (
         <>
-          <div className="relative bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+          <div className="relative bg-good/25 border border-good rounded-xl px-4 py-3">
             {!diff.perfect && !explanation && (
               <button
                 type="button"
                 onClick={handleExplain}
                 disabled={explanationStatus === 'loading'}
                 aria-label="Explain the grammar"
-                className="absolute top-2 right-2 text-indigo-500 text-xs font-semibold bg-white/70 hover:bg-white hover:text-indigo-700 rounded-full px-2 py-0.5 transition-colors disabled:opacity-50"
+                className="absolute top-2 right-2 text-accent text-xs font-semibold bg-white/70 hover:bg-white hover:text-accent-deep rounded-full px-2 py-0.5 transition-colors disabled:opacity-50"
               >
                 {explanationStatus === 'loading' ? '…' : 'Why?'}
               </button>
             )}
-            <div className="text-xs uppercase tracking-wide text-green-600 mb-1 font-medium flex items-center justify-center gap-1.5">
+            <div className="text-xs uppercase tracking-wide text-good-deep mb-1 font-medium flex items-center justify-center gap-1.5">
               {diff.perfect ? '✓ Perfect!' : 'Correction'}
-              <TextSpeakerButton text={result.sentence} className="text-green-500 hover:text-green-700 transition-colors normal-case" />
+              <TextSpeakerButton text={result.sentence} className="text-good hover:text-good-deep transition-colors normal-case" />
             </div>
-            <div className="text-lg text-green-800 text-center">
+            <div className="text-lg text-good-deep text-center">
               {diff.tokens.map(({ text, changed }, i) => {
                 const lemmaMap = Object.fromEntries(Object.entries(glosses).map(([k, v]) => [k, v.lemma]));
                 const match = isWordToken(text) ? resolveClickedWord(text, lemmaMap, word.de) : undefined;
                 const gloss = !match ? glosses[text] : undefined;
-                const underline = changed ? ' underline decoration-violet-500 decoration-2 underline-offset-2 font-bold' : '';
+                const underline = changed ? ' underline decoration-accent decoration-2 underline-offset-2 font-bold' : '';
                 if (match) {
                   return (
                     <button
                       key={i}
                       type="button"
                       onClick={() => { setSelectedGlossToken(null); setSelectedWord(prev => (prev?.id === match.id ? null : match)); }}
-                      className={`hover:bg-green-200/70 rounded px-0.5 -mx-0.5 transition-colors${underline}`}
+                      className={`hover:bg-good/70 rounded px-0.5 -mx-0.5 transition-colors${underline}`}
                     >
                       {text}
                     </button>
@@ -288,7 +288,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
                       key={i}
                       type="button"
                       onClick={() => { setSelectedWord(null); setSelectedGlossToken(prev => (prev === text ? null : text)); }}
-                      className={`hover:bg-green-200/70 rounded px-0.5 -mx-0.5 transition-colors${underline}`}
+                      className={`hover:bg-good/70 rounded px-0.5 -mx-0.5 transition-colors${underline}`}
                     >
                       {text}
                     </button>
@@ -299,41 +299,41 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
             </div>
           </div>
           {!diff.perfect && explanation && (
-            <div className="flex flex-col gap-1.5 -mt-1 bg-indigo-50 rounded-lg px-4 py-2">
+            <div className="flex flex-col gap-1.5 -mt-1 bg-accent/10 rounded-lg px-4 py-2">
               {explanation.points.length > 0 && (
-                <ul className="list-disc pl-5 flex flex-col gap-1 text-sm text-indigo-800">
+                <ul className="list-disc pl-5 flex flex-col gap-1 text-sm text-ink">
                   {explanation.points.map((point, i) => <li key={i}>{point}</li>)}
                 </ul>
               )}
             </div>
           )}
           {!diff.perfect && explanationStatus === 'error' && (
-            <p className="text-red-500 text-xs -mt-1">Couldn't load an explanation — try again.</p>
+            <p className="text-clay text-xs -mt-1">Couldn't load an explanation — try again.</p>
           )}
           {!diff.perfect && explanationStatus === 'limit-reached' && (
-            <p className="text-amber-600 text-xs -mt-1">Used up today's practice limit — come back tomorrow.</p>
+            <p className="text-accent-deep text-xs -mt-1">Used up today's practice limit — come back tomorrow.</p>
           )}
           {selectedWord && <WordInfoPanel key={selectedWord.id} word={selectedWord} />}
           {!selectedWord && selectedGlossToken && glosses[selectedGlossToken] && (
             <GlossPopup surfaceForm={selectedGlossToken} gloss={glosses[selectedGlossToken]} />
           )}
           {diff.perfect ? (
-            <p className="text-green-700 text-sm text-center">Cleared from your mistake notebook 🎉</p>
+            <p className="text-good-deep text-sm text-center">Cleared from your mistake notebook</p>
           ) : (
-            <p className="text-stone-500 text-sm text-center">Still not quite — want to try again?</p>
+            <p className="text-ink-soft text-sm text-center">Still not quite — want to try again?</p>
           )}
           <div className="flex gap-2">
             {!diff.perfect && (
               <button
                 onClick={() => { setResult(null); setInput(''); setStatus('idle'); setGlosses({}); setSelectedWord(null); setSelectedGlossToken(null); setExplanation(null); setExplanationStatus('idle'); }}
-                className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all"
+                className="flex-1 bg-accent text-white py-2.5 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
               >
                 Try again
               </button>
             )}
             <button
               onClick={onDone}
-              className={diff.perfect ? 'flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-semibold hover:bg-indigo-700 active:scale-95 transition-all' : 'text-stone-500 text-sm px-3'}
+              className={diff.perfect ? 'flex-1 bg-accent text-white py-2.5 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all' : 'text-ink-soft text-sm px-3'}
             >
               {diff.perfect ? 'Done' : 'Close'}
             </button>

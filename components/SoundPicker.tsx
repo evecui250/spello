@@ -36,11 +36,11 @@ export default function SoundPicker({ onChange }: Props) {
             type="button"
             onClick={() => pick(opt.id)}
             className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl border-2 transition-colors text-left ${
-              isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-stone-200 hover:border-indigo-300'
+              isSelected ? 'border-accent bg-accent/10' : 'border-paper-line hover:border-accent/50'
             }`}
           >
-            <span className={`text-sm font-medium ${isSelected ? 'text-indigo-700' : 'text-stone-700'}`}>{opt.name}</span>
-            <span className={`text-xs ${isSelected ? 'text-indigo-500' : 'text-stone-400'}`}>{isSelected ? '✓ Selected' : '▶ Preview'}</span>
+            <span className={`text-sm font-medium ${isSelected ? 'text-accent-deep' : 'text-ink'}`}>{opt.name}</span>
+            <span className={`text-xs ${isSelected ? 'text-accent' : 'text-ink-soft'}`}>{isSelected ? '✓ Selected' : '▶ Preview'}</span>
           </button>
         );
       })}

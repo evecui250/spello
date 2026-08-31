@@ -55,7 +55,7 @@ export default function BugReportButton() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-amber-200 hover:text-amber-100 underline"
+        className="text-on-bg/75 hover:text-on-bg underline"
       >
         Report a problem
       </button>
@@ -72,23 +72,23 @@ export default function BugReportButton() {
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-amber-50 rounded-2xl shadow-xl p-5 flex flex-col gap-3"
+            className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-3"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-stone-800">Report a problem</h2>
+              <h2 className="font-bold text-ink">Report a problem</h2>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close"
-                className="text-stone-400 hover:text-stone-600 text-xl leading-none"
+                className="text-ink-soft hover:text-ink text-xl leading-none"
               >
                 ×
               </button>
             </div>
 
             {status === 'sent' ? (
-              <p className="text-green-700 text-sm bg-green-50 border border-green-100 rounded-lg px-3 py-2">
+              <p className="text-good-deep text-sm bg-good/25 border border-good rounded-lg px-3 py-2">
                 ✓ Thanks — we&apos;ll take a look.
               </p>
             ) : (
@@ -105,7 +105,7 @@ export default function BugReportButton() {
                   onChange={e => setMessage(e.target.value)}
                   rows={4}
                   placeholder="What happened?"
-                  className="w-full border-2 border-indigo-100 rounded-xl px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 resize-none"
+                  className="w-full border-2 border-paper-line rounded-xl px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent/50 resize-none"
                 />
                 {!signedInEmail && (
                   <input
@@ -113,17 +113,17 @@ export default function BugReportButton() {
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     placeholder="Your email (optional, if you'd like a reply)"
-                    className="w-full border-2 border-indigo-100 rounded-lg px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-300 text-sm"
+                    className="w-full border-2 border-paper-line rounded-lg px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent/50 text-sm"
                   />
                 )}
                 {status === 'error' && (
-                  <p className="text-red-600 text-sm">Couldn&apos;t send that — check your connection and try again.</p>
+                  <p className="text-clay text-sm">Couldn&apos;t send that — check your connection and try again.</p>
                 )}
                 <button
                   type="button"
                   onClick={handleSubmit}
                   disabled={!message.trim() || status === 'sending'}
-                  className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-semibold disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
+                  className="w-full bg-accent text-white py-2.5 rounded-xl font-semibold disabled:opacity-40 hover:bg-accent-deep active:scale-95 transition-all"
                 >
                   {status === 'sending' ? 'Sending…' : 'Send report'}
                 </button>
