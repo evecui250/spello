@@ -67,6 +67,49 @@ interface RequestBody {
   userTranslation?: string;
 }
 
+// Plain Levenshtein edit distance — used below to check that the model's
+// own reported wordForm is a plausible inflection of the actual target
+// word, not a hallucinated or substituted one. Short strings only (single
+// German words), so the classic O(n*m) table is plenty fast.
+function editDistance(a: string, b: string): number {
+  const dp: number[][] = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+// The actual bug this guards against: the model quietly swaps the target
+// word for a different one (a close synonym, or — in the "learner's
+// attempt doesn't touch the target word at all" fallback path — a fresh
+// translation that just never happens to need it) while still returning
+// SOME wordForm/sentence pair, so the malformed-response check above
+// never catches it. Real German inflection (plurals, cases, and
+// especially strong-verb ablaut like gehen -> ging) can change a word
+// enough that a strict substring check alone would false-positive on
+// legitimate answers, so this allows loose matching: either form contains
+// the other, they share a long-enough prefix, or their edit distance is
+// small relative to length. Loose by design — an occasional unnecessary
+// (unnecessary) retry costs one extra AI call, which is far cheaper than
+// either silently shipping a wrong word, or being so strict it retries
+// every legitimate irregular verb.
+function formMatchesTarget(wordDe: string, wordForm: string): boolean {
+  const a = wordDe.toLowerCase();
+  const b = wordForm.toLowerCase();
+  if (!a || !b) return false;
+  if (a.includes(b) || b.includes(a)) return true;
+  const prefixLen = Math.min(3, a.length);
+  if (a.slice(0, prefixLen) === b.slice(0, prefixLen)) return true;
+  const dist = editDistance(a, b);
+  return dist <= Math.ceil(Math.max(a.length, b.length) / 2);
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: CORS_HEADERS });
@@ -122,19 +165,7 @@ Deno.serve(async (req: Request) => {
     }
     const hasUserInput = !!userTranslation && userTranslation.trim().length > 0;
 
-    const completion = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content:
+    const systemPrompt =
               'You are a German tutor helping a learner practice new vocabulary. The ' +
               `exercise sentence, to be translated into German, is: "${englishPrompt}" — ` +
               `specifically testing the word "${wordDe}" (CEFR ${level || 'A1'}). ` +
@@ -211,54 +242,125 @@ Deno.serve(async (req: Request) => {
               'conjugated form — that is a common mistake to avoid. Always end your ' +
               'sentence with correct terminal punctuation matching the English sentence\'s own ' +
               'punctuation (a period, question mark, or exclamation mark) — add it even if the ' +
-              'learner\'s attempt omitted it. Respond with exactly this JSON: {"sentence": "...", ' +
+              'learner\'s attempt omitted it. Final check before you answer: read your own output ' +
+              `sentence back and confirm it actually contains a real inflected form of "${wordDe}" ` +
+              '— if it does not, that is wrong, fix it before responding. Respond with exactly ' +
+              'this JSON: {"sentence": "...", ' +
               '"wordForm": the exact inflected form of the word as it literally appears, ' +
               'verbatim, inside "sentence" — this must be an exact substring match so it can be ' +
-              'highlighted}.',
-          },
-          { role: 'user', content: hasUserInput ? userTranslation! : 'Please translate the sentence.' },
-        ],
-        temperature: 0.3,
-        // Trimmed down from 350 — this response used to also carry a
-        // per-word lemma map for tap-to-look-up, which was by far the
-        // biggest chunk of output and made this call noticeably slow
-        // (output tokens are generated sequentially, so cutting them
-        // cuts wall-clock time almost linearly). That lookup now comes
-        // from a separate sentence-glosses call fired after the
-        // correction already renders (see DailySessionFlow) instead of
-        // blocking the correction itself on it.
-        max_tokens: 120,
-      }),
-    });
+              'highlighted}.';
 
-    if (!completion.ok) {
-      const errText = await completion.text();
-      console.error('OpenAI error:', errText);
-      return json({ error: 'AI correction failed' }, 502);
+    type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+    type ModelResult = { parsed: { sentence?: string; wordForm?: string }; raw: string; usage: { prompt_tokens?: number; completion_tokens?: number } };
+
+    // One real OpenAI call + parse, logged to ai_usage on its own — pulled
+    // out into its own function so the "target word went missing" retry
+    // below (see formMatchesTarget) can call this exact same path a second
+    // time with an extended message list, rather than duplicating the
+    // fetch/parse/log logic.
+    async function callModel(messages: ChatMessage[]): Promise<ModelResult> {
+      const completion = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          response_format: { type: 'json_object' },
+          messages,
+          temperature: 0.3,
+          // Trimmed down from 350 — this response used to also carry a
+          // per-word lemma map for tap-to-look-up, which was by far the
+          // biggest chunk of output and made this call noticeably slow
+          // (output tokens are generated sequentially, so cutting them
+          // cuts wall-clock time almost linearly). That lookup now comes
+          // from a separate sentence-glosses call fired after the
+          // correction already renders (see DailySessionFlow) instead of
+          // blocking the correction itself on it.
+          max_tokens: 120,
+        }),
+      });
+
+      if (!completion.ok) {
+        const errText = await completion.text();
+        console.error('OpenAI error:', errText);
+        throw new Error('AI correction failed');
+      }
+
+      const result = await completion.json();
+      const raw: string = result.choices?.[0]?.message?.content ?? '{}';
+      let parsed: { sentence?: string; wordForm?: string } = {};
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        // leave parsed empty — caught by the caller
+      }
+      const usage = result.usage ?? {};
+      await supabase.from('ai_usage').insert({
+        user_id: userId,
+        ip_address: ip,
+        word_id: wordId,
+        level: level || 'unknown',
+        model: MODEL,
+        input_tokens: usage.prompt_tokens ?? 0,
+        output_tokens: usage.completion_tokens ?? 0,
+      });
+      return { parsed, raw, usage };
     }
 
-    const result = await completion.json();
-    const raw: string = result.choices?.[0]?.message?.content ?? '{}';
-    let parsed: { sentence?: string; wordForm?: string } = {};
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      // leave parsed empty — caught by the check below
-    }
-    const usage = result.usage ?? {};
-    await supabase.from('ai_usage').insert({
-      user_id: userId,
-      ip_address: ip,
-      word_id: wordId,
-      level: level || 'unknown',
-      model: MODEL,
-      input_tokens: usage.prompt_tokens ?? 0,
-      output_tokens: usage.completion_tokens ?? 0,
-    });
+    const firstMessages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: hasUserInput ? userTranslation! : 'Please translate the sentence.' },
+    ];
+
+    let { parsed, raw } = await callModel(firstMessages);
 
     if (!parsed.sentence || !parsed.wordForm) {
       console.error('Malformed AI response:', raw);
       return json({ error: 'AI returned an unexpected format' }, 502);
+    }
+
+    // The actual bug this session is fixing: the model can return a
+    // well-formed {sentence, wordForm} pair that simply doesn't use the
+    // target word at all (swapped for a synonym, or a "fresh translation"
+    // that never needed it) — the prompt already says this must never
+    // happen, in three places now, but that's still just an instruction, not
+    // a guarantee. One bounded retry (never more than one, so a
+    // persistently-noncompliant response still degrades to "ship whatever
+    // came back" rather than looping) with the model's own bad answer fed
+    // back to it tends to self-correct far more reliably than the original
+    // prompt alone.
+    const wordMissing = !parsed.sentence.toLowerCase().includes(parsed.wordForm.toLowerCase())
+      || !formMatchesTarget(wordDe, parsed.wordForm);
+
+    if (wordMissing) {
+      console.error(`Target word "${wordDe}" missing from correction, retrying once:`, raw);
+      const retryMessages: ChatMessage[] = [
+        ...firstMessages,
+        { role: 'assistant', content: raw },
+        {
+          role: 'user',
+          content: `That sentence does not actually use "${wordDe}" — you must rewrite it so a real ` +
+            `inflected form of "${wordDe}" genuinely appears in the sentence, never a different word. ` +
+            'Respond again with the same JSON format.',
+        },
+      ];
+      // Best-effort: a network/HTTP failure on this SECOND call shouldn't
+      // fail the whole request when the first call already produced a
+      // usable (if imperfect) answer — same "always succeeds" contract
+      // this endpoint already has for a garbled user attempt.
+      try {
+        const retry = await callModel(retryMessages);
+        if (retry.parsed.sentence && retry.parsed.wordForm) {
+          parsed = retry.parsed;
+        }
+        // If the retry itself came back malformed, parsed still holds the
+        // first (word-missing) response — shipping that beats failing the
+        // exercise outright.
+      } catch (retryErr) {
+        console.error('Retry call failed, falling back to first response:', retryErr);
+      }
     }
 
     return json({ sentence: parsed.sentence, wordForm: parsed.wordForm });
