@@ -48,7 +48,7 @@ interface AdminStats {
     newDevicesAnonymous: number;
     newIpsTotal: number;
     newIpsSignedIn: number;
-    wordsStudied: number;
+    wordsStudied: { signedIn: number; anonymous: number };
     aiUsage: { signedIn: AiUsageSummary; anonymous: AiUsageSummary };
     // How many times the "Why?" grammar-explanation button was tapped
     // today — tracked separately from the correction calls above so we
@@ -59,7 +59,7 @@ interface AdminStats {
     signups: { date: string; count: number }[];
     devices: { date: string; signedIn: number; anonymous: number }[];
     aiUsage: { date: string; signedInCalls: number; anonymousCalls: number; costUsd: number }[];
-    wordsStudied: { date: string; total: number }[];
+    wordsStudied: { date: string; signedIn: number; anonymous: number }[];
     explanationClicks: { date: string; count: number }[];
   };
   levelBreakdown: { level: string; signedIn: number; anonymous: number }[];
@@ -185,7 +185,8 @@ export default function AdminPage() {
         <h2 className="font-semibold text-stone-800">Today</h2>
         <div className="grid grid-cols-2 gap-3">
           <StatCard label="New signups" value={stats.today.newSignups} />
-          <StatCard label="Words practiced (signed-in)" value={stats.today.wordsStudied} />
+          <StatCard label="Words practiced (signed-in)" value={stats.today.wordsStudied.signedIn} />
+          <StatCard label="Words practiced (anonymous)" value={stats.today.wordsStudied.anonymous} />
           <StatCard label="New devices — signed in" value={stats.today.newDevicesSignedIn} />
           <StatCard label="New devices — anonymous" value={stats.today.newDevicesAnonymous} />
           <StatCard label="New IPs" value={stats.today.newIpsTotal} />
@@ -223,10 +224,13 @@ export default function AdminPage() {
           ]}
         />
         <TrendChart
-          title="Words practiced / day (signed-in accounts only)"
+          title="Words practiced / day"
           dates={dates}
-          series={[{ label: 'Words practiced', color: SIGNED_IN_COLOR, values: stats.trends.wordsStudied.map(t => t.total) }]}
-          emptyNote="Tracking just started — this fills in day by day from here, it can't show history from before this was added."
+          series={[
+            { label: 'Signed in', color: SIGNED_IN_COLOR, values: stats.trends.wordsStudied.map(t => t.signedIn) },
+            { label: 'Anonymous', color: ANONYMOUS_COLOR, values: stats.trends.wordsStudied.map(t => t.anonymous) },
+          ]}
+          emptyNote="Tracking just started — this fills in day by day from here, it can't show history from before this was added. Anonymous counts are a coarse per-device total (words studied/mastered today), never per-word detail — that never leaves an anonymous learner's own device."
         />
       </div>
 

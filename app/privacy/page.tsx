@@ -42,8 +42,11 @@ export default function PrivacyPage() {
               not you sign in) so we can see roughly how many people actually use Spello: a
               random identifier for your browser (not tied to your name or email unless you're
               signed in), your IP address, browser/device type, and which level you're studying.
-              We don't use this to individually track what any one person does in the app — no
-              per-action event log, no cross-site tracking, no ad or analytics network involved.
+              If you're not signed in, we also keep a running daily count of how many words
+              you've studied and mastered that day, tied to that same random device identifier —
+              a total for the day, never which specific words. We don't use any of this to
+              individually track what any one person does in the app — no per-word/per-action
+              event log, no cross-site tracking, no ad or analytics network involved.
             </li>
             <li>Anything you submit through the bug-report button — your message, the page you were on, and your browser/device type, so we can actually fix what you reported.</li>
           </ul>

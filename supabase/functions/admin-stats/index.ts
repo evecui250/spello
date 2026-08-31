@@ -449,22 +449,35 @@ Deno.serve(async (req: Request) => {
       count: explanationRows.filter(r => dateStr(new Date(r.created_at)) === date).length,
     }));
 
-    // Words studied: only ever known for signed-in, synced accounts (see
-    // the daily_activity migration) — an anonymous learner's word-level
-    // progress never reaches the server at all. This will read as mostly
-    // empty before the date this feature shipped; it can't backfill.
+    // Words studied — signed-in/synced accounts via daily_activity (full
+    // per-word detail never leaves an anonymous learner's device, so that
+    // table only ever has real accounts in it — see its own migration).
+    // Anonymous learners get a much coarser, device-keyed daily total
+    // instead, from daily_activity_anon (see that migration and
+    // record-anon-activity) — a real aggregate count, not per-word detail,
+    // written on the same "after real activity" trigger as the signed-in
+    // side rather than usage_pings' once-a-day page-load snapshot. Both
+    // will read as mostly empty before the date each shipped; neither can
+    // backfill history from before it existed.
     const { data: activityWindow } = await admin
       .from('daily_activity')
       .select('user_id, activity_date, words_studied, words_mastered, level')
       .gte('activity_date', windowStartDate);
     const activityRows = activityWindow ?? [];
+    const { data: anonActivityWindow } = await admin
+      .from('daily_activity_anon')
+      .select('device_id, activity_date, words_studied, words_mastered, level')
+      .gte('activity_date', windowStartDate);
+    const anonActivityRows = anonActivityWindow ?? [];
     const wordsStudiedTrend = windowDays.map(date => ({
       date,
-      total: activityRows.filter(r => r.activity_date === date).reduce((s, r) => s + (r.words_studied ?? 0), 0),
+      signedIn: activityRows.filter(r => r.activity_date === date).reduce((s, r) => s + (r.words_studied ?? 0), 0),
+      anonymous: anonActivityRows.filter(r => r.activity_date === date).reduce((s, r) => s + (r.words_studied ?? 0), 0),
     }));
-    const wordsStudiedToday = activityRows
-      .filter(r => r.activity_date === todayStr)
-      .reduce((s, r) => s + (r.words_studied ?? 0), 0);
+    const wordsStudiedToday = {
+      signedIn: activityRows.filter(r => r.activity_date === todayStr).reduce((s, r) => s + (r.words_studied ?? 0), 0),
+      anonymous: anonActivityRows.filter(r => r.activity_date === todayStr).reduce((s, r) => s + (r.words_studied ?? 0), 0),
+    };
 
     // Leaderboard: today's daily_activity rows, sorted most-to-least
     // words studied — signed-in/synced learners only, by construction

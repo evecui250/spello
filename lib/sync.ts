@@ -13,6 +13,7 @@ import {
   today,
 } from './storage';
 import { Level, LEVEL_ORDER, Word } from './words';
+import { getOrCreateDeviceId, isLocalDev } from './telemetry';
 
 // Each level is its own profile locally (see storage.ts) — the remote row
 // mirrors that by nesting every level's progress/settings under its own key,
@@ -278,6 +279,36 @@ async function pushToRemote(userId: string): Promise<void> {
   }
 }
 
+// Anonymous counterpart to the daily_activity upsert inside pushToRemote
+// above — same words_studied/words_mastered computation (merged across
+// every level's own progress, same as that function), just keyed by
+// device_id instead of a signed-in user_id, since that's the only
+// identity an anonymous learner has (see lib/telemetry.ts). Routed through
+// the record-anon-activity Edge Function (service role) rather than a
+// direct table write — daily_activity_anon has no client policies at all,
+// same lockdown as usage_pings. Best-effort and silent, exactly like the
+// daily_activity upsert it mirrors: this is a stats-only side channel,
+// never something that should affect (or be affected by) real study flow.
+async function pushAnonActivity(): Promise<void> {
+  if (isLocalDev()) return;
+  try {
+    const activeLevel = getActiveLevel();
+    const allValues = LEVEL_ORDER.flatMap(level => Object.values(getAllProgressForLevel(level)));
+    const t = today();
+    await supabase.functions.invoke('record-anon-activity', {
+      body: {
+        deviceId: getOrCreateDeviceId(),
+        activityDate: t,
+        wordsStudied: allValues.filter(p => p.lastPracticed === t).length,
+        wordsMastered: allValues.filter(p => p.fullyMastered && p.lastReviewedAt === t).length,
+        level: activeLevel,
+      },
+    });
+  } catch {
+    // Silent — see comment above.
+  }
+}
+
 // Immediate (non-debounced) push, awaited — for actions where the caller
 // needs to know the upload actually went out before doing anything else
 // (e.g. clearing progress: without this, the debounced scheduleSync's
@@ -342,6 +373,7 @@ export function watchAuthAndSync(): () => void {
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingUserId: string | null = null;
+let anonActivityTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Debounced just enough to coalesce a rapid string of edits (e.g. dragging a
 // pace slider) into one push, not so long that closing/backgrounding the
@@ -357,7 +389,18 @@ export function scheduleSync(): void {
   if (typeof window === 'undefined') return;
   supabase.auth.getSession().then(({ data }) => {
     const userId = data.session?.user.id;
-    if (!userId) return;
+    if (!userId) {
+      // No account to sync real progress to, but still worth a lightweight
+      // activity ping (see pushAnonActivity) so anonymous usage shows up in
+      // /admin too — same debounce window/timer as the signed-in path,
+      // just a different (much smaller) payload.
+      if (anonActivityTimer) clearTimeout(anonActivityTimer);
+      anonActivityTimer = setTimeout(() => {
+        anonActivityTimer = null;
+        pushAnonActivity();
+      }, SYNC_DEBOUNCE_MS);
+      return;
+    }
     pendingUserId = userId;
     if (pushTimer) clearTimeout(pushTimer);
     pushTimer = setTimeout(() => {

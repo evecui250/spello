@@ -29,7 +29,7 @@ export function getOrCreateDeviceId(): string {
 // localhost specifically (never true for real visitors, always true for
 // `next dev`/local test builds) keeps development/testing activity from
 // quietly polluting real usage counts, which happened once already.
-function isLocalDev(): boolean {
+export function isLocalDev(): boolean {
   return ['localhost', '127.0.0.1'].includes(window.location.hostname);
 }
 
