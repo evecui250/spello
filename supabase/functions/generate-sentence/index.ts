@@ -127,7 +127,13 @@ Deno.serve(async (req: Request) => {
               `(3) The sentence MUST be between ${minWords} and ${maxWords} words long ` +
               '(inclusive) — count every word, this is a hard requirement, not a suggestion. ' +
               'The sentence should be meaningful and make sense on its own, not a trivial or ' +
-              'random-sounding string of words. ' +
+              'random-sounding string of words — and prefer something a real person would ' +
+              'plausibly actually say or write (daily routines, work, family, food, weather, ' +
+              'travel, shopping, making plans, asking for help) over a flat, generic textbook ' +
+              'illustration of the word\'s dictionary meaning. Given the vocabulary limits above, ' +
+              'a short, bare sentence is sometimes unavoidable — that\'s fine — but when several ' +
+              'options fit equally well within the constraints, pick the one that sounds like ' +
+              'something a person would genuinely say, not the blandest grammatically-valid one. ' +
               `(4) CRITICAL: the German word actually being practiced is "${wordDe}", not just ` +
               `any word meaning "${wordEn}" — the English sentence you write will later be ` +
               `translated back into German and checked specifically for "${wordDe}", so it ` +
