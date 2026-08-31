@@ -45,7 +45,7 @@ export default function SettingsPage() {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [showPaceInfo, setShowPaceInfo] = useState(false);
   const [theme, setTheme] = useState<Theme>('forest');
-  const [cardMode, setCardMode] = useState<CardMode>('light');
+  const [cardMode, setCardMode] = useState<CardMode>('auto');
   const [fontScale, setFontScale] = useState<FontScale>('default');
   const [soundName, setSoundName] = useState('Triad Bloom');
   // Collapsed by default -- the whole point of grouping Theme/Font
@@ -249,10 +249,11 @@ export default function SettingsPage() {
 
             <div>
               <label className="block font-semibold text-ink mb-1">Cards</label>
-              <p className="text-ink-soft text-sm mb-3">Dims every card for reading comfortably at night.</p>
-              <div className="grid grid-cols-2 gap-2">
+              <p className="text-ink-soft text-sm mb-3">Dims every card for reading comfortably at night. Auto follows your device's clock.</p>
+              <div className="grid grid-cols-3 gap-2">
                 {([
                   { value: 'light', label: 'Day' },
+                  { value: 'auto', label: 'Auto' },
                   { value: 'dark', label: 'Night' },
                 ] as { value: CardMode; label: string }[]).map(opt => {
                   const isSelected = cardMode === opt.value;

@@ -936,22 +936,35 @@ export function saveFontScale(scale: FontScale): void {
 // warm dark parchment regardless of which background theme is active
 // (see AppBackground's own gradientNight for the sky half of this), for
 // reading comfortably at night without switching to a whole different
-// theme. ---
-export type CardMode = 'light' | 'dark';
+// theme. 'auto' (the default) follows the device's own local clock
+// instead of a fixed choice — see resolveCardMode. ---
+export type CardMode = 'light' | 'dark' | 'auto';
 const CARD_MODE_KEY = 'wb2_card_mode';
 export const CARD_MODE_CHANGED_EVENT = 'wb2-card-mode-changed';
-const VALID_CARD_MODES: CardMode[] = ['light', 'dark'];
+const VALID_CARD_MODES: CardMode[] = ['light', 'dark', 'auto'];
 
 export function getCardMode(): CardMode {
-  if (typeof window === 'undefined') return 'light';
+  if (typeof window === 'undefined') return 'auto';
   const raw = localStorage.getItem(CARD_MODE_KEY);
-  return (VALID_CARD_MODES as string[]).includes(raw ?? '') ? (raw as CardMode) : 'light';
+  return (VALID_CARD_MODES as string[]).includes(raw ?? '') ? (raw as CardMode) : 'auto';
 }
 
 export function saveCardMode(mode: CardMode): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(CARD_MODE_KEY, mode);
   window.dispatchEvent(new Event(CARD_MODE_CHANGED_EVENT));
+}
+
+// 'light'/'dark' pass straight through — 'auto' resolves against the
+// DEVICE'S OWN local clock (not UTC, not a sunset API — deliberately
+// simple: a fixed evening/morning cutoff is what "night" means for a
+// study app, not astronomical dusk). 19:00-06:59 reads as night; the
+// caller (AppBackground) re-calls this periodically so a session left
+// open across one of those boundaries still flips on its own.
+export function resolveCardMode(mode: CardMode): 'light' | 'dark' {
+  if (mode !== 'auto') return mode;
+  const hour = new Date().getHours();
+  return (hour >= 19 || hour < 7) ? 'dark' : 'light';
 }
 
 // --- Correct-answer chime (same per-device, un-synced, not-level-

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getTheme, Theme, THEME_CHANGED_EVENT, getCardMode, CardMode, CARD_MODE_CHANGED_EVENT } from '../lib/storage';
+import { getTheme, Theme, THEME_CHANGED_EVENT, getCardMode, CardMode, CARD_MODE_CHANGED_EVENT, resolveCardMode } from '../lib/storage';
 
 // The app's persistent backdrop — same structural idea across every theme
 // (a soft gradient, one or two glow highlights, a drifting mist band, and
@@ -267,7 +267,14 @@ export default function AppBackground() {
   // aren't wired into any component yet, but the sky itself (this
   // component) already reacts, per real feedback that a still-fully-
   // bright sky under a dimmed card looked mismatched.
-  const [cardMode, setCardMode] = useState<CardMode>('light');
+  const [cardMode, setCardMode] = useState<CardMode>('auto');
+  // The actual light/dark value in effect right now — equal to cardMode
+  // unless it's 'auto', in which case this is resolveCardMode's read of
+  // the device's own clock. Kept as separate state (not just computed
+  // inline on every render) so the interval below can force a re-render
+  // the moment auto's answer changes, without needing cardMode itself to
+  // change.
+  const [resolvedCardMode, setResolvedCardMode] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
     const load = () => setTheme(getTheme());
@@ -283,11 +290,23 @@ export default function AppBackground() {
     return () => window.removeEventListener(CARD_MODE_CHANGED_EVENT, load);
   }, []);
 
+  // Re-resolves immediately on every cardMode change, then — only while
+  // 'auto' is actually selected — keeps re-checking once a minute so a
+  // session left open across the morning/evening cutoff still flips on
+  // its own instead of waiting for a manual toggle or a reload.
+  useEffect(() => {
+    const resolve = () => setResolvedCardMode(resolveCardMode(cardMode));
+    resolve();
+    if (cardMode !== 'auto') return;
+    const interval = setInterval(resolve, 60_000);
+    return () => clearInterval(interval);
+  }, [cardMode]);
+
   // Mirrors both onto <html> as data attributes so plain CSS (globals.css)
   // can theme every future card via [data-app-theme]/[data-card-mode]
   // selectors without threading theme/cardMode through every component —
   // 'forest'/'light' are the unmarked defaults (matching getTheme()'s own
-  // "forest is the default" and getCardMode()'s "light is the default"),
+  // "forest is the default" and resolveCardMode's own light/dark values),
   // so those two specifically clear the attribute instead of setting it.
   useEffect(() => {
     const root = document.documentElement;
@@ -296,12 +315,12 @@ export default function AppBackground() {
   }, [theme]);
   useEffect(() => {
     const root = document.documentElement;
-    if (cardMode === 'light') root.removeAttribute('data-card-mode');
-    else root.setAttribute('data-card-mode', cardMode);
-  }, [cardMode]);
+    if (resolvedCardMode === 'light') root.removeAttribute('data-card-mode');
+    else root.setAttribute('data-card-mode', resolvedCardMode);
+  }, [resolvedCardMode]);
 
   const cfg = THEME_CONFIG[theme];
-  const gradient = cardMode === 'dark' && cfg.gradientNight ? cfg.gradientNight : cfg.gradient;
+  const gradient = resolvedCardMode === 'dark' && cfg.gradientNight ? cfg.gradientNight : cfg.gradient;
 
   return (
     <div aria-hidden className={`fixed inset-0 -z-10 overflow-hidden bg-gradient-to-b ${gradient}`}>
