@@ -128,6 +128,23 @@ Deno.serve(async (req: Request) => {
               '(inclusive) — count every word, this is a hard requirement, not a suggestion. ' +
               'The sentence should be meaningful and make sense on its own, not a trivial or ' +
               'random-sounding string of words. ' +
+              `(4) CRITICAL: the German word actually being practiced is "${wordDe}", not just ` +
+              `any word meaning "${wordEn}" — the English sentence you write will later be ` +
+              `translated back into German and checked specifically for "${wordDe}", so it ` +
+              `must be written so that "${wordDe}" (in its correct grammatical form) is a ` +
+              'genuinely natural, idiomatic way to render it — not merely translatable using ' +
+              'some other, more common German word that happens to share the same English ' +
+              'gloss. This matters a lot for German, where one English gloss often maps to ' +
+              'several German words with different grammatical patterns: a real, confirmed ' +
+              'miss was generating "I advise you to check the address" for the target word ' +
+              '"beraten" — that ADVISE-SOMEONE-TO-DO-X sentence shape is what "raten" (dative ' +
+              'person + zu + infinitive) naturally fits, not "beraten" (accusative person, ' +
+              'closer to "consult with/counsel", not naturally followed by "advise them TO DO ' +
+              'a specific action"); a sentence like "I meet my lawyer because she advises me ' +
+              'well in financial matters" fits "beraten" instead. Before finalizing, recall ' +
+              `"${wordDe}"'s actual German grammar (which case/preposition it governs, whether ` +
+              'it takes a direct object, an infinitive clause, etc.) and make sure the English ' +
+              'sentence you write actually calls for that exact pattern. ' +
               (wantsZh
                 ? 'Additionally, include a "sentenceZh" field: a natural, fluent Simplified ' +
                   'Chinese translation of that exact English sentence (meaning-for-meaning, ' +

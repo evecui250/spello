@@ -92,22 +92,34 @@ function editDistance(a: string, b: string): number {
 // SOME wordForm/sentence pair, so the malformed-response check above
 // never catches it. Real German inflection (plurals, cases, and
 // especially strong-verb ablaut like gehen -> ging) can change a word
-// enough that a strict substring check alone would false-positive on
-// legitimate answers, so this allows loose matching: either form contains
-// the other, they share a long-enough prefix, or their edit distance is
-// small relative to length. Loose by design — an occasional unnecessary
-// (unnecessary) retry costs one extra AI call, which is far cheaper than
-// either silently shipping a wrong word, or being so strict it retries
-// every legitimate irregular verb.
+// enough that a strict check alone would false-positive on legitimate
+// answers, so this allows loose matching — but not unconditionally: a
+// real, confirmed miss slipped through the original version of this
+// function, which treated ANY substring containment as a match — "rate"
+// (a real inflection of the unrelated verb "raten") is coincidentally a
+// literal substring of "beraten" ("be-RATE-n"), so the model silently
+// swapping "beraten" for "raten" went undetected. Substring containment
+// now only counts when the shorter string is a substantial fraction of
+// the longer one (a short, unrelated word is far more likely to
+// coincidentally appear inside a longer, unrelated target than a real
+// inflection is to be that much shorter than its own lemma); the edit-
+// distance fallback is scaled off the SHORTER word's length rather than
+// the longer one, for the same reason — a fixed few edits should mean
+// much more on a short word than a long one. This is deliberately still
+// not perfect (a genuinely irregular short verb like gehen/ging can still
+// trip it) — an occasional unnecessary retry costs one extra AI call,
+// which is far cheaper than silently shipping a wrong word.
 function formMatchesTarget(wordDe: string, wordForm: string): boolean {
   const a = wordDe.toLowerCase();
   const b = wordForm.toLowerCase();
   if (!a || !b) return false;
-  if (a.includes(b) || b.includes(a)) return true;
-  const prefixLen = Math.min(3, a.length);
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length <= b.length ? b : a;
+  if (longer.includes(shorter) && shorter.length / longer.length >= 0.6) return true;
+  const prefixLen = Math.min(3, a.length, b.length);
   if (a.slice(0, prefixLen) === b.slice(0, prefixLen)) return true;
   const dist = editDistance(a, b);
-  return dist <= Math.ceil(Math.max(a.length, b.length) / 2);
+  return dist <= Math.ceil(Math.min(a.length, b.length) / 2);
 }
 
 Deno.serve(async (req: Request) => {
@@ -341,9 +353,12 @@ Deno.serve(async (req: Request) => {
         { role: 'assistant', content: raw },
         {
           role: 'user',
-          content: `That sentence does not actually use "${wordDe}" — you must rewrite it so a real ` +
-            `inflected form of "${wordDe}" genuinely appears in the sentence, never a different word. ` +
-            'Respond again with the same JSON format.',
+          content: `Double-check: does that sentence genuinely contain a real inflected form of ` +
+            `"${wordDe}" specifically (not a different, even closely-related word)? If it already ` +
+            `does — including an irregular/strong-verb form that looks quite different from the ` +
+            `infinitive (e.g. "ging" for "gehen") — you may respond with the exact same answer again. ` +
+            `If it does not, rewrite it so a real form of "${wordDe}" genuinely appears. Respond again ` +
+            'with the same JSON format either way.',
         },
       ];
       // Best-effort: a network/HTTP failure on this SECOND call shouldn't
