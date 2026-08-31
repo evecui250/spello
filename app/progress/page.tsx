@@ -158,7 +158,7 @@ export default function ProgressPage() {
                   type="button"
                   onClick={() => { setScope(s); setOpenStage(null); }}
                   className={`px-2.5 py-1 rounded-full transition-colors ${
-                    scope === s ? 'bg-white text-ink shadow-sm' : 'text-ink-soft'
+                    scope === s ? 'bg-paper text-ink shadow-sm' : 'text-ink-soft'
                   }`}
                 >
                   {s === 'current' ? 'This book' : 'All books'}
@@ -267,7 +267,7 @@ export default function ProgressPage() {
                 {Object.entries(stageLevelCounts[openStage])
                   .sort((a, b) => LEVEL_ORDER.indexOf(a[0] as Level) - LEVEL_ORDER.indexOf(b[0] as Level))
                   .map(([lvl, count]) => (
-                    <div key={lvl} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2">
+                    <div key={lvl} className="flex items-center justify-between bg-paper/60 rounded-lg px-3 py-2">
                       <span className="text-ink font-medium">{lvl}</span>
                       <span className="text-ink-soft text-sm">{count} word{count === 1 ? '' : 's'}</span>
                     </div>
@@ -282,7 +282,7 @@ export default function ProgressPage() {
                 {[...stageWords[openStage]]
                   .sort((a, b) => a.de.localeCompare(b.de, 'de'))
                   .map(w => (
-                    <div key={w.id} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2 gap-2">
+                    <div key={w.id} className="flex items-center justify-between bg-paper/60 rounded-lg px-3 py-2 gap-2">
                       <span className="text-ink font-medium truncate">
                         {w.article ? `${w.article} ` : ''}{w.de}
                       </span>

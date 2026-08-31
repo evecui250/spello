@@ -112,7 +112,7 @@ export default function AccountPanel({ onSync }: Props) {
           <button
             onClick={handleSendLink}
             disabled={resendCooldown > 0}
-            className="self-start text-xs font-semibold text-accent-deep hover:text-ink disabled:text-ink-soft disabled:cursor-default transition-colors"
+            className="self-start text-xs font-semibold text-label hover:text-ink disabled:text-ink-soft disabled:cursor-default transition-colors"
           >
             {resendCooldown > 0 ? `Resend link (${resendCooldown}s)` : 'Resend link'}
           </button>

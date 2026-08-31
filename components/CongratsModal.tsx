@@ -233,7 +233,7 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
             // eslint-disable-next-line @next/next/no-img-element
             <img src={imgUrl} alt="Daily goal complete" className="w-full h-full object-contain" />
           ) : (
-            <span className="text-accent text-sm">Preparing image…</span>
+            <span className="text-label text-sm">Preparing image…</span>
           )}
         </div>
         <div className="flex gap-2">
@@ -247,7 +247,7 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
           <button
             onClick={handleSave}
             disabled={!imgUrl}
-            className="flex-1 bg-accent/10 text-accent-deep py-3 rounded-xl font-semibold hover:bg-accent/15 active:scale-95 transition-all disabled:opacity-40"
+            className="flex-1 bg-accent/10 text-label py-3 rounded-xl font-semibold hover:bg-accent/15 active:scale-95 transition-all disabled:opacity-40"
           >
             Save image
           </button>

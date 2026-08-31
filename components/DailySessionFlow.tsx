@@ -492,7 +492,7 @@ function SentenceWordHeader({ word }: { word: Word }) {
     <div className="text-center -mt-1">
       <div className="text-2xl font-bold text-ink tracking-wide break-words">
         {word.article ? `${word.article} ` : ''}{word.de}{' '}
-        <SpeakerButton word={word} className="align-middle text-accent hover:text-accent-deep transition-colors text-xl" />
+        <SpeakerButton word={word} className="align-middle text-label hover:text-label transition-colors text-xl" />
       </div>
       <WordGrammarInfo word={word} />
     </div>
@@ -778,12 +778,12 @@ function SentenceExercise({
         </div>
       )}
       {promptStatus === 'limit-reached' && (
-        <p className="text-accent-deep text-sm text-center py-4">
+        <p className="text-label text-sm text-center py-4">
           You've used up today's practice limit — come back tomorrow for more!
         </p>
       )}
       {promptStatus === 'unreachable' && (
-        <p className="text-accent-deep text-sm text-center py-4">
+        <p className="text-label text-sm text-center py-4">
           Can't reach our AI service right now (this can happen depending on your network) —
           switched off sentence-writing mode. You can turn it back on anytime in Settings.
         </p>
@@ -791,13 +791,13 @@ function SentenceExercise({
       {promptStatus === 'ready' && promptSentence && (
         <>
           <div className="bg-accent/10 rounded-xl px-3 py-2 text-center">
-            <div className="text-xs uppercase tracking-wide text-accent mb-1">Translate to German</div>
+            <div className="text-xs uppercase tracking-wide text-label mb-1">Translate to German</div>
             {/* No visual affordance otherwise marks which words are
                 clickable (hover alone isn't discoverable on a touch
                 screen, which this PWA mostly runs on) — a persistent,
                 short reminder rather than a one-time tip, since there's
                 nothing else teaching this. */}
-            <p className="text-[11px] text-accent/80 mb-1">Tip: tap a word for a hint</p>
+            <p className="text-[11px] text-label/80 mb-1">Tip: tap a word for a hint</p>
             <div className="text-ink italic">
               {/* Tap a word for a hint — its German dictionary-form
                   translation, regardless of this word's own tense/case
@@ -918,12 +918,12 @@ function SentenceExercise({
             <p className="text-clay text-sm text-center">Couldn't get a correction — check your connection and try again.</p>
           )}
           {status === 'limit-reached' && (
-            <p className="text-accent-deep text-sm text-center">
+            <p className="text-label text-sm text-center">
               You've used up today's practice limit — come back tomorrow for more!
             </p>
           )}
           {status === 'unreachable' && (
-            <p className="text-accent-deep text-sm text-center">
+            <p className="text-label text-sm text-center">
               Can't reach our AI service right now (this can happen depending on your network) —
               switched off sentence-writing mode. You can turn it back on anytime in Settings.
             </p>
@@ -942,7 +942,7 @@ function SentenceExercise({
                     onClick={handleExplain}
                     disabled={explanationStatus === 'loading'}
                     aria-label="Explain the grammar"
-                    className="absolute top-2 right-2 text-accent text-xs font-semibold bg-white/70 hover:bg-white hover:text-accent-deep rounded-full px-2 py-0.5 transition-colors disabled:opacity-50"
+                    className="absolute top-2 right-2 text-label text-xs font-semibold bg-paper/70 hover:bg-paper hover:text-label rounded-full px-2 py-0.5 transition-colors disabled:opacity-50"
                   >
                     {explanationStatus === 'loading' ? '…' : 'Why?'}
                   </button>
@@ -1023,7 +1023,7 @@ function SentenceExercise({
                 <p className="text-clay text-xs -mt-2">Couldn't load an explanation — try again.</p>
               )}
               {!correctionDiff.perfect && explanationStatus === 'limit-reached' && (
-                <p className="text-accent-deep text-xs -mt-2">Used up today's practice limit — come back tomorrow.</p>
+                <p className="text-label text-xs -mt-2">Used up today's practice limit — come back tomorrow.</p>
               )}
               {selectedWord && <WordInfoPanel key={selectedWord.id} word={selectedWord} />}
               {!selectedWord && selectedGlossToken && glosses[selectedGlossToken] && (
@@ -1116,7 +1116,7 @@ function ReferenceSentence({ example, word, masked = false }: {
                 ____
               </span>
             ) : (
-              <span className="font-bold text-accent-deep not-italic">{parts.match}</span>
+              <span className="font-bold text-label not-italic">{parts.match}</span>
             )}
             {parts.after}
           </>
@@ -1128,14 +1128,14 @@ function ReferenceSentence({ example, word, masked = false }: {
             space keeps the icon glued to the sentence's last word so it
             only ever wraps together with it, never dangling alone. */}
         {' '}
-        <TextSpeakerButton text={example.sentence} className="text-accent hover:text-accent-deep transition-colors align-middle not-italic" />
+        <TextSpeakerButton text={example.sentence} className="text-label hover:text-label transition-colors align-middle not-italic" />
       </div>
       {translation && (
         <div className="text-ink-soft text-sm mt-1">
           {translationParts ? (
             <>
               {translationParts.before}
-              <span className="font-bold text-accent-deep">{translationParts.match}</span>
+              <span className="font-bold text-label">{translationParts.match}</span>
               {translationParts.after}
             </>
           ) : translation}
@@ -2505,7 +2505,7 @@ export default function DailySessionFlow() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold text-ink">
                       {w.article ? `${w.article} ` : ''}{w.de}
-                      <SpeakerButton word={w} className="ml-1.5 text-accent-deep hover:text-ink transition-colors align-middle" />
+                      <SpeakerButton word={w} className="ml-1.5 text-label hover:text-ink transition-colors align-middle" />
                     </span>
                     <span className="shrink-0 text-[10px] font-medium text-ink-soft bg-paper-dim rounded-full px-2 py-0.5">
                       Introduced
@@ -2642,7 +2642,7 @@ export default function DailySessionFlow() {
                     <span className="font-semibold text-ink">
                       {w.article ? `${w.article} ` : ''}{w.de}
                     </span>
-                    <SpeakerButton word={w} className="ml-1.5 text-accent-deep hover:text-ink transition-colors align-middle" />
+                    <SpeakerButton word={w} className="ml-1.5 text-label hover:text-ink transition-colors align-middle" />
                     <div className="text-ink-soft text-sm">{glossFor(w, getSettings().nativeLanguage)}</div>
                     {sentence && (
                       <div className="mt-1.5 pt-1.5 border-t border-paper-line/60 flex flex-col gap-0.5">
@@ -2718,7 +2718,7 @@ export default function DailySessionFlow() {
       <div className="flex flex-col gap-5">
         <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-5 min-h-[30rem]">
           <div>
-            <div className="text-sm font-medium text-accent-deep mb-1">
+            <div className="text-sm font-medium text-label mb-1">
               {CHUNK_LABELS[snap.activeChunk]}
             </div>
             <MilestoneBar activeChunk={snap.activeChunk} wordId={snap.word.id} />
@@ -2746,7 +2746,7 @@ export default function DailySessionFlow() {
             <div className="flex flex-col gap-3">
               <SentenceWordHeader word={snap.word} />
               <div className="bg-accent/10 rounded-xl px-3 py-2 text-center">
-                <div className="text-xs uppercase tracking-wide text-accent mb-1">Translate to German</div>
+                <div className="text-xs uppercase tracking-wide text-label mb-1">Translate to German</div>
                 <div className="text-ink italic">
                   {getSettings().nativeLanguage === 'zh' ? (snap.sentence.englishPromptZh ?? snap.word.exercisePromptZh ?? snap.sentence.englishPrompt) : snap.sentence.englishPrompt}
                 </div>
@@ -2794,7 +2794,7 @@ export default function DailySessionFlow() {
             <button
               onClick={() => setHistoryIndex(i => Math.max(0, (i ?? 0) - 1))}
               disabled={historyIndex === 0}
-              className="flex-1 bg-white text-accent-deep border-2 border-paper-line py-2.5 rounded-xl font-semibold disabled:opacity-40 hover:enabled:bg-accent/10 transition-all"
+              className="flex-1 bg-paper text-label border-2 border-paper-line py-2.5 rounded-xl font-semibold disabled:opacity-40 hover:enabled:bg-accent/10 transition-all"
             >
               ← Previous
             </button>
@@ -2829,7 +2829,7 @@ export default function DailySessionFlow() {
             </button>
           )}
         </div>
-        <div className="h-2 w-full bg-white/15 rounded-full overflow-hidden">
+        <div className="h-2 w-full bg-paper/15 rounded-full overflow-hidden">
           {/* emerald, matching MilestoneBar's own earned/completed color —
               this fill represents progress already done, not "still to
               go" (that's what amber means on MilestoneBar), so it should
@@ -2844,7 +2844,7 @@ export default function DailySessionFlow() {
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-5 min-h-[30rem]">
         <div>
           <div className="flex items-center justify-between mb-1">
-            <div className="text-sm font-medium text-accent-deep">
+            <div className="text-sm font-medium text-label">
               {CHUNK_LABELS[activeChunk]}
             </div>
             {/* A labeled switch, not a pill that just names the current
@@ -2866,10 +2866,10 @@ export default function DailySessionFlow() {
                 title={settings.sentenceWritingMode ? 'Sentence writing: on — tap to switch to copy mode' : 'Sentence writing: off — tap to turn on'}
                 className="flex items-center gap-1.5 shrink-0"
               >
-                <span className="text-[10px] font-semibold text-accent-deep">Writing</span>
+                <span className="text-[10px] font-semibold text-label">Writing</span>
                 <span className={`relative inline-block w-7 h-4 rounded-full transition-colors ${settings.sentenceWritingMode ? 'bg-accent' : 'bg-paper-dim'}`}>
                   <span
-                    className="absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform"
+                    className="absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-paper shadow transition-transform"
                     style={{ transform: settings.sentenceWritingMode ? 'translateX(0.75rem)' : 'translateX(0)' }}
                   />
                 </span>
@@ -2977,7 +2977,7 @@ export default function DailySessionFlow() {
               <div className="text-center -mt-1">
                 <div className="text-xs uppercase tracking-wide text-ink-soft mb-1">Copy this word</div>
                 <div className="text-2xl font-bold text-ink tracking-wide break-words">
-                  {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-accent hover:text-accent-deep transition-colors text-xl" />
+                  {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-label hover:text-label transition-colors text-xl" />
                 </div>
                 <WordGrammarInfo word={word} />
               </div>
@@ -2995,7 +2995,7 @@ export default function DailySessionFlow() {
                 instant aiUnreachable flips, before its own local status
                 message ever gets a chance to render). */}
             {aiUnreachable && (
-              <p className="text-accent-deep text-xs text-center px-2">
+              <p className="text-label text-xs text-center px-2">
                 Can't reach our AI service right now (this can happen depending on your network) —
                 switched off sentence-writing mode. You can turn it back on anytime in Settings.
               </p>
@@ -3022,7 +3022,7 @@ export default function DailySessionFlow() {
                 </div>
               ) : (
                 <div className="flex justify-center gap-2">
-                  <span className="bg-accent/15 text-accent-deep font-bold px-4 py-1 rounded-full text-lg">{word.article}</span>
+                  <span className="bg-accent/15 text-label font-bold px-4 py-1 rounded-full text-lg">{word.article}</span>
                 </div>
               )
             )}

@@ -355,7 +355,7 @@ export default function WordsPage() {
           <span className="font-semibold text-ink">
             {w.article ? `${w.article} ` : ''}{w.de}
           </span>
-          <SpeakerButton word={w} className="ml-1.5 text-accent-deep hover:text-ink transition-colors align-middle" />
+          <SpeakerButton word={w} className="ml-1.5 text-label hover:text-ink transition-colors align-middle" />
           {w.plural && <span className="text-ink-soft text-sm ml-2">· {w.plural}</span>}
           {/* Only shown when browsing a mixed-book view — "All books" or
               "My words" — where a row's own book isn't otherwise implied
@@ -366,7 +366,7 @@ export default function WordsPage() {
             </span>
           )}
           {isCustomWordId(w.id) && (
-            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-accent-deep bg-accent/15 rounded-full px-2 py-0.5 align-middle">
+            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-label bg-accent/15 rounded-full px-2 py-0.5 align-middle">
               My word
             </span>
           )}
@@ -490,12 +490,12 @@ export default function WordsPage() {
                 </p>
               )}
               {lookupStatus === 'limit-reached' && (
-                <p className="text-accent-deep text-sm">Used up today's AI lookups — come back tomorrow.</p>
+                <p className="text-label text-sm">Used up today's AI lookups — come back tomorrow.</p>
               )}
               {(lookupStatus === 'error' || lookupStatus === 'unreachable') && (
                 <div className="flex items-center gap-2">
                   <p className="text-clay text-sm">Couldn't look that up right now.</p>
-                  <button onClick={handleLookup} className="text-accent-deep text-sm font-semibold underline shrink-0">Try again</button>
+                  <button onClick={handleLookup} className="text-label text-sm font-semibold underline shrink-0">Try again</button>
                 </div>
               )}
             </>

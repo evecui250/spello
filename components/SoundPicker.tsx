@@ -39,8 +39,8 @@ export default function SoundPicker({ onChange }: Props) {
               isSelected ? 'border-accent bg-accent/10' : 'border-paper-line hover:border-accent/50'
             }`}
           >
-            <span className={`text-sm font-medium ${isSelected ? 'text-accent-deep' : 'text-ink'}`}>{opt.name}</span>
-            <span className={`text-xs ${isSelected ? 'text-accent' : 'text-ink-soft'}`}>{isSelected ? '✓ Selected' : '▶ Preview'}</span>
+            <span className={`text-sm font-medium ${isSelected ? 'text-label' : 'text-ink'}`}>{opt.name}</span>
+            <span className={`text-xs ${isSelected ? 'text-label' : 'text-ink-soft'}`}>{isSelected ? '✓ Selected' : '▶ Preview'}</span>
           </button>
         );
       })}

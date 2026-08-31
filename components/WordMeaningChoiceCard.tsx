@@ -105,9 +105,9 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
     <div className="flex flex-col gap-5">
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-5">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-medium text-accent-deep">What does this word mean?</div>
+          <div className="text-sm font-medium text-label">What does this word mean?</div>
           {isReview && (
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-accent-deep bg-paper-dim rounded-full px-2 py-0.5 shrink-0">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-label bg-paper-dim rounded-full px-2 py-0.5 shrink-0">
               Review
             </span>
           )}
@@ -122,7 +122,7 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
             <div className="text-center">
               <span className="text-2xl font-semibold text-ink">
                 {spokenForm(word)}
-                <SpeakerButton word={word} className="ml-1.5 text-accent-deep hover:text-ink transition-colors align-middle" />
+                <SpeakerButton word={word} className="ml-1.5 text-label hover:text-ink transition-colors align-middle" />
               </span>
             </div>
           ) : (
@@ -130,14 +130,14 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
               <button
                 onClick={() => speakWord(word)}
                 aria-label="Play the word again"
-                className="w-16 h-16 rounded-full bg-accent/15 text-accent-deep flex items-center justify-center hover:bg-accent/25 active:scale-95 transition-all"
+                className="w-16 h-16 rounded-full bg-accent/15 text-label flex items-center justify-center hover:bg-accent/25 active:scale-95 transition-all"
               >
                 <SpeakerIcon className="w-7 h-7" />
               </button>
               <span className="text-xs text-ink-soft">Tap to hear it again</span>
               <button
                 onClick={() => { setWordRevealed(true); onReveal?.(); }}
-                className="text-xs text-accent underline mt-1"
+                className="text-xs text-label underline mt-1"
               >
                 Can't listen right now? Show the word
               </button>
@@ -148,11 +148,11 @@ export default function WordMeaningChoiceCard({ word, correct: correctChoice, ch
           {choices.map(choice => {
             const isCorrectChoice = choice === correctChoice;
             const isPicked = choice === selected;
-            let cls = 'border-2 border-accent/30 bg-white/80 text-ink hover:border-accent/70 hover:bg-white';
+            let cls = 'border-2 border-accent/30 bg-paper/80 text-ink hover:border-accent/70 hover:bg-paper';
             if (selected !== null) {
               if (isCorrectChoice) cls = 'border-2 border-good-deep bg-good/25 text-good-deep';
               else if (isPicked) cls = 'border-2 border-clay bg-clay/20 text-clay';
-              else cls = 'border-2 border-accent/30 bg-white/60 text-ink-soft opacity-60';
+              else cls = 'border-2 border-accent/30 bg-paper/60 text-ink-soft opacity-60';
             }
             return (
               <button

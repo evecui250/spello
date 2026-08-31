@@ -132,13 +132,13 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
       <div className="flex items-center justify-between gap-2">
         <span className="text-lg font-bold text-ink">
           {word.article ? `${word.article} ` : ''}{word.de}
-          <SpeakerButton word={word} className="ml-1.5 align-middle text-accent hover:text-accent-deep transition-colors text-base" />
+          <SpeakerButton word={word} className="ml-1.5 align-middle text-label hover:text-label transition-colors text-base" />
         </span>
         <span className="text-ink-soft text-sm">{glossFor(word, nativeLanguage)}</span>
       </div>
 
       <div className="bg-accent/10 rounded-xl px-3 py-2">
-        <div className="text-xs uppercase tracking-wide text-accent mb-1">Translate to German</div>
+        <div className="text-xs uppercase tracking-wide text-label mb-1">Translate to German</div>
         <div className="text-ink italic">
           {promptOnScreen && nativeLanguage === 'zh'
             ? applyGlossFallback(segmentChineseForClicks(promptOnScreen, word), promptGlosses).map((span, i) => {
@@ -231,8 +231,8 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
       {!result && (
         <>
           {status === 'error' && <p className="text-clay text-xs">Couldn't check that — try again.</p>}
-          {status === 'limit-reached' && <p className="text-accent-deep text-xs">Used up today's practice limit — come back tomorrow.</p>}
-          {status === 'unreachable' && <p className="text-accent-deep text-xs">Can't reach our AI service right now.</p>}
+          {status === 'limit-reached' && <p className="text-label text-xs">Used up today's practice limit — come back tomorrow.</p>}
+          {status === 'unreachable' && <p className="text-label text-xs">Can't reach our AI service right now.</p>}
           <div className="flex gap-2">
             <button
               onClick={handleSubmit}
@@ -255,7 +255,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
                 onClick={handleExplain}
                 disabled={explanationStatus === 'loading'}
                 aria-label="Explain the grammar"
-                className="absolute top-2 right-2 text-accent text-xs font-semibold bg-white/70 hover:bg-white hover:text-accent-deep rounded-full px-2 py-0.5 transition-colors disabled:opacity-50"
+                className="absolute top-2 right-2 text-label text-xs font-semibold bg-paper/70 hover:bg-paper hover:text-label rounded-full px-2 py-0.5 transition-colors disabled:opacity-50"
               >
                 {explanationStatus === 'loading' ? '…' : 'Why?'}
               </button>
@@ -311,7 +311,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
             <p className="text-clay text-xs -mt-1">Couldn't load an explanation — try again.</p>
           )}
           {!diff.perfect && explanationStatus === 'limit-reached' && (
-            <p className="text-accent-deep text-xs -mt-1">Used up today's practice limit — come back tomorrow.</p>
+            <p className="text-label text-xs -mt-1">Used up today's practice limit — come back tomorrow.</p>
           )}
           {selectedWord && <WordInfoPanel key={selectedWord.id} word={selectedWord} />}
           {!selectedWord && selectedGlossToken && glosses[selectedGlossToken] && (

@@ -301,7 +301,7 @@ export default function WordMatchGame({ source, onQuit }: Props) {
               </button>
             </>
           ) : (
-            <p className="text-accent-deep bg-paper-dim/70 rounded-xl px-4 py-3 text-sm">
+            <p className="text-label bg-paper-dim/70 rounded-xl px-4 py-3 text-sm">
               Learn at least {GAME_MIN_WORDS_REQUIRED} words first to unlock this
               game — you have {learnedWords.length} so far.
             </p>
@@ -339,19 +339,19 @@ export default function WordMatchGame({ source, onQuit }: Props) {
               const isMatched = matchedIds.has(w.id);
               const isSelected = selectedGerman === w.id;
               const isWrong = wrongFlash?.german === w.id;
-              let germanCls = 'border-2 border-accent/30 bg-white/80 text-ink hover:border-accent/70';
+              let germanCls = 'border-2 border-accent/30 bg-paper/80 text-ink hover:border-accent/70';
               if (isMatched) germanCls = 'border-2 border-good-deep bg-good/25 text-good-deep opacity-0 scale-90 pointer-events-none';
               else if (isWrong) germanCls = 'border-2 border-clay bg-clay/20 text-clay';
-              else if (isSelected) germanCls = 'border-2 border-accent bg-accent/10 text-accent-deep';
+              else if (isSelected) germanCls = 'border-2 border-accent bg-accent/10 text-label';
 
               const text = shuffledEn[i];
               const enIsMatched = roundWords.some(rw => matchedIds.has(rw.id) && glossFor(rw, nativeLanguage) === text);
               const enIsSelected = selectedEnglish === text;
               const enIsWrong = wrongFlash?.english === text;
-              let enCls = 'border-2 border-accent/30 bg-white/80 text-ink hover:border-accent/70';
+              let enCls = 'border-2 border-accent/30 bg-paper/80 text-ink hover:border-accent/70';
               if (enIsMatched) enCls = 'border-2 border-good-deep bg-good/25 text-good-deep opacity-0 scale-90 pointer-events-none';
               else if (enIsWrong) enCls = 'border-2 border-clay bg-clay/20 text-clay';
-              else if (enIsSelected) enCls = 'border-2 border-accent bg-accent/10 text-accent-deep';
+              else if (enIsSelected) enCls = 'border-2 border-accent bg-accent/10 text-label';
 
               return (
                 <Fragment key={w.id}>
@@ -379,7 +379,7 @@ export default function WordMatchGame({ source, onQuit }: Props) {
       {phase === 'over' && (
         <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-3 items-center text-center">
           <h2 className="text-lg font-bold text-ink">Time&apos;s up!</h2>
-          <div className="text-3xl font-extrabold text-accent-deep">{matchedCount} pairs matched</div>
+          <div className="text-3xl font-extrabold text-label">{matchedCount} pairs matched</div>
           <button
             type="button"
             onClick={startGame}

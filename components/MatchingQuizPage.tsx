@@ -84,7 +84,7 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
   return (
     <div className="flex flex-col gap-5">
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-4">
-        <div className="text-sm font-medium text-accent-deep">Match each word to its meaning</div>
+        <div className="text-sm font-medium text-label">Match each word to its meaning</div>
         {/* One shared grid (German+English interleaved in DOM order) rather
             than two independently-flexed columns — CSS Grid sizes each row
             to its tallest cell across BOTH columns, so a two-line German
@@ -99,19 +99,19 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
             const isCorrect = correctIds.has(w.id);
             const isSelected = selectedGerman === w.id;
             const isWrong = wrongFlash?.german === w.id;
-            let germanCls = 'border-2 border-accent/30 bg-white/80 text-ink hover:border-accent/70 hover:bg-white';
+            let germanCls = 'border-2 border-accent/30 bg-paper/80 text-ink hover:border-accent/70 hover:bg-paper';
             if (isCorrect) germanCls = 'border-2 border-good-deep bg-good/25 text-good-deep';
             else if (isWrong) germanCls = 'border-2 border-clay bg-clay/20 text-clay';
-            else if (isSelected) germanCls = 'border-2 border-accent bg-accent/10 text-accent-deep';
+            else if (isSelected) germanCls = 'border-2 border-accent bg-accent/10 text-label';
 
             const text = shuffledEn[i];
             const enIsCorrect = words.some(ew => correctIds.has(ew.id) && glossFor(ew, nativeLanguage) === text);
             const enIsSelected = selectedEnglish === text;
             const enIsWrong = wrongFlash?.english === text;
-            let enCls = 'border-2 border-accent/30 bg-white/80 text-ink hover:border-accent/70 hover:bg-white';
+            let enCls = 'border-2 border-accent/30 bg-paper/80 text-ink hover:border-accent/70 hover:bg-paper';
             if (enIsCorrect) enCls = 'border-2 border-good-deep bg-good/25 text-good-deep';
             else if (enIsWrong) enCls = 'border-2 border-clay bg-clay/20 text-clay';
-            else if (enIsSelected) enCls = 'border-2 border-accent bg-accent/10 text-accent-deep';
+            else if (enIsSelected) enCls = 'border-2 border-accent bg-accent/10 text-label';
 
             return (
               <Fragment key={w.id}>

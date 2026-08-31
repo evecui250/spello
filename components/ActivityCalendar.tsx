@@ -15,7 +15,7 @@ import CongratsModal from './CongratsModal';
 // bronze/amber tone the cream card backgrounds already lean on, so neither
 // mark fights with the page around it.
 const FULL_CLASSES = 'bg-good/70 text-good-deep';
-const PARTIAL_CLASSES = 'bg-gold/70 text-accent-deep';
+const PARTIAL_CLASSES = 'bg-gold/70 text-label';
 // Darker than a typical muted label (stone-400) so the date digits stay
 // easy to read at a glance, without going all the way to the near-black
 // headings use — this is still a secondary/quiet element on the card.
@@ -294,7 +294,7 @@ function DayDetailPopup({ dateStr, isFullDay, onClose }: { dateStr: string; isFu
           <button
             type="button"
             onClick={() => setShowCard(true)}
-            className="self-start text-xs font-semibold text-accent-deep hover:text-ink bg-accent/10 hover:bg-accent/15 rounded-full px-3 py-1.5 transition-colors"
+            className="self-start text-xs font-semibold text-label hover:text-ink bg-accent/10 hover:bg-accent/15 rounded-full px-3 py-1.5 transition-colors"
           >
             View card
           </button>
@@ -309,7 +309,7 @@ function DayDetailPopup({ dateStr, isFullDay, onClose }: { dateStr: string; isFu
                   {learned.length} word{learned.length === 1 ? '' : 's'} learned
                 </h3>
                 {learned.map(w => (
-                  <div key={w.id} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2 gap-2">
+                  <div key={w.id} className="flex items-center justify-between bg-paper/60 rounded-lg px-3 py-2 gap-2">
                     <span className="text-ink font-medium truncate">{w.article ? `${w.article} ` : ''}{w.de}</span>
                     <span className="text-ink-soft text-sm text-right truncate">{glossFor(w, nativeLanguage)}</span>
                   </div>
@@ -322,7 +322,7 @@ function DayDetailPopup({ dateStr, isFullDay, onClose }: { dateStr: string; isFu
                   {reviewed.length} word{reviewed.length === 1 ? '' : 's'} reviewed
                 </h3>
                 {reviewed.map(w => (
-                  <div key={w.id} className="flex items-center justify-between bg-white/60 rounded-lg px-3 py-2 gap-2">
+                  <div key={w.id} className="flex items-center justify-between bg-paper/60 rounded-lg px-3 py-2 gap-2">
                     <span className="text-ink font-medium truncate">{w.article ? `${w.article} ` : ''}{w.de}</span>
                     <span className="text-ink-soft text-sm text-right truncate">{glossFor(w, nativeLanguage)}</span>
                   </div>

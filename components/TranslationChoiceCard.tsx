@@ -80,9 +80,9 @@ export default function TranslationChoiceCard({ word, correct: correctChoice, ch
     <div className="flex flex-col gap-5">
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-5">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-medium text-accent-deep">Which German word means this?</div>
+          <div className="text-sm font-medium text-label">Which German word means this?</div>
           {isReview && (
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-accent-deep bg-paper-dim rounded-full px-2 py-0.5 shrink-0">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-label bg-paper-dim rounded-full px-2 py-0.5 shrink-0">
               Review
             </span>
           )}
@@ -94,17 +94,17 @@ export default function TranslationChoiceCard({ word, correct: correctChoice, ch
           {choices.map(choice => {
             const isCorrectChoice = choice === correctChoice;
             const isPicked = choice === selected;
-            // A real bg-white fill (not just a faint border on the card's
+            // A real bg-paper fill (not just a faint border on the card's
             // own translucent background) — confirmed real: against a
             // bright theme, the card's bg-paper/75 lets enough of a
             // vivid backdrop bleed through that a border-only button all
             // but disappeared. The fill keeps it visible regardless of
             // theme.
-            let cls = 'border-2 border-accent/30 bg-white/80 text-ink hover:border-accent/70 hover:bg-white';
+            let cls = 'border-2 border-accent/30 bg-paper/80 text-ink hover:border-accent/70 hover:bg-paper';
             if (selected !== null) {
               if (isCorrectChoice) cls = 'border-2 border-good-deep bg-good/25 text-good-deep';
               else if (isPicked) cls = 'border-2 border-clay bg-clay/20 text-clay';
-              else cls = 'border-2 border-accent/30 bg-white/60 text-ink-soft opacity-60';
+              else cls = 'border-2 border-accent/30 bg-paper/60 text-ink-soft opacity-60';
             }
             return (
               <button

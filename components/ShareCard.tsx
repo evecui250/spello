@@ -134,7 +134,7 @@ export default function ShareCard() {
                 <button
                   type="button"
                   onClick={handleInstall}
-                  className="bg-paper-dim text-accent-deep px-4 py-2 rounded-xl font-semibold text-sm hover:bg-gold active:scale-95 transition-all"
+                  className="bg-paper-dim text-label px-4 py-2 rounded-xl font-semibold text-sm hover:bg-gold active:scale-95 transition-all"
                 >
                   Install app
                 </button>

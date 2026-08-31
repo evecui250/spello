@@ -31,7 +31,7 @@ export default function GlossPopup({ gloss }: Props) {
           type="button"
           onClick={() => speakText(gloss.lemma)}
           aria-label={`Play pronunciation of ${gloss.lemma}`}
-          className="ml-1.5 align-middle text-accent hover:text-accent-deep transition-colors"
+          className="ml-1.5 align-middle text-label hover:text-label transition-colors"
         >
           <SpeakerIcon />
         </button>

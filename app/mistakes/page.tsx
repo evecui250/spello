@@ -75,7 +75,7 @@ export default function MistakesPage() {
           <span className="font-semibold text-ink">
             {w.article ? `${w.article} ` : ''}{w.de}
           </span>
-          <SpeakerButton word={w} className="text-accent-deep hover:text-ink transition-colors align-middle" />
+          <SpeakerButton word={w} className="text-label hover:text-ink transition-colors align-middle" />
           <span className="text-ink-soft text-sm">{glossFor(w, nativeLanguage)}</span>
         </div>
         {sentence && (
@@ -91,7 +91,7 @@ export default function MistakesPage() {
         {mistake && (
           <button
             onClick={() => setRedoTarget({ word: w, mistake })}
-            className="mt-2 text-xs font-semibold text-accent-deep bg-paper-dim rounded-full px-2.5 py-1 hover:bg-gold transition-colors"
+            className="mt-2 text-xs font-semibold text-label bg-paper-dim rounded-full px-2.5 py-1 hover:bg-gold transition-colors"
           >
             ✎ Redo this sentence
           </button>

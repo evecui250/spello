@@ -27,6 +27,17 @@
   --color-good-deep: #5E8F71;
   --color-clay: #B6573A;
   --color-gold: #E8C76A;
+  /* Eyebrow labels, speaker icons, badges, links — accent-colored TEXT
+     sitting directly on the paper surface (as opposed to white/ink text
+     on a solid accent BACKGROUND, which isn't affected by this). Defaults
+     to accent-deep (referencing it, not copying its value, so this always
+     tracks whichever theme is active) — measured contrast against the
+     night parchment below 3.5:1 for most themes, well under WCAG's 4.5:1,
+     so [data-card-mode="dark"] overrides this to gold instead (5.4-10:1
+     against night paper across every theme — verified, not assumed). One
+     override for all ten themes, not per-theme, since gold already clears
+     the bar everywhere. */
+  --color-label: var(--color-accent-deep);
   /* Header/link text sitting directly on the dark sky background (not on
      a card) — Tailwind's opacity modifier (text-on-bg/70) covers the
      "softer" variant instead of a second token. */
@@ -132,13 +143,18 @@ h1, h2, h3 { font-family: var(--font-display); }
    you stare at for minutes at a time; the sky behind it is decorative).
    One warm, dim parchment substitute for all ten skies, rather than a
    separate dark variant per theme — accent/good/clay/gold intentionally
-   stay exactly as the active sky already defines them above, so buttons
-   keep their real color identity and only the reading surface itself
-   dims. Placed last so it wins over whichever [data-app-theme] block is
-   also active on the same root element. */
+   stay exactly as the active sky already defines them above, so BUTTON
+   backgrounds keep their real color identity and only the reading
+   surface itself dims. --color-label is the one deliberate exception:
+   it's accent-colored TEXT sitting directly on that now-dark paper (see
+   its own comment in the @theme block above), which the unchanged accent
+   colors don't have enough contrast for at this darkness — measured, not
+   assumed. Placed last so it wins over whichever [data-app-theme] block
+   is also active on the same root element. */
 [data-card-mode="dark"] {
   --color-paper: #241E19; --color-paper-dim: #2E2620; --color-paper-line: #453A30;
   --color-ink: #EDE3D2; --color-ink-soft: #A99A82;
+  --color-label: var(--color-gold);
 }
 
 /* Shared card/button surfaces for the next (per-page) restyle pass to

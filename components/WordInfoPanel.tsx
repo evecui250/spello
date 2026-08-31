@@ -34,7 +34,7 @@ export default function WordInfoPanel({ word, usedForm, isPreview }: Props) {
       <div className="flex items-center justify-between gap-2">
         <span className="text-lg font-bold text-ink">
           {word.article ? `${word.article} ` : ''}{word.de}
-          <SpeakerButton word={word} allowAudioGeneration={!isPreview} className="ml-1.5 align-middle text-accent hover:text-accent-deep transition-colors text-base" />
+          <SpeakerButton word={word} allowAudioGeneration={!isPreview} className="ml-1.5 align-middle text-label hover:text-label transition-colors text-base" />
         </span>
         {/* A custom (AI-looked-up) word isn't actually FROM the curated
             book it's filed under -- "from B2" there would misleadingly
@@ -43,7 +43,7 @@ export default function WordInfoPanel({ word, usedForm, isPreview }: Props) {
             List's own lookup PREVIEW (see app/words/page.tsx), which is
             given a real "custom-" id before it's ever actually saved, for
             precisely this reason. */}
-        <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 ${isCustomWordId(word.id) ? 'text-accent-deep bg-accent/15' : 'text-ink-soft bg-paper-dim'}`}>
+        <span className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 ${isCustomWordId(word.id) ? 'text-label bg-accent/15' : 'text-ink-soft bg-paper-dim'}`}>
           {isCustomWordId(word.id) ? 'My word' : `from ${word.level.replace('_old', '')}`}
         </span>
       </div>

@@ -164,7 +164,7 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
   return (
     <div className="flex flex-col gap-5">
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-5">
-        <div className="text-sm font-medium text-accent-deep">
+        <div className="text-sm font-medium text-label">
           {checked ? (allCorrect ? 'Perfect!' : 'Here\'s how it fits together') : 'Tap a word, then tap where it belongs'}
         </div>
 
@@ -203,8 +203,8 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
                     onClick={() => handleTrayTap(trayIdx)}
                     className={`px-4 py-2 rounded-xl font-medium border-2 transition-all ${
                       selectedTray === trayIdx
-                        ? 'border-accent bg-accent/15 text-accent-deep scale-105'
-                        : 'border-accent/30 bg-white/80 text-ink hover:border-accent/70'
+                        ? 'border-accent bg-accent/15 text-label scale-105'
+                        : 'border-accent/30 bg-paper/80 text-ink hover:border-accent/70'
                     }`}
                   >
                     {answer}
@@ -244,11 +244,11 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
                 const w = wordById.get(blank.wordId);
                 if (!w) return null;
                 return (
-                  <div key={i} className="flex items-center justify-between gap-3 bg-white/70 rounded-xl px-4 py-2.5">
+                  <div key={i} className="flex items-center justify-between gap-3 bg-paper/70 rounded-xl px-4 py-2.5">
                     <div>
                       <span className="font-semibold text-ink">
                         {w.article ? `${w.article} ` : ''}{w.de}
-                        <SpeakerButton word={w} className="ml-1.5 text-accent-deep hover:text-ink transition-colors align-middle" />
+                        <SpeakerButton word={w} className="ml-1.5 text-label hover:text-ink transition-colors align-middle" />
                       </span>
                       <div className="text-ink-soft text-sm">{glossFor(w, getSettings().nativeLanguage)}</div>
                     </div>
@@ -282,13 +282,13 @@ function BlankSlot({
   correctAnswer: string;
   onTap: () => void;
 }) {
-  let cls = 'border-paper-line bg-white/60 text-ink-soft';
+  let cls = 'border-paper-line bg-paper/60 text-ink-soft';
   if (checked) {
     cls = correct ? 'border-good-deep bg-good/25 text-good-deep hover:bg-good/35' : 'border-clay bg-clay/20 text-clay hover:bg-clay/30';
   } else if (filled !== null) {
-    cls = 'border-accent/70 bg-accent/10 text-accent-deep';
+    cls = 'border-accent/70 bg-accent/10 text-label';
   } else if (selectable) {
-    cls = 'border-accent/70 bg-accent/60 text-accent animate-pulse';
+    cls = 'border-accent/70 bg-accent/60 text-ink animate-pulse';
   }
   return (
     <button

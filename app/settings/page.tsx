@@ -212,7 +212,7 @@ export default function SettingsPage() {
               interactive on this page) makes it look like a real control,
               not decoration. */}
           <span
-            className={`shrink-0 w-8 h-8 rounded-full bg-accent/15 text-accent-deep flex items-center justify-center text-base font-bold transition-transform ${appearanceOpen ? 'rotate-180' : ''}`}
+            className={`shrink-0 w-8 h-8 rounded-full bg-accent/15 text-label flex items-center justify-center text-base font-bold transition-transform ${appearanceOpen ? 'rotate-180' : ''}`}
           >
             ▾
           </span>
@@ -238,7 +238,7 @@ export default function SettingsPage() {
                           isSelected ? 'ring-2 ring-offset-2 ring-offset-amber-50 ring-accent scale-110' : 'ring-1 ring-black/10'
                         }`}
                       />
-                      <span className={`text-[11px] font-medium capitalize ${isSelected ? 'text-accent-deep' : 'text-ink-soft'}`}>
+                      <span className={`text-[11px] font-medium capitalize ${isSelected ? 'text-label' : 'text-ink-soft'}`}>
                         {t}
                       </span>
                     </button>
@@ -263,7 +263,7 @@ export default function SettingsPage() {
                       type="button"
                       onClick={() => handleCardModeChange(opt.value)}
                       className={`rounded-xl py-3 border-2 font-medium text-sm transition-colors ${
-                        isSelected ? 'border-accent bg-accent/10 text-accent-deep' : 'border-paper-line text-ink-soft'
+                        isSelected ? 'border-accent bg-accent/10 text-label' : 'border-paper-line text-ink-soft'
                       }`}
                     >
                       {opt.label}
@@ -293,7 +293,7 @@ export default function SettingsPage() {
                       }`}
                     >
                       <span className={`font-bold text-ink ${opt.sample}`}>Aa</span>
-                      <span className={`text-xs font-medium ${isSelected ? 'text-accent-deep' : 'text-ink-soft'}`}>{opt.label}</span>
+                      <span className={`text-xs font-medium ${isSelected ? 'text-label' : 'text-ink-soft'}`}>{opt.label}</span>
                     </button>
                   );
                 })}
@@ -504,7 +504,7 @@ export default function SettingsPage() {
       <button
         type="button"
         onClick={() => setResetModalOpen(true)}
-        className="text-center bg-clay/80 backdrop-blur-sm rounded-2xl border border-clay shadow-sm p-4 font-semibold text-clay hover:bg-clay/60 transition-colors"
+        className="text-center bg-clay/15 backdrop-blur-sm rounded-2xl border border-clay shadow-sm p-4 font-semibold text-clay hover:bg-clay/25 transition-colors"
       >
         Reset account
       </button>

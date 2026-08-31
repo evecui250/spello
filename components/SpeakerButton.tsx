@@ -45,7 +45,7 @@ export default function SpeakerButton({ word, className, allowAudioGeneration = 
       onClick={handleClick}
       aria-label={failed ? `Couldn't play pronunciation of ${word.de} — tap to try again` : `Play pronunciation of ${word.de}`}
       title={failed ? "Couldn't play — tap to try again" : undefined}
-      className={(className ?? 'text-accent hover:text-accent-deep transition-colors') + (failed ? ' text-clay' : '')}
+      className={(className ?? 'text-label hover:text-label transition-colors') + (failed ? ' text-clay' : '')}
     >
       <SpeakerIcon muted={failed} />
     </button>
