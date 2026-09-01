@@ -16,4 +16,12 @@ scripts/.zh-translations-cache.json
 scripts/.vocab-compliance-cache.json
 scripts/.polysemy-cache.json
 scripts/.preposition-notes-cache.json
+scripts/.audit-word-fit-cache.json
+scripts/.audit-word-fit-flagged.json
+scripts/.confirm-word-fit-cache.json
+scripts/.confirm-word-fit-confirmed.json
+scripts/.regenerate-cache.json
+scripts/.final-keep-list.json
+scripts/.to-apply.json
+scripts/.final-apply.json
 scripts/__pycache__/
