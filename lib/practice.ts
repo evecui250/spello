@@ -186,11 +186,13 @@ export function buildStudyWords(
 }
 
 // The ~220 curated high-frequency A1 words (see lib/words.ts) always use
-// the old copy-the-word round 1, never the AI translation exercise —
-// checked independently of progress, since it's the same rule whether this
+// the old copy-the-word round 1, never the AI translation exercise — same
+// for any word individually flagged copyModeOnly (a handful of words
+// elsewhere in the corpus with no reliable translation-exercise sentence).
+// Checked independently of progress, since it's the same rule whether this
 // is the word's first pass or a Hint-triggered demotion back to round 1.
 export function isBootstrapCopyWord(word: Word): boolean {
-  return word.level === 'A1' && !!word.highFrequency;
+  return (word.level === 'A1' && !!word.highFrequency) || !!word.copyModeOnly;
 }
 
 // Which levels' full vocabulary counts as "already known" for a given
