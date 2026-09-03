@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { Word, Level, glossFor, diffAgainstAttempt, resolveClickedWord, isWordToken, findWordByEnglishForm, segmentChineseForClicks, applyGlossFallback, tokenize } from '../lib/words';
-import { WordProgress, getSettings, getWordProgress, saveWordProgress } from '../lib/storage';
+import { WordProgress, getSettings, getWordProgress, saveWordProgress, today } from '../lib/storage';
 import { correctSentence, explainCorrection, getSentenceGlosses, WordGloss, ExplanationResult, DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
 import { scheduleSync } from '../lib/sync';
 import { playCorrectChime } from '../lib/sound';
+import { supabase } from '../lib/supabase';
 import SpeakerButton from './SpeakerButton';
 import TextSpeakerButton from './TextSpeakerButton';
 import WordInfoPanel from './WordInfoPanel';
 import GlossPopup from './GlossPopup';
+import { PointsIcon } from './icons';
 
 interface Props {
   word: Word;
@@ -46,6 +48,16 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
   const [selectedPromptGlossToken, setSelectedPromptGlossToken] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<ExplanationResult | null>(null);
   const [explanationStatus, setExplanationStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached'>('idle');
+  // Set true only when a perfect correction actually earns a NEW point --
+  // i.e. this word hadn't already been touched today via the normal
+  // study/review flow (points are 1-per-distinct-word-per-day, driven by
+  // lastPracticed -- see this card's own handleSubmit for where that gets
+  // set). Points only actually accrue for signed-in learners.
+  const [earnedPoint, setEarnedPoint] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSignedIn(!!data.session));
+  }, []);
   const nativeLanguage = getSettings().nativeLanguage;
 
   const diff = result ? diffAgainstAttempt(input, result.sentence) : null;
@@ -92,8 +104,18 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
         // writes elsewhere shouldn't be clobbered by a stale snapshot.
         const current = getWordProgress(word.id);
         const at = new Date().toISOString();
+        const t = today();
+        // A perfect correction earns a point the same way any other
+        // practice does -- by touching lastPracticed, which is exactly
+        // what daily_activity's words_studied (and so the points economy,
+        // see lib/shop.ts) already counts, once per distinct word per
+        // day. Only a genuinely NEW touch today earns a NEW point --
+        // re-perfecting a word already practiced today via the normal
+        // flow doesn't double-count, same as any other source wouldn't.
+        setEarnedPoint(perfect && current.lastPracticed !== t);
         saveWordProgress({
           ...current,
+          lastPracticed: perfect ? t : current.lastPracticed,
           exampleSentence: perfect
             ? { sentence: correction.sentence, wordForm: correction.wordForm, englishPrompt: mistake.englishPrompt, englishPromptZh: mistake.englishPromptZh, at }
             : current.exampleSentence,
@@ -264,6 +286,11 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
               {diff.perfect ? '✓ Perfect!' : 'Correction'}
               <TextSpeakerButton text={result.sentence} className="text-good hover:text-good-deep transition-colors normal-case" />
             </div>
+            {diff.perfect && earnedPoint && signedIn && (
+              <div className="flex items-center justify-center gap-1 text-good-deep font-mono font-bold text-xs mb-1">
+                <PointsIcon className="w-3.5 h-3.5" /> +1 point
+              </div>
+            )}
             <div className="text-lg text-good-deep text-center">
               {diff.tokens.map(({ text, changed }, i) => {
                 const lemmaMap = Object.fromEntries(Object.entries(glosses).map(([k, v]) => [k, v.lemma]));
