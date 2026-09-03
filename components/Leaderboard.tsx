@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { SYNCED_EVENT } from '../lib/sync';
 import { AVATAR_CATALOG } from '../lib/shop';
+import { PointsIcon } from './icons';
 
 interface LeaderboardEntry {
   userId: string;
@@ -12,9 +13,16 @@ interface LeaderboardEntry {
   points: number;
 }
 
+interface DateRange {
+  start: string;
+  end: string;
+}
+
 interface LeaderboardResponse {
   week: LeaderboardEntry[];
   month: LeaderboardEntry[];
+  weekRange: DateRange;
+  monthRange: DateRange;
 }
 
 const MEDAL_COLOR = ['#E8C76A', '#B8B8B8', '#C9863F'];
@@ -24,6 +32,14 @@ function avatarImage(avatarId: string): string {
   return found?.image || AVATAR_CATALOG[0].image;
 }
 
+function fmtDay(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function fmtRange(range: DateRange): string {
+  return `${fmtDay(range.start)} – ${fmtDay(range.end)}`;
+}
+
 // Public/read-only for everyone, signed in or not — no props, no auth
 // awareness needed. Fetches on mount and again whenever a sync completes
 // (the viewer's own just-synced activity can change their rank).
@@ -31,6 +47,7 @@ export default function Leaderboard() {
   const [tab, setTab] = useState<'week' | 'month'>('week');
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [myUserId, setMyUserId] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     const load = () => {
@@ -44,17 +61,21 @@ export default function Leaderboard() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setMyUserId(session?.user.id ?? null));
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setMyUserId(session?.user.id ?? null);
+      setAuthChecked(true);
+    });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => setMyUserId(session?.user.id ?? null));
     return () => sub.subscription.unsubscribe();
   }, []);
 
   const entries = data?.[tab] ?? [];
-  if (data && entries.length === 0 && data.week.length === 0 && data.month.length === 0) return null;
+  const range = data ? (tab === 'week' ? data.weekRange : data.monthRange) : null;
+  if (data && data.week.length === 0 && data.month.length === 0) return null;
 
   return (
     <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-1">
         <h2 className="font-bold text-ink">Top Learners</h2>
         <div className="flex gap-1 bg-paper-dim rounded-full p-1">
           {(['week', 'month'] as const).map(t => (
@@ -70,6 +91,7 @@ export default function Leaderboard() {
           ))}
         </div>
       </div>
+      {range && <p className="text-ink-soft text-xs mb-3">{fmtRange(range)}</p>}
       {entries.length === 0 ? (
         <p className="text-ink-soft text-sm">No one has studied {tab === 'week' ? 'this week' : 'this month'} yet — be the first!</p>
       ) : (
@@ -96,11 +118,18 @@ export default function Leaderboard() {
                   {e.displayName}
                   {isMe && <span className="ml-1.5 text-xs font-bold text-accent-deep">(you)</span>}
                 </span>
-                <span className="font-mono text-sm font-semibold text-label">{e.points.toLocaleString()}</span>
+                <span className="flex items-center gap-1 font-mono text-sm font-semibold text-label">
+                  <PointsIcon className="w-3.5 h-3.5" /> {e.points.toLocaleString()}
+                </span>
               </div>
             );
           })}
         </div>
+      )}
+      {authChecked && !myUserId && (
+        <p className="text-ink-soft text-xs mt-3 pt-3 border-t border-paper-line/60">
+          Sign in (Settings → Account) to appear on this leaderboard yourself.
+        </p>
       )}
     </div>
   );

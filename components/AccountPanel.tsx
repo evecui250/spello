@@ -6,6 +6,7 @@ import { SYNCED_EVENT } from '../lib/sync';
 import { getAiUsageStats, AiUsageStats } from '../lib/ai';
 import { AVATAR_CATALOG, getMyProfile, setNickname as saveNickname, setLeaderboardOptOut } from '../lib/shop';
 import MascotShopModal from './MascotShopModal';
+import { PointsIcon } from './icons';
 
 interface Props {
   // Called after remote data has been pulled and merged in, so the caller
@@ -181,7 +182,7 @@ export default function AccountPanel({ onSync }: Props) {
 
         {balance !== null && (
           <div className="flex items-center justify-between bg-paper-dim border border-gold rounded-xl px-4 py-2.5">
-            <span className="text-ink-soft text-sm font-semibold">🏅 Points</span>
+            <span className="flex items-center gap-1.5 text-ink-soft text-sm font-semibold"><PointsIcon className="w-4 h-4" /> Points</span>
             <span className="font-mono text-base font-bold text-label">{balance.toLocaleString()}</span>
           </div>
         )}

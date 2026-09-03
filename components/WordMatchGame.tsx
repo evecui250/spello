@@ -9,6 +9,7 @@ import { speakWord } from '../lib/speech';
 import { getOrCreateDeviceId } from '../lib/telemetry';
 import { supabase } from '../lib/supabase';
 import { GAME_MIN_WORDS_REQUIRED } from '../lib/practice';
+import { PointsIcon } from './icons';
 
 // The actual "match the German word to its meaning" game, shared by both
 // real entry points: app/game/page.tsx (Settings' standalone preview link,
@@ -385,7 +386,11 @@ export default function WordMatchGame({ source, onQuit }: Props) {
         <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-3 items-center text-center">
           <h2 className="text-lg font-bold text-ink">Time&apos;s up!</h2>
           <div className="text-3xl font-extrabold text-label">{matchedCount} pairs matched</div>
-          {earnedPoint && <div className="text-label font-mono font-bold text-sm">🏅 +1 point</div>}
+          {earnedPoint && (
+            <div className="flex items-center gap-1 text-label font-mono font-bold text-sm">
+              <PointsIcon className="w-4 h-4" /> +1 point
+            </div>
+          )}
           <button
             type="button"
             onClick={startGame}

@@ -105,3 +105,24 @@ export function SpeakerIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+// The points currency's own mark — a coin rather than a generic star or
+// medal emoji, with a small sprout in place of a face/number so it ties
+// back to the same growth motif as SproutIcon/the mascot's own progress
+// stages, rather than reading as a game-generic "score" token. Self-
+// colored (gold + accent-deep), not currentColor -- it's meant to look
+// like a specific, real currency wherever it appears, not inherit
+// whatever text color surrounds it the way the outline icons above do.
+export function PointsIcon({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className}>
+      <circle cx="12" cy="12" r="9.5" fill="var(--color-gold)" stroke="var(--color-accent-deep)" strokeWidth="1.25" />
+      <circle cx="12" cy="12" r="7" fill="none" stroke="var(--color-accent-deep)" strokeOpacity="0.35" strokeWidth="1" />
+      <path
+        d="M12 15.5V10M12 10c0-2 -1.6-3.6-3.6-3.6 0 2 1.6 3.6 3.6 3.6Zm0 1.4c0-2 1.6-3.6 3.6-3.6 0 2-1.6 3.6-3.6 3.6Z"
+        fill="var(--color-accent-deep)"
+        stroke="none"
+      />
+    </svg>
+  );
+}

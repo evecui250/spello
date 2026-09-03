@@ -51,6 +51,11 @@ function firstOfMonth(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`;
 }
 
+function lastOfMonth(d: Date): string {
+  // Day 0 of next month == last day of this month.
+  return dateStr(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)));
+}
+
 // Shows the first 2 letters (not just 1) so people can at least
 // recognize their own or a friend's entry — still nowhere near enough to
 // identify a stranger from it.
@@ -146,7 +151,13 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    return json({ week: buildWindow(weekStart), month: buildWindow(monthStart) });
+    const weekEnd = dateStr(new Date(new Date(weekStart).getTime() + 6 * DAY_MS));
+    return json({
+      week: buildWindow(weekStart),
+      month: buildWindow(monthStart),
+      weekRange: { start: weekStart, end: weekEnd },
+      monthRange: { start: monthStart, end: lastOfMonth(now) },
+    });
   } catch (err) {
     console.error('get-leaderboard error:', err);
     return json({ error: 'Unexpected error' }, 500);

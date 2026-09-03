@@ -6,6 +6,7 @@ import {
   AVATAR_CATALOG, ACCESSORY_CATALOG, getMyProfile, buyAccessory,
   setAvatarId as saveAvatarId, setEquippedAccessory,
 } from '../lib/shop';
+import { PointsIcon } from './icons';
 
 interface Props {
   onClose: () => void;
@@ -94,7 +95,7 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
         ) : (
           <>
             <div className="flex items-center justify-between bg-paper-dim border border-gold rounded-xl px-4 py-3">
-              <span className="text-ink-soft text-sm font-semibold">🏅 Points</span>
+              <span className="flex items-center gap-1.5 text-ink-soft text-sm font-semibold"><PointsIcon className="w-4 h-4" /> Points</span>
               <span className="font-mono text-lg font-bold text-label">{balance.toLocaleString()}</span>
             </div>
 
@@ -139,8 +140,8 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
                   if (!owned && confirmingId === acc.id) {
                     return (
                       <div key={acc.id} className="col-span-3 flex flex-col items-center gap-2 rounded-xl border border-accent bg-accent/10 px-3 py-3 text-center">
-                        <span className="text-sm font-semibold text-ink">
-                          Spend 🏅 {acc.cost} on {acc.name}? This can&apos;t be undone.
+                        <span className="flex items-center gap-1 text-sm font-semibold text-ink">
+                          Spend <PointsIcon className="w-4 h-4" /> {acc.cost} on {acc.name}? This can&apos;t be undone.
                         </span>
                         <div className="flex gap-2">
                           <button
@@ -176,8 +177,8 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
                       }`}
                     >
                       <span className="text-sm font-semibold text-ink">{acc.name}</span>
-                      <span className={`text-xs font-mono ${equipped ? 'text-accent-deep' : owned ? 'text-good-deep' : 'text-label'}`}>
-                        {equipped ? 'Equipped' : owned ? 'Owned' : `🏅 ${acc.cost}`}
+                      <span className={`flex items-center gap-1 text-xs font-mono ${equipped ? 'text-accent-deep' : owned ? 'text-good-deep' : 'text-label'}`}>
+                        {equipped ? 'Equipped' : owned ? 'Owned' : <><PointsIcon className="w-3.5 h-3.5" /> {acc.cost}</>}
                       </span>
                     </button>
                   );

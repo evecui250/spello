@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { PointsIcon } from './icons';
 
 interface Props {
   studiedCount: number;
@@ -237,7 +238,7 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
       >
         {signedIn && (studiedCount > 0 || reviewedCount > 0) && (
           <div className="flex items-center justify-center gap-1.5 -mb-1">
-            <span className="text-label font-mono font-bold text-lg">🏅 +{studiedCount + reviewedCount}</span>
+            <span className="flex items-center gap-1 text-label font-mono font-bold text-lg"><PointsIcon className="w-5 h-5" /> +{studiedCount + reviewedCount}</span>
             <span className="text-ink-soft text-sm">points earned today</span>
           </div>
         )}

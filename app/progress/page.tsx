@@ -14,6 +14,7 @@ import DachshundMascot from '../../components/Mascot';
 import GoalDaysBadge from '../../components/GoalDaysBadge';
 import ActivityCalendar from '../../components/ActivityCalendar';
 import Leaderboard from '../../components/Leaderboard';
+import { LEADERBOARD_SEEN_KEY, LEADERBOARD_SEEN_EVENT } from '../../components/NavBar';
 import { THEME_CONFIG } from '../../components/AppBackground';
 
 // A fixed pixel cap for the tallest bar, not a percentage of some
@@ -58,6 +59,14 @@ export default function ProgressPage() {
   // shows a per-level count breakdown instead (see the popup itself).
   const [openStage, setOpenStage] = useState<MascotStageId | null>(null);
   const [theme, setTheme] = useState<Theme>('forest');
+
+  // Clears the Progress nav tab's "new feature" dot the moment this page
+  // is actually visited — see NavBar.tsx.
+  useEffect(() => {
+    if (localStorage.getItem(LEADERBOARD_SEEN_KEY)) return;
+    localStorage.setItem(LEADERBOARD_SEEN_KEY, '1');
+    window.dispatchEvent(new Event(LEADERBOARD_SEEN_EVENT));
+  }, []);
 
   useEffect(() => {
     const loadTheme = () => setTheme(getTheme());
