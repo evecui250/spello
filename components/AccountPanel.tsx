@@ -115,25 +115,33 @@ export default function AccountPanel({ onSync }: Props) {
   if (email) {
     return (
       <div className="flex flex-col gap-4">
+        <div className="flex flex-col items-center text-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setShopOpen(true)}
+            className="w-20 h-20 rounded-full overflow-hidden border-4 border-paper-line hover:border-accent transition-colors"
+            title="Choose mascot & shop"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${currentAvatar.image}`}
+              alt="Your mascot"
+              className="w-full h-full object-cover"
+            />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShopOpen(true)}
+            className="text-xs font-semibold text-label hover:text-ink transition-colors"
+          >
+            Tap to change mascot &amp; buy accessories
+          </button>
+        </div>
+
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setShopOpen(true)}
-              className="w-12 h-12 rounded-full overflow-hidden border-2 border-paper-line hover:border-accent transition-colors shrink-0"
-              title="Choose mascot & shop"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${currentAvatar.image}`}
-                alt="Your mascot"
-                className="w-full h-full object-cover"
-              />
-            </button>
-            <div>
-              <div className="font-semibold text-ink">Signed in</div>
-              <p className="text-ink-soft text-sm">{email} — progress syncs automatically.</p>
-            </div>
+          <div>
+            <div className="font-semibold text-ink">Signed in</div>
+            <p className="text-ink-soft text-sm">{email} — progress syncs automatically.</p>
           </div>
           <button
             onClick={handleSignOut}

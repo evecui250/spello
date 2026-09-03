@@ -6,6 +6,7 @@ import { SYNCED_EVENT } from '../lib/sync';
 import { AVATAR_CATALOG } from '../lib/shop';
 
 interface LeaderboardEntry {
+  userId: string;
   displayName: string;
   avatarId: string;
   points: number;
@@ -29,6 +30,7 @@ function avatarImage(avatarId: string): string {
 export default function Leaderboard() {
   const [tab, setTab] = useState<'week' | 'month'>('week');
   const [data, setData] = useState<LeaderboardResponse | null>(null);
+  const [myUserId, setMyUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const load = () => {
@@ -39,6 +41,12 @@ export default function Leaderboard() {
     load();
     window.addEventListener(SYNCED_EVENT, load);
     return () => window.removeEventListener(SYNCED_EVENT, load);
+  }, []);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setMyUserId(session?.user.id ?? null));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => setMyUserId(session?.user.id ?? null));
+    return () => sub.subscription.unsubscribe();
   }, []);
 
   const entries = data?.[tab] ?? [];
@@ -66,23 +74,32 @@ export default function Leaderboard() {
         <p className="text-ink-soft text-sm">No one has studied {tab === 'week' ? 'this week' : 'this month'} yet — be the first!</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {entries.map((e, i) => (
-            <div key={i} className="flex items-center gap-3 bg-paper-dim rounded-xl px-3 py-2">
-              <span className="font-mono font-bold text-sm w-4 text-center" style={{ color: MEDAL_COLOR[i] }}>
-                {i + 1}
-              </span>
-              <div className="w-8 h-8 rounded-full overflow-hidden border border-paper-line shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImage(e.avatarId)}`}
-                  alt=""
-                  className="w-full h-full object-cover"
-                />
+          {entries.map((e, i) => {
+            const isMe = e.userId === myUserId;
+            return (
+              <div
+                key={i}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2 ${isMe ? 'bg-accent/15 border border-accent' : 'bg-paper-dim'}`}
+              >
+                <span className="font-mono font-bold text-sm w-4 text-center" style={{ color: MEDAL_COLOR[i] }}>
+                  {i + 1}
+                </span>
+                <div className="w-8 h-8 rounded-full overflow-hidden border border-paper-line shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImage(e.avatarId)}`}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <span className="flex-1 text-sm font-semibold text-ink truncate">
+                  {e.displayName}
+                  {isMe && <span className="ml-1.5 text-xs font-bold text-accent-deep">(you)</span>}
+                </span>
+                <span className="font-mono text-sm font-semibold text-label">{e.points.toLocaleString()}</span>
               </div>
-              <span className="flex-1 text-sm font-semibold text-ink truncate">{e.displayName}</span>
-              <span className="font-mono text-sm font-semibold text-label">{e.points.toLocaleString()}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

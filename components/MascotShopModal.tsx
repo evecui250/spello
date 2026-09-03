@@ -24,6 +24,11 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
   const [loading, setLoading] = useState(true);
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [buyError, setBuyError] = useState<string | null>(null);
+  // Set when an unowned item is tapped, before the actual purchase — see
+  // the accessory grid below. Spending points is irreversible (no
+  // sell-back mechanic), so buying happens in two taps: select, then
+  // confirm, rather than firing on the first tap.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   useEffect(() => {
     getMyProfile().then(profile => {
@@ -50,6 +55,7 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
   };
 
   const buy = async (id: string) => {
+    setConfirmingId(null);
     setBuyError(null);
     setBuyingId(id);
     const result = await buyAccessory(id);
@@ -130,15 +136,40 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
                 {ACCESSORY_CATALOG.map(acc => {
                   const owned = ownedIds.includes(acc.id);
                   const equipped = equippedId === acc.id;
+                  if (!owned && confirmingId === acc.id) {
+                    return (
+                      <div key={acc.id} className="col-span-3 flex flex-col items-center gap-2 rounded-xl border border-accent bg-accent/10 px-3 py-3 text-center">
+                        <span className="text-sm font-semibold text-ink">
+                          Spend 🏅 {acc.cost} on {acc.name}? This can&apos;t be undone.
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={buyingId === acc.id}
+                            onClick={() => buy(acc.id)}
+                            className="bg-accent text-white px-4 py-1.5 rounded-full text-sm font-semibold hover:bg-accent-deep transition-colors disabled:opacity-50"
+                          >
+                            {buyingId === acc.id ? 'Buying…' : 'Confirm'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmingId(null)}
+                            className="text-ink-soft hover:text-ink px-4 py-1.5 rounded-full text-sm font-semibold transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
                   return (
                     <button
                       key={acc.id}
                       type="button"
-                      disabled={buyingId === acc.id}
                       onClick={() => {
                         if (equipped) equip(null);
                         else if (owned) equip(acc.id);
-                        else buy(acc.id);
+                        else setConfirmingId(acc.id);
                       }}
                       className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-center transition-colors ${
                         equipped ? 'border-accent bg-accent/10' : owned ? 'border-good bg-good/10' : 'border-paper-line bg-paper-dim'
@@ -146,7 +177,7 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
                     >
                       <span className="text-sm font-semibold text-ink">{acc.name}</span>
                       <span className={`text-xs font-mono ${equipped ? 'text-accent-deep' : owned ? 'text-good-deep' : 'text-label'}`}>
-                        {equipped ? 'Equipped' : owned ? 'Owned' : buyingId === acc.id ? '…' : `🏅 ${acc.cost}`}
+                        {equipped ? 'Equipped' : owned ? 'Owned' : `🏅 ${acc.cost}`}
                       </span>
                     </button>
                   );

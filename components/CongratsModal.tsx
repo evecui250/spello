@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 interface Props {
   studiedCount: number;
@@ -120,6 +121,14 @@ function drawCount(ctx: CanvasRenderingContext2D, box: typeof NEW_WORDS_BOX, val
 export default function CongratsModal({ studiedCount, reviewedCount, language, onClose, date, level }: Props) {
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const dateKey = date ?? new Date().toISOString().slice(0, 10);
+  // Points only actually accrue for signed-in learners (see lib/shop.ts) —
+  // checked locally here rather than threaded down as a prop, so a
+  // signed-out learner isn't shown a number that doesn't correspond to
+  // any real, rankable/spendable points.
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSignedIn(!!data.session));
+  }, []);
 
   useEffect(() => {
     const canvas = document.createElement('canvas');
@@ -226,6 +235,12 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
         className="bg-paper rounded-2xl p-5 max-w-sm w-full flex flex-col gap-4 shadow-xl"
         onClick={e => e.stopPropagation()}
       >
+        {signedIn && (studiedCount > 0 || reviewedCount > 0) && (
+          <div className="flex items-center justify-center gap-1.5 -mb-1">
+            <span className="text-label font-mono font-bold text-lg">🏅 +{studiedCount + reviewedCount}</span>
+            <span className="text-ink-soft text-sm">points earned today</span>
+          </div>
+        )}
         <div className="rounded-xl overflow-hidden border border-paper-line bg-accent/10 aspect-square flex items-center justify-center">
           {imgUrl ? (
             // The image is generated locally on-device (canvas → blob URL),

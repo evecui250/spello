@@ -51,14 +51,22 @@ function firstOfMonth(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`;
 }
 
+// Shows the first 2 letters (not just 1) so people can at least
+// recognize their own or a friend's entry — still nowhere near enough to
+// identify a stranger from it.
 function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
-  const localMasked = `${local?.[0] ?? '?'}•••`;
+  const localMasked = `${local?.slice(0, 2) ?? '??'}•••`;
   const domainMasked = `•••${domain?.slice(-4) ?? ''}`;
   return `${localMasked}@${domainMasked}`;
 }
 
 interface LeaderboardEntry {
+  // Safe to expose publicly -- an opaque UUID, not PII -- so the client
+  // can highlight "you" by exact ID match rather than a fragile
+  // string-compare against its own locally-computed display name (which
+  // could collide with someone else's mask by coincidence).
+  userId: string;
   displayName: string;
   avatarId: string;
   points: number;
@@ -134,7 +142,7 @@ Deno.serve(async (req: Request) => {
         const profile = profileByUserId.get(t.userId);
         const email = emailByUserId.get(t.userId);
         const displayName = profile?.nickname || (email ? maskEmail(email) : 'Anonymous');
-        return { displayName, avatarId: profile?.avatar_id || 'dachshund', points: t.points };
+        return { userId: t.userId, displayName, avatarId: profile?.avatar_id || 'dachshund', points: t.points };
       });
     }
 

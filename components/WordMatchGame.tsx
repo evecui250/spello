@@ -118,6 +118,10 @@ export default function WordMatchGame({ source, onQuit }: Props) {
   const [phase, setPhase] = useState<Phase>('intro');
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [matchedCount, setMatchedCount] = useState(0);
+  // Only signed-in players actually earn a point for a completed game
+  // (see lib/shop.ts's GAME_PLAY_DAILY_POINT_CAP) — set alongside the
+  // game_plays insert below rather than shown unconditionally.
+  const [earnedPoint, setEarnedPoint] = useState(false);
 
   const [roundWords, setRoundWords] = useState<Word[]>([]);
   const [shuffledEn, setShuffledEn] = useState<string[]>([]);
@@ -203,6 +207,7 @@ export default function WordMatchGame({ source, onQuit }: Props) {
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user.id) setEarnedPoint(true);
         await supabase.from('game_plays').insert({
           device_id: getOrCreateDeviceId(),
           user_id: session?.user.id ?? null,
@@ -380,6 +385,7 @@ export default function WordMatchGame({ source, onQuit }: Props) {
         <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-3 items-center text-center">
           <h2 className="text-lg font-bold text-ink">Time&apos;s up!</h2>
           <div className="text-3xl font-extrabold text-label">{matchedCount} pairs matched</div>
+          {earnedPoint && <div className="text-label font-mono font-bold text-sm">🏅 +1 point</div>}
           <button
             type="button"
             onClick={startGame}
