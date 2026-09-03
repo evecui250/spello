@@ -1021,28 +1021,55 @@ export function buildMatchingPages(wordIds: string[]): string[][] {
 // generation contract. Optional/skippable, never touches mastery/growth
 // scoring, same reinforcement-only status as the matching-quiz recap.
 export const MIN_PARAGRAPH_WORDS = 2;
-export const MAX_PARAGRAPH_WORDS = 3;
+export const MAX_PARAGRAPH_WORDS = 5;
 
-// Splits a day's newly-introduced words into several SHORT paragraphs
-// (2-3 words each) rather than one long one — fewer simultaneous [[i]]
-// placeholders/inflection constraints per request measurably lowers the
-// AI's odds of a mechanical slip (a duplicated or dropped placeholder
-// index — see generate-paragraph's own hasValidPlaceholders, the actual
-// validation a request can fail), independent of how well the words'
-// meanings happen to fit together. Round-robins words across
+// Splits a day's newly-introduced words into paragraph-sized batches of
+// up to MAX_PARAGRAPH_WORDS each — ONE paragraph is always preferred for
+// up to 5 words; only a day with MORE than that gets split into several,
+// so a 4-5 word day still reads as one coherent scene rather than being
+// preemptively chopped into unrelated fragments. Round-robins across
 // ceil(words.length / MAX_PARAGRAPH_WORDS) batches instead of a plain
-// greedy chunk-then-drop-the-remainder split — a 4-word day used to be
-// one strained 4-blank paragraph; now it's two natural 2-word ones,
-// with no leftover ever silently dropped as long as the total is at
-// least MIN_PARAGRAPH_WORDS. A 5-word day becomes 3+2; an 8-word day
-// becomes 3+3+2. A single leftover word (day total < MIN_PARAGRAPH_WORDS)
-// still isn't worth its own paragraph and is dropped, same as before.
+// greedy chunk-then-drop-the-remainder split, so no leftover is ever
+// silently dropped as long as the day's total is at least
+// MIN_PARAGRAPH_WORDS — a 6-word day becomes 3+3, an 8-word day becomes
+// 3+3+2, a 10-word day becomes 5+5. A single leftover word (day total
+// < MIN_PARAGRAPH_WORDS) still isn't worth its own paragraph and is
+// dropped. Splitting a genuinely-too-hard batch into smaller ones because
+// the AI itself couldn't weave it into one paragraph is instead handled
+// as a runtime FALLBACK once generation actually fails (see
+// DailySessionFlow's generation effect and combineParagraphExercises
+// below) — not preemptively here, since most word combinations are fine
+// as one paragraph and splitting on suspicion alone would fragment a
+// coherent scene for no reason.
 export function buildParagraphBatches(words: Word[]): Word[][] {
   if (words.length < MIN_PARAGRAPH_WORDS) return [];
   const numBatches = Math.ceil(words.length / MAX_PARAGRAPH_WORDS);
   const batches: Word[][] = Array.from({ length: numBatches }, () => []);
   words.forEach((w, i) => batches[i % numBatches].push(w));
   return batches.filter(b => b.length >= MIN_PARAGRAPH_WORDS);
+}
+
+// Stitches two smaller successful paragraph generations into one combined
+// exercise — the runtime fallback DailySessionFlow reaches for when a
+// full batch fails generation (structurally invalid even after
+// generate-paragraph's own server-side retry): rather than showing "AI
+// returned an unusable paragraph structure" or splitting into a whole
+// SEPARATE bonus round, this keeps the SAME single exercise slot (today's
+// paragraph count/index plan never changes) but its text is now two
+// short paragraphs back to back. `\n\n` between them relies on
+// ParagraphExerciseCard's segments container having whitespace-pre-line
+// (a normal single-paragraph generation never contains a literal
+// newline, so this is a no-op there). Blanks/tray simply concatenate —
+// each blank still references its own wordId, so nothing needs
+// renumbering across the two halves.
+export function combineParagraphExercises(a: ParagraphExercise, b: ParagraphExercise): ParagraphExercise {
+  const lastA = a.segments[a.segments.length - 1];
+  const firstB = b.segments[0];
+  return {
+    segments: [...a.segments.slice(0, -1), `${lastA}\n\n${firstB}`, ...b.segments.slice(1)],
+    blanks: [...a.blanks, ...b.blanks],
+    tray: shuffled([...a.tray, ...b.tray]),
+  };
 }
 
 // If every word in a batch shares the same corpus `category`, surfaced as a

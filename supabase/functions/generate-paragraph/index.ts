@@ -111,12 +111,15 @@ Deno.serve(async (req: Request) => {
 
     const body = (await req.json()) as RequestBody;
     const { level, words, themeHint } = body;
-    // 2-3 mirrors MIN_PARAGRAPH_WORDS/MAX_PARAGRAPH_WORDS in
+    // 2-5 mirrors MIN_PARAGRAPH_WORDS/MAX_PARAGRAPH_WORDS in
     // lib/practice.ts -- enforced again here since this is a public
     // endpoint and the client-side batching is only a courtesy, not a
-    // guarantee.
-    if (!Array.isArray(words) || words.length < 2 || words.length > 3) {
-      return json({ error: 'Expected 2-3 words' }, 400);
+    // guarantee. The client's own runtime fallback (see
+    // combineParagraphExercises) also calls this with as few as 2 words
+    // when splitting a failed larger batch in half, so the floor stays
+    // at 2 even though a normal request is usually 3-5.
+    if (!Array.isArray(words) || words.length < 2 || words.length > 5) {
+      return json({ error: 'Expected 2-5 words' }, 400);
     }
     const range = PARAGRAPH_RANGE[level] ?? PARAGRAPH_RANGE.B1;
 

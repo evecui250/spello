@@ -168,7 +168,13 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
           {checked ? (allCorrect ? 'Perfect!' : 'Here\'s how it fits together') : 'Tap a word, then tap where it belongs'}
         </div>
 
-        <div className="text-lg leading-relaxed text-ink">
+        {/* whitespace-pre-line only ever matters for the rare fallback
+            where two smaller paragraphs got stitched into one exercise
+            (see combineParagraphExercises) — a normal single-paragraph
+            generation never contains a literal newline, so this is a
+            no-op there and just lets that stitched boundary render as a
+            real paragraph break instead of collapsing to one space. */}
+        <div className="text-lg leading-relaxed text-ink whitespace-pre-line">
           {exercise.segments.map((segment, i) => (
             <span key={i}>
               {renderSegment(segment, `s${i}`)}

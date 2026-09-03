@@ -15,6 +15,7 @@ import {
   wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint, demoteReviewRound,
   buildMcqChoices, buildReverseMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
   hasEnoughWordsForGame, buildParagraphBatches, sharedCategoryHint, parseParagraphResponse,
+  MIN_PARAGRAPH_WORDS, combineParagraphExercises,
 } from '../lib/practice';
 import { REVIEW_PLAN, recordMilestonePass } from '../lib/srs';
 import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks, tokenize, isWordToken, diffAgainstAttempt, applyGlossFallback } from '../lib/words';
@@ -2274,13 +2275,44 @@ export default function DailySessionFlow() {
     if (!batch) return;
     setParagraphStatus('loading');
     const settings = getSettings();
-    generateParagraphExercise(
+    const generateFor = (words: Word[]) => generateParagraphExercise(
       settings.level,
-      batch.map(w => ({ de: w.de, article: w.article, plural: w.plural, type: w.type, thirdPerson: w.thirdPerson, pastTense: w.pastTense, perfectTense: w.perfectTense })),
-      sharedCategoryHint(batch),
-    )
-      .then(({ paragraph, answers }) => {
-        const parsed = parseParagraphResponse(paragraph, answers, batch);
+      words.map(w => ({ de: w.de, article: w.article, plural: w.plural, type: w.type, thirdPerson: w.thirdPerson, pastTense: w.pastTense, perfectTense: w.perfectTense })),
+      sharedCategoryHint(words),
+    ).then(({ paragraph, answers }) => parseParagraphResponse(paragraph, answers, words));
+    // Same as generateFor, but a non-fatal failure (anything except
+    // AIUnreachableError/DailyLimitReachedError, which splitting can't
+    // help with anyway) resolves to null instead of rejecting — lets the
+    // split-fallback below treat "the AI gave up after its own retry"
+    // (a rejected promise — generate-paragraph's final structural check
+    // returning a 502) exactly the same as "came back 200 but still
+    // didn't parse" (parseParagraphResponse returning null), which is
+    // the far more common shape now that the server already retries once
+    // internally before ever surfacing an error at all.
+    const tryGenerate = (words: Word[]): Promise<ParagraphExercise | null> => generateFor(words).then(
+      parsed => parsed,
+      err => { if (err instanceof AIUnreachableError || err instanceof DailyLimitReachedError) throw err; return null; },
+    );
+
+    tryGenerate(batch)
+      .then(parsed => {
+        if (parsed) return parsed;
+        // Failed even after generate-paragraph's own server-side retry —
+        // as a last resort, split this batch into two smaller ones and
+        // try each separately, stitching the results into one exercise
+        // if both land (see combineParagraphExercises' own comment for
+        // why this stays a single exercise slot rather than growing
+        // today's paragraph count). Only attempted when there's enough
+        // words left for two still-valid halves (>= MIN_PARAGRAPH_WORDS
+        // each) — a 2-3 word batch that fails just fails, same as
+        // before, since a below-minimum remainder isn't worth its own
+        // paragraph.
+        if (batch.length < MIN_PARAGRAPH_WORDS * 2) return null;
+        const mid = Math.ceil(batch.length / 2);
+        return Promise.all([tryGenerate(batch.slice(0, mid)), tryGenerate(batch.slice(mid))])
+          .then(([a, b]) => (a && b ? combineParagraphExercises(a, b) : null));
+      })
+      .then(parsed => {
         if (!parsed) { setParagraphStatus('error'); return; }
         const current = getDailySession();
         if (!current) return;

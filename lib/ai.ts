@@ -222,7 +222,7 @@ export interface ParagraphWordInput {
 
 // Generates the bonus end-of-introduction cloze paragraph (see
 // generate-paragraph's own comment for the full contract) for a batch of
-// 2-3 of today's newly-introduced words. Same daily-cap/unreachable
+// 2-5 of today's newly-introduced words. Same daily-cap/unreachable
 // handling as every other AI call here -- callers should catch
 // DailyLimitReachedError/AIUnreachableError and let the learner skip
 // today's story rather than block the rest of the session on it.
