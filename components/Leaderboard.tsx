@@ -1,0 +1,90 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { SYNCED_EVENT } from '../lib/sync';
+import { AVATAR_CATALOG } from '../lib/shop';
+
+interface LeaderboardEntry {
+  displayName: string;
+  avatarId: string;
+  points: number;
+}
+
+interface LeaderboardResponse {
+  week: LeaderboardEntry[];
+  month: LeaderboardEntry[];
+}
+
+const MEDAL_COLOR = ['#E8C76A', '#B8B8B8', '#C9863F'];
+
+function avatarImage(avatarId: string): string {
+  const found = AVATAR_CATALOG.find(a => a.id === avatarId);
+  return found?.image || AVATAR_CATALOG[0].image;
+}
+
+// Public/read-only for everyone, signed in or not — no props, no auth
+// awareness needed. Fetches on mount and again whenever a sync completes
+// (the viewer's own just-synced activity can change their rank).
+export default function Leaderboard() {
+  const [tab, setTab] = useState<'week' | 'month'>('week');
+  const [data, setData] = useState<LeaderboardResponse | null>(null);
+
+  useEffect(() => {
+    const load = () => {
+      supabase.functions.invoke<LeaderboardResponse>('get-leaderboard')
+        .then(({ data: result }) => { if (result) setData(result); })
+        .catch(() => {});
+    };
+    load();
+    window.addEventListener(SYNCED_EVENT, load);
+    return () => window.removeEventListener(SYNCED_EVENT, load);
+  }, []);
+
+  const entries = data?.[tab] ?? [];
+  if (data && entries.length === 0 && data.week.length === 0 && data.month.length === 0) return null;
+
+  return (
+    <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="font-bold text-ink">Top Learners</h2>
+        <div className="flex gap-1 bg-paper-dim rounded-full p-1">
+          {(['week', 'month'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${
+                tab === t ? 'bg-accent-deep text-white' : 'text-ink-soft'
+              }`}
+            >
+              {t === 'week' ? 'This Week' : 'This Month'}
+            </button>
+          ))}
+        </div>
+      </div>
+      {entries.length === 0 ? (
+        <p className="text-ink-soft text-sm">No one has studied {tab === 'week' ? 'this week' : 'this month'} yet — be the first!</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {entries.map((e, i) => (
+            <div key={i} className="flex items-center gap-3 bg-paper-dim rounded-xl px-3 py-2">
+              <span className="font-mono font-bold text-sm w-4 text-center" style={{ color: MEDAL_COLOR[i] }}>
+                {i + 1}
+              </span>
+              <div className="w-8 h-8 rounded-full overflow-hidden border border-paper-line shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImage(e.avatarId)}`}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <span className="flex-1 text-sm font-semibold text-ink truncate">{e.displayName}</span>
+              <span className="font-mono text-sm font-semibold text-label">{e.points.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -13,6 +13,7 @@ import { SYNCED_EVENT } from '../../lib/sync';
 import DachshundMascot from '../../components/Mascot';
 import GoalDaysBadge from '../../components/GoalDaysBadge';
 import ActivityCalendar from '../../components/ActivityCalendar';
+import Leaderboard from '../../components/Leaderboard';
 import { THEME_CONFIG } from '../../components/AppBackground';
 
 // A fixed pixel cap for the tallest bar, not a percentage of some
@@ -236,6 +237,8 @@ export default function ProgressPage() {
           })}
         </div>
       </div>
+
+      <Leaderboard />
 
       <ActivityCalendar />
 
