@@ -335,15 +335,19 @@ Deno.serve(async (req: Request) => {
     // Word Match game plays (see the game_plays migration) -- split by
     // entry point so "how many played from Settings' preview link" vs.
     // "how many played from the real end-of-learning slot" vs. "how many
-    // used the Progress page's mastered-words rapid review" is visible
-    // separately. dailyFlow reads 0 until that real slot actually exists
-    // (see app/game/page.tsx's own top comment) -- expected, not a bug.
+    // used one of the Progress page's four per-stage rapid reviews" is
+    // visible separately. The four stage_review sources (puppy/short/
+    // medium/mastered) are combined into one stageReview count here --
+    // the admin dashboard cares about "is this feature getting used at
+    // all," not a per-stage breakdown. dailyFlow reads 0 until that real
+    // slot actually exists (see app/game/page.tsx's own top comment) --
+    // expected, not a bug.
     const { data: gamePlayRows } = await admin.from('game_plays').select('source');
-    const gamePlaysBySource = { settingsPreview: 0, dailyFlow: 0, masteredReview: 0 };
+    const gamePlaysBySource = { settingsPreview: 0, dailyFlow: 0, stageReview: 0 };
     for (const r of gamePlayRows ?? []) {
       if (r.source === 'settings_preview') gamePlaysBySource.settingsPreview += 1;
       else if (r.source === 'daily_flow') gamePlaysBySource.dailyFlow += 1;
-      else if (r.source === 'mastered_review') gamePlaysBySource.masteredReview += 1;
+      else if (r.source?.endsWith('_review')) gamePlaysBySource.stageReview += 1;
     }
 
     // Every registered account, most-recently-active first — "who's

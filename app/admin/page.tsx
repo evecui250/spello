@@ -73,7 +73,7 @@ interface AdminStats {
   // Word Match game plays split by entry point -- see the game_plays
   // migration. dailyFlow reads 0 until a real end-of-learning entry point
   // exists, not a bug.
-  gamePlaysBySource: { settingsPreview: number; dailyFlow: number; masteredReview: number };
+  gamePlaysBySource: { settingsPreview: number; dailyFlow: number; stageReview: number };
   // Every registered account, most-recently-active first — see
   // admin-stats' own comment for what "active" means here and why.
   registeredLearners: { email: string; country: string; lastActive: string; everActive: boolean; createdAt: string }[];
@@ -127,7 +127,7 @@ export default function AdminPage() {
         debugErrors: data.debugErrors ?? [],
         geoBreakdown: data.geoBreakdown ?? { byIp: [], byUser: [] },
         themeBreakdown: data.themeBreakdown ?? [],
-        gamePlaysBySource: data.gamePlaysBySource ?? { settingsPreview: 0, dailyFlow: 0, masteredReview: 0 },
+        gamePlaysBySource: data.gamePlaysBySource ?? { settingsPreview: 0, dailyFlow: 0, stageReview: 0 },
         today: { ...data.today, explanationClicks: data.today?.explanationClicks ?? 0 },
         trends: { ...data.trends, explanationClicks: data.trends?.explanationClicks ?? [] },
         registeredLearners: data.registeredLearners ?? [],
@@ -308,8 +308,8 @@ export default function AdminPage() {
             <div className="text-xs text-stone-500">End of learning</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-stone-800">{stats.gamePlaysBySource.masteredReview}</div>
-            <div className="text-xs text-stone-500">Mastered rapid review</div>
+            <div className="text-2xl font-bold text-stone-800">{stats.gamePlaysBySource.stageReview}</div>
+            <div className="text-xs text-stone-500">Progress rapid review (any stage)</div>
           </div>
         </div>
       </div>

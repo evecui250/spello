@@ -41,6 +41,17 @@ const STAGE_LABEL: Record<MascotStageId, string> = {
   'long-crowned': 'Mastered',
 };
 
+// Each stage's own rapid-review entry point (app/game/page.tsx's ?source=
+// query, WordMatchGame's focus prop) — one game_plays source value per
+// stage, matching this codebase's existing "plain text + check constraint"
+// convention rather than a separate `stage` column.
+const REVIEW_SOURCE: Record<MascotStageId, string> = {
+  puppy: 'puppy_review',
+  short: 'short_review',
+  medium: 'medium_review',
+  'long-crowned': 'mastered_review',
+};
+
 type Scope = 'current' | 'all';
 
 export default function ProgressPage() {
@@ -175,15 +186,11 @@ export default function ProgressPage() {
             ? `${totalWords} words total across ${activeLevels.length} vocabulary book${activeLevels.length === 1 ? '' : 's'}.`
             : `${totalWords} words total in this vocabulary book.`}
         </p>
+        {/* Every stage's popup now offers both the word list AND a rapid-
+            review round drawn from that same stage (see the popup below) —
+            one hint covers both, rather than a separate line per purpose. */}
         {introducedCount > 0 && (
-          <p className="text-ink-soft text-xs mb-1">Tap a mascot below to see its words.</p>
-        )}
-        {/* Mastered words are retired from the normal SRS schedule for
-            good (see recordMilestonePass) — this is the one hint that a
-            rapid-review button exists at all for them, surfaced only once
-            there's actually at least one to review. */}
-        {stageCounts['long-crowned'] > 0 && (
-          <p className="text-ink-soft text-xs mb-1">⚡ Tap Mastered for a quick 1-minute refresher.</p>
+          <p className="text-ink-soft text-xs mb-1">Tap a dog to get a quick 1-minute refresher.</p>
         )}
         {bootstrapWords.length > 0 && (
           <p className="text-ink-soft text-sm mb-4">
@@ -316,24 +323,25 @@ export default function ProgressPage() {
                 ×
               </button>
             </div>
-            {/* Mastered words never come back for review on their own
-                (see recordMilestonePass's own comment) — this is the one
-                remaining way to see them again. Reuses the exact same
-                Word Match game (see WordMatchGame's focus='mastered'),
-                just pointed at the mastered-only pool instead of "any
-                learned word" — no separate game/component needed. Shown
-                only on the Mastered popup, regardless of the "This book"/
-                "All books" scope toggle below (the game itself always
-                pulls mastered words across every book, same as the game's
+            {/* Every stage gets its own rapid-review round now, not just
+                Mastered — reuses the exact same Word Match game (see
+                WordMatchGame's focus prop), just pointed at THIS stage's
+                own pool instead of "any learned word" — no separate game/
+                component needed per stage. Mastered words are the one
+                case this is the ONLY way to see them again at all (see
+                recordMilestonePass's own comment — the normal SRS
+                schedule retires them for good); the other three stages
+                still get their normal scheduled reviews too, this is just
+                extra practice in between. Shown regardless of the "This
+                book"/"All books" scope toggle below (the game itself
+                always pulls words across every book, same as the game's
                 normal pool already does). */}
-            {openStage === 'long-crowned' && (
-              <Link
-                href="/game/?source=mastered_review"
-                className="flex items-center justify-center gap-1.5 bg-accent text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-accent-deep active:scale-95 transition-all"
-              >
-                ⚡ Rapid review (1 min)
-              </Link>
-            )}
+            <Link
+              href={`/game/?source=${REVIEW_SOURCE[openStage]}`}
+              className="flex items-center justify-center gap-1.5 bg-accent text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-accent-deep active:scale-95 transition-all"
+            >
+              ⚡ Rapid review (1 min)
+            </Link>
             {scope === 'all' ? (
               <div className="flex flex-col gap-1.5">
                 {Object.entries(stageLevelCounts[openStage])

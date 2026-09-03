@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { WORDS, glossFor, Word } from '../lib/words';
-import { getMergedProgressAcrossLevels, getSettings, getTheme, Theme, THEME_CHANGED_EVENT, getDailyWordLog, today, WordProgress, getAllCustomWordsAcrossLevels } from '../lib/storage';
+import { getMergedProgressAcrossLevels, getSettings, getTheme, Theme, THEME_CHANGED_EVENT, getDailyWordLog, today, WordProgress, MascotStageId, getAllCustomWordsAcrossLevels } from '../lib/storage';
 import { THEME_CONFIG } from './AppBackground';
 import { speakWord } from '../lib/speech';
 import { getOrCreateDeviceId } from '../lib/telemetry';
@@ -11,11 +11,15 @@ import { supabase } from '../lib/supabase';
 import { GAME_MIN_WORDS_REQUIRED } from '../lib/practice';
 import { PointsIcon } from './icons';
 
-// The actual "match the German word to its meaning" game, shared by both
-// real entry points: app/game/page.tsx (Settings' standalone preview link,
-// source=settings_preview) and DailySessionFlow's post-congrats bonus
-// round (source=daily_flow) — same game either way, just tagged
-// differently in game_plays and given a different way out (see onQuit).
+// The actual "match the German word to its meaning" game, shared by every
+// real entry point: app/game/page.tsx (a bookmarkable standalone link,
+// source=settings_preview by default), DailySessionFlow's post-congrats
+// bonus round (source=daily_flow), and Progress page's four per-stage
+// rapid-review buttons (source=puppy_review/short_review/medium_review/
+// mastered_review, via app/game/page.tsx's own ?source= routing) — same
+// game every time, just tagged differently in game_plays, pointed at a
+// different word pool (see focus), and given a different way out (onQuit/
+// homeHref).
 
 // A learner-recognizable word: reached its first mascot stage (puppy) or
 // beyond — matches "already learnt" the same way the rest of the app
@@ -27,17 +31,20 @@ import { PointsIcon } from './icons';
 // and allWordsForLevel's own comment) — a custom word earns its way into
 // this game the same as any corpus word once it's actually learned.
 //
-// focus='mastered' narrows this to ONLY the final (long-crowned) stage —
-// the Progress page's "rapid review" entry point (source=mastered_review):
-// mastered words are retired from the normal SRS schedule for good (see
-// recordMilestonePass), so this game is the one remaining way to see them
-// again at all. Once the pool is restricted this way, pickRoundWords below
-// needs no changes of its own — every round it draws already comes
-// entirely from this same mastered-only pool.
-function getLearnedWords(focus?: 'mastered'): Word[] {
+// focus=<stage> narrows this to ONLY that one mascot stage — the Progress
+// page's per-stage "rapid review" buttons (source=puppy_review/short_review/
+// medium_review/mastered_review, one per stage, see REVIEW_SOURCE there):
+// mastered words in particular are retired from the normal SRS schedule for
+// good (see recordMilestonePass), so that one is the ONLY remaining way to
+// see them again; the other three stages still get their normal scheduled
+// reviews too, this is just extra practice in between. Once the pool is
+// restricted this way, pickRoundWords below needs no changes of its own —
+// every round it draws already comes entirely from this same
+// single-stage pool.
+function getLearnedWords(focus?: MascotStageId): Word[] {
   const progress = getMergedProgressAcrossLevels();
   const all = [...WORDS, ...getAllCustomWordsAcrossLevels()];
-  if (focus === 'mastered') return all.filter(w => progress[w.id]?.mascotStage === 'long-crowned');
+  if (focus) return all.filter(w => progress[w.id]?.mascotStage === focus);
   return all.filter(w => !!progress[w.id]?.mascotStage);
 }
 
@@ -113,21 +120,20 @@ type Phase = 'intro' | 'playing' | 'over';
 interface Props {
   // Tags every recorded game_plays row (see that migration) so the admin
   // dashboard can split "played from Settings' preview" vs. "today's real
-  // bonus round" vs. "a mastered-words rapid review from Progress" apart.
-  source: 'settings_preview' | 'daily_flow' | 'mastered_review';
+  // bonus round" vs. each per-stage rapid review from Progress apart.
+  source: 'settings_preview' | 'daily_flow' | 'puppy_review' | 'short_review' | 'medium_review' | 'mastered_review';
   // When provided, replaces the standalone page's own "← Home" link with
   // a quit action instead, and adds a second way out on the results
   // screen — DailySessionFlow's post-congrats round has no page chrome of
   // its own to navigate away with, and the whole point there is "play
   // again and again, or finish for today," not a one-shot preview.
   onQuit?: () => void;
-  // Narrows the word pool to only fully-mastered words — see
-  // getLearnedWords' own comment. Every other prop below is cosmetic text
-  // overrides for that same mode (app/game/page.tsx's ?source=
-  // mastered_review case), so this one screen doesn't need a parallel
-  // "MasteredReviewGame" component of its own just to say different words
-  // around the identical game.
-  focus?: 'mastered';
+  // Narrows the word pool to only ONE mascot stage — see getLearnedWords'
+  // own comment. Every other prop below is cosmetic text overrides for
+  // that same mode (app/game/page.tsx's ?source=*_review cases), so this
+  // one screen doesn't need a parallel "StageReviewGame" component of its
+  // own just to say different words around the identical game.
+  focus?: MascotStageId;
   title?: string;
   subtitle?: string;
   notEnoughMessage?: (have: number, need: number) => string;
