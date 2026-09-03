@@ -78,6 +78,9 @@ interface AdminStats {
   // admin-stats' own comment for what "active" means here and why.
   registeredLearners: { email: string; country: string; lastActive: string; everActive: boolean; createdAt: string }[];
   leaderboardToday: { email: string; wordsStudied: number; wordsMastered: number; level: string | null }[];
+  // All-time, unwindowed -- see admin-stats' own comment on the balance
+  // formula. Sorted by totalAccumulated descending server-side.
+  userPoints: { email: string; nickname: string | null; totalAccumulated: number; pointsLeft: number }[];
   wordStages: {
     totals: StageCounts;
     byLearner: { email: string; level: string | null; stages: StageCounts }[];
@@ -128,6 +131,7 @@ export default function AdminPage() {
         today: { ...data.today, explanationClicks: data.today?.explanationClicks ?? 0 },
         trends: { ...data.trends, explanationClicks: data.trends?.explanationClicks ?? [] },
         registeredLearners: data.registeredLearners ?? [],
+        userPoints: data.userPoints ?? [],
       });
       setStatus('ready');
     })();
@@ -400,6 +404,36 @@ export default function AdminPage() {
                 </span>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Points */}
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-3">
+        <h2 className="font-semibold text-stone-800">Points ({stats.userPoints.length} signed-in users)</h2>
+        <p className="text-stone-400 text-xs -mt-1">All-time, not just today. "Left" is after any shop spending; "accumulated" is the lifetime total earned.</p>
+        {stats.userPoints.length === 0 ? (
+          <p className="text-stone-500 text-sm">No signed-in activity yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-stone-400 text-xs text-left">
+                  <th className="py-1.5 px-2 font-medium">User</th>
+                  <th className="py-1.5 px-2 font-medium text-right">Points left</th>
+                  <th className="py-1.5 px-2 font-medium text-right">Total accumulated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.userPoints.map((row, i) => (
+                  <tr key={row.email + i} className="border-t border-amber-100/60">
+                    <td className="py-1.5 px-2 text-stone-700 truncate max-w-[180px]">{row.nickname ?? row.email}</td>
+                    <td className="py-1.5 px-2 text-stone-600 text-right">{row.pointsLeft.toLocaleString()}</td>
+                    <td className="py-1.5 px-2 text-stone-600 text-right">{row.totalAccumulated.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

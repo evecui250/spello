@@ -16,6 +16,11 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ADMIN_EMAIL = Deno.env.get('ADMIN_EMAIL') || 'evecui250@gmail.com';
 
+// Kept in sync with lib/shop.ts's own copy (and get-leaderboard/
+// get-my-profile/buy-accessory's) -- see that file's comment for why
+// this cap exists.
+const GAME_PLAY_DAILY_POINT_CAP = 5;
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -504,6 +509,53 @@ Deno.serve(async (req: Request) => {
       .order('created_at', { ascending: false })
       .limit(5);
 
+    // Points per user -- all-time, unwindowed (unlike wordsStudiedTrend
+    // above, which is the last TREND_DAYS only). Same balance formula as
+    // get-my-profile/buy-accessory's own copies (kept in sync by hand,
+    // same reasoning as those two — no _shared/ module in this codebase's
+    // Edge Functions). "Total accumulated" is earned, before any
+    // spending; "points left" is earned minus spent.
+    const { data: allActivityRows } = await admin.from('daily_activity').select('user_id, words_studied');
+    const { data: allGameRows } = await admin.from('game_plays').select('user_id, created_at').not('user_id', 'is', null);
+    const { data: allOwnedRows } = await admin.from('owned_accessories').select('user_id, cost_paid');
+    const { data: profileRows } = await admin.from('profiles').select('user_id, nickname');
+
+    const earnedFromWordsByUser = new Map<string, number>();
+    for (const row of allActivityRows ?? []) {
+      earnedFromWordsByUser.set(row.user_id, (earnedFromWordsByUser.get(row.user_id) ?? 0) + (row.words_studied ?? 0));
+    }
+    const gamesByUserDay = new Map<string, Map<string, number>>();
+    for (const row of allGameRows ?? []) {
+      const uid = row.user_id as string;
+      const day = dateStr(new Date(row.created_at));
+      const byDay = gamesByUserDay.get(uid) ?? new Map<string, number>();
+      byDay.set(day, (byDay.get(day) ?? 0) + 1);
+      gamesByUserDay.set(uid, byDay);
+    }
+    const earnedFromGamesByUser = new Map<string, number>();
+    for (const [uid, byDay] of gamesByUserDay) {
+      let total = 0;
+      for (const count of byDay.values()) total += Math.min(count, GAME_PLAY_DAILY_POINT_CAP);
+      earnedFromGamesByUser.set(uid, total);
+    }
+    const spentByUser = new Map<string, number>();
+    for (const row of allOwnedRows ?? []) {
+      spentByUser.set(row.user_id, (spentByUser.get(row.user_id) ?? 0) + (row.cost_paid ?? 0));
+    }
+    const nicknameByUserId = new Map((profileRows ?? []).map(p => [p.user_id, p.nickname as string | null]));
+
+    const pointsUserIds = new Set([...earnedFromWordsByUser.keys(), ...earnedFromGamesByUser.keys(), ...spentByUser.keys()]);
+    const userPoints = [...pointsUserIds].map(uid => {
+      const earned = (earnedFromWordsByUser.get(uid) ?? 0) + (earnedFromGamesByUser.get(uid) ?? 0);
+      const spent = spentByUser.get(uid) ?? 0;
+      return {
+        email: emailByUserId.get(uid) ?? '(unknown)',
+        nickname: nicknameByUserId.get(uid) ?? null,
+        totalAccumulated: earned,
+        pointsLeft: earned - spent,
+      };
+    }).sort((a, b) => b.totalAccumulated - a.totalAccumulated);
+
     return json({
       totals: {
         totalAccounts,
@@ -543,6 +595,7 @@ Deno.serve(async (req: Request) => {
       },
       bugReportCount: bugReportCount ?? 0,
       recentBugReports: recentBugReports ?? [],
+      userPoints,
       // Temporary/diagnostic — see the comment where this is built. Empty
       // array in the normal case; /admin only renders anything for this
       // when it's actually non-empty.
