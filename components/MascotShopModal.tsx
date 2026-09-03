@@ -131,6 +131,7 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
               </div>
             </div>
 
+            {ACCESSORY_CATALOG.length > 0 && (
             <div>
               <div className="text-ink-soft text-xs font-semibold uppercase tracking-wide mb-2">Accessories</div>
               <div className="grid grid-cols-3 gap-2">
@@ -186,6 +187,7 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
               </div>
               {buyError && <p className="text-clay text-xs mt-2">{buyError}</p>}
             </div>
+            )}
           </>
         )}
       </div>

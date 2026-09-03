@@ -116,11 +116,12 @@ export default function AccountPanel({ onSync }: Props) {
   if (email) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col items-center text-center gap-1.5">
+        {/* Resume-style header: photo on the left, name on the right */}
+        <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={() => setShopOpen(true)}
-            className="w-20 h-20 rounded-full overflow-hidden border-4 border-paper-line hover:border-accent transition-colors"
+            className="w-24 h-24 rounded-full overflow-hidden border-4 border-paper-line hover:border-accent transition-colors shrink-0"
             title="Choose mascot & shop"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -130,13 +131,39 @@ export default function AccountPanel({ onSync }: Props) {
               className="w-full h-full object-cover"
             />
           </button>
-          <button
-            type="button"
-            onClick={() => setShopOpen(true)}
-            className="text-xs font-semibold text-label hover:text-ink transition-colors"
-          >
-            Tap to change mascot &amp; buy accessories
-          </button>
+          <div className="flex-1 min-w-0">
+            {editingNickname ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={nickname}
+                  onChange={e => setNicknameState(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleNicknameSave()}
+                  maxLength={24}
+                  placeholder="Shown on the leaderboard"
+                  className="flex-1 min-w-0 border-2 border-accent/70 rounded-lg px-3 py-1.5 text-lg font-bold text-ink placeholder:text-ink-soft placeholder:text-sm placeholder:font-normal focus:outline-none focus:border-accent"
+                  autoFocus
+                />
+                <button onClick={handleNicknameSave} className="text-sm font-semibold text-label hover:text-ink transition-colors shrink-0">
+                  Save
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setEditingNickname(true)}
+                className="text-xl font-bold text-ink hover:text-label transition-colors text-left truncate block"
+              >
+                {nickname || <span className="text-ink-soft italic text-base font-normal">Set a nickname…</span>}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShopOpen(true)}
+              className="text-xs font-semibold text-label hover:text-ink transition-colors mt-1"
+            >
+              Tap photo to change mascot &amp; buy accessories
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center justify-between">
@@ -150,34 +177,6 @@ export default function AccountPanel({ onSync }: Props) {
           >
             Sign out
           </button>
-        </div>
-
-        <div>
-          <label className="block text-ink-soft text-xs font-semibold uppercase tracking-wide mb-1">Nickname</label>
-          {editingNickname ? (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={nickname}
-                onChange={e => setNicknameState(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleNicknameSave()}
-                maxLength={24}
-                placeholder="Shown on the leaderboard"
-                className="flex-1 border-2 border-accent/70 rounded-lg px-3 py-1.5 text-sm text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent"
-                autoFocus
-              />
-              <button onClick={handleNicknameSave} className="text-sm font-semibold text-label hover:text-ink transition-colors">
-                Save
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setEditingNickname(true)}
-              className="text-sm text-ink hover:text-label transition-colors"
-            >
-              {nickname || <span className="text-ink-soft italic">Set a nickname…</span>}
-            </button>
-          )}
         </div>
 
         {balance !== null && (

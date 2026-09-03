@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 import { SYNCED_EVENT } from '../lib/sync';
 import { AVATAR_CATALOG } from '../lib/shop';
@@ -48,6 +49,8 @@ export default function Leaderboard() {
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [enlarged, setEnlarged] = useState<LeaderboardEntry | null>(null);
 
   useEffect(() => {
     const load = () => {
@@ -76,7 +79,17 @@ export default function Leaderboard() {
   return (
     <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
       <div className="flex items-center justify-between mb-1">
-        <h2 className="font-bold text-ink">Top Learners</h2>
+        <div className="flex items-center gap-1.5">
+          <h2 className="font-bold text-ink">Top Learners</h2>
+          <button
+            type="button"
+            onClick={() => setShowHelp(v => !v)}
+            aria-label="What is this?"
+            className="w-4 h-4 rounded-full border border-ink-soft text-ink-soft text-[10px] font-bold flex items-center justify-center hover:border-ink hover:text-ink transition-colors"
+          >
+            ?
+          </button>
+        </div>
         <div className="flex gap-1 bg-paper-dim rounded-full p-1">
           {(['week', 'month'] as const).map(t => (
             <button
@@ -91,6 +104,11 @@ export default function Leaderboard() {
           ))}
         </div>
       </div>
+      {showHelp && (
+        <p className="text-ink-soft text-xs bg-paper-dim rounded-lg px-3 py-2 mb-3">
+          Change your own nickname and profile picture in Settings → Account.
+        </p>
+      )}
       {range && <p className="text-ink-soft text-xs mb-3">{fmtRange(range)}</p>}
       {entries.length === 0 ? (
         <p className="text-ink-soft text-sm">No one has studied {tab === 'week' ? 'this week' : 'this month'} yet — be the first!</p>
@@ -106,14 +124,19 @@ export default function Leaderboard() {
                 <span className="font-mono font-bold text-sm w-4 text-center" style={{ color: MEDAL_COLOR[i] }}>
                   {i + 1}
                 </span>
-                <div className="w-8 h-8 rounded-full overflow-hidden border border-paper-line shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEnlarged(e)}
+                  className="w-8 h-8 rounded-full overflow-hidden border border-paper-line shrink-0"
+                  aria-label={`View ${e.displayName}'s picture`}
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImage(e.avatarId)}`}
                     alt=""
                     className="w-full h-full object-cover"
                   />
-                </div>
+                </button>
                 <span className="flex-1 text-sm font-semibold text-ink truncate">
                   {e.displayName}
                   {isMe && <span className="ml-1.5 text-xs font-bold text-accent-deep">(you)</span>}
@@ -130,6 +153,36 @@ export default function Leaderboard() {
         <p className="text-ink-soft text-xs mt-3 pt-3 border-t border-paper-line/60">
           Sign in (Settings → Account) to appear on this leaderboard yourself.
         </p>
+      )}
+
+      {enlarged && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setEnlarged(null)}
+        >
+          <div
+            className="bg-paper rounded-2xl shadow-xl p-6 flex flex-col items-center gap-3"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-paper-line">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImage(enlarged.avatarId)}`}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <span className="font-bold text-ink text-lg">{enlarged.displayName}</span>
+            <button
+              type="button"
+              onClick={() => setEnlarged(null)}
+              className="text-ink-soft hover:text-ink text-sm font-semibold transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

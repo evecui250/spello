@@ -30,13 +30,14 @@ export interface AccessoryOption {
   cost: number;
 }
 
-export const ACCESSORY_CATALOG: AccessoryOption[] = [
-  { id: 'bandana', name: 'Bandana', cost: 50 },
-  { id: 'bowtie', name: 'Bow tie', cost: 90 },
-  { id: 'sunglasses', name: 'Sunglasses', cost: 150 },
-  { id: 'party-hat', name: 'Party hat', cost: 220 },
-  { id: 'gold-collar', name: 'Gold collar', cost: 500 },
-];
+// Emptied for now -- there's no actual rendering yet that shows a bought
+// accessory ON the mascot image, so shipping a shop for them was showing
+// something non-functional. Re-adding items here (and the identical
+// catalog in buy-accessory's own copy) is all it takes to bring the shop
+// section back once accessories actually attach to the avatar somehow.
+// No real owned_accessories rows exist yet (confirmed via a direct query
+// before this change), so nothing needed cleaning up.
+export const ACCESSORY_CATALOG: AccessoryOption[] = [];
 
 // How many of a user's game_plays rows count toward points PER CALENDAR
 // DAY -- game_plays has zero insert rate-limiting and a nullable,
