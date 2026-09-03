@@ -26,9 +26,19 @@ import { PointsIcon } from './icons';
 // hasEnoughWordsForGame, which gates whether this game is even reachable,
 // and allWordsForLevel's own comment) — a custom word earns its way into
 // this game the same as any corpus word once it's actually learned.
-function getLearnedWords(): Word[] {
+//
+// focus='mastered' narrows this to ONLY the final (long-crowned) stage —
+// the Progress page's "rapid review" entry point (source=mastered_review):
+// mastered words are retired from the normal SRS schedule for good (see
+// recordMilestonePass), so this game is the one remaining way to see them
+// again at all. Once the pool is restricted this way, pickRoundWords below
+// needs no changes of its own — every round it draws already comes
+// entirely from this same mastered-only pool.
+function getLearnedWords(focus?: 'mastered'): Word[] {
   const progress = getMergedProgressAcrossLevels();
-  return [...WORDS, ...getAllCustomWordsAcrossLevels()].filter(w => !!progress[w.id]?.mascotStage);
+  const all = [...WORDS, ...getAllCustomWordsAcrossLevels()];
+  if (focus === 'mastered') return all.filter(w => progress[w.id]?.mascotStage === 'long-crowned');
+  return all.filter(w => !!progress[w.id]?.mascotStage);
 }
 
 const GAME_DURATION = 60;
@@ -102,18 +112,38 @@ type Phase = 'intro' | 'playing' | 'over';
 
 interface Props {
   // Tags every recorded game_plays row (see that migration) so the admin
-  // dashboard can split "played from Settings' preview" vs. "played as
-  // today's real bonus round" apart.
-  source: 'settings_preview' | 'daily_flow';
+  // dashboard can split "played from Settings' preview" vs. "today's real
+  // bonus round" vs. "a mastered-words rapid review from Progress" apart.
+  source: 'settings_preview' | 'daily_flow' | 'mastered_review';
   // When provided, replaces the standalone page's own "← Home" link with
   // a quit action instead, and adds a second way out on the results
   // screen — DailySessionFlow's post-congrats round has no page chrome of
   // its own to navigate away with, and the whole point there is "play
   // again and again, or finish for today," not a one-shot preview.
   onQuit?: () => void;
+  // Narrows the word pool to only fully-mastered words — see
+  // getLearnedWords' own comment. Every other prop below is cosmetic text
+  // overrides for that same mode (app/game/page.tsx's ?source=
+  // mastered_review case), so this one screen doesn't need a parallel
+  // "MasteredReviewGame" component of its own just to say different words
+  // around the identical game.
+  focus?: 'mastered';
+  title?: string;
+  subtitle?: string;
+  notEnoughMessage?: (have: number, need: number) => string;
+  homeHref?: string;
+  homeLabel?: string;
+  // Both the top-bar quit button (with its own trailing " →") and the
+  // results screen's plain quit link reuse this one label, rather than
+  // taking two separately-overridable strings that would always change
+  // together anyway.
+  quitLabel?: string;
 }
 
-export default function WordMatchGame({ source, onQuit }: Props) {
+export default function WordMatchGame({
+  source, onQuit, focus, title = 'Word Match', subtitle, notEnoughMessage,
+  homeHref = '/', homeLabel = '← Home', quitLabel = 'Finish for today',
+}: Props) {
   const [theme, setTheme] = useState<Theme>('forest');
   const [learnedWords, setLearnedWords] = useState<Word[]>([]);
   const [phase, setPhase] = useState<Phase>('intro');
@@ -150,7 +180,8 @@ export default function WordMatchGame({ source, onQuit }: Props) {
   }, []);
 
   useEffect(() => {
-    setLearnedWords(getLearnedWords());
+    setLearnedWords(getLearnedWords(focus));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const canPlay = learnedWords.length >= GAME_MIN_WORDS_REQUIRED;
@@ -279,14 +310,14 @@ export default function WordMatchGame({ source, onQuit }: Props) {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Word Match</h1>
+        <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>{title}</h1>
         {onQuit ? (
           <button type="button" onClick={onQuit} className="text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
-            Finish for today →
+            {quitLabel} →
           </button>
         ) : (
-          <Link href="/" className="text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
-            ← Home
+          <Link href={homeHref} className="text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
+            {homeLabel}
           </Link>
         )}
       </div>
@@ -294,6 +325,7 @@ export default function WordMatchGame({ source, onQuit }: Props) {
       {phase === 'intro' && (
         <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-4 items-center text-center">
           <h2 className="text-lg font-bold text-ink">Match words against the clock</h2>
+          {subtitle && <p className="text-ink-soft text-sm -mt-2">{subtitle}</p>}
           {canPlay ? (
             <>
               <p className="text-ink-soft text-xs">{GAME_DURATION}s per game · {PAIRS_PER_ROUND} pairs per board</p>
@@ -308,8 +340,9 @@ export default function WordMatchGame({ source, onQuit }: Props) {
             </>
           ) : (
             <p className="text-label bg-paper-dim/70 rounded-xl px-4 py-3 text-sm">
-              Learn at least {GAME_MIN_WORDS_REQUIRED} words first to unlock this
-              game — you have {learnedWords.length} so far.
+              {notEnoughMessage
+                ? notEnoughMessage(learnedWords.length, GAME_MIN_WORDS_REQUIRED)
+                : `Learn at least ${GAME_MIN_WORDS_REQUIRED} words first to unlock this game — you have ${learnedWords.length} so far.`}
             </p>
           )}
         </div>
@@ -405,7 +438,7 @@ export default function WordMatchGame({ source, onQuit }: Props) {
               onClick={onQuit}
               className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
             >
-              Finish for today
+              {quitLabel}
             </button>
           )}
         </div>

@@ -12,6 +12,14 @@ import WordMatchGame from '../../components/WordMatchGame';
 // its own when no onQuit is passed already covers leaving). Still reachable
 // by a direct/bookmarked URL with no query string, which is what the
 // settings_preview default below covers.
+//
+// ?source=mastered_review is the Progress page's "Mastered" popup —
+// mastered words are retired from the normal SRS schedule for good, so
+// this is the one remaining way to see them again. It reuses this exact
+// route/component (focus='mastered' just narrows WordMatchGame's own word
+// pool) rather than a separate page, and points its own "← Home" fallback
+// back at Progress instead of the app's actual Home, since that's where a
+// learner reaching this URL actually came from.
 export default function GamePage() {
   // Which entry point sent the learner here -- see the game_plays
   // migration, which this tags every recorded play with. Plain
@@ -19,13 +27,28 @@ export default function GamePage() {
   // the Suspense-boundary requirement that hook needs under
   // `output: 'export'` -- same reasoning as DailySessionFlow's own
   // previewSignInNudge param.
-  const [source, setSource] = useState<'settings_preview' | 'daily_flow'>('settings_preview');
+  const [source, setSource] = useState<'settings_preview' | 'daily_flow' | 'mastered_review'>('settings_preview');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get('source') === 'daily_flow') setSource('daily_flow');
+    const s = params.get('source');
+    if (s === 'daily_flow' || s === 'mastered_review') setSource(s);
   }, []);
+
+  if (source === 'mastered_review') {
+    return (
+      <WordMatchGame
+        source={source}
+        focus="mastered"
+        title="Mastered Refresh"
+        subtitle="A quick refresher — mastered words are never brought back for review automatically."
+        notEnoughMessage={(have, need) => `Master at least ${need} words first to unlock this refresher — you have ${have} mastered so far.`}
+        homeHref="/progress/"
+        homeLabel="← Progress"
+      />
+    );
+  }
 
   return <WordMatchGame source={source} />;
 }

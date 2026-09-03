@@ -73,7 +73,7 @@ interface AdminStats {
   // Word Match game plays split by entry point -- see the game_plays
   // migration. dailyFlow reads 0 until a real end-of-learning entry point
   // exists, not a bug.
-  gamePlaysBySource: { settingsPreview: number; dailyFlow: number };
+  gamePlaysBySource: { settingsPreview: number; dailyFlow: number; masteredReview: number };
   // Every registered account, most-recently-active first — see
   // admin-stats' own comment for what "active" means here and why.
   registeredLearners: { email: string; country: string; lastActive: string; everActive: boolean; createdAt: string }[];
@@ -127,7 +127,7 @@ export default function AdminPage() {
         debugErrors: data.debugErrors ?? [],
         geoBreakdown: data.geoBreakdown ?? { byIp: [], byUser: [] },
         themeBreakdown: data.themeBreakdown ?? [],
-        gamePlaysBySource: data.gamePlaysBySource ?? { settingsPreview: 0, dailyFlow: 0 },
+        gamePlaysBySource: data.gamePlaysBySource ?? { settingsPreview: 0, dailyFlow: 0, masteredReview: 0 },
         today: { ...data.today, explanationClicks: data.today?.explanationClicks ?? 0 },
         trends: { ...data.trends, explanationClicks: data.trends?.explanationClicks ?? [] },
         registeredLearners: data.registeredLearners ?? [],
@@ -295,8 +295,7 @@ export default function AdminPage() {
         <div>
           <h2 className="font-semibold text-stone-800">Word Match game</h2>
           <p className="text-stone-400 text-xs -mt-0.5">
-            Completed games (timer ran out), split by where the learner started it from. &quot;End of learning&quot; stays 0 until that
-            real entry point exists — the preview link in Settings is the only one live right now.
+            Completed games (timer ran out), split by where the learner started it from.
           </p>
         </div>
         <div className="flex gap-6">
@@ -307,6 +306,10 @@ export default function AdminPage() {
           <div>
             <div className="text-2xl font-bold text-stone-800">{stats.gamePlaysBySource.dailyFlow}</div>
             <div className="text-xs text-stone-500">End of learning</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-stone-800">{stats.gamePlaysBySource.masteredReview}</div>
+            <div className="text-xs text-stone-500">Mastered rapid review</div>
           </div>
         </div>
       </div>
