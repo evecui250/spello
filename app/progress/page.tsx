@@ -245,6 +245,36 @@ export default function ProgressPage() {
             );
           })}
         </div>
+        {/* Overall progress toward this book (+ My Words, already folded
+            into totalWords via allWordsForLevel) — mastered (dark) and
+            everything else that's at least been introduced (Familiar/
+            Strong count as "introduced" too here, lighter shade of the
+            same color rather than a separate hue, since the point is
+            "how far along," not re-explaining the 4 stages the bars above
+            already break down) stacked against the full total, so what's
+            NOT yet started is whatever's left unfilled. */}
+        {totalWords > 0 && (
+          <div className="mt-4 pt-4 border-t border-paper-line/60">
+            <div className="flex items-center justify-between text-xs text-ink-soft mb-1.5">
+              <span>Overall progress</span>
+              <span>{stageCounts['long-crowned']} mastered · {introducedCount} introduced · {totalWords} total</span>
+            </div>
+            <div className="h-3 rounded-full bg-paper-dim overflow-hidden flex">
+              <div
+                className="h-full transition-all"
+                style={{ width: `${(stageCounts['long-crowned'] / totalWords) * 100}%`, backgroundColor: bars[3].color }}
+              />
+              <div
+                className="h-full transition-all"
+                style={{
+                  width: `${((introducedCount - stageCounts['long-crowned']) / totalWords) * 100}%`,
+                  backgroundColor: bars[3].color,
+                  opacity: 0.4,
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <Leaderboard />

@@ -132,33 +132,40 @@ export default function AccountPanel({ onSync }: Props) {
             />
           </button>
           <div className="flex-1 min-w-0">
-            {editingNickname ? (
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={nickname}
-                  onChange={e => setNicknameState(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleNicknameSave()}
-                  maxLength={24}
-                  placeholder="Shown on the leaderboard"
-                  className="flex-1 min-w-0 border-2 border-accent/70 rounded-lg px-3 py-1.5 text-lg font-bold text-ink placeholder:text-ink-soft placeholder:text-sm placeholder:font-normal focus:outline-none focus:border-accent"
-                  autoFocus
-                />
-                <button onClick={handleNicknameSave} className="text-sm font-semibold text-label hover:text-ink transition-colors shrink-0">
-                  Save
+            <div className="flex items-center justify-between gap-2">
+              {editingNickname ? (
+                <div className="flex gap-2 flex-1 min-w-0">
+                  <input
+                    type="text"
+                    value={nickname}
+                    onChange={e => setNicknameState(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleNicknameSave()}
+                    maxLength={24}
+                    placeholder="Shown on the leaderboard"
+                    className="flex-1 min-w-0 border-2 border-accent/70 rounded-lg px-3 py-1.5 text-lg font-bold text-ink placeholder:text-ink-soft placeholder:text-sm placeholder:font-normal focus:outline-none focus:border-accent"
+                    autoFocus
+                  />
+                  <button onClick={handleNicknameSave} className="text-sm font-semibold text-label hover:text-ink transition-colors shrink-0">
+                    Save
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setEditingNickname(true)}
+                  className="flex items-center gap-1.5 text-xl font-bold text-ink hover:text-label transition-colors text-left truncate min-w-0"
+                >
+                  <span className="truncate">
+                    {nickname || <span className="text-ink-soft italic text-base font-normal">Set a nickname…</span>}
+                  </span>
+                  <PencilIcon className="w-3.5 h-3.5 text-ink-soft shrink-0" />
                 </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setEditingNickname(true)}
-                className="flex items-center gap-1.5 text-xl font-bold text-ink hover:text-label transition-colors text-left truncate w-full"
-              >
-                <span className="truncate">
-                  {nickname || <span className="text-ink-soft italic text-base font-normal">Set a nickname…</span>}
+              )}
+              {balance !== null && !editingNickname && (
+                <span className="flex items-center gap-1 font-mono font-bold text-label shrink-0">
+                  <PointsIcon className="w-4 h-4" /> {balance.toLocaleString()}
                 </span>
-                <PencilIcon className="w-3.5 h-3.5 text-ink-soft shrink-0" />
-              </button>
-            )}
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setShopOpen(true)}
@@ -181,13 +188,6 @@ export default function AccountPanel({ onSync }: Props) {
             Sign out
           </button>
         </div>
-
-        {balance !== null && (
-          <div className="flex items-center justify-between bg-paper-dim border border-gold rounded-xl px-4 py-2.5">
-            <span className="flex items-center gap-1.5 text-ink-soft text-sm font-semibold"><PointsIcon className="w-4 h-4" /> Points</span>
-            <span className="font-mono text-base font-bold text-label">{balance.toLocaleString()}</span>
-          </div>
-        )}
 
         <label className="flex items-center justify-between cursor-pointer">
           <span className="text-ink-soft text-sm">Appear on the weekly/monthly leaderboard</span>

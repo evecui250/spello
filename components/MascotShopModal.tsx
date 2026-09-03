@@ -182,7 +182,8 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
                       onClick={() => {
                         if (equipped) equip(null);
                         else if (owned) equip(acc.id);
-                        else setConfirmingId(acc.id);
+                        else if (balance < acc.cost) { setBuyError(`Not enough points — need ${acc.cost - balance} more.`); setConfirmingId(null); }
+                        else { setBuyError(null); setConfirmingId(acc.id); }
                       }}
                       className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-center transition-colors ${
                         equipped ? 'border-accent bg-accent/10' : owned ? 'border-good bg-good/10' : 'border-paper-line bg-paper-dim'

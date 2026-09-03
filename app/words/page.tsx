@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { WORDS, wordsForLevel, Word, Level, glossFor } from '../../lib/words';
+import { WORDS, Word, Level, glossFor } from '../../lib/words';
 import {
   getMergedProgressAcrossLevels, getSettings, WordProgress, MascotStageId, today,
-  getAllCustomWordsForLevel, getAllCustomWordsAcrossLevels, addCustomWord, removeCustomWord,
+  getAllCustomWordsAcrossLevels, addCustomWord, removeCustomWord, getWordProgress, saveWordProgress,
   newCustomWordId, isCustomWordId, PROGRESS_CHANGED_EVENT,
 } from '../../lib/storage';
-import { daysBetween } from '../../lib/srs';
+import { daysBetween, recordMilestonePass } from '../../lib/srs';
 import { imageUrlForWord } from '../../lib/wordImage';
 import { WORDS_WITH_IMAGES } from '../../lib/wordImageManifest';
 import { lookupWord, LookupWordResult, DailyLimitReachedError, AIUnreachableError, generateWordAudio } from '../../lib/ai';
@@ -55,13 +55,10 @@ function searchRank(w: Word, q: string, nativeLanguage: 'en' | 'zh'): number | n
 }
 
 // The four real, user-selectable vocabulary books (matches Settings' own
-// level picker) — excludes the still-unused 'C1'/'C2' Level values, which
-// aren't a book a learner can pick yet.
+// level picker) — search spans all of these at once now (see the owner's
+// own framing: "no matter it's from our vocab book or not"), rather than
+// needing a book picked first.
 const BOOK_LEVELS: Level[] = ['A1', 'A2', 'B1', 'B2'];
-// 'myWords' isn't a real Level — it's a cross-book view of only the
-// learner's own added words, same custom-word pool 'all' already merges
-// in per-level, just with the curated corpus left out entirely.
-type BookFilter = 'all' | Level | 'myWords';
 
 type Familiarity = 'all' | 'new' | 'learning' | 'mastered';
 
@@ -120,15 +117,14 @@ function WordThumbnail({ word }: { word: Word }) {
   );
 }
 
-// Applies a starting filter value from the URL's own query string (e.g. a
-// link from Progress: /words/?level=A1&familiarity=learning&date=all) —
+// Applies a starting filter value from the URL's own query string —
 // plain window.location rather than Next's useSearchParams, specifically
 // to avoid the Suspense-boundary requirement that hook needs under
 // `output: 'export'`. Called from a useEffect below rather than a lazy
 // useState initializer — confirmed real: reaching this page via a
 // same-origin <Link> (as opposed to a full page load/typed URL) could
-// leave a param like `familiarity` not applied even though `level` and
-// `date` were, which points at Next's client-side navigation/prefetch not
+// leave a param like `familiarity` not applied even though `date` was,
+// which points at Next's client-side navigation/prefetch not
 // guaranteeing window.location is what a mount-time initializer sees;
 // reading it in an effect (which only ever runs after the browser's own
 // URL is definitely settled) sidesteps that entirely. No-op (returns
@@ -141,22 +137,32 @@ function applyParam<T extends string>(key: string, valid: readonly T[], setter: 
   return false;
 }
 
+// Stamps a freshly-added word straight to "Introduced" (mascotStage
+// 'puppy') the moment it's added, rather than leaving it with no progress
+// at all until it happens to come up in a future study session —
+// addCustomWord only ever wrote the vocabulary record itself, never a
+// WordProgress row, so without this a newly-added word looked identical
+// to a plain "New" corpus word and wouldn't enter the review rotation
+// until manually studied first. recordMilestonePass is the exact same
+// helper a real Day-1 study pass uses to make this transition, so a
+// freshly-added word gets a real nextReviewDue and counts identically to
+// one introduced the normal way — same pipeline, no separate handling
+// needed anywhere else (see lib/practice.ts's allWordsForLevel/
+// buildReviewWords, which key off mascotStage regardless of how a word
+// got it).
+function addCustomWordIntroduced(word: Word): void {
+  addCustomWord(word);
+  saveWordProgress(recordMilestonePass(getWordProgress(word.id), 'puppy'));
+}
+
+type View = 'search' | 'myWords';
+
 export default function WordsPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress>>({});
   const [search, setSearch] = useState('');
+  const [view, setView] = useState<View>('search');
   const [filterFamiliarity, setFilterFamiliarity] = useState<Familiarity>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
-  // Which vocabulary book to browse — defaults to "All books" regardless
-  // of Settings' active level, but any single level can still be browsed
-  // too. progress below is the merge of EVERY level's own store (see
-  // getMergedProgressAcrossLevels) rather than just the currently active
-  // one — each level keeps a fully separate local profile (see
-  // lib/storage.ts), so reading only the active one used to silently hide
-  // real progress on a word studied under a different level (e.g.
-  // browsing A1 while B2 is active showed every A1 word as "New" even
-  // with real history). Same helper Progress page's own "All books" view
-  // uses, so the two always agree with each other.
-  //
   // nativeLanguage starts at DEFAULT_SETTINGS' own value (not a lazy
   // getSettings() read) and gets corrected in the effect below instead —
   // confirmed real: reading real localStorage directly in a useState
@@ -165,22 +171,18 @@ export default function WordsPage() {
   // DEFAULT_SETTINGS) than on the client's first real render (real
   // localStorage) whenever a learner's actual settings differ from the
   // defaults, which is exactly what a React hydration-mismatch error is —
-  // the effect's update happens safely AFTER hydration instead. filterLevel
-  // has no such mismatch risk since its default ('all') doesn't depend on
-  // localStorage at all.
-  const [filterLevel, setFilterLevel] = useState<BookFilter>('all');
+  // the effect's update happens safely AFTER hydration instead.
   const [nativeLanguage, setNativeLanguage] = useState<'en' | 'zh'>('en');
-  // Bumped on every add/remove so the `words` memo below (which reads
-  // custom words fresh from storage each time, not from React state)
-  // actually recomputes — storage.ts's add/removeCustomWord aren't
-  // themselves reactive, same reason PROGRESS_CHANGED_EVENT exists
-  // elsewhere, just simpler to force locally here since this page is the
-  // only thing that needs to react to it.
+  const [activeLevel, setActiveLevel] = useState<Level>('A1');
+  // Bumped on every add/remove so `customWords` below (which reads fresh
+  // from storage each time, not from React state) actually recomputes —
+  // storage.ts's add/removeCustomWord aren't themselves reactive, same
+  // reason PROGRESS_CHANGED_EVENT exists elsewhere, just simpler to force
+  // locally here since this page is the only thing that needs to react.
   const [customWordsVersion, setCustomWordsVersion] = useState(0);
   // The "look up & add" flow's own state — a separate small piece of UI
-  // triggered when a search matches nothing in the current book (see
-  // searchMatchesAnything below), entirely independent of the list/filter
-  // state above it.
+  // triggered when a search matches nothing anywhere (see
+  // searchMatchesAnything below), entirely independent of the list state.
   const [lookupStatus, setLookupStatus] = useState<'idle' | 'loading' | 'not-found' | 'error' | 'limit-reached' | 'unreachable'>('idle');
   const [lookupResult, setLookupResult] = useState<LookupWordResult | null>(null);
   // Generated the moment a lookup succeeds (not a shared placeholder) --
@@ -198,52 +200,29 @@ export default function WordsPage() {
   // generated doesn't need to regenerate it after adding.
   const [lookupResultId, setLookupResultId] = useState<string | null>(null);
 
-  // Learner-added words, read fresh from storage — kept as its own STATE
-  // (populated only inside an effect below), never read directly during
-  // render, for the same reason filterLevel/nativeLanguage above aren't a
-  // lazy getSettings() read either: this page prerenders at build time
-  // with no window at all (server sees none), so a live localStorage read
-  // sitting directly in the `words` memo would make the client's very
-  // first render (before this effect has had a chance to run) disagree
-  // with that prerendered HTML the instant any custom word actually
-  // exists — confirmed real via a genuine hydration-mismatch error (724
-  // vs 725 words) the moment a test seeded one into localStorage ahead of
-  // the initial render. Starting empty here matches the prerender exactly;
+  // Learner-added words across EVERY book, read fresh from storage —
+  // kept as its own STATE (populated only inside an effect below), never
+  // read directly during render, for the same reason nativeLanguage above
+  // isn't a lazy getSettings() read either: this page prerenders at build
+  // time with no window at all, so a live localStorage read sitting
+  // directly in a memo would make the client's very first render
+  // disagree with that prerendered HTML the instant any custom word
+  // actually exists. Starting empty here matches the prerender exactly;
   // the effect's update then lands safely AFTER hydration completes.
+  // Needed in BOTH views now — Search mode checks it to mark a match
+  // "Already in my words", not just the My Words tab itself.
   const [customWords, setCustomWords] = useState<Word[]>([]);
 
   useEffect(() => {
     setNativeLanguage(getSettings().nativeLanguage);
-    applyParam('level', ['all', 'myWords', ...BOOK_LEVELS], setFilterLevel);
+    setActiveLevel(getSettings().level);
     applyParam('familiarity', ['all', 'new', 'learning', 'mastered'], setFilterFamiliarity);
     applyParam('date', ['all', 'today', '7days', '30days'], setDateFilter);
   }, []);
 
   useEffect(() => {
-    setCustomWords(filterLevel === 'all' || filterLevel === 'myWords' ? getAllCustomWordsAcrossLevels() : Object.values(getAllCustomWordsForLevel(filterLevel)));
-  }, [filterLevel, customWordsVersion]);
-
-  // Which book a newly-added word (see AddWordCard below) actually belongs
-  // to — whichever specific book is being browsed, or the learner's own
-  // active study level when browsing "All books"/"My words" (so it's never
-  // left ambiguous which book a lookup result would be filed under).
-  const addTargetLevel: Level = filterLevel === 'all' || filterLevel === 'myWords' ? getSettings().level : filterLevel;
-
-  // Learner-added words merge in alongside the curated corpus — same
-  // "count exactly the same" treatment as the study/review pipeline (see
-  // lib/practice.ts's allWordsForLevel), so this page (the only place a
-  // learner can see/manage them) shows the true combined list rather than
-  // silently hiding half of it. "My words" is the one exception — just the
-  // custom pool, curated corpus left out entirely, since its whole point
-  // is isolating what the learner added themselves.
-  const words = useMemo(() => {
-    const pool = filterLevel === 'all'
-      ? [...WORDS.filter(w => (BOOK_LEVELS as string[]).includes(w.level)), ...customWords]
-      : filterLevel === 'myWords'
-      ? customWords
-      : [...wordsForLevel(filterLevel), ...customWords];
-    return [...pool].sort((a, b) => a.de.localeCompare(b.de, 'de'));
-  }, [filterLevel, customWords]);
+    setCustomWords(getAllCustomWordsAcrossLevels());
+  }, [customWordsVersion]);
 
   useEffect(() => {
     const load = () => setProgress(getMergedProgressAcrossLevels());
@@ -253,29 +232,53 @@ export default function WordsPage() {
   }, []);
 
   const t = today();
-
   const q = search.toLowerCase();
-  const filtered = words
-    .filter(w => {
-      const p = progress[w.id];
-      if (!matchesFamiliarity(p, filterFamiliarity)) return false;
-      if (!matchesDateFilter(p, dateFilter, t)) return false;
-      return true;
-    })
-    .map(w => ({ w, rank: search ? searchRank(w, q, nativeLanguage) : 0 }))
-    .filter((x): x is { w: Word; rank: number } => x.rank !== null)
-    .sort((a, b) => a.rank - b.rank)
-    .map(x => x.w);
+  const earned = (p?: WordProgress) => !!p && p.studiedTimes > 0;
+
+  // Every corpus word across all 4 books, plus every custom word already
+  // added anywhere — the full pool Search mode ranks against. "No matter
+  // it's from our vocab book or not" is the owner's own framing for why
+  // this doesn't stay scoped to a single book the way browsing used to.
+  const searchPool = useMemo(
+    () => [...WORDS.filter(w => (BOOK_LEVELS as string[]).includes(w.level)), ...customWords],
+    [customWords],
+  );
+
+  const searchResults = useMemo(() => {
+    if (view !== 'search' || !search.trim()) return [];
+    return searchPool
+      .filter(w => {
+        const p = progress[w.id];
+        if (!matchesFamiliarity(p, filterFamiliarity)) return false;
+        if (!matchesDateFilter(p, dateFilter, t)) return false;
+        return true;
+      })
+      .map(w => ({ w, rank: searchRank(w, q, nativeLanguage) }))
+      .filter((x): x is { w: Word; rank: number } => x.rank !== null)
+      .sort((a, b) => a.rank - b.rank)
+      .map(x => x.w);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, search, searchPool, progress, filterFamiliarity, dateFilter, nativeLanguage]);
+
+  const myWordsList = useMemo(() => {
+    if (view !== 'myWords') return [];
+    return customWords
+      .filter(w => {
+        const p = progress[w.id];
+        if (!matchesFamiliarity(p, filterFamiliarity)) return false;
+        if (!matchesDateFilter(p, dateFilter, t)) return false;
+        return true;
+      })
+      .sort((a, b) => a.de.localeCompare(b.de, 'de'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, customWords, progress, filterFamiliarity, dateFilter]);
 
   // Whether the search itself (ignoring the familiarity/date filters,
   // which are orthogonal display narrowing, not "does this word exist at
-  // all") found anything in the currently-browsed book(s) — this, not
-  // `filtered.length === 0`, is what should gate the "look up & add"
-  // offer below, so it never appears just because e.g. "Mastered" happens
-  // to hide every real match.
-  const searchMatchesAnything = search.trim() !== '' && words.some(w => searchRank(w, q, nativeLanguage) !== null);
-
-  const earned = (p?: WordProgress) => !!p && p.studiedTimes > 0;
+  // all") found anything anywhere — this, not `searchResults.length === 0`,
+  // is what should gate the "look up & add" offer below, so it never
+  // appears just because e.g. "Mastered" happens to hide every real match.
+  const searchMatchesAnything = search.trim() !== '' && searchPool.some(w => searchRank(w, q, nativeLanguage) !== null);
 
   // Auto-fires the AI lookup once a search comes up empty locally, instead
   // of making the learner notice there's no match and tap a button to
@@ -286,11 +289,11 @@ export default function WordsPage() {
   // back to 'idle' would immediately re-trigger itself in a loop.
   useEffect(() => {
     const term = search.trim();
-    if (!term || searchMatchesAnything || lookupStatus !== 'idle' || lookupResult) return;
+    if (view !== 'search' || !term || searchMatchesAnything || lookupStatus !== 'idle' || lookupResult) return;
     const timer = setTimeout(() => handleLookup(), 600);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, searchMatchesAnything, lookupStatus, lookupResult]);
+  }, [view, search, searchMatchesAnything, lookupStatus, lookupResult]);
 
   function handleLookup() {
     const term = search.trim();
@@ -298,7 +301,7 @@ export default function WordsPage() {
     setLookupStatus('loading');
     setLookupResult(null);
     setLookupResultId(null);
-    lookupWord(term, addTargetLevel)
+    lookupWord(term, activeLevel)
       .then(result => {
         if (!result) { setLookupStatus('not-found'); return; }
         setLookupResult(result);
@@ -311,14 +314,18 @@ export default function WordsPage() {
       });
   }
 
+  // From the AI lookup flow — a word that doesn't exist in the corpus at
+  // all. Filed under the learner's own ACTIVE study level (not whatever
+  // book might have been browsed before this redesign) so it's reviewed
+  // together with the book they're actually working through right now.
   function handleAddWord(result: LookupWordResult) {
     // Reuses the id already minted for the preview (see lookupResultId's
     // own comment) rather than generating a fresh one -- if the learner
     // already tapped the preview's speaker, this is the SAME id that
     // audio was cached under, so it's picked up immediately with no
     // second generation call needed.
-    const word: Word = { ...result, id: lookupResultId ?? newCustomWordId(), level: addTargetLevel };
-    addCustomWord(word);
+    const word: Word = { ...result, id: lookupResultId ?? newCustomWordId(), level: activeLevel };
+    addCustomWordIntroduced(word);
     setCustomWordsVersion(v => v + 1);
     setLookupResult(null);
     setLookupResultId(null);
@@ -338,6 +345,20 @@ export default function WordsPage() {
     generateWordAudio(word.id, spokenForm(word));
   }
 
+  // From a search match that's a REAL corpus word, but from a book other
+  // than the one actively being studied — clones it into a fresh custom
+  // word filed under the active level, so it joins the same review
+  // rotation. A match already in the active level's own book is left
+  // alone entirely (see SearchResultRow below) — the normal study
+  // schedule already covers it, nothing to add.
+  function handleAddFromOtherBook(w: Word) {
+    const cloned: Word = { ...w, id: newCustomWordId(), level: activeLevel };
+    addCustomWordIntroduced(cloned);
+    setCustomWordsVersion(v => v + 1);
+    scheduleSync();
+    generateWordAudio(cloned.id, spokenForm(cloned));
+  }
+
   function handleRemoveWord(w: Word) {
     if (!window.confirm(`Remove "${w.de}" from your words? Any progress on it will be lost too.`)) return;
     removeCustomWord(w.id);
@@ -345,61 +366,111 @@ export default function WordsPage() {
     scheduleSync();
   }
 
-  function WordItem({ w }: { w: Word }) {
-    // exampleSentence/lastMistake display moved to the dedicated Mistake
-    // Notebook page (see app/mistakes/page.tsx) — this list stays focused
-    // on familiarity/mastery, not sentence-level detail.
+  // The progress/mascot side of a row — identical for My Words items and
+  // already-added search matches, so both call sites below share it
+  // rather than duplicating the mascot/"New" pill markup.
+  function ProgressBadge({ w }: { w: Word }) {
+    return (
+      <span className="shrink-0 w-20 flex flex-col items-center gap-0.5">
+        {earned(progress[w.id]) ? (
+          <>
+            <DachshundMascot stage={progress[w.id].mascotStage ?? 'puppy'} className="w-11 h-11" />
+            <span className="text-[10px] font-medium text-ink-soft whitespace-nowrap">
+              {STAGE_LABEL[progress[w.id].mascotStage ?? 'puppy']}
+            </span>
+            {!progress[w.id].fullyMastered && (
+              <span className="text-[10px] text-ink-soft whitespace-nowrap">
+                {reviewLabel(progress[w.id].nextReviewDue)}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="flex items-center justify-center px-2.5 py-1.5 rounded-full bg-paper-dim">
+            <span className="text-xs font-medium text-ink-soft">New</span>
+          </span>
+        )}
+      </span>
+    );
+  }
+
+  function WordMeta({ w, showBook }: { w: Word; showBook: boolean }) {
+    return (
+      <div className="min-w-0 flex-1">
+        <span className="font-semibold text-ink">
+          {w.article ? `${w.article} ` : ''}{w.de}
+        </span>
+        <SpeakerButton word={w} className="ml-1.5 text-label hover:text-ink transition-colors align-middle" />
+        {w.plural && <span className="text-ink-soft text-sm ml-2">· {w.plural}</span>}
+        {showBook && (
+          <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-ink-soft bg-paper-dim rounded-full px-2 py-0.5 align-middle">
+            {w.level}
+          </span>
+        )}
+        {isCustomWordId(w.id) && (
+          <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-label bg-accent/15 rounded-full px-2 py-0.5 align-middle">
+            My word
+          </span>
+        )}
+        <div className="text-ink-soft text-sm">{glossFor(w, nativeLanguage)}</div>
+      </div>
+    );
+  }
+
+  // My Words tab — unchanged from before: a plain browsable/manageable
+  // list of everything the learner has added, across every book.
+  function MyWordsRow({ w }: { w: Word }) {
     return (
       <div className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3 flex items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <span className="font-semibold text-ink">
-            {w.article ? `${w.article} ` : ''}{w.de}
-          </span>
-          <SpeakerButton word={w} className="ml-1.5 text-label hover:text-ink transition-colors align-middle" />
-          {w.plural && <span className="text-ink-soft text-sm ml-2">· {w.plural}</span>}
-          {/* Only shown when browsing a mixed-book view — "All books" or
-              "My words" — where a row's own book isn't otherwise implied
-              by the filter itself. */}
-          {(filterLevel === 'all' || filterLevel === 'myWords') && (
-            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-ink-soft bg-paper-dim rounded-full px-2 py-0.5 align-middle">
-              {w.level}
-            </span>
-          )}
-          {isCustomWordId(w.id) && (
-            <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-label bg-accent/15 rounded-full px-2 py-0.5 align-middle">
-              My word
-            </span>
-          )}
-          <div className="text-ink-soft text-sm">{glossFor(w, nativeLanguage)}</div>
-        </div>
+        <WordMeta w={w} showBook />
         <WordThumbnail word={w} />
-        <span className="shrink-0 w-20 flex flex-col items-center gap-0.5">
-          {earned(progress[w.id]) ? (
-            <>
-              <DachshundMascot stage={progress[w.id].mascotStage ?? 'puppy'} className="w-11 h-11" />
-              <span className="text-[10px] font-medium text-ink-soft whitespace-nowrap">
-                {STAGE_LABEL[progress[w.id].mascotStage ?? 'puppy']}
-              </span>
-              {!progress[w.id].fullyMastered && (
-                <span className="text-[10px] text-ink-soft whitespace-nowrap">
-                  {reviewLabel(progress[w.id].nextReviewDue)}
-                </span>
-              )}
-            </>
-          ) : (
-            <span className="flex items-center justify-center px-2.5 py-1.5 rounded-full bg-paper-dim">
-              <span className="text-xs font-medium text-ink-soft">New</span>
-            </span>
-          )}
-        </span>
-        {isCustomWordId(w.id) && (
+        <ProgressBadge w={w} />
+        <button
+          onClick={() => handleRemoveWord(w)}
+          aria-label={`Remove ${w.de} from your words`}
+          className="shrink-0 self-start text-ink-soft hover:text-clay transition-colors text-lg leading-none px-1"
+        >
+          ×
+        </button>
+      </div>
+    );
+  }
+
+  // Search tab — a match is either already yours in some form (already a
+  // custom word, or a real word from the book you're actively studying),
+  // in which case there's nothing to do but show its existing progress,
+  // or it's a real word from a DIFFERENT book, which gets an explicit
+  // "Add to my words" action (see handleAddFromOtherBook).
+  function SearchResultRow({ w }: { w: Word }) {
+    const alreadyCustom = isCustomWordId(w.id);
+    const inActiveBook = !alreadyCustom && w.level === activeLevel;
+    const addable = !alreadyCustom && !inActiveBook;
+    return (
+      <div className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3 flex items-center gap-3">
+        <WordMeta w={w} showBook={!alreadyCustom} />
+        <WordThumbnail word={w} />
+        {addable ? (
           <button
-            onClick={() => handleRemoveWord(w)}
-            aria-label={`Remove ${w.de} from your words`}
-            className="shrink-0 self-start text-ink-soft hover:text-clay transition-colors text-lg leading-none px-1"
+            onClick={() => handleAddFromOtherBook(w)}
+            className="shrink-0 bg-accent text-white text-xs px-3 py-2 rounded-lg font-semibold hover:bg-accent-deep active:scale-95 transition-all"
           >
-            ×
+            Add to my words
           </button>
+        ) : (
+          <div className="shrink-0 flex flex-col items-center gap-1">
+            {inActiveBook && (
+              <span className="text-[10px] font-medium text-ink-soft whitespace-nowrap">In your book</span>
+            )}
+            <ProgressBadge w={w} />
+            {alreadyCustom && (
+              <button
+                onClick={() => handleRemoveWord(w)}
+                aria-label={`Remove ${w.de} from your words`}
+                className="text-ink-soft hover:text-clay transition-colors text-xs"
+              >
+                Remove
+              </button>
+            )}
+          </div>
         )}
       </div>
     );
@@ -409,33 +480,37 @@ export default function WordsPage() {
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Word List</h1>
 
-      <input
-        type="search"
-        placeholder="Search German or English…"
-        value={search}
-        onChange={e => { setSearch(e.target.value); setLookupStatus('idle'); setLookupResult(null); setLookupResultId(null); }}
-        className="bg-paper/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-4 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent"
-      />
+      <div className="flex gap-1 bg-paper-dim/70 backdrop-blur-sm rounded-full p-1 self-start">
+        {(['search', 'myWords'] as const).map(v => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={`text-sm font-semibold px-4 py-1.5 rounded-full transition-colors ${
+              view === v ? 'bg-accent-deep text-white' : 'text-on-bg/70 hover:text-on-bg'
+            }`}
+          >
+            {v === 'search' ? 'Search' : 'My Words'}
+          </button>
+        ))}
+      </div>
 
-      {/* A fixed 3-column grid (not flex-wrap) — each select always takes
-          exactly a third of the row and shrinks to fit, rather than
-          wrapping individually once their combined intrinsic width (which
-          depends on the currently-selected option's text, so it shifts as
-          you change them) happens to exceed the row on a given screen —
-          confirmed real: fine on some phones, "All days" wrapped to its
-          own row on others. min-w-0 lets a grid item actually shrink below
-          its content's natural width instead of overflowing the cell. */}
-      <div className="grid grid-cols-3 gap-1.5">
-        <select
-          value={filterLevel}
-          onChange={e => setFilterLevel(e.target.value as BookFilter)}
-          className="min-w-0 bg-paper/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
-        >
-          <option value="all">All books</option>
-          <option value="myWords">My words</option>
-          {BOOK_LEVELS.map(lvl => <option key={lvl} value={lvl}>{lvl}</option>)}
-        </select>
+      {view === 'search' && (
+        <input
+          type="search"
+          autoFocus
+          placeholder="Search any German or English word to add it…"
+          value={search}
+          onChange={e => { setSearch(e.target.value); setLookupStatus('idle'); setLookupResult(null); setLookupResultId(null); }}
+          className="bg-paper/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-4 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent"
+        />
+      )}
 
+      {/* A fixed 2-column grid — each select always takes exactly half the
+          row and shrinks to fit, rather than wrapping individually once
+          their combined intrinsic width happens to exceed the row on a
+          given screen. min-w-0 lets a grid item actually shrink below its
+          content's natural width instead of overflowing the cell. */}
+      <div className="grid grid-cols-2 gap-1.5">
         <select
           value={filterFamiliarity}
           onChange={e => setFilterFamiliarity(e.target.value as Familiarity)}
@@ -459,22 +534,18 @@ export default function WordsPage() {
         </select>
       </div>
 
+      {view === 'search' && !search.trim() && (
+        <p className="text-on-bg/70 text-sm text-center py-8">
+          Search for a word — from any of the books, or completely new — to add it to your studies.
+        </p>
+      )}
+
       {/* "Look up & add" — only offered once the search itself has come up
-          empty in the book(s) actually being browsed (see
-          searchMatchesAnything's own comment) — a learner who already has
-          matches to look at shouldn't be nudged to add a duplicate. Real
-          bug: `search.trim() !== ''` is missing from searchMatchesAnything
-          itself for exactly this reason (an EMPTY search also short-
-          circuits it to false), so an empty search box showed this offer
-          too ('No match for "" in B2') — checked explicitly here instead
-          of folding it into that flag, so the flag can stay a plain
-          "would a lookup add value" answer. The lookup itself now fires
-          automatically (see the debounced effect above) rather than
-          waiting on a button tap, and the wording below no longer names a
-          specific book -- the old "No match for X in B2" was wrong on
-          "All books"/"My words" (the search actually ran across every
-          book, not just the one a new word would be filed under). */}
-      {search.trim() !== '' && !searchMatchesAnything && (
+          empty everywhere (see searchMatchesAnything's own comment) — a
+          learner who already has matches to look at shouldn't be nudged
+          to add a duplicate. The lookup fires automatically (see the
+          debounced effect above) rather than waiting on a button tap. */}
+      {view === 'search' && search.trim() !== '' && !searchMatchesAnything && (
         <div className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3 flex flex-col gap-2.5">
           {!lookupResult && (
             <>
@@ -509,7 +580,7 @@ export default function WordsPage() {
                   "from LEVEL" badge reads correctly since it's already a
                   genuine custom id. handleAddWord reuses this exact id. */}
               <WordInfoPanel
-                word={{ ...lookupResult, id: lookupResultId, level: addTargetLevel }}
+                word={{ ...lookupResult, id: lookupResultId, level: activeLevel }}
               />
               <div className="flex gap-2">
                 <button
@@ -530,10 +601,29 @@ export default function WordsPage() {
         </div>
       )}
 
-      <p className="text-on-bg/70 text-sm">{filtered.length} words</p>
-      <div className="flex flex-col gap-2">
-        {filtered.map(w => <WordItem key={w.id} w={w} />)}
-      </div>
+      {view === 'search' && search.trim() !== '' && (
+        <>
+          <p className="text-on-bg/70 text-sm">{searchResults.length} match{searchResults.length === 1 ? '' : 'es'}</p>
+          <div className="flex flex-col gap-2">
+            {searchResults.map(w => <SearchResultRow key={w.id} w={w} />)}
+          </div>
+        </>
+      )}
+
+      {view === 'myWords' && (
+        <>
+          <p className="text-on-bg/70 text-sm">{myWordsList.length} word{myWordsList.length === 1 ? '' : 's'}</p>
+          {myWordsList.length === 0 ? (
+            <p className="text-on-bg/70 text-sm text-center py-8">
+              Nothing here yet — search for a word and add it to see it in this list.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {myWordsList.map(w => <MyWordsRow key={w.id} w={w} />)}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

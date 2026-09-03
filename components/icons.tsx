@@ -122,16 +122,21 @@ export function SpeakerIcon({ className }: IconProps) {
 // colored (gold + accent-deep), not currentColor -- it's meant to look
 // like a specific, real currency wherever it appears, not inherit
 // whatever text color surrounds it the way the outline icons above do.
+// Option C from the icon-choice round -- an "S" monogram coin, matching
+// the mascot's own collar tag (see public/avatar_*.png) rather than an
+// arbitrary symbol, so the currency reads as visibly "Spello's own."
 export function PointsIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" className={className}>
       <circle cx="12" cy="12" r="9.5" fill="var(--color-gold)" stroke="var(--color-accent-deep)" strokeWidth="1.25" />
       <circle cx="12" cy="12" r="7" fill="none" stroke="var(--color-accent-deep)" strokeOpacity="0.35" strokeWidth="1" />
-      <path
-        d="M12 15.5V10M12 10c0-2 -1.6-3.6-3.6-3.6 0 2 1.6 3.6 3.6 3.6Zm0 1.4c0-2 1.6-3.6 3.6-3.6 0 2-1.6 3.6-3.6 3.6Z"
+      <text
+        x="12" y="16.2" textAnchor="middle"
+        fontFamily="Karla, sans-serif" fontWeight="800" fontSize="11"
         fill="var(--color-accent-deep)"
-        stroke="none"
-      />
+      >
+        S
+      </text>
     </svg>
   );
 }
