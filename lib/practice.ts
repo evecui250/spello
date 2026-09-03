@@ -265,12 +265,45 @@ export function resizeTodayStudyBatch(newSize: number): void {
     // without this it goes stale and the progress bar's "done / total" count
     // can go negative or otherwise stop matching the resized batch.
     if (session.studyQueueIds) session.studyQueueIds = [...session.studyQueueIds, ...extra.map(w => w.id)];
+    // Real bug caught live: studyRound1NeededIds/studyMcqDone (see
+    // DailySessionFlow's own MCQ-checkpoint comment on enterStudyMcqPhase)
+    // were never kept in step here. studyRound1NeededIds is only ever
+    // captured ONCE, at today's first entry into study-rounds — a
+    // genuinely fresh word pulled in by THIS resize starts at round 1
+    // same as any other, but was invisible to the "has every round-1
+    // word finished round 1 yet" check, and if today's MCQ batch had
+    // already fired once (studyMcqDone is a one-shot flag, never reset
+    // anywhere else), it was permanently locked out of ever getting one
+    // at all — it could only complete introduction via the legacy
+    // round-2 spelling test instead. Reported live as exactly that: new
+    // words added mid-session (via a "words per day" change) got no MCQ
+    // and went straight to round 2. Extending the needed-ids list with
+    // just the genuinely-fresh extras (a resize can also pull in an
+    // already-in-progress "Continuing" word, which must stay excluded
+    // the same way enterRoundsPhase's own capture excludes it) and
+    // re-arming the one-shot flag lets the exact same mechanism fire a
+    // second time, once these newly-added words also finish round 1.
+    if (session.studyRound1NeededIds) {
+      const freshExtraIds = extra.filter(w => (allProgress[w.id]?.round ?? 1) === 1).map(w => w.id);
+      if (freshExtraIds.length > 0) {
+        session.studyRound1NeededIds = [...session.studyRound1NeededIds, ...freshExtraIds];
+        session.studyMcqDone = false;
+      }
+    }
     saveDailySession(session);
   } else if (targetSize < existing.length) {
     const keepPending = pendingIds.slice(0, targetSize - doneIds.length);
     session.studyWordIds = [...doneIds, ...keepPending];
     const kept = new Set(session.studyWordIds);
     if (session.studyQueueIds) session.studyQueueIds = session.studyQueueIds.filter(id => kept.has(id));
+    // Mirrors the growing branch above — a dropped word must not linger
+    // in studyRound1NeededIds either, or allDoneRound1's `.every(...)`
+    // would wait forever on a word that's no longer even part of today's
+    // batch, permanently blocking the MCQ checkpoint for everyone else
+    // still in it.
+    if (session.studyRound1NeededIds) {
+      session.studyRound1NeededIds = session.studyRound1NeededIds.filter(id => kept.has(id));
+    }
     saveDailySession(session);
   }
 }
