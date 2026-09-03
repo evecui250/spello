@@ -147,6 +147,8 @@ export default function ProgressPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Progress</h1>
+
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
         <div className="flex items-center justify-between gap-2 mb-1">
           <h2 className="font-semibold text-ink">Words breakdown</h2>
