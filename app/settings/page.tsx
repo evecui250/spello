@@ -188,7 +188,8 @@ export default function SettingsPage() {
         </span>
       </div>
 
-      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6">
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-4">
+        <span className="block font-semibold text-ink">Account</span>
         <AccountPanel onSync={loadFromStorage} />
       </div>
 

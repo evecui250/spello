@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 import { SYNCED_EVENT } from '../lib/sync';
-import { AVATAR_CATALOG } from '../lib/shop';
+import { avatarImageFor } from '../lib/shop';
 import { PointsIcon } from './icons';
 
 interface LeaderboardEntry {
   userId: string;
   displayName: string;
   avatarId: string;
+  equippedAccessoryId: string | null;
   points: number;
 }
 
@@ -27,11 +28,6 @@ interface LeaderboardResponse {
 }
 
 const MEDAL_COLOR = ['#E8C76A', '#B8B8B8', '#C9863F'];
-
-function avatarImage(avatarId: string): string {
-  const found = AVATAR_CATALOG.find(a => a.id === avatarId);
-  return found?.image || AVATAR_CATALOG[0].image;
-}
 
 function fmtDay(iso: string): string {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -132,7 +128,7 @@ export default function Leaderboard() {
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImage(e.avatarId)}`}
+                    src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(e.avatarId, e.equippedAccessoryId)}`}
                     alt=""
                     className="w-full h-full object-cover"
                   />
@@ -167,7 +163,7 @@ export default function Leaderboard() {
             <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-paper-line">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImage(enlarged.avatarId)}`}
+                src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(enlarged.avatarId, enlarged.equippedAccessoryId)}`}
                 alt=""
                 className="w-full h-full object-cover"
               />

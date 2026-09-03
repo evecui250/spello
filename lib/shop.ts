@@ -13,31 +13,45 @@ import { supabase } from './supabase';
 export interface AvatarOption {
   id: string;
   name: string;
-  image: string; // path under /public
+  image: string; // path under /public, no accessory equipped
+  // Per-accessory-id alternate portrait for THIS animal -- a whole
+  // separate image, not an overlay, since that's how the art was actually
+  // produced (each accessory is a full redraw per animal, not a sticker
+  // composited on top). avatarImageFor below is the one place that
+  // should ever read this.
+  variants?: Record<string, string>;
   comingSoon?: boolean;
 }
 
 export const AVATAR_CATALOG: AvatarOption[] = [
-  { id: 'dachshund', name: 'Dachshund', image: 'avatar_dachshund.png' },
-  { id: 'cat', name: 'Cat', image: 'avatar_cat.png' },
-  { id: 'labrador', name: 'Labrador', image: 'avatar_labrador.png' },
-  { id: 'cat-white', name: 'White Cat', image: 'avatar_cat_white.png' },
+  { id: 'dachshund', name: 'Dachshund', image: 'avatar_dachshund.png', variants: { 'leather-collar': 'avatar_dachshund_gold_collar.png' } },
+  { id: 'cat', name: 'Cat', image: 'avatar_cat.png', variants: { 'leather-collar': 'avatar_cat_gold_collar.png' } },
+  { id: 'labrador', name: 'Labrador', image: 'avatar_labrador.png', variants: { 'leather-collar': 'avatar_labrador_gold_collar.png' } },
+  { id: 'cat-white', name: 'White Cat', image: 'avatar_cat_white.png', variants: { 'leather-collar': 'avatar_cat_white_gold_collar.png' } },
 ];
+
+// The one place that should resolve "what image do I actually show for
+// this user" -- the equipped accessory only changes the picture if the
+// chosen avatar actually has a drawn variant for it (every avatar does,
+// for every accessory that exists today, but this stays safe if that
+// ever isn't true, e.g. a future avatar added before its own variant
+// art exists).
+export function avatarImageFor(avatarId: string, equippedAccessoryId: string | null | undefined): string {
+  const avatar = AVATAR_CATALOG.find(a => a.id === avatarId) ?? AVATAR_CATALOG[0];
+  if (equippedAccessoryId && avatar.variants?.[equippedAccessoryId]) return avatar.variants[equippedAccessoryId];
+  return avatar.image;
+}
 
 export interface AccessoryOption {
   id: string;
   name: string;
   cost: number;
+  icon: string; // path under /public -- the shop grid's own item image
 }
 
-// Emptied for now -- there's no actual rendering yet that shows a bought
-// accessory ON the mascot image, so shipping a shop for them was showing
-// something non-functional. Re-adding items here (and the identical
-// catalog in buy-accessory's own copy) is all it takes to bring the shop
-// section back once accessories actually attach to the avatar somehow.
-// No real owned_accessories rows exist yet (confirmed via a direct query
-// before this change), so nothing needed cleaning up.
-export const ACCESSORY_CATALOG: AccessoryOption[] = [];
+export const ACCESSORY_CATALOG: AccessoryOption[] = [
+  { id: 'leather-collar', name: 'Leather Collar', cost: 200, icon: 'item_leather_collar_icon.png' },
+];
 
 // How many of a user's game_plays rows count toward points PER CALENDAR
 // DAY -- game_plays has zero insert rate-limiting and a nullable,

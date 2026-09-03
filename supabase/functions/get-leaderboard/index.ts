@@ -74,6 +74,7 @@ interface LeaderboardEntry {
   userId: string;
   displayName: string;
   avatarId: string;
+  equippedAccessoryId: string | null;
   points: number;
 }
 
@@ -95,7 +96,7 @@ Deno.serve(async (req: Request) => {
     const [{ data: activityRows }, { data: gameRows }, { data: profileRows }, { data: usersData }] = await Promise.all([
       admin.from('daily_activity').select('user_id, activity_date, words_studied').gte('activity_date', fetchStart),
       admin.from('game_plays').select('user_id, created_at').not('user_id', 'is', null).gte('created_at', new Date(now.getTime() - FETCH_WINDOW_DAYS * DAY_MS).toISOString()),
-      admin.from('profiles').select('user_id, nickname, avatar_id, leaderboard_opt_out'),
+      admin.from('profiles').select('user_id, nickname, avatar_id, equipped_accessory_id, leaderboard_opt_out'),
       admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     ]);
 
@@ -147,7 +148,10 @@ Deno.serve(async (req: Request) => {
         const profile = profileByUserId.get(t.userId);
         const email = emailByUserId.get(t.userId);
         const displayName = profile?.nickname || (email ? maskEmail(email) : 'Anonymous');
-        return { userId: t.userId, displayName, avatarId: profile?.avatar_id || 'dachshund', points: t.points };
+        return {
+          userId: t.userId, displayName, avatarId: profile?.avatar_id || 'dachshund',
+          equippedAccessoryId: profile?.equipped_accessory_id ?? null, points: t.points,
+        };
       });
     }
 

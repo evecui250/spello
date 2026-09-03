@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  AVATAR_CATALOG, ACCESSORY_CATALOG, getMyProfile, buyAccessory,
+  AVATAR_CATALOG, ACCESSORY_CATALOG, avatarImageFor, getMyProfile, buyAccessory,
   setAvatarId as saveAvatarId, setEquippedAccessory,
 } from '../lib/shop';
 import { PointsIcon } from './icons';
@@ -94,6 +94,17 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
           <p className="text-ink-soft text-sm">Loading…</p>
         ) : (
           <>
+            <div className="flex justify-center">
+              <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-paper-line">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(avatarId, equippedId)}`}
+                  alt="Your mascot"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
+
             <div className="flex items-center justify-between bg-paper-dim border border-gold rounded-xl px-4 py-3">
               <span className="flex items-center gap-1.5 text-ink-soft text-sm font-semibold"><PointsIcon className="w-4 h-4" /> Points</span>
               <span className="font-mono text-lg font-bold text-label">{balance.toLocaleString()}</span>
@@ -177,9 +188,17 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
                         equipped ? 'border-accent bg-accent/10' : owned ? 'border-good bg-good/10' : 'border-paper-line bg-paper-dim'
                       }`}
                     >
+                      <div className="w-10 h-10 rounded-full overflow-hidden border border-paper-line bg-paper flex items-center justify-center">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${acc.icon}`}
+                          alt=""
+                          className="w-[85%] h-[85%] object-contain"
+                        />
+                      </div>
                       <span className="text-sm font-semibold text-ink">{acc.name}</span>
                       <span className={`flex items-center gap-1 text-xs font-mono ${equipped ? 'text-accent-deep' : owned ? 'text-good-deep' : 'text-label'}`}>
-                        {equipped ? 'Equipped' : owned ? 'Owned' : <><PointsIcon className="w-3.5 h-3.5" /> {acc.cost}</>}
+                        {equipped ? 'Equipped' : owned ? 'Tap to equip' : <><PointsIcon className="w-3.5 h-3.5" /> {acc.cost}</>}
                       </span>
                     </button>
                   );

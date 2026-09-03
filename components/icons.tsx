@@ -40,6 +40,15 @@ export function StarIcon({ className }: IconProps) {
   );
 }
 
+export function PencilIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="m15 4.5 4.5 4.5L8 20.5l-4.5 1 1-4.5Z" />
+      <path d="m13.5 6 4.5 4.5" />
+    </svg>
+  );
+}
+
 export function LayersIcon({ className }: IconProps) {
   return (
     <svg {...base} className={className}>

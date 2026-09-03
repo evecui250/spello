@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { SYNCED_EVENT } from '../lib/sync';
 import { getAiUsageStats, AiUsageStats } from '../lib/ai';
-import { AVATAR_CATALOG, getMyProfile, setNickname as saveNickname, setLeaderboardOptOut } from '../lib/shop';
+import { avatarImageFor, getMyProfile, setNickname as saveNickname, setLeaderboardOptOut } from '../lib/shop';
 import MascotShopModal from './MascotShopModal';
-import { PointsIcon } from './icons';
+import { PointsIcon, PencilIcon } from './icons';
 
 interface Props {
   // Called after remote data has been pulled and merged in, so the caller
@@ -27,6 +27,7 @@ export default function AccountPanel({ onSync }: Props) {
   const [aiStats, setAiStats] = useState<AiUsageStats | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [avatarId, setAvatarId] = useState('dachshund');
+  const [equippedAccessoryId, setEquippedAccessoryId] = useState<string | null>(null);
   const [nickname, setNicknameState] = useState('');
   const [editingNickname, setEditingNickname] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
@@ -58,6 +59,7 @@ export default function AccountPanel({ onSync }: Props) {
     getMyProfile().then(profile => {
       if (!profile) return;
       setAvatarId(profile.avatarId);
+      setEquippedAccessoryId(profile.equippedAccessoryId);
       setNicknameState(profile.nickname ?? '');
       setBalance(profile.balance);
       setOptOut(profile.leaderboardOptOut);
@@ -69,8 +71,6 @@ export default function AccountPanel({ onSync }: Props) {
     loadProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email]);
-
-  const currentAvatar = AVATAR_CATALOG.find(a => a.id === avatarId) ?? AVATAR_CATALOG[0];
 
   const handleNicknameSave = async () => {
     await saveNickname(nickname);
@@ -126,7 +126,7 @@ export default function AccountPanel({ onSync }: Props) {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${currentAvatar.image}`}
+              src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(avatarId, equippedAccessoryId)}`}
               alt="Your mascot"
               className="w-full h-full object-cover"
             />
@@ -151,17 +151,20 @@ export default function AccountPanel({ onSync }: Props) {
             ) : (
               <button
                 onClick={() => setEditingNickname(true)}
-                className="text-xl font-bold text-ink hover:text-label transition-colors text-left truncate block"
+                className="flex items-center gap-1.5 text-xl font-bold text-ink hover:text-label transition-colors text-left truncate w-full"
               >
-                {nickname || <span className="text-ink-soft italic text-base font-normal">Set a nickname…</span>}
+                <span className="truncate">
+                  {nickname || <span className="text-ink-soft italic text-base font-normal">Set a nickname…</span>}
+                </span>
+                <PencilIcon className="w-3.5 h-3.5 text-ink-soft shrink-0" />
               </button>
             )}
             <button
               type="button"
               onClick={() => setShopOpen(true)}
-              className="text-xs font-semibold text-label hover:text-ink transition-colors mt-1"
+              className="mt-1.5 bg-accent/15 text-label px-3 py-1 rounded-full text-xs font-semibold hover:bg-accent/25 transition-colors"
             >
-              Tap photo to change mascot &amp; buy accessories
+              My pet
             </button>
           </div>
         </div>

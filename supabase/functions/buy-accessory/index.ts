@@ -21,10 +21,9 @@ const CORS_HEADERS = {
 
 // Kept in sync with lib/shop.ts's own copy.
 const GAME_PLAY_DAILY_POINT_CAP = 5;
-// Emptied for now -- see lib/shop.ts's own copy for why. Every purchase
-// attempt correctly falls through to "Unknown accessory" below until
-// items are re-added here.
-const ACCESSORY_CATALOG: Record<string, number> = {};
+const ACCESSORY_CATALOG: Record<string, number> = {
+  'leather-collar': 200,
+};
 
 function dateStr(d: Date): string {
   return d.toISOString().slice(0, 10);

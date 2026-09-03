@@ -26,6 +26,7 @@ import TranslationChoiceCard from './TranslationChoiceCard';
 import WordMeaningChoiceCard from './WordMeaningChoiceCard';
 import MatchingQuizPage from './MatchingQuizPage';
 import DachshundMascot from './Mascot';
+import { PointsIcon } from './icons';
 import CongratsModal from './CongratsModal';
 import WordMatchGame from './WordMatchGame';
 import SignInNudge from './SignInNudge';
@@ -1260,6 +1261,14 @@ export default function DailySessionFlow() {
   // very much wasn't zero. Capturing it once at phase-entry means the
   // card always reflects what was actually just accomplished.
   const [congratsStats, setCongratsStats] = useState<DailyStats | null>(null);
+  // Only signed-in learners actually earn points (see lib/shop.ts) --
+  // checked once here so the study-done/report phases' own "+N points"
+  // lines (this round's count only, not the day's running total that
+  // CongratsModal shows) can gate on it the same way CongratsModal does.
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSignedIn(!!data.session));
+  }, []);
   const [showSignInNudge, setShowSignInNudge] = useState(false);
   const [showAiUnlockCelebration, setShowAiUnlockCelebration] = useState(false);
 
@@ -2467,9 +2476,14 @@ export default function DailySessionFlow() {
         <h2 className="text-2xl font-bold text-on-bg mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           Study complete!
         </h2>
-        <p className="text-on-bg/80 mb-6">
+        <p className="text-on-bg/80 mb-1">
           Today {session.studyWordIds.length} word{session.studyWordIds.length === 1 ? '' : 's'} learned.
         </p>
+        {signedIn && (
+          <p className="flex items-center justify-center gap-1.5 text-on-bg/90 font-mono font-bold mb-6" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+            <PointsIcon className="w-4 h-4" /> +{session.studyWordIds.length} points
+          </p>
+        )}
         {/* Moved up here (right under the summary line) rather than below
             the full word list -- real feedback was that learners had to
             scroll past every word introduced today just to find the way
@@ -2622,6 +2636,11 @@ export default function DailySessionFlow() {
         <h2 className="text-2xl font-bold text-on-bg mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           {session.reviewWordIds.length} word{session.reviewWordIds.length === 1 ? '' : 's'} reviewed today
         </h2>
+        {signedIn && (
+          <p className="flex items-center justify-center gap-1.5 text-on-bg/90 font-mono font-bold mb-4" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+            <PointsIcon className="w-4 h-4" /> +{session.reviewWordIds.length} points
+          </p>
+        )}
         {/* Moved up from below the word list -- same reasoning as
             study-done's own Continue button above: don't make learners
             scroll past every reviewed word just to move on. */}
