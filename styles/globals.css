@@ -42,6 +42,14 @@
      a card) — Tailwind's opacity modifier (text-on-bg/70) covers the
      "softer" variant instead of a second token. */
   --color-on-bg: #F3EAD8;
+  /* The round-ladder's per-letter spelling tiles (LetterInputRow) — a
+     typed letter's own text color, kept as its own token (not reused from
+     anywhere else) since nothing else needed this exact indigo. Reads
+     fine at 8.3:1 against the light paper it was originally tuned for,
+     but had never been given a dark-mode-safe value at all (a genuinely
+     missing override, not a wrong one) — see [data-card-mode="dark"]
+     below, same "measured, not assumed" standard as --color-label. */
+  --color-tile-input: #3730a3;
 }
 
 /* Base typography — global, so this lands app-wide the moment this file
@@ -155,6 +163,23 @@ h1, h2, h3 { font-family: var(--font-display); }
   --color-paper: #241E19; --color-paper-dim: #2E2620; --color-paper-line: #453A30;
   --color-ink: #EDE3D2; --color-ink-soft: #A99A82;
   --color-label: var(--color-gold);
+  /* Two more measured (not assumed) exceptions to this block's own "accent/
+     good/clay/gold stay exactly as the active sky already defines them"
+     rule above — both are TEXT sitting directly on this now-dark paper
+     (or on a translucent tint of it), the same situation --color-label
+     already needed fixing for, not a button background (which the
+     unchanged accent/clay/gold are still correct for).
+     --color-good-deep: the sentence-correction box (bg-good/25 + this as
+     its text) measured ~2.8:1 against that tint at the unchanged value —
+     well under WCAG's 4.5:1. --color-good itself (the tint/border source)
+     already clears 6.5:1+ against this dark paper on its own, so only the
+     -deep text variant needs a brighter override; 5.2-5.9:1 verified
+     against every bg-good/NN tint actually used. --color-tile-input: the
+     round-ladder's typed-letter color (see @theme above) was flat
+     indigo-on-near-black at ~1.7:1 — brightened to a light periwinkle in
+     the same hue family, 9.6:1 against this paper. */
+  --color-good-deep: #8FD1A3;
+  --color-tile-input: #B4C4FF;
 }
 
 /* Shared card/button surfaces for the next (per-page) restyle pass to

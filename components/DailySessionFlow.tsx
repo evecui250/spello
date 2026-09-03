@@ -1822,20 +1822,28 @@ export default function DailySessionFlow() {
       });
       if (earnedUpgrade) addEarnedUpgrade(stage!);
     } else {
-      // A correct submission here is always this word's ONLY round-ladder
-      // step for introduction now (round 1 -- see applyResult's own
-      // comment on why a bare promotion to round 2 doesn't render
-      // anywhere any more, and enterStudyMcqPhase for what completes
-      // introduction instead), so "correct" alone means "done with the
-      // round-ladder, hand off to the reversed-MCQ batch" -- except for a
-      // rare pre-existing word already mid-introduction at round 2 from
-      // before this changed (still shown via the old round-2 typing UI,
-      // see the round-ladder's own rendering), where a correct submission
-      // there completes introduction outright via applyResult's own
-      // recordMilestonePass branch. Either way, "correct" is exactly the
-      // right signal for "this word is done here."
-      const completed = correct;
       const updated = { ...applyResult(progress, correct), ...extra };
+      // A correct submission here normally means "done with the round-
+      // ladder, hand off to the reversed-MCQ batch" (round 1 -- see
+      // applyResult's own comment on why a bare promotion to round 2
+      // doesn't render anywhere any more, and enterStudyMcqPhase for what
+      // completes introduction instead). The one exception: a rare
+      // pre-existing word already mid-introduction at round 2 from before
+      // that changed (still shown via the old round-2 typing UI) that
+      // just got demoted BACK to round 1 by a wrong answer there (see the
+      // round-ladder's own copy-mode rendering, gated on `exampleSentence`
+      // already existing) -- a correct redo there only re-promotes it to
+      // round 2 (applyResult's own round<2 branch), it does NOT complete
+      // introduction, so treating `correct` alone as "done" here skipped
+      // that word's real round-2 retest entirely and silently dropped it
+      // from the ladder (confirmed real: reported as "gets demoted to
+      // level 1 [copy the word], then never returns to level 2 [half-
+      // hinted]"). Recognized by `exampleSentence` already being set
+      // BEFORE this submission -- the only way a round-1 card can have
+      // one at all is exactly this demoted-back case (a genuine first
+      // pass never has one yet, see the JSX's own currentRound===1 gate).
+      const isDemotedRoundTwoRedo = currentRound === 1 && !!exampleSentence;
+      const completed = isDemotedRoundTwoRedo ? correct && !!updated.mascotStage : correct;
       const earnedBadge = updated.studiedTimes > progress.studiedTimes;
 
       saveWordProgress(updated);
@@ -1858,28 +1866,6 @@ export default function DailySessionFlow() {
       }
     }
 
-    // The round-1 translate exercise already auto-plays the corrected
-    // sentence itself (see SentenceExercise) — playing the bare word here
-    // too would overlap it, so that case stays gated behind autoPlayAudio
-    // (and skipped entirely when a reference sentence is about to play its
-    // own audio). Every actual spelling card (round 2+, study or review)
-    // always confirms pronunciation right after Check regardless of that
-    // setting and regardless of right/wrong — hearing the correct word
-    // immediately after attempting to spell it is the whole point, not
-    // something the ambient auto-play preference should gate.
-    //
-    // On a CORRECT answer, the chime plays first and the word's own
-    // pronunciation is delayed a beat behind it — playing both at the
-    // same instant made the chime intermittently inaudible, and the
-    // order also just reads better: "yes, correct" before "here's how
-    // it's said".
-    const playWord = () => {
-      if (currentRound === 1) {
-        if (settings.autoPlayAudio && !extra?.exampleSentence) speakWord(word);
-      } else {
-        speakWord(word);
-      }
-    };
     // A round-1 sentence-writing/direct-sentence submission always calls
     // this with correct=true (see this function's own params — there's no
     // real pass/fail for a translation attempt, just a correction), so it
@@ -1898,6 +1884,33 @@ export default function DailySessionFlow() {
     // effect for that same submission, which real reports connect to the
     // sentence's speaker button going completely unresponsive afterward.
     const isSentenceOrDirectSubmission = currentRound === 1 && !!(extra?.exampleSentence || extra?.lastMistake);
+    // The round-1 translate exercise already auto-plays the corrected
+    // sentence itself (see SentenceExercise) — playing the bare word here
+    // too would overlap it. Gated on isSentenceOrDirectSubmission (not just
+    // `!extra?.exampleSentence`, which the chime condition above already
+    // moved past) — real bug caught live: the exampleSentence-only check
+    // missed the IMPERFECT half of a sentence-writing submission the exact
+    // same way the chime's own check used to (extra carries `lastMistake`
+    // then, not `exampleSentence`), so a wrong translation attempt played
+    // BOTH the bare word here AND SentenceExercise's own spoken correction
+    // at the same time. Every actual spelling card (round 2+, study or
+    // review) still always confirms pronunciation right after Check
+    // regardless of the autoPlayAudio setting and regardless of right/
+    // wrong — hearing the correct word immediately after attempting to
+    // spell it is the whole point, not something that setting should gate.
+    //
+    // On a CORRECT answer, the chime plays first and the word's own
+    // pronunciation is delayed a beat behind it — playing both at the
+    // same instant made the chime intermittently inaudible, and the
+    // order also just reads better: "yes, correct" before "here's how
+    // it's said".
+    const playWord = () => {
+      if (currentRound === 1) {
+        if (settings.autoPlayAudio && !isSentenceOrDirectSubmission) speakWord(word);
+      } else {
+        speakWord(word);
+      }
+    };
     if (correct && !isSentenceOrDirectSubmission) {
       playCorrectChime();
       clearTimeout(pendingWordAudioTimer.current);
@@ -1913,6 +1926,16 @@ export default function DailySessionFlow() {
     // on-screen keyboard the moment Check fires instead of leaving it up
     // until the learner taps away themselves.
     activeInputRef.current?.blur();
+    // The final no-hint review round (round 4) autoplays the word's own
+    // audio as its prompt (see loadCurrent), possibly still mid-playback
+    // (or mid word-repeat) the instant a fast learner hits Check — a real
+    // report of the correct-chime going silent right after answering
+    // there traces to competing audio at that exact moment (the Web Audio
+    // API chime and an active HTMLMediaElement clip don't always mix
+    // cleanly, especially on mobile). Stopping any in-flight word audio
+    // first, before submitResult's own chime-then-word sequence begins,
+    // gives the chime a clean stage regardless of how fast the answer came.
+    stopSpeech();
     const wordRight = checkAnswer(word.de, values.join(''));
     const articleGuess = articleValues.join('').toLowerCase();
     const articleRight = !needsArticle || articleGuess === word.article;

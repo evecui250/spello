@@ -111,12 +111,12 @@ Deno.serve(async (req: Request) => {
 
     const body = (await req.json()) as RequestBody;
     const { level, words, themeHint } = body;
-    // 3-5 mirrors MIN_PARAGRAPH_WORDS/MAX_PARAGRAPH_WORDS in
+    // 2-3 mirrors MIN_PARAGRAPH_WORDS/MAX_PARAGRAPH_WORDS in
     // lib/practice.ts -- enforced again here since this is a public
     // endpoint and the client-side batching is only a courtesy, not a
     // guarantee.
-    if (!Array.isArray(words) || words.length < 3 || words.length > 5) {
-      return json({ error: 'Expected 3-5 words' }, 400);
+    if (!Array.isArray(words) || words.length < 2 || words.length > 3) {
+      return json({ error: 'Expected 2-3 words' }, 400);
     }
     const range = PARAGRAPH_RANGE[level] ?? PARAGRAPH_RANGE.B1;
 
@@ -194,8 +194,42 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // Mirrors parseParagraphResponse's own validation (lib/practice.ts) --
+    // every placeholder index must be in range 0..count-1, none repeated,
+    // and every index must actually appear once. Checked here too (not
+    // just trusted to the client) so a malformed generation can actually
+    // be retried instead of always reaching the client as a dead end.
+    function hasValidPlaceholders(paragraph: string, answers: string[], count: number): boolean {
+      if (!paragraph || !Array.isArray(answers) || answers.length !== count) return false;
+      const seen = new Set<number>();
+      const re = /\[\[(\d+)\]\]/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(paragraph))) {
+        const idx = Number(m[1]);
+        if (idx < 0 || idx >= count || seen.has(idx)) return false;
+        seen.add(idx);
+      }
+      return seen.size === count;
+    }
+
     let genResult = await generateOnce(wordList, words.length, level, range, themeHint);
     if (!genResult) return json({ error: 'AI paragraph generation failed' }, 502);
+    // Structural check FIRST -- a malformed [[i]] placeholder set (a
+    // duplicate index, one out of range, or a missing index) makes the
+    // whole response unusable regardless of anything else below, and this
+    // was previously never checked server-side at all: the client's own
+    // parseParagraphResponse (lib/practice.ts) performs exactly this check
+    // and silently gives up with NO way to recover, surfacing as
+    // "couldn't put today's story together" for what's usually just one
+    // mechanical slip (the model is generally fine on the actual German/
+    // naturalness side of this prompt -- see its own comment -- but a
+    // stray duplicate or dropped placeholder token is a real, observed
+    // failure mode). One retry, same budget-conscious pattern as the
+    // checks below.
+    if (!hasValidPlaceholders(genResult.paragraph, genResult.answers, words.length)) {
+      const retry = await generateOnce(wordList, words.length, level, range, themeHint);
+      if (retry && hasValidPlaceholders(retry.paragraph, retry.answers, words.length)) genResult = retry;
+    }
     if (!followsForcedForms(genResult.paragraph, genResult.answers)) {
       const retry = await generateOnce(wordList, words.length, level, range, themeHint);
       if (retry) genResult = retry;
@@ -231,6 +265,18 @@ Deno.serve(async (req: Request) => {
     if (!paragraph || !Array.isArray(answers) || answers.length !== words.length) {
       console.error('Malformed AI response:', paragraph, answers);
       return json({ error: 'AI returned an unexpected format' }, 502);
+    }
+    // Final safety net -- the moderation-retry branch above can overwrite
+    // `paragraph`/`answers` with a fresh generation that was never itself
+    // checked against hasValidPlaceholders, so this re-checks whatever's
+    // actually about to be returned rather than trusting the earlier
+    // check to still apply. Usage is still logged above either way (a
+    // real OpenAI call happened, cost was incurred) -- only the response
+    // itself is withheld from the client, same as the other failure
+    // branches here.
+    if (!hasValidPlaceholders(paragraph, answers, words.length)) {
+      console.error('generate-paragraph: invalid placeholder structure after retry', { paragraph, answers });
+      return json({ error: 'AI returned an unusable paragraph structure' }, 502);
     }
     if (!followsForcedForms(paragraph, answers)) {
       // Logged, not failed -- after two attempts this is a quality

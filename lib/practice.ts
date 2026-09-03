@@ -987,22 +987,28 @@ export function buildMatchingPages(wordIds: string[]): string[][] {
 // back in by meaning — see generate-paragraph's own comment for the full
 // generation contract. Optional/skippable, never touches mastery/growth
 // scoring, same reinforcement-only status as the matching-quiz recap.
-export const MIN_PARAGRAPH_WORDS = 3;
-export const MAX_PARAGRAPH_WORDS = 5;
+export const MIN_PARAGRAPH_WORDS = 2;
+export const MAX_PARAGRAPH_WORDS = 3;
 
-// Splits a day's newly-introduced words into paragraph-sized batches: at
-// most MAX_PARAGRAPH_WORDS each (a paragraph naturally sized for a
-// learner's level starts feeling stuffed well before 6+ blanks — see the
-// per-level word-count caps in generate-paragraph), any remainder batch
-// under MIN_PARAGRAPH_WORDS dropped entirely rather than forced into its
-// own too-thin paragraph. A 5-word day is one exercise; a 6-word day is a
-// 5 + a dropped leftover 1 (not a strained 6-blank paragraph, not a padded
-// second exercise); an 8-word day is 5 + 3.
+// Splits a day's newly-introduced words into several SHORT paragraphs
+// (2-3 words each) rather than one long one — fewer simultaneous [[i]]
+// placeholders/inflection constraints per request measurably lowers the
+// AI's odds of a mechanical slip (a duplicated or dropped placeholder
+// index — see generate-paragraph's own hasValidPlaceholders, the actual
+// validation a request can fail), independent of how well the words'
+// meanings happen to fit together. Round-robins words across
+// ceil(words.length / MAX_PARAGRAPH_WORDS) batches instead of a plain
+// greedy chunk-then-drop-the-remainder split — a 4-word day used to be
+// one strained 4-blank paragraph; now it's two natural 2-word ones,
+// with no leftover ever silently dropped as long as the total is at
+// least MIN_PARAGRAPH_WORDS. A 5-word day becomes 3+2; an 8-word day
+// becomes 3+3+2. A single leftover word (day total < MIN_PARAGRAPH_WORDS)
+// still isn't worth its own paragraph and is dropped, same as before.
 export function buildParagraphBatches(words: Word[]): Word[][] {
-  const batches: Word[][] = [];
-  for (let i = 0; i < words.length; i += MAX_PARAGRAPH_WORDS) {
-    batches.push(words.slice(i, i + MAX_PARAGRAPH_WORDS));
-  }
+  if (words.length < MIN_PARAGRAPH_WORDS) return [];
+  const numBatches = Math.ceil(words.length / MAX_PARAGRAPH_WORDS);
+  const batches: Word[][] = Array.from({ length: numBatches }, () => []);
+  words.forEach((w, i) => batches[i % numBatches].push(w));
   return batches.filter(b => b.length >= MIN_PARAGRAPH_WORDS);
 }
 

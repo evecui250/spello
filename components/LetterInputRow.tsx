@@ -265,11 +265,20 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
         // Only while actively typing (not once checked — nothing to
         // resume typing into anymore then).
         const isCursor = !showCorrectness && focused && k === flatValue.length;
+        // The cursor tile's background is a plain, theme-independent white
+        // (see its own comment above) — its letter color has to stay the
+        // fixed dark indigo that was always tuned for a white backdrop,
+        // regardless of theme. Every OTHER tile is transparent over
+        // whatever the surrounding card surface is, so ITS letter color is
+        // the one that actually needs to react to dark mode (see
+        // --color-tile-input's own comment in globals.css — flat
+        // indigo-on-near-black measured ~1.7:1, unreadable).
+        const textColorClass = isCursor ? 'text-indigo-800' : 'text-tile-input';
         return (
           <div
             key={i}
             style={tileStyle}
-            className={`pointer-events-none flex items-end justify-center pb-1 font-bold border-b-2 text-indigo-800 ${underline} ${isCursor ? 'bg-white rounded-t' : ''}`}
+            className={`pointer-events-none flex items-end justify-center pb-1 font-bold border-b-2 ${textColorClass} ${underline} ${isCursor ? 'bg-white rounded-t' : ''}`}
           >
             {typedChar}
           </div>
