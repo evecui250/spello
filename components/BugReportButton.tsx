@@ -4,13 +4,16 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 
-// A text link on the Settings page (next to Terms of Service/Privacy
-// Policy) — lets a learner report a problem without navigating away or
-// losing whatever they were mid-way through (the modal is just an
-// overlay; the page underneath is untouched). Works whether signed in or
-// not, same as everything else now that sign-in is entirely optional (see
-// AuthGate's removal) — see the bug_reports migration for the insert-only
-// RLS policy backing this.
+// A prominent card on the Settings page (in the spot the old "Share
+// Spello" card used to occupy — see git history — since sharing wasn't
+// pulling its weight there) — lets a learner send feedback (bugs,
+// problems, or just general thoughts) without navigating away or losing
+// whatever they were mid-way through (the modal is just an overlay; the
+// page underneath is untouched). Works whether signed in or not, same as
+// everything else now that sign-in is entirely optional (see AuthGate's
+// removal) — see the bug_reports migration for the insert-only RLS
+// policy backing this (still the same table/flow as when this was
+// framed narrowly as "report a problem" — just broader copy now).
 export default function BugReportButton() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -55,13 +58,13 @@ export default function BugReportButton() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-on-bg/75 hover:text-on-bg underline"
+        className="text-center bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-4 font-semibold text-ink hover:bg-paper transition-colors"
       >
-        Report a problem
+        Feedback
       </button>
 
-      {/* Portaled straight to <body>, same reasoning as ShareCard's modal:
-          any ancestor with backdrop-filter/transform/etc. becomes the
+      {/* Portaled straight to <body> -- any ancestor with backdrop-filter/
+          transform/etc. becomes the
           containing block for a plain in-place fixed overlay, which once
           clipped this exact modal against a small container instead of
           the true viewport. Escaping to body sidesteps that regardless of
@@ -76,7 +79,7 @@ export default function BugReportButton() {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-ink">Report a problem</h2>
+              <h2 className="font-bold text-ink">Feedback</h2>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -104,7 +107,7 @@ export default function BugReportButton() {
                   value={message}
                   onChange={e => setMessage(e.target.value)}
                   rows={4}
-                  placeholder="What happened?"
+                  placeholder="A bug, an idea, or anything else on your mind"
                   className="w-full border-2 border-paper-line rounded-xl px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent/50 resize-none"
                 />
                 {!signedInEmail && (
@@ -125,7 +128,7 @@ export default function BugReportButton() {
                   disabled={!message.trim() || status === 'sending'}
                   className="w-full bg-accent text-white py-2.5 rounded-xl font-semibold disabled:opacity-40 hover:bg-accent-deep active:scale-95 transition-all"
                 >
-                  {status === 'sending' ? 'Sending…' : 'Send report'}
+                  {status === 'sending' ? 'Sending…' : 'Send'}
                 </button>
               </>
             )}

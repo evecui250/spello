@@ -11,7 +11,6 @@ import { Level, wordsForLevel, LEVEL_SOURCE } from '../../lib/words';
 import { scheduleSync, syncNow } from '../../lib/sync';
 import { CHIME_OPTIONS } from '../../lib/sound';
 import AccountPanel from '../../components/AccountPanel';
-import ShareCard from '../../components/ShareCard';
 import BugReportButton from '../../components/BugReportButton';
 import SoundPicker from '../../components/SoundPicker';
 import { supabase } from '../../lib/supabase';
@@ -493,14 +492,14 @@ export default function SettingsPage() {
         >
           View welcome guide
         </Link>
-        <ShareCard />
+        <BugReportButton />
       </div>
 
       {/* A tester previously mis-tapped a prominent on-page danger-zone
           button, which is why this opens a confirmation modal rather than
           resetting outright — but per owner feedback, burying the entry
           point itself as a small text link made it too easy to miss
-          entirely. Same visual weight as View welcome guide/Share Spello
+          entirely. Same visual weight as View welcome guide/Feedback
           above, just red-tinted so it still reads as the odd one out. */}
       <button
         type="button"
@@ -513,7 +512,6 @@ export default function SettingsPage() {
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm">
         <Link href="/terms" className="text-on-bg/75 hover:text-on-bg underline">Terms of Service</Link>
         <Link href="/privacy" className="text-on-bg/75 hover:text-on-bg underline">Privacy Policy</Link>
-        <BugReportButton />
         {signedInEmail === ADMIN_EMAIL && (
           <Link href="/admin" className="text-on-bg/75 hover:text-on-bg underline">Admin</Link>
         )}
