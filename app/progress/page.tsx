@@ -5,13 +5,12 @@ import { createPortal } from 'react-dom';
 import { WORDS, wordsForLevel, glossFor, Level, LEVEL_ORDER, Word } from '../../lib/words';
 import {
   getAllProgress, getAllProgressForLevel, getMergedProgressAcrossLevels,
-  getSettings, getStreak, getTotalGoalDays, MascotStageId, WordProgress,
+  getSettings, MascotStageId, WordProgress,
   getTheme, Theme, THEME_CHANGED_EVENT, getAllCustomWordsAcrossLevels,
 } from '../../lib/storage';
 import { allWordsForLevel } from '../../lib/practice';
 import { SYNCED_EVENT } from '../../lib/sync';
 import DachshundMascot from '../../components/Mascot';
-import GoalDaysBadge from '../../components/GoalDaysBadge';
 import ActivityCalendar from '../../components/ActivityCalendar';
 import Leaderboard from '../../components/Leaderboard';
 import { LEADERBOARD_SEEN_KEY, LEADERBOARD_SEEN_EVENT } from '../../components/NavBar';
@@ -45,8 +44,6 @@ type Scope = 'current' | 'all';
 
 export default function ProgressPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress> | null>(null);
-  const [totalGoalDays, setTotalGoalDays] = useState(0);
-  const [streakCount, setStreakCount] = useState(0);
   const [scope, setScope] = useState<Scope>('current');
   // Which levels actually have any progress at all — "All books" only
   // ever aggregates books the learner has genuinely touched, not every
@@ -83,8 +80,6 @@ export default function ProgressPage() {
     // pull, until the next manual reload.
     const load = () => {
       setProgress(getAllProgress());
-      setTotalGoalDays(getTotalGoalDays());
-      setStreakCount(getStreak().count);
       setStudiedLevels(LEVEL_ORDER.filter(l => Object.keys(getAllProgressForLevel(l)).length > 0));
     };
     load();
@@ -152,11 +147,6 @@ export default function ProgressPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex justify-center gap-6">
-        <GoalDaysBadge variant="goal" count={totalGoalDays} size={112} label="goal days" />
-        <GoalDaysBadge variant="streak" count={streakCount} size={112} label="day streak" />
-      </div>
-
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
         <div className="flex items-center justify-between gap-2 mb-1">
           <h2 className="font-semibold text-ink">Words breakdown</h2>
@@ -252,12 +242,24 @@ export default function ProgressPage() {
             same color rather than a separate hue, since the point is
             "how far along," not re-explaining the 4 stages the bars above
             already break down) stacked against the full total, so what's
-            NOT yet started is whatever's left unfilled. */}
-        {totalWords > 0 && (
+            NOT yet started is whatever's left unfilled. "All books" scope
+            already breaks totals down per-book above, so a second combined
+            bar spanning every book at once didn't add anything there —
+            shown only for "This book". */}
+        {totalWords > 0 && scope === 'current' && (
           <div className="mt-4 pt-4 border-t border-paper-line/60">
             <div className="flex items-center justify-between text-xs text-ink-soft mb-1.5">
               <span>Overall progress</span>
-              <span>{stageCounts['long-crowned']} mastered · {introducedCount} introduced · {totalWords} total</span>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: bars[3].color, opacity: 0.4 }} />
+                  Learning
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: bars[3].color }} />
+                  Mastered
+                </span>
+              </div>
             </div>
             <div className="h-3 rounded-full bg-paper-dim overflow-hidden flex">
               <div

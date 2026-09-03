@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, TouchEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { getActivityCalendarDays, getDailyWordLog, getSettings, localDateString, today } from '../lib/storage';
+import { getActivityCalendarDays, getDailyWordLog, getSettings, getStreak, getTotalGoalDays, localDateString, today } from '../lib/storage';
 import { SYNCED_EVENT } from '../lib/sync';
 import { glossFor, Word } from '../lib/words';
 import { wordsById } from '../lib/practice';
@@ -99,11 +99,20 @@ export default function ActivityCalendar() {
   const [weekOffset, setWeekOffset] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  // Shown as plain text at the top of this card now instead of the
+  // GoalDaysBadge forest-themed images sitting separately at the top of the
+  // whole Progress page — kept self-contained here (own load + SYNCED_EVENT
+  // listener, same pattern as `days` below) rather than threaded down as
+  // props, matching how this component already owns its own data.
+  const [totalGoalDays, setTotalGoalDays] = useState(0);
+  const [streakCount, setStreakCount] = useState(0);
 
   useEffect(() => {
     const load = () => {
       const { full, partial } = getActivityCalendarDays();
       setDays({ full: new Set(full), partial: new Set(partial) });
+      setTotalGoalDays(getTotalGoalDays());
+      setStreakCount(getStreak().count);
     };
     load();
     window.addEventListener(SYNCED_EVENT, load);
@@ -150,7 +159,7 @@ export default function ActivityCalendar() {
 
   return (
     <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
-      <div className="flex items-center justify-between gap-2 mb-3">
+      <div className="flex items-center justify-between gap-2 mb-1">
         <h2 className="font-semibold text-ink">Activity</h2>
         <button
           type="button"
@@ -161,6 +170,9 @@ export default function ActivityCalendar() {
           <span aria-hidden className="inline-block text-[10px] leading-none">{expanded ? '▲' : '▼'}</span>
         </button>
       </div>
+      <p className="text-xs text-ink-soft mb-3">
+        {totalGoalDays} goal day{totalGoalDays === 1 ? '' : 's'} · {streakCount} day streak
+      </p>
 
       {!expanded ? (
         <div className="flex flex-col gap-2">

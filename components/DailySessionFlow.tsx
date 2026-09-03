@@ -1308,6 +1308,14 @@ export default function DailySessionFlow() {
   const roundMode: RoundMode = session?.phase === 'review-rounds' ? 'review' : 'study';
   const word = queue[0] ?? null;
   const needsArticle = !!(settings?.requireArticle && word?.type === 'noun' && word?.article);
+  // The medium-stage word's final review (REVIEW_PLAN.medium.startRound/
+  // capRound are both 4 — a study episode never reaches round 4 at all, see
+  // roundRange's own comment) — prompts by ear instead of by gloss text: the
+  // learner hears the German word and spells it from that, rather than
+  // translating a shown English/Chinese prompt. A miss here still demotes
+  // to round 2 (demoteReviewRound) same as before — untouched, only the
+  // round-4 prompt itself changes.
+  const isFinalNoHintReview = currentRound === 4 && roundMode === 'review';
   // Same gating reasons as the copy-the-word fallback below (see its own
   // comment) PLUS sentence writing mode being explicitly off — a word
   // that's already bootstrap/demoted doesn't need a fetched reference
@@ -1528,6 +1536,11 @@ export default function DailySessionFlow() {
     setDirectSentenceStatus('idle');
     setWordStatus(mode === 'review' ? 'Review' : (progress.lastPracticed && progress.lastPracticed !== today() ? 'Continuing' : 'New'));
     if (round === 1 && getSettings().autoPlayAudio) speakWord(w);
+    // Round 4 is only ever reached in review mode (medium stage's final,
+    // no-hint review — see REVIEW_PLAN) and audio IS this round's prompt
+    // now, not an optional pronunciation aid, so it always plays on load
+    // regardless of the autoPlayAudio setting.
+    if (mode === 'review' && round === 4) speakWord(w);
   };
 
   function enterRoundsPhase(ds: DailySession, mode: RoundMode) {
@@ -2900,7 +2913,18 @@ export default function DailySessionFlow() {
 
         <div className="text-center">
           <RoundWordImage word={word} />
-          <div className="text-2xl font-semibold text-ink">{glossFor(word, getSettings().nativeLanguage)}</div>
+          {isFinalNoHintReview ? (
+            <div className="flex flex-col items-center gap-2">
+              <div className="text-xs uppercase tracking-wide text-ink-soft">Listen and spell what you hear</div>
+              <SpeakerButton
+                word={word}
+                className="flex items-center justify-center w-16 h-16 rounded-full bg-accent/15 text-label hover:bg-accent/25 active:scale-95 transition-all"
+                iconClassName="w-7 h-7"
+              />
+            </div>
+          ) : (
+            <div className="text-2xl font-semibold text-ink">{glossFor(word, getSettings().nativeLanguage)}</div>
+          )}
         </div>
 
         {/* Context for every round 2+/review card, not just round 1 —
@@ -3121,6 +3145,14 @@ export default function DailySessionFlow() {
                       <span className="">{word.article ? `${word.article} ` : ''}{word.de}</span>{' '}
                       <SpeakerButton word={word} className="align-middle text-clay/75 hover:text-clay transition-colors" />
                     </>
+                  )}
+                  {/* This round's prompt was audio, not a shown translation
+                      (see isFinalNoHintReview) — the meaning is only
+                      revealed now, alongside the spelling correction. */}
+                  {isFinalNoHintReview && (
+                    <div className={`text-sm font-medium mt-1 ${feedback ? 'text-good-deep/80' : 'text-clay/80'}`}>
+                      {glossFor(word, getSettings().nativeLanguage)}
+                    </div>
                   )}
                 </div>
                 <button

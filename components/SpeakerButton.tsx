@@ -13,6 +13,11 @@ interface Props {
   // WordInfoPanel's own isPreview prop) — see speakWord/speakWordOnce's
   // own comment for the real cross-word-audio bug this prevents.
   allowAudioGeneration?: boolean;
+  // Overrides SpeakerIcon's own default 'w-4 h-4' sizing — every existing
+  // call site is a small inline affordance next to text, but the
+  // final-review "listen and spell" prompt needs a large, clearly-tappable
+  // icon since it's the primary interaction there, not a secondary one.
+  iconClassName?: string;
 }
 
 // A real report caught this: tapping the button for a word with no
@@ -28,7 +33,7 @@ interface Props {
 // total mystery.
 const FAILURE_DISPLAY_MS = 2000;
 
-export default function SpeakerButton({ word, className, allowAudioGeneration = true }: Props) {
+export default function SpeakerButton({ word, className, allowAudioGeneration = true, iconClassName }: Props) {
   const [failed, setFailed] = useState(false);
 
   const handleClick = () => {
@@ -47,7 +52,7 @@ export default function SpeakerButton({ word, className, allowAudioGeneration = 
       title={failed ? "Couldn't play — tap to try again" : undefined}
       className={(className ?? 'text-label hover:text-label transition-colors') + (failed ? ' text-clay' : '')}
     >
-      <SpeakerIcon muted={failed} />
+      <SpeakerIcon muted={failed} className={iconClassName} />
     </button>
   );
 }

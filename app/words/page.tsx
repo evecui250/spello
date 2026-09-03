@@ -36,21 +36,46 @@ function reviewLabel(nextReviewDue?: string): string | null {
   return days <= 0 ? 'due today' : `in ${days} day${days === 1 ? '' : 's'}`;
 }
 
-// Lower is more relevant — a German prefix match (e.g. "ob" → "oben") is far
-// more useful than a word that merely contains the letters mid-way through
-// (e.g. "Autobahn"), or one that only matches via its English translation.
-// Returns null for no match at all, so it can double as the search filter.
+// Lower is more relevant. Tiers are spaced 100 apart (exact match, German
+// prefix, inflected-form prefix, German contains, inflected-form contains,
+// gloss prefix, gloss contains) and within a tier the matched form's own
+// length breaks ties — this is what makes an exact/short match like "Ei"
+// outrank a longer word that merely happens to start with the same letters
+// (e.g. "Eingang", "Einladung" both start with "ei" too, but "Ei" itself is
+// an exact match and ranks first). Inflected forms (plural/thirdPerson/
+// pastTense/perfectTense — all real fields already on Word) are checked
+// too, so searching a plural like "Eier" resolves to the base word "Ei"
+// instead of coming up empty and offering the AI-lookup/add-new flow for a
+// word that already exists. Returns null for no match at all, so it can
+// double as the search filter.
 function searchRank(w: Word, q: string, nativeLanguage: 'en' | 'zh'): number | null {
   const de = w.de.toLowerCase();
   // Also matched with the article included (e.g. "der Start") — searchRank
   // only checked the bare word before, so typing the article along with it
   // (as it's actually displayed/spoken) found nothing.
   const withArticle = w.article ? `${w.article} ${w.de}`.toLowerCase() : de;
+  const germanForms = [de, withArticle];
+  const inflectedForms = [w.plural, w.thirdPerson, w.pastTense, w.perfectTense]
+    .filter((f): f is string => !!f)
+    .map(f => f.toLowerCase());
   const gloss = glossFor(w, nativeLanguage).toLowerCase();
-  if (de.startsWith(q) || withArticle.startsWith(q)) return 0;
-  if (de.includes(q) || withArticle.includes(q)) return 1;
-  if (gloss.startsWith(q)) return 2;
-  if (gloss.includes(q)) return 3;
+
+  if (germanForms.includes(q) || inflectedForms.includes(q)) return 0;
+
+  const germanPrefix = germanForms.find(f => f.startsWith(q));
+  if (germanPrefix) return 100 + germanPrefix.length;
+
+  const inflectedPrefix = inflectedForms.find(f => f.startsWith(q));
+  if (inflectedPrefix) return 200 + inflectedPrefix.length;
+
+  const germanContains = germanForms.find(f => f.includes(q));
+  if (germanContains) return 300 + germanContains.length;
+
+  const inflectedContains = inflectedForms.find(f => f.includes(q));
+  if (inflectedContains) return 400 + inflectedContains.length;
+
+  if (gloss.startsWith(q)) return 500;
+  if (gloss.includes(q)) return 600;
   return null;
 }
 
@@ -247,18 +272,12 @@ export default function WordsPage() {
   const searchResults = useMemo(() => {
     if (view !== 'search' || !search.trim()) return [];
     return searchPool
-      .filter(w => {
-        const p = progress[w.id];
-        if (!matchesFamiliarity(p, filterFamiliarity)) return false;
-        if (!matchesDateFilter(p, dateFilter, t)) return false;
-        return true;
-      })
       .map(w => ({ w, rank: searchRank(w, q, nativeLanguage) }))
       .filter((x): x is { w: Word; rank: number } => x.rank !== null)
       .sort((a, b) => a.rank - b.rank)
       .map(x => x.w);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, search, searchPool, progress, filterFamiliarity, dateFilter, nativeLanguage]);
+  }, [view, search, searchPool, nativeLanguage]);
 
   const myWordsList = useMemo(() => {
     if (view !== 'myWords') return [];
@@ -505,34 +524,40 @@ export default function WordsPage() {
         />
       )}
 
-      {/* A fixed 2-column grid — each select always takes exactly half the
-          row and shrinks to fit, rather than wrapping individually once
-          their combined intrinsic width happens to exceed the row on a
-          given screen. min-w-0 lets a grid item actually shrink below its
-          content's natural width instead of overflowing the cell. */}
-      <div className="grid grid-cols-2 gap-1.5">
-        <select
-          value={filterFamiliarity}
-          onChange={e => setFilterFamiliarity(e.target.value as Familiarity)}
-          className="min-w-0 bg-paper/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
-        >
-          <option value="all">All words</option>
-          <option value="new">New</option>
-          <option value="learning">Learning</option>
-          <option value="mastered">Mastered</option>
-        </select>
+      {/* Familiarity/date filters only make sense for browsing the full My
+          Words list — Search mode is a single-word lookup (usually just a
+          few results), so these dropdowns were pure clutter there and have
+          been dropped for that view entirely. A fixed 2-column grid — each
+          select always takes exactly half the row and shrinks to fit,
+          rather than wrapping individually once their combined intrinsic
+          width happens to exceed the row on a given screen. min-w-0 lets a
+          grid item actually shrink below its content's natural width
+          instead of overflowing the cell. */}
+      {view === 'myWords' && (
+        <div className="grid grid-cols-2 gap-1.5">
+          <select
+            value={filterFamiliarity}
+            onChange={e => setFilterFamiliarity(e.target.value as Familiarity)}
+            className="min-w-0 bg-paper/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
+          >
+            <option value="all">All words</option>
+            <option value="new">New</option>
+            <option value="learning">Learning</option>
+            <option value="mastered">Mastered</option>
+          </select>
 
-        <select
-          value={dateFilter}
-          onChange={e => setDateFilter(e.target.value as DateFilter)}
-          className="min-w-0 bg-paper/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
-        >
-          <option value="all">All days</option>
-          <option value="today">Today</option>
-          <option value="7days">Past 7 days</option>
-          <option value="30days">Past 30 days</option>
-        </select>
-      </div>
+          <select
+            value={dateFilter}
+            onChange={e => setDateFilter(e.target.value as DateFilter)}
+            className="min-w-0 bg-paper/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
+          >
+            <option value="all">All days</option>
+            <option value="today">Today</option>
+            <option value="7days">Past 7 days</option>
+            <option value="30days">Past 30 days</option>
+          </select>
+        </div>
+      )}
 
       {view === 'search' && !search.trim() && (
         <p className="text-on-bg/70 text-sm text-center py-8">
