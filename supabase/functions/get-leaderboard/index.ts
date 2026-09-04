@@ -72,6 +72,10 @@ interface LeaderboardEntry {
   // string-compare against its own locally-computed display name (which
   // could collide with someone else's mask by coincidence).
   userId: string;
+  // 1-indexed position in this window's full standings -- lets the
+  // client show "#21" for a learner outside the top 3 without needing
+  // its own separate lookup/count.
+  rank: number;
   displayName: string;
   avatarId: string;
   equippedAccessoryId: string | null;
@@ -130,6 +134,12 @@ Deno.serve(async (req: Request) => {
       pointsByUserDay.set(uid, merged);
     }
 
+    // Returns EVERY opted-in ranked learner this window, not just the top
+    // 3 — the Progress page's own compact view still only ever shows the
+    // top 3 plus (when signed in and outside them) the caller's own row,
+    // but the full list is what powers both that row's "#21"-style rank
+    // and the "see everyone" expanded view, so it's computed once here
+    // rather than needing a second request.
     function buildWindow(windowStart: string): LeaderboardEntry[] {
       const totals: { userId: string; points: number; lastDay: string }[] = [];
       for (const [uid, byDay] of pointsByUserDay) {
@@ -144,12 +154,12 @@ Deno.serve(async (req: Request) => {
         if (points > 0) totals.push({ userId: uid, points, lastDay });
       }
       totals.sort((a, b) => b.points - a.points || (a.lastDay < b.lastDay ? -1 : a.lastDay > b.lastDay ? 1 : (a.userId < b.userId ? -1 : 1)));
-      return totals.slice(0, 3).map(t => {
+      return totals.map((t, i) => {
         const profile = profileByUserId.get(t.userId);
         const email = emailByUserId.get(t.userId);
         const displayName = profile?.nickname || (email ? maskEmail(email) : 'Anonymous');
         return {
-          userId: t.userId, displayName, avatarId: profile?.avatar_id || 'dachshund',
+          userId: t.userId, rank: i + 1, displayName, avatarId: profile?.avatar_id || 'dachshund',
           equippedAccessoryId: profile?.equipped_accessory_id ?? null, points: t.points,
         };
       });

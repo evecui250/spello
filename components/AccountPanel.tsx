@@ -24,6 +24,16 @@ export default function AccountPanel({ onSync }: Props) {
   const [inputEmail, setInputEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  // The same email also carries a 6-digit code (Supabase's own default
+  // template renders both the link AND the raw token) — typing it in is
+  // the fix for a real reported gap: the link opens whatever the OS
+  // considers the DEFAULT browser, which silently signs in a browser the
+  // learner may not even be the one actually using Spello in. The code
+  // has no such problem — it's typed directly into THIS tab, so it
+  // always signs in the right one.
+  const [otpCode, setOtpCode] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
   const [aiStats, setAiStats] = useState<AiUsageStats | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [avatarId, setAvatarId] = useState('dachshund');
@@ -104,6 +114,28 @@ export default function AccountPanel({ onSync }: Props) {
     } else {
       setStatus('sent');
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode.trim() || verifying) return;
+    setVerifying(true);
+    setVerifyError('');
+    const { error } = await supabase.auth.verifyOtp({
+      email: inputEmail.trim(),
+      token: otpCode.trim(),
+      type: 'email',
+    });
+    setVerifying(false);
+    if (error) {
+      setVerifyError(error.message);
+    } else {
+      // onAuthStateChange (see the effect above) picks up the new
+      // session and flips this component into the signed-in view — no
+      // manual state reset needed beyond clearing this form's own inputs.
+      setOtpCode('');
+      setStatus('idle');
+      setInputEmail('');
     }
   };
 
@@ -226,11 +258,41 @@ export default function AccountPanel({ onSync }: Props) {
         the AI sentence-writing exercises.
       </p>
       {status === 'sent' ? (
-        <div className="bg-good/25 border border-good rounded-lg px-3 py-2 flex flex-col gap-1.5">
+        <div className="bg-good/25 border border-good rounded-lg px-3 py-2 flex flex-col gap-2">
           <p className="text-good-deep text-sm">✓ Check {inputEmail} for a sign-in link.</p>
           <p className="text-ink-soft text-xs">
             Don&apos;t see it? Check your spam/junk folder — it can take a minute to arrive.
           </p>
+          {/* The link opens whatever the device considers the DEFAULT
+              browser, which may not be the one this tab is actually in —
+              a real reported gap ("I'm using a different browser and it
+              stays signed out"). The same email also has a 6-digit code;
+              typing it in here always signs in THIS tab, regardless of
+              which browser opened the link. */}
+          <div className="pt-1 border-t border-good/40 flex flex-col gap-1.5">
+            <p className="text-ink-soft text-xs">Using a different browser than the link opens? Enter the code from the email instead:</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="123456"
+                value={otpCode}
+                onChange={e => setOtpCode(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
+                maxLength={6}
+                className="flex-1 min-w-0 border-2 border-accent/70 rounded-lg px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent font-mono tracking-widest"
+              />
+              <button
+                onClick={handleVerifyOtp}
+                disabled={!otpCode.trim() || verifying}
+                className="bg-accent text-white px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-40 hover:bg-accent-deep active:scale-95 transition-all shrink-0"
+              >
+                {verifying ? 'Verifying…' : 'Verify'}
+              </button>
+            </div>
+            {verifyError && <p className="text-clay text-xs">{verifyError}</p>}
+          </div>
           <button
             onClick={handleSendLink}
             disabled={resendCooldown > 0}
