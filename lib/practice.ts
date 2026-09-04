@@ -125,7 +125,24 @@ function withNaturalSequenceOrder(words: Word[]): Word[] {
 // done with Study for good and moves to the review pool instead, however
 // many further reviews it still owes. Words already in progress (abandoned
 // mid-introduction) are prioritized over brand-new ones, so an unfinished
-// word gets picked up again before more new words are introduced.
+// word gets picked up again before more new words are introduced -- but
+// capped at limit-1 (see RESERVED_FRESH_SLOTS below) whenever there's any
+// fresh content at all, never the WHOLE batch. Real bug caught live,
+// confirmed against a live account: a small number of words stuck at
+// round 2 with no mascotStage (a rare legacy case -- see enterStudyMcqPhase's
+// own comment on a pre-existing word already mid-introduction when the
+// MCQ redesign shipped, which per that same design never gets picked back
+// up by anything except this same daily batch) never actually resolved
+// for over a month, and because inProgress was NEVER bounded, a batch
+// size of 4 with 5 such stuck words meant literally 100% of every single
+// day's "new words" were these 5 words on repeat -- zero fresh vocabulary
+// ever got introduced the entire time, with nothing about the experience
+// (still labeled "new words", still counted toward the daily goal)
+// hinting that anything was wrong. Reserving at least one fresh slot
+// whenever fresh words exist guarantees this can never fully starve new
+// content again, regardless of how large a stuck backlog ever grows.
+const RESERVED_FRESH_SLOTS = 1;
+
 export function buildStudyWords(
   limit = getSettings().studyBatchSize,
   excludeIds: Set<string> = new Set(),
@@ -182,7 +199,10 @@ export function buildStudyWords(
     freshOrdered = shuffled(fresh);
   }
 
-  return [...shuffled(inProgress), ...freshOrdered].slice(0, limit);
+  const reserved = freshOrdered.length > 0 ? Math.min(RESERVED_FRESH_SLOTS, limit) : 0;
+  const pickedInProgress = shuffled(inProgress).slice(0, Math.max(0, limit - reserved));
+  const remaining = limit - pickedInProgress.length;
+  return [...pickedInProgress, ...freshOrdered.slice(0, remaining)];
 }
 
 // The ~220 curated high-frequency A1 words (see lib/words.ts) always use
