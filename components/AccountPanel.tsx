@@ -24,13 +24,13 @@ export default function AccountPanel({ onSync }: Props) {
   const [inputEmail, setInputEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
-  // The same email also carries a 6-digit code (Supabase's own default
-  // template renders both the link AND the raw token) — typing it in is
-  // the fix for a real reported gap: the link opens whatever the OS
-  // considers the DEFAULT browser, which silently signs in a browser the
-  // learner may not even be the one actually using Spello in. The code
-  // has no such problem — it's typed directly into THIS tab, so it
-  // always signs in the right one.
+  // The same email also carries a code (this project's Magic Link
+  // template was updated to render {{ .Token }} alongside the link) —
+  // typing it in is the fix for a real reported gap: the link opens
+  // whatever the OS considers the DEFAULT browser, which silently signs
+  // in a browser the learner may not even be the one actually using
+  // Spello in. The code has no such problem — it's typed directly into
+  // THIS tab, so it always signs in the right one.
   const [otpCode, setOtpCode] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState('');
@@ -266,9 +266,10 @@ export default function AccountPanel({ onSync }: Props) {
           {/* The link opens whatever the device considers the DEFAULT
               browser, which may not be the one this tab is actually in —
               a real reported gap ("I'm using a different browser and it
-              stays signed out"). The same email also has a 6-digit code;
-              typing it in here always signs in THIS tab, regardless of
-              which browser opened the link. */}
+              stays signed out"). The same email also has a code (this
+              project's auth.email.otp_length is 8, not the 6 Supabase
+              quotes as its own default); typing it in here always signs
+              in THIS tab, regardless of which browser opened the link. */}
           <div className="pt-1 border-t border-good/40 flex flex-col gap-1.5">
             <p className="text-ink-soft text-xs">Using a different browser than the link opens? Enter the code from the email instead:</p>
             <div className="flex gap-2">
@@ -276,11 +277,17 @@ export default function AccountPanel({ onSync }: Props) {
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                placeholder="123456"
+                placeholder="Enter code from email"
                 value={otpCode}
                 onChange={e => setOtpCode(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
-                maxLength={6}
+                // No maxLength -- this project's actual OTP length turned
+                // out to be 8 digits, not Supabase's commonly-quoted
+                // 6-digit default (confirmed live: a hardcoded 6 here
+                // silently truncated every real code, always rejected as
+                // "invalid or expired" no matter what was typed). Left
+                // unbounded rather than hardcoding 8 either, in case this
+                // project's own otp_length setting ever changes again.
                 className="flex-1 min-w-0 border-2 border-accent/70 rounded-lg px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent font-mono tracking-widest"
               />
               <button
