@@ -82,14 +82,20 @@ function LeaderboardRow({ entry, isMe, onAvatarClick }: { entry: LeaderboardEntr
 // the same full-rankings view.
 function MoreRow({ onClick }: { onClick: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex items-center justify-center py-1 text-ink-soft hover:text-ink transition-colors"
-      aria-label="See full rankings"
-    >
-      <span className="font-mono font-bold tracking-widest">···</span>
-    </button>
+    <div className="flex items-center justify-center py-1">
+      {/* A bare "···" read as plain decoration, not a tappable control —
+          the circle (same rounded-full + bg-paper-dim pill treatment used
+          elsewhere for a tappable badge, e.g. ProgressBadge's "New" pill)
+          is what actually signals "this is a button." */}
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label="See full rankings"
+        className="w-8 h-8 rounded-full border border-ink-soft/40 bg-paper-dim text-ink-soft hover:text-ink hover:border-ink-soft transition-colors flex items-center justify-center active:scale-95"
+      >
+        <span className="font-mono font-bold tracking-widest text-xs">···</span>
+      </button>
+    </div>
   );
 }
 
