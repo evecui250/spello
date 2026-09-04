@@ -1312,6 +1312,18 @@ export interface ParagraphExercise {
   // slot back to its word by STRING equality alone could resolve the
   // wrong one.
   tray: { answer: string; wordId: string }[];
+  // The story's full text, already resolved to its correct German
+  // (no [[i]] placeholders) and translated into the learner's own
+  // language, split into parallel sentence-aligned arrays (sentences[i]
+  // translates to translations[i]) — powers the post-check translation
+  // panel in ParagraphExerciseCard (click a sentence in either language,
+  // its counterpart highlights). Optional so an OLDER cached exercise
+  // (persisted before this field existed, or one whose translation
+  // generation didn't line up — see generate-paragraph's own comment)
+  // still renders fine with no translation panel at all, rather than
+  // crashing on a missing field.
+  sentences?: string[];
+  translations?: string[];
 }
 
 export interface DailySession {

@@ -1065,10 +1065,19 @@ export function buildParagraphBatches(words: Word[]): Word[][] {
 export function combineParagraphExercises(a: ParagraphExercise, b: ParagraphExercise): ParagraphExercise {
   const lastA = a.segments[a.segments.length - 1];
   const firstB = b.segments[0];
+  const sentences = [...(a.sentences ?? []), ...(b.sentences ?? [])];
+  // Only kept if BOTH halves came with a complete, aligned translation
+  // set of their own (generate-paragraph already degrades a half's own
+  // mismatch to an empty array — see its own comment) — a partial pairing
+  // (one half translated, the other not) would silently misalign every
+  // sentence after the join point, worse than just showing no panel.
+  const translations = [...(a.translations ?? []), ...(b.translations ?? [])];
   return {
     segments: [...a.segments.slice(0, -1), `${lastA}\n\n${firstB}`, ...b.segments.slice(1)],
     blanks: [...a.blanks, ...b.blanks],
     tray: shuffled([...a.tray, ...b.tray]),
+    sentences,
+    translations: translations.length === sentences.length ? translations : [],
   };
 }
 
@@ -1083,13 +1092,21 @@ export function sharedCategoryHint(words: Word[]): string | undefined {
   return words.every(w => w.category === first) ? first : undefined;
 }
 
-// Parses generate-paragraph's raw `{paragraph, answers}` response (see that
-// function's own comment) into the segments/blanks shape the UI wants, and
-// validates it's actually usable: exactly one `[[i]]` placeholder per word,
-// no duplicates, no gaps. Returns null on anything malformed rather than
-// throwing -- a bad AI response should read as "couldn't build today's
-// story" (skippable, see DailySessionFlow), not crash the session.
-export function parseParagraphResponse(paragraph: string, answers: string[], words: Word[]): ParagraphExercise | null {
+// Parses generate-paragraph's raw `{paragraph, answers, sentences,
+// translations}` response (see that function's own comment) into the
+// segments/blanks shape the UI wants, and validates the part that
+// actually matters for the exercise itself: exactly one `[[i]]`
+// placeholder per word, no duplicates, no gaps. Returns null on anything
+// malformed there rather than throwing -- a bad AI response should read
+// as "couldn't build today's story" (skippable, see DailySessionFlow),
+// not crash the session. sentences/translations are passed through as-is
+// (already validated/aligned server-side, or already emptied out there on
+// a mismatch) -- a translation problem alone never fails the whole
+// exercise, only the bonus-on-top-of-a-bonus translation panel.
+export function parseParagraphResponse(
+  paragraph: string, answers: string[], words: Word[],
+  sentences: string[] = [], translations: string[] = [],
+): ParagraphExercise | null {
   if (!paragraph || !Array.isArray(answers) || answers.length !== words.length) return null;
   const placeholder = /\[\[(\d+)\]\]/g;
   const seen = new Set<number>();
@@ -1107,5 +1124,8 @@ export function parseParagraphResponse(paragraph: string, answers: string[], wor
   }
   segments.push(paragraph.slice(lastEnd));
   if (seen.size !== words.length) return null;
-  return { segments, blanks, tray: shuffled(blanks.map(b => ({ answer: b.answer, wordId: b.wordId }))) };
+  return {
+    segments, blanks, tray: shuffled(blanks.map(b => ({ answer: b.answer, wordId: b.wordId }))),
+    sentences, translations: translations.length === sentences.length ? translations : [],
+  };
 }

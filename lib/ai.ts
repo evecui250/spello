@@ -208,6 +208,17 @@ export async function explainCorrection(
 export interface GeneratedParagraph {
   paragraph: string; // contains [[0]], [[1]], ... placeholders -- see lib/practice.ts's parseParagraphResponse
   answers: string[]; // answers[i] is the correct inflected form for placeholder [[i]]
+  // Both parallel, sentence-aligned (sentences[i] translates to
+  // translations[i]) -- sentences is the FULLY-RESOLVED German text
+  // (placeholders already replaced with their answers), split the same
+  // way generate-paragraph itself splits it server-side. translations is
+  // empty when the model's sentence count didn't match on the
+  // translation side even after its own retry (a quality shortfall, not
+  // a fatal one -- see that function's own comment); the client's
+  // translation panel just doesn't show anything in that rare case,
+  // rather than showing misaligned pairs.
+  sentences: string[];
+  translations: string[];
 }
 
 export interface ParagraphWordInput {
@@ -230,12 +241,18 @@ export async function generateParagraphExercise(
   level: string,
   words: ParagraphWordInput[],
   themeHint?: string,
+  nativeLanguage?: 'en' | 'zh',
 ): Promise<GeneratedParagraph> {
-  const { data, error } = await invokeWithTimeout<{ paragraph?: string; answers?: string[]; limitReached?: boolean }>('generate-paragraph', { level, words, themeHint });
+  const { data, error } = await invokeWithTimeout<{ paragraph?: string; answers?: string[]; sentences?: string[]; translations?: string[]; limitReached?: boolean }>('generate-paragraph', { level, words, themeHint, nativeLanguage });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (!data?.paragraph || !Array.isArray(data.answers)) throw new Error('Malformed AI response');
-  return { paragraph: data.paragraph, answers: data.answers };
+  return {
+    paragraph: data.paragraph,
+    answers: data.answers,
+    sentences: Array.isArray(data.sentences) ? data.sentences : [],
+    translations: Array.isArray(data.translations) ? data.translations : [],
+  };
 }
 
 export interface LookupWordResult {

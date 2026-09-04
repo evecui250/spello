@@ -70,6 +70,7 @@ interface RequestBody {
   level: string;
   words: RequestWord[];
   themeHint?: string;
+  nativeLanguage?: 'en' | 'zh';
 }
 
 Deno.serve(async (req: Request) => {
@@ -110,7 +111,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as RequestBody;
-    const { level, words, themeHint } = body;
+    const { level, words, themeHint, nativeLanguage } = body;
+    const wantsZh = nativeLanguage === 'zh';
     // 2-5 mirrors MIN_PARAGRAPH_WORDS/MAX_PARAGRAPH_WORDS in
     // lib/practice.ts -- enforced again here since this is a public
     // endpoint and the client-side batching is only a courtesy, not a
@@ -215,7 +217,31 @@ Deno.serve(async (req: Request) => {
       return seen.size === count;
     }
 
-    let genResult = await generateOnce(wordList, words.length, level, range, themeHint);
+    // Splits a fully-resolved (no [[i]] placeholders left) German
+    // paragraph into individual sentences -- good enough for these short,
+    // controlled, AI-generated everyday scenes (no abbreviations/decimals
+    // expected), used both to validate the model actually returned one
+    // translation per sentence and to hand the client pre-aligned
+    // sentence pairs for the post-check translation panel (see
+    // ParagraphExerciseCard) instead of making it re-derive boundaries
+    // itself.
+    function splitSentences(text: string): string[] {
+      const matches = text.match(/[^.!?]+[.!?]+(\s+|$)/g);
+      if (matches) return matches.map(s => s.trim()).filter(Boolean);
+      const trimmed = text.trim();
+      return trimmed ? [trimmed] : [];
+    }
+
+    function resolvePlaceholders(paragraph: string, answers: string[]): string {
+      return paragraph.replace(/\[\[(\d+)\]\]/g, (_, i) => answers[Number(i)] ?? '');
+    }
+
+    function hasValidTranslations(paragraph: string, answers: string[], translations: string[]): boolean {
+      return Array.isArray(translations) && translations.length > 0
+        && translations.length === splitSentences(resolvePlaceholders(paragraph, answers)).length;
+    }
+
+    let genResult = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
     if (!genResult) return json({ error: 'AI paragraph generation failed' }, 502);
     // Structural check FIRST -- a malformed [[i]] placeholder set (a
     // duplicate index, one out of range, or a missing index) makes the
@@ -230,23 +256,32 @@ Deno.serve(async (req: Request) => {
     // failure mode). One retry, same budget-conscious pattern as the
     // checks below.
     if (!hasValidPlaceholders(genResult.paragraph, genResult.answers, words.length)) {
-      const retry = await generateOnce(wordList, words.length, level, range, themeHint);
+      const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
       if (retry && hasValidPlaceholders(retry.paragraph, retry.answers, words.length)) genResult = retry;
     }
     if (!followsForcedForms(genResult.paragraph, genResult.answers)) {
-      const retry = await generateOnce(wordList, words.length, level, range, themeHint);
+      const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
       if (retry) genResult = retry;
     }
+    // Same idea, for the translations array specifically -- the model can
+    // get the placeholders/forced-forms right and still miscount
+    // sentences on the translation side (merge two into one, or split one
+    // into two), which would misalign every sentence pair after that
+    // point in the post-check translation panel.
+    if (!hasValidTranslations(genResult.paragraph, genResult.answers, genResult.translations)) {
+      const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
+      if (retry && hasValidTranslations(retry.paragraph, retry.answers, retry.translations)) genResult = retry;
+    }
 
-    let { paragraph, answers, usage } = genResult;
+    let { paragraph, answers, translations, usage } = genResult;
     let flagged = await isFlagged(paragraph);
     if (flagged) {
       // One retry with a fresh generation -- a single odd completion isn't
       // worth failing the whole bonus exercise over. A second flag gives up
       // entirely (see the check below) rather than looping.
-      const retry = await generateOnce(wordList, words.length, level, range, themeHint);
+      const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
       if (retry) {
-        ({ paragraph, answers, usage } = retry);
+        ({ paragraph, answers, translations, usage } = retry);
         flagged = await isFlagged(paragraph);
       }
     }
@@ -288,8 +323,21 @@ Deno.serve(async (req: Request) => {
       // a skippable bonus exercise.
       console.warn('generate-paragraph: separable-verb form not followed after retry', { answers, forcedParticiple });
     }
+    const resolved = resolvePlaceholders(paragraph, answers);
+    const sentences = splitSentences(resolved);
+    // A translation-count mismatch even after its own retry is a quality
+    // shortfall, not a fatal one -- the fill-in exercise itself is still
+    // fully valid (that's all hasValidPlaceholders/followsForcedForms
+    // above already guarantee), so this degrades to "no translation
+    // panel today" (empty array, see ParagraphExerciseCard's own gating)
+    // rather than failing the whole bonus exercise over a bonus-on-top-
+    // of-a-bonus feature.
+    const alignedTranslations = translations.length === sentences.length ? translations : [];
+    if (alignedTranslations.length === 0) {
+      console.warn('generate-paragraph: translation/sentence count mismatch after retry', { sentences, translations });
+    }
 
-    return json({ paragraph, answers });
+    return json({ paragraph, answers, sentences, translations: alignedTranslations });
   } catch (err) {
     console.error('generate-paragraph error:', err);
     return json({ error: 'Unexpected error' }, 500);
@@ -301,8 +349,9 @@ async function generateOnce(
   count: number,
   level: string,
   range: { minSentences: number; maxSentences: number; minWords: number; maxWords: number },
-  themeHint?: string,
-): Promise<{ paragraph: string; answers: string[]; usage: { prompt_tokens?: number; completion_tokens?: number } } | null> {
+  themeHint: string | undefined,
+  wantsZh: boolean,
+): Promise<{ paragraph: string; answers: string[]; translations: string[]; usage: { prompt_tokens?: number; completion_tokens?: number } } | null> {
   const completion = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -343,15 +392,29 @@ async function generateOnce(
             'above exactly, especially any separable-prefix verb\'s forced perfect-tense wording. ' +
             'Every index from 0 to ' +
             (count - 1) +
-            ' must appear exactly once. Respond with exactly this JSON: ' +
-            '{"paragraph": "... [[0]] ... [[1]] ...", "answers": ["form for word 0", "form for word 1", ...]} ' +
+            ' must appear exactly once. ' +
+            `Also translate the paragraph into ${wantsZh ? 'natural, fluent Simplified Chinese' : 'natural, fluent English'} ` +
+            '(meaning-for-meaning, not word-for-word), split into a "translations" array with EXACTLY ' +
+            'one entry per sentence of the German paragraph, in the SAME order they appear -- ' +
+            'translations.length must equal the number of sentences you actually wrote. Each ' +
+            'translations[i] must correspond to exactly one German sentence, so a reader can match ' +
+            'them up one-to-one. ' +
+            (wantsZh
+              ? "Chinese verbs don't inflect for tense the way German does, so keep each sentence's " +
+                'tense unambiguous: use the completed-action particle 了 or an explicit time word ' +
+                "where the German is a completed/past action, and don't add 了 where it's present/" +
+                'habitual. '
+              : '') +
+            'Respond with exactly this JSON: ' +
+            '{"paragraph": "... [[0]] ... [[1]] ...", "answers": ["form for word 0", "form for word 1", ...], ' +
+            '"translations": ["translation of sentence 1", "translation of sentence 2", ...]} ' +
             '-- answers[i] is the exact inflected form you used at placeholder [[i]], in the same ' +
             'order as the numbered word list above (not the order they appear in the paragraph).',
         },
         { role: 'user', content: 'Write the paragraph now.' },
       ],
       temperature: 0.8,
-      max_tokens: 500,
+      max_tokens: 700,
     }),
   });
 
@@ -362,9 +425,9 @@ async function generateOnce(
   const result = await completion.json();
   const raw: string = result.choices?.[0]?.message?.content ?? '{}';
   try {
-    const parsed = JSON.parse(raw) as { paragraph?: string; answers?: string[] };
-    if (!parsed.paragraph || !Array.isArray(parsed.answers)) return null;
-    return { paragraph: parsed.paragraph, answers: parsed.answers, usage: result.usage ?? {} };
+    const parsed = JSON.parse(raw) as { paragraph?: string; answers?: string[]; translations?: string[] };
+    if (!parsed.paragraph || !Array.isArray(parsed.answers) || !Array.isArray(parsed.translations)) return null;
+    return { paragraph: parsed.paragraph, answers: parsed.answers, translations: parsed.translations, usage: result.usage ?? {} };
   } catch {
     return null;
   }

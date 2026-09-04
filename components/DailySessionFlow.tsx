@@ -2279,7 +2279,8 @@ export default function DailySessionFlow() {
       settings.level,
       words.map(w => ({ de: w.de, article: w.article, plural: w.plural, type: w.type, thirdPerson: w.thirdPerson, pastTense: w.pastTense, perfectTense: w.perfectTense })),
       sharedCategoryHint(words),
-    ).then(({ paragraph, answers }) => parseParagraphResponse(paragraph, answers, words));
+      settings.nativeLanguage,
+    ).then(({ paragraph, answers, sentences, translations }) => parseParagraphResponse(paragraph, answers, words, sentences, translations));
     // Same as generateFor, but a non-fatal failure (anything except
     // AIUnreachableError/DailyLimitReachedError, which splitting can't
     // help with anyway) resolves to null instead of rejecting — lets the

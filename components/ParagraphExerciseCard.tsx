@@ -37,6 +37,12 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
   const [selectedWord, setSelectedWord] = useState<{ word: Word; usedForm?: string } | null>(null);
   const [selectedGlossToken, setSelectedGlossToken] = useState<string | null>(null);
   const [glosses, setGlosses] = useState<Record<string, WordGloss>>({});
+  // Which sentence is highlighted in the post-check translation panel —
+  // shared between the German and translation columns so tapping either
+  // side highlights both (see TranslationPanel below). null = nothing
+  // selected. Tapping the same index again clears it, same toggle
+  // behavior as the tray/blank selection above.
+  const [selectedSentence, setSelectedSentence] = useState<number | null>(null);
 
   const wordById = useMemo(() => new Map(words.map(w => [w.id, w])), [words]);
   const usedIndices = new Set(blankTray.filter((i): i is number => i !== null));
@@ -265,6 +271,15 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
                 );
               })}
             </div>
+            {exercise.translations && exercise.sentences && exercise.translations.length > 0
+              && exercise.translations.length === exercise.sentences.length && (
+              <TranslationPanel
+                sentences={exercise.sentences}
+                translations={exercise.translations}
+                selected={selectedSentence}
+                onSelect={i => setSelectedSentence(prev => (prev === i ? null : i))}
+              />
+            )}
             <button
               onClick={onComplete}
               className="w-full bg-accent text-white py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
@@ -273,6 +288,57 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
             </button>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// The post-check translation panel — German story (already fully
+// resolved to its correct answers) above, the learner's own native-
+// language translation below, split into parallel sentences (see
+// generate-paragraph's own comment for how they're aligned). Tapping
+// either side highlights that sentence AND its counterpart, so it's easy
+// to line them up — exactly the interaction from the owner-approved
+// design preview, just wired to real per-sentence data now instead of
+// placeholder content. No separate language toggle — this always shows
+// whichever language generate-paragraph was asked for (the learner's own
+// Settings → native language), same as every other translation in the app.
+function TranslationPanel({
+  sentences, translations, selected, onSelect,
+}: {
+  sentences: string[];
+  translations: string[];
+  selected: number | null;
+  onSelect: (i: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 pt-1 border-t border-paper-line/60">
+      <div className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Translation</div>
+      <div className="text-base leading-relaxed text-ink">
+        {sentences.map((s, i) => (
+          <span
+            key={i}
+            onClick={() => onSelect(i)}
+            className={`cursor-pointer rounded px-0.5 -mx-0.5 transition-colors ${
+              selected === i ? 'bg-accent/25 ring-1 ring-accent' : 'hover:bg-accent/10'
+            }`}
+          >
+            {s}{i < sentences.length - 1 ? ' ' : ''}
+          </span>
+        ))}
+      </div>
+      <div className="text-base leading-relaxed text-ink-soft border-t border-paper-line/40 pt-3">
+        {translations.map((t, i) => (
+          <span
+            key={i}
+            onClick={() => onSelect(i)}
+            className={`cursor-pointer rounded px-0.5 -mx-0.5 transition-colors ${
+              selected === i ? 'bg-accent/25 ring-1 ring-accent text-ink' : 'hover:bg-accent/10'
+            }`}
+          >
+            {t}{i < translations.length - 1 ? ' ' : ''}
+          </span>
+        ))}
       </div>
     </div>
   );
