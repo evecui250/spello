@@ -72,13 +72,26 @@ export interface MyProfile {
   balance: number;
 }
 
-// Signed-out callers get null, same convention as getAiUsageStats.
+// Signed-out callers get null, same convention as getAiUsageStats. One
+// retry before giving up on a real failure -- real report caught live: a
+// learner who'd already set a nickname on one device signed in on a
+// second one and was shown the "Set a nickname…" placeholder again, as if
+// nothing had ever been saved. This had zero retry, unlike every other AI/
+// profile call in the app (see e.g. ParagraphExerciseCard's own gloss
+// fetch for the identical fix) -- a single transient failure right at
+// sign-in (this is very often called the moment a session first exists,
+// racing every other startup fetch, or right after AccountPanel's own
+// verifyOtp flow) silently returned null, and the caller (AccountPanel's
+// loadProfile) has no way to tell "genuinely no nickname yet" apart from
+// "the fetch itself failed" -- it just leaves the field blank either way.
 export async function getMyProfile(): Promise<MyProfile | null> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return null;
-  const { data, error } = await supabase.functions.invoke<MyProfile>('get-my-profile');
-  if (error || !data) return null;
-  return data;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { data, error } = await supabase.functions.invoke<MyProfile>('get-my-profile');
+    if (!error && data) return data;
+  }
+  return null;
 }
 
 export interface BuyAccessoryResult {
