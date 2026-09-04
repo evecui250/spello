@@ -253,9 +253,18 @@ export default function AccountPanel({ onSync }: Props) {
   return (
     <div>
       <label className="block font-semibold text-ink mb-1">Sign in</label>
-      <p className="text-ink-soft text-sm mb-3">
+      <p className="text-ink-soft text-sm mb-1">
         Sign in with a magic link — this keeps your progress synced across devices and unlocks
         the AI sentence-writing exercises.
+      </p>
+      {/* Real reported gap: school/work emails (.edu and similar) often
+          never deliver the sign-in email at all — strict institutional
+          spam filtering blocks it outright, not a bug on Spello's end
+          (see the OTP-code fallback below, which doesn't help if the
+          email never arrives in the first place). Cheaper to warn up
+          front than to have someone wait on an email that's never coming. */}
+      <p className="text-ink-soft text-xs mb-3">
+        Avoid school/work email addresses (e.g. .edu) if you can — their spam filters often block this kind of email entirely.
       </p>
       {status === 'sent' ? (
         <div className="bg-good/25 border border-good rounded-lg px-3 py-2 flex flex-col gap-2">

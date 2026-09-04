@@ -48,7 +48,31 @@ function reviewLabel(nextReviewDue?: string): string | null {
 // instead of coming up empty and offering the AI-lookup/add-new flow for a
 // word that already exists. Returns null for no match at all, so it can
 // double as the search filter.
-function searchRank(w: Word, q: string, nativeLanguage: 'en' | 'zh'): number | null {
+// Splits a gloss into individual candidate translations — a gloss often
+// lists several senses/synonyms ("to run, walk", "跑，走") or carries a
+// leading English infinitive marker ("to run") that would otherwise block
+// an exact/prefix match on the actual word a learner typed. Real bug
+// caught live: searching "run" ranked "rund" (round) above "laufen" (en:
+// "to run, walk") purely because "to run, walk" as one whole string
+// doesn't START WITH "run" — only .includes() ever matched it, landing
+// far below "rund"'s coincidental German PREFIX match. Splitting on every
+// separator first (commas, the Chinese "，"/"、", slashes, semicolons)
+// and stripping a leading "to " fixes this at the source: "run" now
+// matches the part "run" exactly, rather than needing a tier/field-order
+// hack layered on top.
+function glossParts(gloss: string): string[] {
+  return gloss
+    .split(/[,，、/;]+/)
+    .map(p => p.trim().replace(/^to\s+/i, ''))
+    .filter(Boolean);
+}
+
+// Checks German (+ inflected forms) AND both English and Chinese glosses
+// regardless of the learner's own Settings language — "smart enough to
+// detect English/Chinese/German input" (the owner's own framing) means
+// search shouldn't need to know or guess which script a query is in, only
+// whether it matches something real about the word either way.
+function searchRank(w: Word, q: string): number | null {
   const de = w.de.toLowerCase();
   // Also matched with the article included (e.g. "der Start") — searchRank
   // only checked the bare word before, so typing the article along with it
@@ -58,24 +82,31 @@ function searchRank(w: Word, q: string, nativeLanguage: 'en' | 'zh'): number | n
   const inflectedForms = [w.plural, w.thirdPerson, w.pastTense, w.perfectTense]
     .filter((f): f is string => !!f)
     .map(f => f.toLowerCase());
-  const gloss = glossFor(w, nativeLanguage).toLowerCase();
+  const glosses = [
+    ...glossParts((w.en ?? '').toLowerCase()),
+    ...glossParts((w.zh ?? '').toLowerCase()),
+  ];
 
-  if (germanForms.includes(q) || inflectedForms.includes(q)) return 0;
+  if (germanForms.includes(q) || inflectedForms.includes(q) || glosses.includes(q)) return 0;
 
   const germanPrefix = germanForms.find(f => f.startsWith(q));
   if (germanPrefix) return 100 + germanPrefix.length;
 
   const inflectedPrefix = inflectedForms.find(f => f.startsWith(q));
-  if (inflectedPrefix) return 200 + inflectedPrefix.length;
+  if (inflectedPrefix) return 150 + inflectedPrefix.length;
+
+  const glossPrefix = glosses.find(p => p.startsWith(q));
+  if (glossPrefix) return 200 + glossPrefix.length;
 
   const germanContains = germanForms.find(f => f.includes(q));
   if (germanContains) return 300 + germanContains.length;
 
   const inflectedContains = inflectedForms.find(f => f.includes(q));
-  if (inflectedContains) return 400 + inflectedContains.length;
+  if (inflectedContains) return 350 + inflectedContains.length;
 
-  if (gloss.startsWith(q)) return 500;
-  if (gloss.includes(q)) return 600;
+  const glossContains = glosses.find(p => p.includes(q));
+  if (glossContains) return 400 + glossContains.length;
+
   return null;
 }
 
@@ -272,12 +303,12 @@ export default function WordsPage() {
   const searchResults = useMemo(() => {
     if (view !== 'search' || !search.trim()) return [];
     return searchPool
-      .map(w => ({ w, rank: searchRank(w, q, nativeLanguage) }))
+      .map(w => ({ w, rank: searchRank(w, q) }))
       .filter((x): x is { w: Word; rank: number } => x.rank !== null)
       .sort((a, b) => a.rank - b.rank)
       .map(x => x.w);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, search, searchPool, nativeLanguage]);
+  }, [view, search, searchPool]);
 
   const myWordsList = useMemo(() => {
     if (view !== 'myWords') return [];
@@ -297,7 +328,7 @@ export default function WordsPage() {
   // all") found anything anywhere — this, not `searchResults.length === 0`,
   // is what should gate the "look up & add" offer below, so it never
   // appears just because e.g. "Mastered" happens to hide every real match.
-  const searchMatchesAnything = search.trim() !== '' && searchPool.some(w => searchRank(w, q, nativeLanguage) !== null);
+  const searchMatchesAnything = search.trim() !== '' && searchPool.some(w => searchRank(w, q) !== null);
 
   // Auto-fires the AI lookup once a search comes up empty locally, instead
   // of making the learner notice there's no match and tap a button to
