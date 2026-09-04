@@ -1969,7 +1969,7 @@ export default function DailySessionFlow() {
     // away from it here.
     const touched = { ...progress, lastPracticed: today() };
     const nextRound = roundMode === 'review'
-      ? demoteReviewRound(progress.mascotStage === 'medium' ? 'medium' : 'puppy')
+      ? demoteReviewRound(currentRound)
       : requestHint(progress, currentRound).nextRound;
     const updated = roundMode === 'study' ? { ...touched, round: nextRound } : touched;
     saveWordProgress(updated);

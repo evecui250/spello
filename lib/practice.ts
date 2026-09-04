@@ -811,19 +811,34 @@ export function requestHint(progress: WordProgress, currentRound: Round): { prog
 // The review-side equivalent of requestHint/a wrong answer's demotion,
 // used by BOTH applyReviewResult's own wrong branch and the round-ladder's
 // Hint button in review mode. Round 3 no longer exists, so "one step
-// back" can't just be currentRound-1 any more: puppy has only the one
-// rung (round 2 — also its own REVIEW_PLAN.startRound, so "demoted" and
-// "fresh" coincide there); medium's own fresh start is round 4 directly
-// now (see REVIEW_PLAN), so its demotion target is NOT plan.startRound —
-// a miss there is an explicit jump to round 2, a full extra round of
-// scaffolding rather than a one-step demotion, since missing the
-// near-mastery blind-recall test deserves more help, not less (explicit
-// owner call). Both stages land on round 2 either way, just for
-// different reasons — hardcoded rather than derived from REVIEW_PLAN so
-// a future change to medium's own startRound can't silently change what
-// a miss demotes to.
-export function demoteReviewRound(stage: 'puppy' | 'medium'): Round {
-  return 2;
+// back" can't just be currentRound-1 any more: medium's own fresh start
+// is round 4 directly now (see REVIEW_PLAN), so a miss there is an
+// explicit jump to round 2, a full extra round of scaffolding rather than
+// a one-step demotion, since missing the near-mastery blind-recall test
+// deserves more help, not less (explicit owner call).
+//
+// Always gives strictly more help than what's already on screen — real
+// bug caught live: this used to take STAGE instead of the current round
+// and always return 2 regardless, which was a same-round no-op for a
+// puppy word (REVIEW_PLAN.startRound AND capRound are both 2 for puppy —
+// there's no lower rung to demote FROM in the first place), making Hint
+// look completely broken ("no reaction") and a wrong answer just re-show
+// the exact same half-hint pattern (generateHint's round-2 reveal is
+// fully deterministic, not randomized, specifically so re-deriving it
+// reproduces identically — see its own comment — which is exactly what
+// made the no-op invisible instead of just "less bad than expected").
+// Once already at round 2 (medium's own post-demotion state included),
+// the next miss now escalates all the way to round 1 — full reveal, the
+// same "copy this word" treatment study's own round 1 uses (see the
+// round-ladder's currentRound===1 rendering, which isn't itself gated to
+// study mode) — rather than looping 2 forever. applyReviewResult's own
+// capRound check already handles a subsequent correct submission from
+// round 1 correctly with no changes needed there: it's below capRound
+// either way, so it climbs back to capRound for a real re-test instead of
+// completing outright, the same "correct but below cap" path already used
+// for medium's round-2 retry.
+export function demoteReviewRound(currentRound: Round): Round {
+  return currentRound > 2 ? 2 : 1;
 }
 
 export interface ReviewOutcome {
@@ -869,15 +884,17 @@ export function applyReviewResult(progress: WordProgress, correct: boolean, curr
     if (currentRound >= plan.capRound) {
       return { progress: recordMilestonePass(progress, plan.nextStage, t), nextRound: plan.capRound, isFinal: true, scored: true };
     }
-    // Only medium can be "correct but below cap" now (a post-demotion
-    // round-2 retry climbing back toward round 4) — puppy's single rung
-    // IS its cap round, so it always takes the branch above instead.
+    // "Correct but below cap" — a post-demotion retry (round 2 for
+    // medium, or round 1 for either stage once already at round 2 — see
+    // demoteReviewRound) climbing back toward capRound rather than
+    // completing the milestone outright: passing an easier scaffolded
+    // round isn't the same as passing the real no-hint/half-hint test.
     // Rounds no longer form a contiguous ladder (3 is gone), so this is
     // a direct jump to capRound, not a "+1".
     return { progress: { ...progress, lastPracticed: t }, nextRound: plan.capRound, isFinal: false, scored: true };
   }
 
-  return { progress: { ...progress, lastPracticed: t }, nextRound: demoteReviewRound(stage), isFinal: false, scored: true };
+  return { progress: { ...progress, lastPracticed: t }, nextRound: demoteReviewRound(currentRound), isFinal: false, scored: true };
 }
 
 // Same "der/die/das X" form spoken and shown everywhere else a bare German
