@@ -109,10 +109,17 @@ export default function Leaderboard() {
   const [showFullRankings, setShowFullRankings] = useState(false);
 
   useEffect(() => {
-    const load = () => {
-      supabase.functions.invoke<LeaderboardResponse>('get-leaderboard')
-        .then(({ data: result }) => { if (result) setData(result); })
-        .catch(() => {});
+    // One retry before giving up, same as lib/shop.ts's getMyProfile --
+    // a real, confirmed gap: this had none, so a single transient failure
+    // (most visible signed-out, since there's no later SYNCED_EVENT retry
+    // for that visitor at all) left the leaderboard silently empty for the
+    // rest of that page load, only recovering once something else forced
+    // a fresh mount (another tab, navigating away and back).
+    const load = async () => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const { data: result, error } = await supabase.functions.invoke<LeaderboardResponse>('get-leaderboard');
+        if (!error && result) { setData(result); return; }
+      }
     };
     load();
     window.addEventListener(SYNCED_EVENT, load);

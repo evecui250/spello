@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   getAllProgress, getSettings, today, PROGRESS_CHANGED_EVENT,
@@ -58,6 +58,7 @@ export default function HomePage() {
   // still fires onLoad almost immediately, so the fade-in there is
   // imperceptible.
   const [petLoaded, setPetLoaded] = useState(false);
+  const petImgRef = useRef<HTMLImageElement>(null);
 
   const loadProfile = () => {
     getDisplayProfile().then(profile => {
@@ -68,6 +69,15 @@ export default function HomePage() {
 
   useEffect(() => {
     setPetLoaded(false);
+    // A cached image can finish loading before React attaches the onLoad
+    // listener below (or even synchronously, in the same tick the <img>
+    // is created) -- a real, confirmed gap: the pet silently never
+    // appeared until navigating away and back forced a fresh mount that
+    // happened to win the race. Checking .complete right after render
+    // catches the case onLoad would otherwise miss.
+    if (petImgRef.current?.complete && petImgRef.current.naturalWidth > 0) {
+      setPetLoaded(true);
+    }
   }, [avatarId]);
 
   useEffect(() => {
@@ -212,6 +222,7 @@ export default function HomePage() {
       <div className="flex-1 flex flex-col items-center justify-center gap-5">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
+        ref={petImgRef}
         src={`${BASE}/${heroImageFor(avatarId)}`}
         alt="Your pet"
         onLoad={() => setPetLoaded(true)}
