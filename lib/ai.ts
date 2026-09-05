@@ -223,6 +223,12 @@ export interface GeneratedParagraph {
 
 export interface ParagraphWordInput {
   de: string;
+  // The word's English meaning -- the model otherwise gets nothing but
+  // bare German spelling to work from, a real confirmed gap: a near-
+  // homograph pair like "leben" (to live) / "lieben" (to love) has
+  // nothing to disambiguate it, so the model can silently write the wrong
+  // one. See generate-paragraph's own wordList comment.
+  en: string;
   article?: string;
   plural?: string;
   type: string;

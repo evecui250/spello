@@ -2285,7 +2285,7 @@ export default function DailySessionFlow() {
     const settings = getSettings();
     const generateFor = (words: Word[]) => generateParagraphExercise(
       settings.level,
-      words.map(w => ({ de: w.de, article: w.article, plural: w.plural, type: w.type, thirdPerson: w.thirdPerson, pastTense: w.pastTense, perfectTense: w.perfectTense })),
+      words.map(w => ({ de: w.de, en: w.en, article: w.article, plural: w.plural, type: w.type, thirdPerson: w.thirdPerson, pastTense: w.pastTense, perfectTense: w.perfectTense })),
       sharedCategoryHint(words),
       settings.nativeLanguage,
     ).then(({ paragraph, answers, sentences, translations }) => parseParagraphResponse(paragraph, answers, words, sentences, translations));

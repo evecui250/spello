@@ -58,6 +58,15 @@ const CORS_HEADERS = {
 
 interface RequestWord {
   de: string;
+  // The word's English meaning -- without this the model has nothing but
+  // bare spelling to go on, which is exactly how a near-homograph pair
+  // like "leben" (to live) / "lieben" (to love) gets silently swapped
+  // (confirmed real). Included in every wordList entry below regardless
+  // of the learner's own native language -- it's the one gloss field
+  // guaranteed present for every word (unlike `zh`, backfilled later and
+  // still missing for some), so it's the reliable disambiguator to hand
+  // the model even for a Chinese-native-language request.
+  en: string;
   article?: string;
   plural?: string;
   type: string;
@@ -150,22 +159,23 @@ Deno.serve(async (req: Request) => {
 
     const wordList = words
       .map((w, i) => {
+        const meaning = `meaning "${w.en}"`;
         if (w.type === 'noun') {
-          return `${i}: "${w.de}" (${[w.article, `plural: ${w.plural || 'none'}`].filter(Boolean).join(', ')})`;
+          return `${i}: "${w.de}" (${meaning}; ${[w.article, `plural: ${w.plural || 'none'}`].filter(Boolean).join(', ')})`;
         }
         if (w.type === 'verb') {
           const participle = forcedParticiple[i];
           if (participle) {
             const aux = w.perfectTense!.split(' ')[0];
             return (
-              `${i}: "${w.de}" -- this is a separable-prefix verb. You MUST use its perfect tense: ` +
+              `${i}: "${w.de}" (${meaning}) -- this is a separable-prefix verb. You MUST use its perfect tense: ` +
               `write "${aux}" as normal text immediately before placeholder [[${i}]], and the answer ` +
               `for [[${i}]] must be exactly "${participle}" (nothing else, no prefix elsewhere).`
             );
           }
-          return `${i}: "${w.de}" (infinitive; natural tense/person forms: ${[w.thirdPerson, w.pastTense, w.perfectTense].filter(Boolean).join(' / ')})`;
+          return `${i}: "${w.de}" (${meaning}; infinitive; natural tense/person forms: ${[w.thirdPerson, w.pastTense, w.perfectTense].filter(Boolean).join(' / ')})`;
         }
-        return `${i}: "${w.de}" (${w.type})`;
+        return `${i}: "${w.de}" (${meaning}; ${w.type})`;
       })
       .join('\n');
 
@@ -398,7 +408,10 @@ async function generateOnce(
             'one entry per sentence of the German paragraph, in the SAME order they appear -- ' +
             'translations.length must equal the number of sentences you actually wrote. Each ' +
             'translations[i] must correspond to exactly one German sentence, so a reader can match ' +
-            'them up one-to-one. ' +
+            'them up one-to-one -- before writing the translations array, re-read the German ' +
+            'paragraph you just wrote and number its sentences by their sentence-ending punctuation ' +
+            '(. ! ?) in left-to-right order; translations[i] must translate exactly the sentence you ' +
+            'numbered i, not a paraphrase pieced together from a different one. ' +
             (wantsZh
               ? "Chinese verbs don't inflect for tense the way German does, so keep each sentence's " +
                 'tense unambiguous: use the completed-action particle 了 or an explicit time word ' +
