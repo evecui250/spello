@@ -14,7 +14,9 @@ import { getLocalAvatarId, saveLocalAvatarId, getLocalNickname, saveLocalNicknam
 export interface AvatarOption {
   id: string;
   name: string;
-  image: string; // path under /public, no accessory equipped
+  image: string; // path under /public, no accessory equipped -- a circular
+  // headshot crop, used wherever the avatar reads as an identity/profile
+  // picture (Leaderboard rows, AccountPanel's thumbnail, MascotShopModal).
   // Per-accessory-id alternate portrait for THIS animal -- a whole
   // separate image, not an overlay, since that's how the art was actually
   // produced (each accessory is a full redraw per animal, not a sticker
@@ -22,14 +24,30 @@ export interface AvatarOption {
   // should ever read this.
   variants?: Record<string, string>;
   comingSoon?: boolean;
+  // Full-body portrait, transparent background -- used wherever the pet
+  // is shown as a character rather than a profile picture (Home's hero,
+  // the pet/nickname picker). Kept as a separate image rather than a crop
+  // of `image`, since that's how the art was actually produced. Falls
+  // back to `image` in heroImageFor below for any avatar that doesn't
+  // have one yet.
+  heroImage?: string;
 }
 
 export const AVATAR_CATALOG: AvatarOption[] = [
-  { id: 'dachshund', name: 'Dachshund', image: 'avatar_dachshund.png', variants: { 'leather-collar': 'avatar_dachshund_gold_collar.png' } },
-  { id: 'cat', name: 'Cat', image: 'avatar_cat.png', variants: { 'leather-collar': 'avatar_cat_gold_collar.png' } },
-  { id: 'labrador', name: 'Labrador', image: 'avatar_labrador.png', variants: { 'leather-collar': 'avatar_labrador_gold_collar.png' } },
-  { id: 'cat-white', name: 'White Cat', image: 'avatar_cat_white.png', variants: { 'leather-collar': 'avatar_cat_white_gold_collar.png' } },
+  { id: 'dachshund', name: 'Dachshund', image: 'avatar_dachshund.png', variants: { 'leather-collar': 'avatar_dachshund_gold_collar.png' }, heroImage: 'pet_dachshund_full.png' },
+  { id: 'cat', name: 'Cat', image: 'avatar_cat.png', variants: { 'leather-collar': 'avatar_cat_gold_collar.png' }, heroImage: 'pet_cat_full.png' },
+  { id: 'labrador', name: 'Labrador', image: 'avatar_labrador.png', variants: { 'leather-collar': 'avatar_labrador_gold_collar.png' }, heroImage: 'pet_labrador_full.png' },
+  { id: 'cat-white', name: 'White Cat', image: 'avatar_cat_white.png', variants: { 'leather-collar': 'avatar_cat_white_gold_collar.png' }, heroImage: 'pet_cat_white_full.png' },
 ];
+
+// The one place that should resolve "what full-body portrait do I show
+// for this pet" -- accessories have no separate full-body art (they're a
+// profile-picture-only concept so far), so this ignores equippedAccessoryId
+// entirely, unlike avatarImageFor below.
+export function heroImageFor(avatarId: string): string {
+  const avatar = AVATAR_CATALOG.find(a => a.id === avatarId) ?? AVATAR_CATALOG[0];
+  return avatar.heroImage ?? avatar.image;
+}
 
 // The one place that should resolve "what image do I actually show for
 // this user" -- the equipped accessory only changes the picture if the

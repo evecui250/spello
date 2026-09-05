@@ -6,7 +6,7 @@ import { getSettings, saveSettings, markOnboardingDone, Settings, MascotStageId,
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
 import { Level } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
-import { AVATAR_CATALOG, avatarImageFor, getDisplayProfile, setAvatarId as saveRemoteAvatarId, setNickname as saveRemoteNickname } from '../../lib/shop';
+import { AVATAR_CATALOG, heroImageFor, getDisplayProfile, setAvatarId as saveRemoteAvatarId, setNickname as saveRemoteNickname } from '../../lib/shop';
 import DachshundMascot from '../../components/Mascot';
 import { THEME_CONFIG } from '../../components/AppBackground';
 
@@ -357,9 +357,9 @@ export default function WelcomePage() {
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(a.id, null)}`}
+                      src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${heroImageFor(a.id)}`}
                       alt={a.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                     />
                   </button>
                 ))}

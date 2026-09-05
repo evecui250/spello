@@ -8,7 +8,7 @@ import {
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
 import { SYNCED_EVENT } from '../lib/sync';
-import { getDisplayProfile, avatarImageFor } from '../lib/shop';
+import { getDisplayProfile, heroImageFor } from '../lib/shop';
 import { CheckCircleIcon, SettingsGearIcon } from '../components/icons';
 import PetNicknameModal from '../components/PetNicknameModal';
 import Link from 'next/link';
@@ -48,14 +48,12 @@ export default function HomePage() {
   // The learner's chosen pet + nickname — works whether or not they're
   // signed in (see lib/shop.ts's getDisplayProfile).
   const [avatarId, setAvatarId] = useState('dachshund');
-  const [equippedAccessoryId, setEquippedAccessoryId] = useState<string | null>(null);
   const [nickname, setNickname] = useState<string | null>(null);
   const [petModalOpen, setPetModalOpen] = useState(false);
 
   const loadProfile = () => {
     getDisplayProfile().then(profile => {
       setAvatarId(profile.avatarId);
-      setEquippedAccessoryId(profile.equippedAccessoryId);
       setNickname(profile.nickname);
     });
   };
@@ -190,7 +188,7 @@ export default function HomePage() {
 
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={`${BASE}/${avatarImageFor(avatarId, equippedAccessoryId)}`}
+        src={`${BASE}/${heroImageFor(avatarId)}`}
         alt="Your pet"
         className="h-32 w-auto object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)]"
       />
@@ -212,22 +210,22 @@ export default function HomePage() {
             <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />
           </button>
         ) : (
-          <div className="w-full max-w-[280px] bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-4 flex flex-col gap-3">
-            <span className="text-xs font-semibold text-ink-soft uppercase tracking-wide">Today&apos;s session</span>
+          <div className="w-full max-w-[280px] bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 shadow-sm p-4 flex flex-col gap-3">
+            <span className="text-xs font-semibold text-on-bg/70 uppercase tracking-wide">Today&apos;s session</span>
             <div className="flex items-center">
               <div className="flex-1 flex items-center gap-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`${BASE}/icon_learn_new.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
                 <div>
-                  <div className="font-bold text-ink font-mono">{previewStudyCount}/{totalStudyCount}</div>
-                  <div className="text-xs text-ink-soft">new</div>
+                  <div className="font-bold text-on-bg font-mono">{previewStudyCount}/{totalStudyCount}</div>
+                  <div className="text-xs text-on-bg/65">new</div>
                 </div>
               </div>
-              <div className="w-px h-9 bg-paper-line shrink-0" />
+              <div className="w-px h-9 bg-white/15 shrink-0" />
               <div className="flex-1 flex items-center gap-2 justify-end text-right">
                 <div>
-                  <div className="font-bold text-ink font-mono">{previewReviewCount}/{totalReviewCount}</div>
-                  <div className="text-xs text-ink-soft">to review</div>
+                  <div className="font-bold text-on-bg font-mono">{previewReviewCount}/{totalReviewCount}</div>
+                  <div className="text-xs text-on-bg/65">to review</div>
                 </div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`${BASE}/icon_review.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
@@ -251,13 +249,13 @@ export default function HomePage() {
         {hasNotebookActivity && (
           <Link
             href="/mistakes"
-            className="w-full max-w-[280px] flex items-center gap-3 bg-paper/60 backdrop-blur-sm rounded-xl border border-paper-line/40 px-4 py-2.5 hover:bg-paper/80 transition-colors"
+            className="w-full max-w-[280px] flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-xl border border-white/15 px-4 py-2.5 hover:bg-white/15 transition-colors"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={`${BASE}/icon_mistake_notebook.png`} alt="" className="w-8 h-8 object-contain shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-ink text-sm">Mistake Notebook</div>
-              <div className="text-xs text-ink-soft">{mistakeCount > 0 ? `${mistakeCount} to redo` : 'All caught up'}</div>
+              <div className="font-semibold text-on-bg text-sm">Mistake Notebook</div>
+              <div className="text-xs text-on-bg/65">{mistakeCount > 0 ? `${mistakeCount} to redo` : 'All caught up'}</div>
             </div>
           </Link>
         )}

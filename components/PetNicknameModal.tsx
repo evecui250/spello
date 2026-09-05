@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AVATAR_CATALOG, avatarImageFor, getDisplayProfile, setAvatarId as saveRemoteAvatarId, setNickname as saveRemoteNickname } from '../lib/shop';
+import { AVATAR_CATALOG, heroImageFor, getDisplayProfile, setAvatarId as saveRemoteAvatarId, setNickname as saveRemoteNickname } from '../lib/shop';
 import { saveLocalAvatarId, saveLocalNickname } from '../lib/storage';
 
 interface Props {
@@ -86,9 +86,9 @@ export default function PetNicknameModal({ onClose, onProfileChange }: Props) {
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(a.id, null)}`}
+                      src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${heroImageFor(a.id)}`}
                       alt={a.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                     />
                   </button>
                 ))}
