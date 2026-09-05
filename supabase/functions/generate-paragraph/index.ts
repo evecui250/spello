@@ -304,40 +304,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // New, confirmed real via live testing this rewrite: a noun blank can
-    // land with literally nothing in front of it ("sitzt [[i]]" ->
-    // "sitzt Katze" once resolved -- missing its article entirely).
-    // Heuristic, not exhaustive -- checks the few words immediately
-    // before a noun's placeholder for a recognizable German determiner or
-    // a fixed preposition contraction that already covers it (an
-    // adjective can sit between the two, e.g. "die kleine [[i]]", hence
-    // checking a short window rather than just the one adjacent word).
-    // A false negative here just costs one extra retry, not a wrong
-    // answer -- same low-stakes budget as the other quality checks below.
-    const GERMAN_DETERMINERS = new Set([
-      'der', 'die', 'das', 'den', 'dem', 'des',
-      'ein', 'eine', 'einen', 'einem', 'einer', 'eines',
-      'kein', 'keine', 'keinen', 'keinem', 'keiner', 'keines',
-      'mein', 'meine', 'meinen', 'meinem', 'meiner', 'meines',
-      'dein', 'deine', 'deinen', 'deinem', 'deiner', 'deines',
-      'sein', 'seine', 'seinen', 'seinem', 'seiner', 'seines',
-      'ihr', 'ihre', 'ihren', 'ihrem', 'ihrer', 'ihres',
-      'unser', 'unsere', 'unseren', 'unserem', 'unserer', 'unseres',
-      'dieser', 'diese', 'dieses', 'diesen', 'diesem',
-      'jeder', 'jede', 'jedes', 'jeden', 'jedem',
-      'zum', 'zur', 'im', 'ins', 'am', 'beim', 'vom', 'ans',
-    ]);
-    function nounsHaveArticles(paragraph: string): boolean {
-      return words.every((w, i) => {
-        if (w.type !== 'noun') return true;
-        const m = new RegExp(`\\[\\[${i}\\]\\]`).exec(paragraph);
-        if (!m) return true; // hasValidPlaceholders already covers a missing placeholder
-        const before = paragraph.slice(0, m.index).trim().split(/\s+/).slice(-3)
-          .map(t => t.toLowerCase().replace(/[.,!?]/g, ''));
-        return before.some(t => GERMAN_DETERMINERS.has(t));
-      });
-    }
-
     // New: the resolved German text should land reasonably close to this
     // batch's target word-count band -- not exact (naturalness wins over
     // hitting a count, per the owner's own framing), just not wildly off
@@ -404,10 +370,6 @@ Deno.serve(async (req: Request) => {
     if (!hasNoEmptyAnswers(genResult.answers)) {
       const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
       if (retry && hasNoEmptyAnswers(retry.answers)) genResult = retry;
-    }
-    if (!nounsHaveArticles(genResult.paragraph)) {
-      const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
-      if (retry && nounsHaveArticles(retry.paragraph)) genResult = retry;
     }
     if (!isReasonableLength(genResult.paragraph, genResult.answers)) {
       const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
@@ -487,14 +449,6 @@ Deno.serve(async (req: Request) => {
     if (!hasNoEmptyAnswers(answers)) {
       console.error('generate-paragraph: empty answer after retry', { answers });
       return json({ error: 'AI returned an incomplete answer' }, 502);
-    }
-    if (!nounsHaveArticles(paragraph)) {
-      // Hard fail, per the owner's own explicit call -- a noun blank
-      // missing its article is confirmed real (live-tested this rewrite)
-      // and reads as broken German to a learner ("sitzt Katze"), not
-      // just an awkward stylistic choice.
-      console.error('generate-paragraph: missing article before a noun blank after retry', { paragraph });
-      return json({ error: 'AI dropped an article before a noun blank' }, 502);
     }
     if (!isReasonableLength(paragraph, answers)) {
       // Logged, not failed -- same "quality shortfall, not fatal" call as
@@ -666,11 +620,17 @@ async function generateOnce(
           '{"index": i, "answer": "the exact form you wrote at [[i]]"} -- one entry per target, in any order. ' +
           'Do not rely on array position to convey which target an answer belongs to; the index field is what ' +
           'matters.\n' +
-          '- For a noun target, the placeholder replaces ONLY the noun itself -- write whatever article, ' +
-          'possessive, or quantifier the sentence grammatically needs (e.g. "die", "meine", "ein") as normal ' +
-          'text immediately before the placeholder, unless a fixed preposition contraction (e.g. "zum", "im") ' +
-          'already covers it. A bare noun placeholder with nothing in front of it (e.g. "sitzt [[i]]") is wrong ' +
-          'unless that is genuinely how German omits the article there.\n' +
+          '- For a noun target, the placeholder replaces ONLY the noun itself -- if the sentence you\'re ' +
+          'writing needs an article, possessive, or quantifier in front of it (e.g. "die", "meine", "ein"), ' +
+          'write that as normal text immediately before the placeholder, unless a fixed preposition ' +
+          'contraction (e.g. "zum", "im") already covers it. But plenty of natural German nouns take NO ' +
+          'article at all -- a mass/uncountable noun ("Ich trinke [[i]]" for Wasser/Kaffee/Musik), an ' +
+          'indefinite plural ("Ich esse gern [[i]]" for Äpfel), or a noun in a fixed verb+noun expression ' +
+          '("Er hat [[i]]" for Hunger/Fieber/Zeit) are all completely correct with a bare placeholder and ' +
+          'nothing in front of it. Use your own real judgment of natural German for whichever case this ' +
+          'target actually is -- do not add an article just to be safe, and do not omit one a definite, ' +
+          'specific singular noun genuinely needs (a bare "sitzt [[i]]" for a specific cat sitting somewhere ' +
+          'is wrong; it needs "sitzt die [[i]]" or similar).\n' +
           '- Do not use another form of that target elsewhere in the text -- each target appears exactly once, at ' +
           'its placeholder, and nowhere else.\n' +
           '- Follow each word\'s own instructions above exactly, especially any separable-prefix verb\'s forced ' +
