@@ -207,48 +207,48 @@ export default function HomePage() {
 
       <div className="w-full flex flex-col items-center gap-3">
         {nothingLeftAtAll ? (
-          <div className="w-full max-w-[280px] rounded-full border bg-paper/40 backdrop-blur-sm border-paper-line/30 opacity-80 flex items-center justify-center gap-2 px-6 py-4">
+          <div className="w-full max-w-[320px] rounded-full border bg-paper/40 backdrop-blur-sm border-paper-line/30 opacity-80 flex items-center justify-center gap-2 px-6 py-4">
             <CheckCircleIcon className="w-6 h-6 text-good-deep" />
-            <span className="font-semibold text-ink">All done today</span>
+            <span className="font-semibold text-ink text-lg">All done today</span>
           </div>
         ) : isDoneForNow ? (
           <button
             onClick={handleClick}
-            className="group relative w-full max-w-[280px] rounded-full px-5 py-4 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_16px_rgba(90,58,26,0.35)] hover:shadow-[0_8px_24px_rgba(90,58,26,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
+            className="group relative w-full max-w-[320px] rounded-full px-5 py-4 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_16px_rgba(90,58,26,0.35)] hover:shadow-[0_8px_24px_rgba(90,58,26,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
             style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
           >
-            <span className="text-lg font-extrabold text-on-bg tracking-wide">{label}</span>
-            <span className="text-xs font-medium text-on-bg/75 text-center">study more →</span>
+            <span className="text-xl font-extrabold text-on-bg tracking-wide">{label}</span>
+            <span className="text-sm font-medium text-on-bg/75 text-center">study more →</span>
             <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />
           </button>
         ) : (
-          <div className="w-full max-w-[280px] bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 shadow-sm p-4 flex flex-col gap-3">
-            <span className="text-xs font-semibold text-on-bg/70 uppercase tracking-wide">Today&apos;s session</span>
+          <div className="w-full max-w-[320px] bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 shadow-sm p-5 flex flex-col gap-4">
+            <span className="text-sm font-semibold text-on-bg/70 uppercase tracking-wide">Today&apos;s session</span>
             <div className="flex items-center">
-              <div className="flex-1 flex items-center gap-2">
+              <div className="flex-1 flex items-center gap-2.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`${BASE}/icon_learn_new.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
+                <img src={`${BASE}/icon_learn_new.png`} alt="" className="w-10 h-10 object-contain shrink-0" />
                 <div>
-                  <div className="font-bold text-on-bg font-mono">{previewStudyCount}/{totalStudyCount}</div>
-                  <div className="text-xs text-on-bg/65">new</div>
+                  <div className="font-bold text-on-bg font-mono text-lg">{previewStudyCount}/{totalStudyCount}</div>
+                  <div className="text-sm text-on-bg/65">new</div>
                 </div>
               </div>
-              <div className="w-px h-9 bg-white/15 shrink-0" />
-              <div className="flex-1 flex items-center gap-2">
+              <div className="w-px h-10 bg-white/15 shrink-0" />
+              <div className="flex-1 flex items-center gap-2.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`${BASE}/icon_review.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
+                <img src={`${BASE}/icon_review.png`} alt="" className="w-10 h-10 object-contain shrink-0" />
                 <div>
-                  <div className="font-bold text-on-bg font-mono">{previewReviewCount}/{totalReviewCount}</div>
-                  <div className="text-xs text-on-bg/65">to review</div>
+                  <div className="font-bold text-on-bg font-mono text-lg">{previewReviewCount}/{totalReviewCount}</div>
+                  <div className="text-sm text-on-bg/65">to review</div>
                 </div>
               </div>
             </div>
             <button
               onClick={handleClick}
-              className="group relative w-full rounded-full px-5 py-3 overflow-hidden shadow-[0_4px_16px_rgba(90,58,26,0.35)] hover:shadow-[0_8px_24px_rgba(90,58,26,0.45)] active:scale-[0.98] transition-all duration-300 ease-out"
+              className="group relative w-full rounded-full px-5 py-3.5 overflow-hidden shadow-[0_4px_16px_rgba(90,58,26,0.35)] hover:shadow-[0_8px_24px_rgba(90,58,26,0.45)] active:scale-[0.98] transition-all duration-300 ease-out"
               style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
             >
-              <span className="text-base font-extrabold text-on-bg tracking-wide">{label} →</span>
+              <span className="text-lg font-extrabold text-on-bg tracking-wide">{label} →</span>
               <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />
             </button>
           </div>
@@ -261,13 +261,13 @@ export default function HomePage() {
         {hasNotebookActivity && (
           <Link
             href="/mistakes"
-            className="w-full max-w-[280px] flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-xl border border-white/15 px-4 py-2.5 hover:bg-white/15 transition-colors"
+            className="w-full max-w-[320px] flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-xl border border-white/15 px-4 py-3.5 hover:bg-white/15 transition-colors"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`${BASE}/icon_mistake_notebook.png`} alt="" className="w-8 h-8 object-contain shrink-0" />
+            <img src={`${BASE}/icon_mistake_notebook.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-on-bg text-sm">Mistake Notebook</div>
-              <div className="text-xs text-on-bg/65">{mistakeCount > 0 ? `${mistakeCount} to redo` : 'All caught up'}</div>
+              <div className="font-semibold text-on-bg text-base">Mistake Notebook</div>
+              <div className="text-sm text-on-bg/65">{mistakeCount > 0 ? `${mistakeCount} to redo` : 'All caught up'}</div>
             </div>
           </Link>
         )}
