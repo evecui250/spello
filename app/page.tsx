@@ -50,6 +50,14 @@ export default function HomePage() {
   const [avatarId, setAvatarId] = useState('dachshund');
   const [nickname, setNickname] = useState<string | null>(null);
   const [petModalOpen, setPetModalOpen] = useState(false);
+  // These portraits are large (~1-1.5MB), uncached PNGs on a first visit —
+  // without this, some mobile browsers paint a faint bordered box in the
+  // <img>'s space (worse with the drop-shadow filter below) while it's
+  // still loading, which briefly flashes then vanishes once decoded.
+  // Hiding it until onLoad fires skips that box entirely; a cached revisit
+  // still fires onLoad almost immediately, so the fade-in there is
+  // imperceptible.
+  const [petLoaded, setPetLoaded] = useState(false);
 
   const loadProfile = () => {
     getDisplayProfile().then(profile => {
@@ -57,6 +65,10 @@ export default function HomePage() {
       setNickname(profile.nickname);
     });
   };
+
+  useEffect(() => {
+    setPetLoaded(false);
+  }, [avatarId]);
 
   useEffect(() => {
     loadProfile();
@@ -202,7 +214,8 @@ export default function HomePage() {
       <img
         src={`${BASE}/${heroImageFor(avatarId)}`}
         alt="Your pet"
-        className="h-32 w-auto object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)]"
+        onLoad={() => setPetLoaded(true)}
+        className={`h-32 w-32 object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
       />
 
       <div className="w-full flex flex-col items-center gap-3">
