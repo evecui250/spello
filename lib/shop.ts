@@ -1,6 +1,7 @@
 'use client';
 
 import { supabase } from './supabase';
+import { getLocalAvatarId, saveLocalAvatarId, getLocalNickname, saveLocalNickname } from './storage';
 
 // Avatar and accessory catalogs are small, curated, rarely-changing
 // static content -- kept as code, not database tables, matching this
@@ -138,4 +139,52 @@ export function setEquippedAccessory(accessoryId: string | null): Promise<boolea
 
 export function setLeaderboardOptOut(optOut: boolean): Promise<boolean> {
   return upsertProfile({ leaderboard_opt_out: optOut });
+}
+
+export interface DisplayProfile {
+  avatarId: string;
+  equippedAccessoryId: string | null;
+  nickname: string | null;
+  signedIn: boolean;
+}
+
+// The one place Home and the pet/nickname picker both read from, so
+// neither has to re-implement "am I signed in, and if not what do I show
+// instead" on its own. Signed-out visitors get the local fallback (see
+// lib/storage.ts) with no equipped accessory — accessories are bought
+// with points, which only exist for a signed-in account.
+export async function getDisplayProfile(): Promise<DisplayProfile> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    const profile = await getMyProfile();
+    if (profile) {
+      return { avatarId: profile.avatarId, equippedAccessoryId: profile.equippedAccessoryId, nickname: profile.nickname, signedIn: true };
+    }
+    // getMyProfile already retries once; a still-failed fetch falls back
+    // to the same untouched defaults a brand new profile would have,
+    // rather than leaving the caller with nothing to render.
+    return { avatarId: 'dachshund', equippedAccessoryId: null, nickname: null, signedIn: true };
+  }
+  return { avatarId: getLocalAvatarId(), equippedAccessoryId: null, nickname: getLocalNickname(), signedIn: false };
+}
+
+// Called once, right after a fresh sign-in (see lib/sync.ts's
+// watchAuthAndSync — specifically its 'SIGNED_IN' branch, not
+// 'INITIAL_SESSION', which fires on every reload and would run this far
+// more than once). If this device had picked a pet/nickname while signed
+// out, and the account it just signed into has never been customized
+// (still the untouched defaults), push the local choice up — otherwise a
+// learner who picked a pet before ever signing in would see it silently
+// reset to the default dachshund the moment they sign in. Never
+// overwrites a real, already-customized profile (e.g. signing into an
+// existing account from a fresh device that happens to have its own
+// stale local pick).
+export async function migrateLocalProfileIfNeeded(): Promise<void> {
+  const localAvatarId = getLocalAvatarId();
+  const localNickname = getLocalNickname();
+  if (localAvatarId === 'dachshund' && !localNickname) return;
+  const profile = await getMyProfile();
+  if (!profile || profile.avatarId !== 'dachshund' || profile.nickname !== null) return;
+  if (localAvatarId !== 'dachshund') await setAvatarId(localAvatarId);
+  if (localNickname) await setNickname(localNickname);
 }

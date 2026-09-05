@@ -1,15 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSettings, saveSettings, markOnboardingDone, Settings, MascotStageId, getTheme, saveTheme, Theme } from '../../lib/storage';
+import { getSettings, saveSettings, markOnboardingDone, Settings, MascotStageId, getTheme, saveTheme, Theme, saveLocalAvatarId, saveLocalNickname } from '../../lib/storage';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
 import { Level } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
+import { AVATAR_CATALOG, avatarImageFor, getDisplayProfile, setAvatarId as saveRemoteAvatarId, setNickname as saveRemoteNickname } from '../../lib/shop';
 import DachshundMascot from '../../components/Mascot';
 import { THEME_CONFIG } from '../../components/AppBackground';
 
-const STEPS = ['level', 'theme', 'pace', 'mascots'] as const;
+const STEPS = ['level', 'theme', 'pace', 'mascots', 'pet'] as const;
 type Step = typeof STEPS[number];
 
 // day is the cumulative day-count from introduction (see lib/srs.ts's
@@ -65,6 +66,26 @@ export default function WelcomePage() {
     saveTheme(t);
   };
 
+  // Loaded via getDisplayProfile (not always the untouched defaults) since
+  // this same page is also reachable from Settings' "View welcome guide"
+  // link after onboarding is already done — a signed-in learner revisiting
+  // it should see their real pet/nickname, not a reset-looking default.
+  const [avatarId, setAvatarIdState] = useState('dachshund');
+  const [nickname, setNicknameState] = useState('');
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    getDisplayProfile().then(profile => {
+      setAvatarIdState(profile.avatarId);
+      setNicknameState(profile.nickname ?? '');
+      setSignedIn(profile.signedIn);
+    });
+  }, []);
+  const pickAvatar = (id: string) => {
+    setAvatarIdState(id);
+    if (signedIn) saveRemoteAvatarId(id);
+    else saveLocalAvatarId(id);
+  };
+
   const forecast = useMemo(
     () => estimateProgressForecast(studyBatchSize, dailyReview),
     [studyBatchSize, dailyReview],
@@ -80,6 +101,8 @@ export default function WelcomePage() {
       sentenceWritingMode: true,
     };
     saveSettings(settings);
+    if (signedIn) saveRemoteNickname(nickname);
+    else saveLocalNickname(nickname);
     scheduleSync();
     markOnboardingDone();
     router.push('/');
@@ -298,6 +321,66 @@ export default function WelcomePage() {
           <div className="flex gap-3 w-full">
             <button
               onClick={() => setStep('pace')}
+              className="flex-1 bg-amber-50/75 text-stone-700 py-3.5 rounded-2xl font-semibold border border-amber-100/50 hover:bg-amber-50 active:scale-95 transition-all"
+            >
+              Back
+            </button>
+            <button
+              onClick={() => setStep('pet')}
+              className="flex-[2] bg-indigo-600 text-white py-3.5 rounded-2xl font-semibold shadow-md hover:bg-indigo-700 active:scale-95 transition-all"
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 'pet' && (
+        <div className="w-full flex flex-col gap-6">
+          <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-4">
+            <p className="text-stone-500 text-sm -mt-1">
+              Pick a pet and, if you&apos;d like, a nickname — you can always change these later in Settings.
+            </p>
+            <div>
+              <label className="block font-semibold text-stone-800 mb-2">Your pet</label>
+              <div className="flex gap-3 flex-wrap">
+                {AVATAR_CATALOG.map(a => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    disabled={a.comingSoon}
+                    onClick={() => pickAvatar(a.id)}
+                    className={`relative w-14 h-14 rounded-full overflow-hidden border-2 transition-colors ${
+                      avatarId === a.id ? 'border-indigo-500' : 'border-amber-100'
+                    } ${a.comingSoon ? 'opacity-50' : ''}`}
+                    title={a.comingSoon ? `${a.name} — coming soon` : a.name}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(a.id, null)}`}
+                      alt={a.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block font-semibold text-stone-800 mb-1">Nickname (optional)</label>
+              <input
+                type="text"
+                value={nickname}
+                onChange={e => setNicknameState(e.target.value)}
+                maxLength={24}
+                placeholder="What should we call you?"
+                className="w-full border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-indigo-500"
+              />
+              <p className="text-stone-400 text-sm mt-1">Leave blank to stay anonymous.</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setStep('mascots')}
               className="flex-1 bg-amber-50/75 text-stone-700 py-3.5 rounded-2xl font-semibold border border-amber-100/50 hover:bg-amber-50 active:scale-95 transition-all"
             >
               Back

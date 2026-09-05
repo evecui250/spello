@@ -14,6 +14,7 @@ import {
 } from './storage';
 import { Level, LEVEL_ORDER, Word } from './words';
 import { getOrCreateDeviceId, isLocalDev } from './telemetry';
+import { migrateLocalProfileIfNeeded } from './shop';
 
 // Each level is its own profile locally (see storage.ts) — the remote row
 // mirrors that by nesting every level's progress/settings under its own key,
@@ -344,6 +345,12 @@ export function watchAuthAndSync(): () => void {
       pullAndMerge(session.user.id).then(() => {
         window.dispatchEvent(new Event(SYNCED_EVENT));
       });
+    }
+    // Only on a genuine fresh sign-in, not every reload of an
+    // already-authenticated session — see migrateLocalProfileIfNeeded's
+    // own header comment for why INITIAL_SESSION would run this too often.
+    if (session?.user && event === 'SIGNED_IN') {
+      migrateLocalProfileIfNeeded();
     }
   });
 

@@ -1068,6 +1068,45 @@ export function saveSoundChoice(choice: SoundChoice): void {
   localStorage.setItem(SOUND_CHOICE_KEY, choice);
 }
 
+// --- Local pet identity (same per-device, not-level-namespaced shape as
+// Theme/FontScale above) — the signed-out fallback for avatarId/nickname,
+// which otherwise live only in the server-side `profiles` table (see
+// lib/shop.ts's getMyProfile/setAvatarId/setNickname, all of which no-op
+// without a session). Read by lib/shop.ts's getDisplayProfile whenever
+// there's no signed-in session, and migrated up to the real profile the
+// first time a customized signed-out device signs in (see
+// migrateLocalProfileIfNeeded). No CHANGED_EVENT, unlike Theme — only
+// Home and the pet/nickname picker ever read these, and both re-read on
+// their own mount/save, so there's no other listener that needs to react
+// live. ---
+const LOCAL_AVATAR_ID_KEY = 'wb2_local_avatar_id';
+const LOCAL_NICKNAME_KEY = 'wb2_local_nickname';
+
+export function getLocalAvatarId(): string {
+  if (typeof window === 'undefined') return 'dachshund';
+  return localStorage.getItem(LOCAL_AVATAR_ID_KEY) || 'dachshund';
+}
+
+export function saveLocalAvatarId(avatarId: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(LOCAL_AVATAR_ID_KEY, avatarId);
+}
+
+// null means "no nickname set" — matches the remote profile's own
+// nickname: string | null shape exactly, so callers can treat the two
+// interchangeably.
+export function getLocalNickname(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(LOCAL_NICKNAME_KEY) || null;
+}
+
+export function saveLocalNickname(nickname: string): void {
+  if (typeof window === 'undefined') return;
+  const trimmed = nickname.trim().slice(0, 24);
+  if (trimmed) localStorage.setItem(LOCAL_NICKNAME_KEY, trimmed);
+  else localStorage.removeItem(LOCAL_NICKNAME_KEY);
+}
+
 // --- Settings ---
 
 export function getSettings(): Settings {
