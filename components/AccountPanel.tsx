@@ -254,8 +254,8 @@ export default function AccountPanel({ onSync }: Props) {
     <div>
       <label className="block font-semibold text-ink mb-1">Sign in</label>
       <p className="text-ink-soft text-sm mb-1">
-        Sign in with a magic link — this keeps your progress synced across devices and unlocks
-        the AI sentence-writing exercises.
+        We&apos;ll email you a one-time code — this keeps your progress synced across devices and
+        unlocks the AI sentence-writing exercises.
       </p>
       {/* Real reported gap: school/work emails (.edu and similar) often
           never deliver the sign-in email at all — strict institutional
@@ -268,53 +268,54 @@ export default function AccountPanel({ onSync }: Props) {
       </p>
       {status === 'sent' ? (
         <div className="bg-good/25 border border-good rounded-lg px-3 py-2 flex flex-col gap-2">
-          <p className="text-good-deep text-sm">✓ Check {inputEmail} for a sign-in link.</p>
-          <p className="text-ink-soft text-xs">
-            Don&apos;t see it? Check your spam/junk folder — it can take a minute to arrive.
+          <p className="text-good-deep text-sm">✓ Code sent to {inputEmail}.</p>
+          {/* The code is now the PRIMARY instruction, not a fallback — a
+              real, confirmed data-loss report: tapping the link in the
+              email opens whatever the device treats as the default
+              browser, a completely separate browsing context from this
+              tab/PWA. On a first-ever sign-up that new context has no
+              local progress to push up, and this original tab (holding
+              the real guest progress) never learns it should either — so
+              the learner ends up staring at a real, signed-in, but empty
+              account while their actual progress sits orphaned here.
+              Typing the code back into this exact tab has no such gap: it
+              always finishes the sign-in right where the progress lives
+              (this project's auth.email.otp_length is 8, not the 6
+              Supabase quotes as its own default -- no maxLength here so a
+              future otp_length change doesn't silently re-truncate it). */}
+          <p className="text-ink-soft text-sm">
+            Enter the code from that email below — this keeps you in this tab, which matters if you already have progress saved here.
           </p>
-          {/* The link opens whatever the device considers the DEFAULT
-              browser, which may not be the one this tab is actually in —
-              a real reported gap ("I'm using a different browser and it
-              stays signed out"). The same email also has a code (this
-              project's auth.email.otp_length is 8, not the 6 Supabase
-              quotes as its own default); typing it in here always signs
-              in THIS tab, regardless of which browser opened the link. */}
-          <div className="pt-1 border-t border-good/40 flex flex-col gap-1.5">
-            <p className="text-ink-soft text-xs">Using a different browser than the link opens? Enter the code from the email instead:</p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="Enter code from email"
-                value={otpCode}
-                onChange={e => setOtpCode(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
-                // No maxLength -- this project's actual OTP length turned
-                // out to be 8 digits, not Supabase's commonly-quoted
-                // 6-digit default (confirmed live: a hardcoded 6 here
-                // silently truncated every real code, always rejected as
-                // "invalid or expired" no matter what was typed). Left
-                // unbounded rather than hardcoding 8 either, in case this
-                // project's own otp_length setting ever changes again.
-                className="flex-1 min-w-0 border-2 border-accent/70 rounded-lg px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent font-mono tracking-widest"
-              />
-              <button
-                onClick={handleVerifyOtp}
-                disabled={!otpCode.trim() || verifying}
-                className="bg-accent text-white px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-40 hover:bg-accent-deep active:scale-95 transition-all shrink-0"
-              >
-                {verifying ? 'Verifying…' : 'Verify'}
-              </button>
-            </div>
-            {verifyError && <p className="text-clay text-xs">{verifyError}</p>}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="Enter code from email"
+              value={otpCode}
+              onChange={e => setOtpCode(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
+              autoFocus
+              className="flex-1 min-w-0 border-2 border-accent/70 rounded-lg px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent font-mono tracking-widest"
+            />
+            <button
+              onClick={handleVerifyOtp}
+              disabled={!otpCode.trim() || verifying}
+              className="bg-accent text-white px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-40 hover:bg-accent-deep active:scale-95 transition-all shrink-0"
+            >
+              {verifying ? 'Verifying…' : 'Verify'}
+            </button>
           </div>
+          {verifyError && <p className="text-clay text-xs">{verifyError}</p>}
+          <p className="text-ink-soft text-xs pt-1 border-t border-good/40">
+            The email also has a sign-in link — avoid tapping it if you have progress saved on this device, since it can open a different browser with nothing saved in it. Don&apos;t see the email? Check spam/junk, it can take a minute.
+          </p>
           <button
             onClick={handleSendLink}
             disabled={resendCooldown > 0}
             className="self-start text-xs font-semibold text-label hover:text-ink disabled:text-ink-soft disabled:cursor-default transition-colors"
           >
-            {resendCooldown > 0 ? `Resend link (${resendCooldown}s)` : 'Resend link'}
+            {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : 'Resend code'}
           </button>
         </div>
       ) : (
@@ -332,13 +333,13 @@ export default function AccountPanel({ onSync }: Props) {
             disabled={!inputEmail.trim() || status === 'sending'}
             className="bg-accent text-white px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-40 hover:bg-accent-deep active:scale-95 transition-all"
           >
-            {status === 'sending' ? 'Sending…' : 'Send link'}
+            {status === 'sending' ? 'Sending…' : 'Send code'}
           </button>
         </div>
       )}
       {status === 'error' && (
         <p className="text-clay text-sm mt-2">
-          Couldn't send the link{errorMessage ? `: ${errorMessage}` : ''} — try again in a bit.
+          Couldn't send the code{errorMessage ? `: ${errorMessage}` : ''} — try again in a bit.
         </p>
       )}
     </div>
