@@ -211,9 +211,12 @@ def build_prompt(de, en, level, english_sentence, chinese_sentence):
 # the hard way with gpt-5.6-luna: no custom temperature, max_completion_tokens
 # instead of max_tokens, and a reported (never yet observed here) risk that
 # some non-default reasoning_effort values get rejected outright on
-# /chat/completions. 'high' is used deliberately — this task's whole point is
-# accuracy over cost/speed — with a one-time fallback to 'medium' if OpenAI's
-# own error text specifically calls out reasoning_effort as the problem.
+# /chat/completions. Each level falls back exactly one step (high->medium,
+# medium->low) if OpenAI's own error text specifically calls out
+# reasoning_effort as the problem — cheap insurance, not a real expectation.
+REASONING_FALLBACK = {'high': 'medium', 'medium': 'low'}
+
+
 def call_openai(body, reasoning_effort):
     req = urllib.request.Request(
         'https://api.openai.com/v1/chat/completions',
@@ -225,12 +228,19 @@ def call_openai(body, reasoning_effort):
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         err_text = e.read().decode(errors='replace')
-        if reasoning_effort == 'high' and 'reasoning_effort' in err_text.lower():
-            return call_openai(body, 'medium')
+        fallback = REASONING_FALLBACK.get(reasoning_effort)
+        if fallback and 'reasoning_effort' in err_text.lower():
+            return call_openai(body, fallback)
         raise RuntimeError(f'HTTP {e.code}: {err_text}') from e
 
 
-def run_audit(de, en, level, english_sentence, chinese_sentence, rate_limit_retries=0):
+# Pass 1 (first look at every entry in the corpus) runs at 'medium' — most
+# entries are already fine, and spending high-reasoning tokens on thousands
+# of obviously-good sentences is wasted cost. Pass 2 (revalidation) only
+# ever runs for entries pass 1 flagged IMPROVE/REGENERATE — exactly the
+# questionable/ambiguous minority worth the stronger, more expensive 'high'
+# reasoning.
+def run_audit(de, en, level, english_sentence, chinese_sentence, reasoning_effort, rate_limit_retries=0):
     body = {
         'model': MODEL,
         'max_completion_tokens': 700,
@@ -244,12 +254,15 @@ def run_audit(de, en, level, english_sentence, chinese_sentence, rate_limit_retr
         ],
     }
     try:
-        result = call_openai(body, 'high')
+        result = call_openai(body, reasoning_effort)
     except RuntimeError as e:
         msg = str(e)
         if '429' in msg.split(':', 1)[0] and rate_limit_retries < 8:
             time.sleep(min(2 ** (rate_limit_retries + 1), 30))
-            return run_audit(de, en, level, english_sentence, chinese_sentence, rate_limit_retries + 1)
+            return run_audit(
+                de, en, level, english_sentence, chinese_sentence,
+                reasoning_effort, rate_limit_retries + 1,
+            )
         raise
     raw = result['choices'][0]['message']['content']
     return json.loads(raw)
@@ -258,7 +271,10 @@ def run_audit(de, en, level, english_sentence, chinese_sentence, rate_limit_retr
 def audit_word(word):
     wid = word['id']
     try:
-        pass1 = run_audit(word['de'], word['en'], word['level'], word['exercisePrompt'], word['exercisePromptZh'])
+        pass1 = run_audit(
+            word['de'], word['en'], word['level'],
+            word['exercisePrompt'], word['exercisePromptZh'], 'medium',
+        )
     except Exception as e:
         return wid, {'error': str(e)}
 
@@ -268,7 +284,10 @@ def audit_word(word):
         return wid, record
 
     try:
-        pass2 = run_audit(word['de'], word['en'], word['level'], pass1['englishSentence'], pass1['chineseSentence'])
+        pass2 = run_audit(
+            word['de'], word['en'], word['level'],
+            pass1['englishSentence'], pass1['chineseSentence'], 'high',
+        )
     except Exception as e:
         record['pass2_error'] = str(e)
         record['final'] = 'review'
@@ -286,11 +305,32 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--limit', type=int, default=None)
     parser.add_argument('--level', type=str, default=None)
+    parser.add_argument(
+        '--ids', type=str, default=None,
+        help='Comma-separated word ids to audit (e.g. w0123,w0456) — overrides --limit/--level scoping.',
+    )
+    parser.add_argument(
+        '--words', type=str, default=None,
+        help='Comma-separated German lemmas to audit (e.g. gelangen,beraten) — overrides --limit/--level scoping.',
+    )
     args = parser.parse_args()
 
     words = parse_words()
     if args.level:
         words = [w for w in words if w['level'] == args.level]
+    if args.ids:
+        wanted_ids = {x.strip() for x in args.ids.split(',') if x.strip()}
+        words = [w for w in words if w['id'] in wanted_ids]
+        missing = wanted_ids - {w['id'] for w in words}
+        if missing:
+            print(f'--ids not found (no exercisePrompt, or unknown id): {sorted(missing)}', file=sys.stderr)
+    if args.words:
+        wanted_lemmas = {x.strip().lower() for x in args.words.split(',') if x.strip()}
+        words = [w for w in words if w['de'].lower() in wanted_lemmas]
+        found_lemmas = {w['de'].lower() for w in words}
+        missing = wanted_lemmas - found_lemmas
+        if missing:
+            print(f'--words not found (no exercisePrompt, or unknown lemma): {sorted(missing)}', file=sys.stderr)
 
     results = {}
     if os.path.exists(CACHE_PATH):
