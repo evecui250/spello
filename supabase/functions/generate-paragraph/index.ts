@@ -442,6 +442,13 @@ Deno.serve(async (req: Request) => {
       word_id: words[0]?.de ?? null,
       level: level || 'unknown',
       model: MODEL,
+      // Distinguishes this from correct-sentence/explain-correction's own
+      // rows (both default to 'correction') -- without this, these calls
+      // silently fell into admin-stats' "AI calls" correction bucket even
+      // though they're a completely different feature on a different
+      // model/price point, making that bucket's own cost estimate quietly
+      // wrong. See admin-stats' own kind-based filtering.
+      kind: 'words_in_context',
       input_tokens: usage.prompt_tokens ?? 0,
       output_tokens: usage.completion_tokens ?? 0,
     });

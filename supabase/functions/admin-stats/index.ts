@@ -58,18 +58,42 @@ interface AiUsageSummary {
   estimatedCostUsd: number;
 }
 
-// gpt-4o-mini pricing at the time this was written ($0.15/1M input,
-// $0.60/1M output) — same constants as the ai_usage_summary_view
-// migration; check OpenAI's current pricing if this drifts.
-function costUsd(inputTokens: number, outputTokens: number): number {
-  return Math.round((inputTokens * 0.15 + outputTokens * 0.60) / 1000000 * 10000) / 10000;
+// Per-model pricing (USD per 1M tokens) -- this used to be a single flat
+// gpt-4o-mini rate applied to EVERY row regardless of which model actually
+// served it, which quietly under/over-estimated cost for anything else
+// (generate-paragraph's old gpt-4o calls were already mispriced this way
+// before its move to gpt-5.6-luna; now there'd be an ADDITIONAL,
+// different mismatch if this stayed flat). tts-1-hd is priced per
+// CHARACTER, not input/output tokens -- generate-word-audio's own comment
+// notes it logs character count into input_tokens as the closest
+// available proxy, output_tokens always 0, so treating that column as
+// "characters" for this one model's rate is correct, not a hack.
+// Pricing current as of when each model was actually wired in here --
+// check OpenAI's current pricing if this drifts.
+const MODEL_PRICING: Record<string, { inputPerM: number; outputPerM: number }> = {
+  'gpt-4o-mini': { inputPerM: 0.15, outputPerM: 0.60 },
+  'gpt-4o': { inputPerM: 2.50, outputPerM: 10.00 },
+  'gpt-5.6-luna': { inputPerM: 0.20, outputPerM: 1.20 },
+  'tts-1-hd': { inputPerM: 30.00, outputPerM: 0 },
+};
+// Any model not in the table above (a future swap this file hasn't been
+// updated for yet) falls back to gpt-4o-mini's rate rather than crashing
+// or silently reporting $0 -- an approximation flagged as such is better
+// than either extreme.
+const DEFAULT_PRICING = MODEL_PRICING['gpt-4o-mini'];
+
+function costUsd(rows: { model?: string | null; input_tokens: number; output_tokens: number }[]): number {
+  let totalMicroCents = 0;
+  for (const r of rows) {
+    const pricing = (r.model && MODEL_PRICING[r.model]) || DEFAULT_PRICING;
+    totalMicroCents += (r.input_tokens ?? 0) * pricing.inputPerM + (r.output_tokens ?? 0) * pricing.outputPerM;
+  }
+  return Math.round(totalMicroCents / 1000000 * 10000) / 10000;
 }
 
-function summarizeAiUsage(rows: { user_id: string | null; ip_address: string | null; input_tokens: number; output_tokens: number }[]): AiUsageSummary {
+function summarizeAiUsage(rows: { user_id: string | null; ip_address: string | null; model?: string | null; input_tokens: number; output_tokens: number }[]): AiUsageSummary {
   const callers = new Set(rows.map(r => r.user_id ?? r.ip_address));
-  const inputTokens = rows.reduce((s, r) => s + (r.input_tokens ?? 0), 0);
-  const outputTokens = rows.reduce((s, r) => s + (r.output_tokens ?? 0), 0);
-  return { calls: rows.length, distinctCallers: callers.size, estimatedCostUsd: costUsd(inputTokens, outputTokens) };
+  return { calls: rows.length, distinctCallers: callers.size, estimatedCostUsd: costUsd(rows) };
 }
 
 Deno.serve(async (req: Request) => {
@@ -427,14 +451,18 @@ Deno.serve(async (req: Request) => {
     // ip_address instead; see correct-sentence/generate-sentence).
     const { data: aiRowsWindow } = await admin
       .from('ai_usage')
-      .select('user_id, ip_address, input_tokens, output_tokens, created_at, kind')
+      .select('user_id, ip_address, model, input_tokens, output_tokens, created_at, kind')
       .gte('created_at', windowStartIso);
-    const aiRows = (aiRowsWindow ?? []) as { user_id: string | null; ip_address: string | null; input_tokens: number; output_tokens: number; created_at: string; kind: string | null }[];
+    const aiRows = (aiRowsWindow ?? []) as { user_id: string | null; ip_address: string | null; model: string | null; input_tokens: number; output_tokens: number; created_at: string; kind: string | null }[];
     // kind is null for any row inserted before the column existed —
     // treated as 'correction' (its only meaning back then), same as the
-    // column's own DB default for new rows.
+    // column's own DB default for new rows. generate-paragraph's rows are
+    // tagged 'words_in_context' (see its own insert) specifically so they
+    // don't silently fall into this bucket alongside actual sentence
+    // corrections -- a different feature on a different model/price point.
     const correctionRows = aiRows.filter(r => (r.kind ?? 'correction') === 'correction');
     const explanationRows = aiRows.filter(r => r.kind === 'explanation');
+    const wordsInContextRows = aiRows.filter(r => r.kind === 'words_in_context');
     const aiUsageTrend = windowDays.map(date => {
       const rows = correctionRows.filter(r => dateStr(new Date(r.created_at)) === date);
       const signedIn = rows.filter(r => r.user_id !== null);
@@ -443,14 +471,24 @@ Deno.serve(async (req: Request) => {
         date,
         signedInCalls: signedIn.length,
         anonymousCalls: anon.length,
-        costUsd: costUsd(rows.reduce((s, r) => s + (r.input_tokens ?? 0), 0), rows.reduce((s, r) => s + (r.output_tokens ?? 0), 0)),
+        costUsd: costUsd(rows),
       };
+    });
+    const wordsInContextTrend = windowDays.map(date => {
+      const rows = wordsInContextRows.filter(r => dateStr(new Date(r.created_at)) === date);
+      return { date, calls: rows.length, costUsd: costUsd(rows) };
     });
     const aiRowsToday = correctionRows.filter(r => dateStr(new Date(r.created_at)) === todayStr);
     const aiUsageToday = {
       signedIn: summarizeAiUsage(aiRowsToday.filter(r => r.user_id !== null)),
       anonymous: summarizeAiUsage(aiRowsToday.filter(r => r.user_id === null)),
     };
+    // Words in Context (generate-paragraph) usage — its own card, same
+    // reasoning as explanationClicks below: a different feature, on a
+    // different model, worth seeing on its own rather than folded into
+    // (and quietly distorting the cost of) the sentence-correction totals.
+    const wordsInContextRowsToday = wordsInContextRows.filter(r => dateStr(new Date(r.created_at)) === todayStr);
+    const wordsInContextToday = summarizeAiUsage(wordsInContextRowsToday);
     // "Why?" button usage — its own count, not folded into aiUsageToday
     // above, specifically so this answers "is anyone actually using this"
     // on its own rather than being invisible inside the correction totals.
@@ -577,12 +615,14 @@ Deno.serve(async (req: Request) => {
         newIpsSignedIn: newIpsSignedInToday,
         wordsStudied: wordsStudiedToday,
         aiUsage: aiUsageToday,
+        wordsInContext: wordsInContextToday,
         explanationClicks: explanationClicksToday,
       },
       trends: {
         signups: signupTrend,
         devices: deviceTrend,
         aiUsage: aiUsageTrend,
+        wordsInContext: wordsInContextTrend,
         wordsStudied: wordsStudiedTrend,
         explanationClicks: explanationClicksTrend,
       },

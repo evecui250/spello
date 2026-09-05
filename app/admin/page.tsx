@@ -50,6 +50,12 @@ interface AdminStats {
     newIpsSignedIn: number;
     wordsStudied: { signedIn: number; anonymous: number };
     aiUsage: { signedIn: AiUsageSummary; anonymous: AiUsageSummary };
+    // Words in Context (generate-paragraph, gpt-5.6-luna) -- its own card,
+    // not folded into aiUsage above: a different feature on a different
+    // model/price point, which used to (wrongly) get priced as if it were
+    // gpt-4o-mini along with everything else. See admin-stats' own
+    // per-model MODEL_PRICING.
+    wordsInContext: AiUsageSummary;
     // How many times the "Why?" grammar-explanation button was tapped
     // today — tracked separately from the correction calls above so we
     // can see whether the button is actually getting used.
@@ -59,6 +65,7 @@ interface AdminStats {
     signups: { date: string; count: number }[];
     devices: { date: string; signedIn: number; anonymous: number }[];
     aiUsage: { date: string; signedInCalls: number; anonymousCalls: number; costUsd: number }[];
+    wordsInContext: { date: string; calls: number; costUsd: number }[];
     wordsStudied: { date: string; signedIn: number; anonymous: number }[];
     explanationClicks: { date: string; count: number }[];
   };
@@ -128,8 +135,16 @@ export default function AdminPage() {
         geoBreakdown: data.geoBreakdown ?? { byIp: [], byUser: [] },
         themeBreakdown: data.themeBreakdown ?? [],
         gamePlaysBySource: data.gamePlaysBySource ?? { settingsPreview: 0, dailyFlow: 0, stageReview: 0 },
-        today: { ...data.today, explanationClicks: data.today?.explanationClicks ?? 0 },
-        trends: { ...data.trends, explanationClicks: data.trends?.explanationClicks ?? [] },
+        today: {
+          ...data.today,
+          explanationClicks: data.today?.explanationClicks ?? 0,
+          wordsInContext: data.today?.wordsInContext ?? { calls: 0, distinctCallers: 0, estimatedCostUsd: 0 },
+        },
+        trends: {
+          ...data.trends,
+          explanationClicks: data.trends?.explanationClicks ?? [],
+          wordsInContext: data.trends?.wordsInContext ?? [],
+        },
         registeredLearners: data.registeredLearners ?? [],
         userPoints: data.userPoints ?? [],
       });
@@ -159,6 +174,7 @@ export default function AdminPage() {
 
   const dates = stats.trends.signups.map(t => t.date);
   const aiWindowCostUsd = Math.round(stats.trends.aiUsage.reduce((s, t) => s + t.costUsd, 0) * 10000) / 10000;
+  const wordsInContextWindowCostUsd = Math.round(stats.trends.wordsInContext.reduce((s, t) => s + t.costUsd, 0) * 10000) / 10000;
 
   return (
     <div className="flex flex-col gap-6">
@@ -200,6 +216,7 @@ export default function AdminPage() {
         <div className="flex flex-col gap-2">
           <AiUsageRow label="AI calls — signed in" summary={stats.today.aiUsage.signedIn} />
           <AiUsageRow label="AI calls — anonymous" summary={stats.today.aiUsage.anonymous} />
+          <AiUsageRow label="Words in Context (gpt-5.6-luna)" summary={stats.today.wordsInContext} />
         </div>
       </div>
 
@@ -225,6 +242,13 @@ export default function AdminPage() {
           series={[
             { label: 'Signed in', color: SIGNED_IN_COLOR, values: stats.trends.aiUsage.map(t => t.signedInCalls) },
             { label: 'Anonymous', color: ANONYMOUS_COLOR, values: stats.trends.aiUsage.map(t => t.anonymousCalls) },
+          ]}
+        />
+        <TrendChart
+          title={`Words in Context calls / day (~$${wordsInContextWindowCostUsd.toFixed(4)} over 30 days, gpt-5.6-luna)`}
+          dates={dates}
+          series={[
+            { label: 'Calls', color: SIGNED_IN_COLOR, values: stats.trends.wordsInContext.map(t => t.calls) },
           ]}
         />
         <TrendChart
