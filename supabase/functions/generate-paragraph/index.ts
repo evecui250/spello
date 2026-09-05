@@ -482,12 +482,12 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'AI returned an incomplete answer' }, 502);
     }
     if (!nounsHaveArticles(paragraph)) {
-      // Logged, not failed -- a heuristic check (see its own comment), so
-      // a false negative here shouldn't fail an otherwise-fine exercise;
-      // genuinely missing articles are a quality shortfall the exercise
-      // still mostly works around (the surrounding sentence still reads
-      // sensibly minus one article), not worth a third AI call over.
-      console.warn('generate-paragraph: possible missing article before a noun blank after retry', { paragraph });
+      // Hard fail, per the owner's own explicit call -- a noun blank
+      // missing its article is confirmed real (live-tested this rewrite)
+      // and reads as broken German to a learner ("sitzt Katze"), not
+      // just an awkward stylistic choice.
+      console.error('generate-paragraph: missing article before a noun blank after retry', { paragraph });
+      return json({ error: 'AI dropped an article before a noun blank' }, 502);
     }
     if (!isReasonableLength(paragraph, answers)) {
       // Logged, not failed -- same "quality shortfall, not fatal" call as
@@ -521,16 +521,62 @@ Deno.serve(async (req: Request) => {
 // guarantee the *content* rules (placeholder correctness, non-empty
 // answers, translation alignment, length) -- every content-level check
 // above still runs regardless.
+//
+// `answers` is an array of {index, answer} objects, NOT a plain
+// positional string array. Confirmed real via live testing: with a plain
+// array, the model would occasionally scramble which answer landed at
+// which array position on larger (5-word) batches -- e.g. a verb's
+// inflected form ending up at a noun's position -- silently teaching the
+// wrong word for a blank, roughly 80% of the time at 5 words even after
+// an internal retry. Tagging every answer with its own target index
+// removes the need for the model to track "position N in this array
+// means target N" as a SEPARATE mental model from "[[N]] in the text
+// means target N" -- it only has to get the second part right, and say
+// so explicitly, rather than silently implying the first. toPositionalAnswers
+// below converts this back into the plain string[] every other function
+// in this file already works with, so only parsing changes.
 const RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
     paragraph: { type: 'string' },
-    answers: { type: 'array', items: { type: 'string' } },
+    answers: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          index: { type: 'integer' },
+          answer: { type: 'string' },
+        },
+        required: ['index', 'answer'],
+        additionalProperties: false,
+      },
+    },
     translations: { type: 'array', items: { type: 'string' } },
   },
   required: ['paragraph', 'answers', 'translations'],
   additionalProperties: false,
 };
+
+// Converts the tagged {index, answer}[] shape above into the plain
+// positional string[] every validation/rendering function in this file
+// works with. Rejects (returns null, treated as a malformed generation --
+// same recovery path as any other parse failure) unless every index
+// 0..count-1 has EXACTLY one answer: no duplicates, none out of range,
+// none missing. This is "every target index has exactly one answer" and
+// "no unknown indices" from the hard-validation list, enforced at the
+// earliest possible point.
+function toPositionalAnswers(raw: unknown, count: number): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  const result: (string | undefined)[] = new Array(count).fill(undefined);
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') return null;
+    const { index, answer } = entry as { index?: unknown; answer?: unknown };
+    if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= count) return null;
+    if (typeof answer !== 'string' || result[index] !== undefined) return null;
+    result[index] = answer;
+  }
+  return result.every((a): a is string => a !== undefined) ? result : null;
+}
 
 // gpt-5.6-luna is a reasoning-tier model with two real API differences
 // from gpt-4o's plain chat-completion call: it rejects any custom
@@ -605,7 +651,14 @@ async function generateOnce(
           '- Use every target word with exactly the supplied meaning.\n' +
           '- Use each target exactly once, in the grammatically correct inflected or conjugated form.\n' +
           '- Replace that form with its corresponding [[i]] placeholder (i = the number before that word above) -- ' +
-          'the placeholder REPLACES the word.\n' +
+          'the placeholder REPLACES the word. Placeholders may appear in the text in ANY order that reads ' +
+          "naturally -- they do NOT need to go [[0]], [[1]], [[2]]... in sequence; write whatever order the " +
+          'scene actually calls for, as long as each index 0 through ' + (count - 1) +
+          ' appears exactly once, wherever it belongs.\n' +
+          '- In the "answers" array, tag every answer with the SAME index i as its placeholder -- ' +
+          '{"index": i, "answer": "the exact form you wrote at [[i]]"} -- one entry per target, in any order. ' +
+          'Do not rely on array position to convey which target an answer belongs to; the index field is what ' +
+          'matters.\n' +
           '- For a noun target, the placeholder replaces ONLY the noun itself -- write whatever article, ' +
           'possessive, or quantifier the sentence grammatically needs (e.g. "die", "meine", "ein") as normal ' +
           'text immediately before the placeholder, unless a fixed preposition contraction (e.g. "zum", "im") ' +
@@ -638,8 +691,9 @@ async function generateOnce(
           '2. the scene is coherent and meaningful;\n' +
           '3. every target keeps its supplied meaning;\n' +
           '4. every answer fits its blank grammatically and semantically;\n' +
-          '5. every [[i]] appears exactly once;\n' +
-          '6. answers[i] corresponds to [[i]];\n' +
+          '5. every [[i]] appears exactly once, in whatever order the scene naturally calls for;\n' +
+          '6. every answer entry\'s "index" field correctly matches the [[i]] it belongs to -- this is the one ' +
+          'most worth double-checking, since a mismatched index teaches the learner the wrong word entirely;\n' +
           '7. translations match the German sentences 1:1.\n\n' +
           'Return only the structured output required by the API schema.',
       },
@@ -654,9 +708,11 @@ async function generateOnce(
   const result = await completion.json();
   const raw: string = result.choices?.[0]?.message?.content ?? '{}';
   try {
-    const parsed = JSON.parse(raw) as { paragraph?: string; answers?: string[]; translations?: string[] };
-    if (!parsed.paragraph || !Array.isArray(parsed.answers) || !Array.isArray(parsed.translations)) return null;
-    return { paragraph: parsed.paragraph, answers: parsed.answers, translations: parsed.translations, usage: result.usage ?? {} };
+    const parsed = JSON.parse(raw) as { paragraph?: string; answers?: unknown; translations?: string[] };
+    if (!parsed.paragraph || !Array.isArray(parsed.translations)) return null;
+    const answers = toPositionalAnswers(parsed.answers, count);
+    if (!answers) return null;
+    return { paragraph: parsed.paragraph, answers, translations: parsed.translations, usage: result.usage ?? {} };
   } catch {
     return null;
   }

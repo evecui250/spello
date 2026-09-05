@@ -170,18 +170,8 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
   return (
     <div className="flex flex-col gap-5">
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="text-sm font-medium text-label">
-            {checked ? (allCorrect ? 'Perfect!' : 'Here\'s how it fits together') : 'Tap a word, then tap where it belongs'}
-          </div>
-          {/* Purely informational -- lets a learner curious about how
-              this gets generated know at a glance, not tied to anything
-              functional. Hardcoded rather than round-tripped from the
-              server: this is cosmetic copy, not something that needs to
-              survive a future model swap without a code change anyway. */}
-          <span className="shrink-0 text-[11px] font-medium text-ink-soft/70 whitespace-nowrap">
-            AI model: GPT-5.6-Luna
-          </span>
+        <div className="text-sm font-medium text-label">
+          {checked ? (allCorrect ? 'Perfect!' : 'Here\'s how it fits together') : 'Tap a word, then tap where it belongs'}
         </div>
 
         {/* whitespace-pre-line only ever matters for the rare fallback
