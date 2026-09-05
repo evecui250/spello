@@ -1069,13 +1069,13 @@ export function saveCardMode(mode: CardMode): void {
 // 'light'/'dark' pass straight through — 'auto' resolves against the
 // DEVICE'S OWN local clock (not UTC, not a sunset API — deliberately
 // simple: a fixed evening/morning cutoff is what "night" means for a
-// study app, not astronomical dusk). 19:00-06:59 reads as night; the
+// study app, not astronomical dusk). 20:00-06:59 reads as night; the
 // caller (AppBackground) re-calls this periodically so a session left
 // open across one of those boundaries still flips on its own.
 export function resolveCardMode(mode: CardMode): 'light' | 'dark' {
   if (mode !== 'auto') return mode;
   const hour = new Date().getHours();
-  return (hour >= 19 || hour < 7) ? 'dark' : 'light';
+  return (hour >= 20 || hour < 7) ? 'dark' : 'light';
 }
 
 // --- Correct-answer chime (same per-device, un-synced, not-level-
