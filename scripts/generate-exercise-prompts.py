@@ -156,7 +156,7 @@ def call_openai(word, vocab_cache):
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f'Write the sentence for the word "{word["en"]}".'},
     ]
-    last_sentence, length_attempts, rate_limit_retries = None, 0, 0
+    last_sentence, length_attempts, rate_limit_retries, max_tokens = None, 0, 0, 1500
     while length_attempts < 2:
         body = {
             "model": "gpt-5.6-sol",
@@ -164,11 +164,18 @@ def call_openai(word, vocab_cache):
                 "type": "json_schema",
                 "json_schema": {"name": "exercise_sentence", "strict": True, "schema": SENTENCE_SCHEMA},
             },
-            "messages": messages, "max_completion_tokens": 500,
+            "messages": messages, "max_completion_tokens": max_tokens,
         }
         try:
             result = call_with_reasoning_fallback(body, 'high')
             raw = result['choices'][0]['message']['content']
+            # Reasoning tokens are billed from (and can exhaust) this same
+            # max_completion_tokens budget, leaving an empty completion on
+            # harder words — escalate the budget once rather than retrying
+            # the identical request.
+            if not raw.strip() and max_tokens < 3000:
+                max_tokens = 3000
+                continue
             sentence = json.loads(raw).get('sentence', '').strip()
         except urllib.error.HTTPError as e:
             # OpenAI returns 429 for both rate limits AND exhausted quota —

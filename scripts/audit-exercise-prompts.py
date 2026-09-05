@@ -55,6 +55,13 @@ REPORT_PATH = os.path.join(SCRIPT_DIR, '.exercise-audit-report.json')
 MODEL = 'gpt-5.6-sol'
 MAX_WORKERS = 4
 
+# gpt-5.6-sol's promotional pricing (through Nov 2026): $4/$20 per 1M
+# input/output tokens. Corpus-build-tool-local — this is a one-off script,
+# not the live app's admin-stats tracking, so it doesn't share that file's
+# MODEL_PRICING table.
+PRICE_PER_TOKEN_IN = 4.0 / 1_000_000
+PRICE_PER_TOKEN_OUT = 20.0 / 1_000_000
+
 API_KEY = os.environ.get('OPENAI_API_KEY')
 if not API_KEY:
     sys.exit('Set OPENAI_API_KEY in the environment before running this script.')
@@ -240,10 +247,23 @@ def call_openai(body, reasoning_effort):
 # ever runs for entries pass 1 flagged IMPROVE/REGENERATE — exactly the
 # questionable/ambiguous minority worth the stronger, more expensive 'high'
 # reasoning.
-def run_audit(de, en, level, english_sentence, chinese_sentence, reasoning_effort, rate_limit_retries=0):
+# Reasoning tokens are billed from (and truncate) the same
+# max_completion_tokens budget as the visible JSON output — confirmed live:
+# a real audit call spent 382 of a 700-token budget on hidden reasoning
+# before writing its answer, and on harder entries the budget can run out
+# entirely, leaving an empty message.content that fails to parse. 2000 gives
+# generous headroom for that at negligible cost (unused budget isn't billed,
+# only tokens actually generated are); a one-time escalation to 4000 covers
+# the rare case even that isn't enough.
+DEFAULT_MAX_TOKENS = 2000
+ESCALATED_MAX_TOKENS = 4000
+
+
+def run_audit(de, en, level, english_sentence, chinese_sentence, reasoning_effort,
+               rate_limit_retries=0, max_tokens=DEFAULT_MAX_TOKENS, escalated=False):
     body = {
         'model': MODEL,
-        'max_completion_tokens': 700,
+        'max_completion_tokens': max_tokens,
         'response_format': {
             'type': 'json_schema',
             'json_schema': {'name': 'exercise_audit', 'strict': True, 'schema': AUDIT_SCHEMA},
@@ -260,31 +280,41 @@ def run_audit(de, en, level, english_sentence, chinese_sentence, reasoning_effor
         if '429' in msg.split(':', 1)[0] and rate_limit_retries < 8:
             time.sleep(min(2 ** (rate_limit_retries + 1), 30))
             return run_audit(
-                de, en, level, english_sentence, chinese_sentence,
-                reasoning_effort, rate_limit_retries + 1,
+                de, en, level, english_sentence, chinese_sentence, reasoning_effort,
+                rate_limit_retries + 1, max_tokens, escalated,
             )
         raise
     raw = result['choices'][0]['message']['content']
-    return json.loads(raw)
+    if not raw.strip():
+        if escalated:
+            raise RuntimeError(
+                f"empty content even at {ESCALATED_MAX_TOKENS} max_completion_tokens "
+                f"(finish_reason={result['choices'][0].get('finish_reason')})"
+            )
+        return run_audit(
+            de, en, level, english_sentence, chinese_sentence, reasoning_effort,
+            rate_limit_retries, ESCALATED_MAX_TOKENS, True,
+        )
+    return json.loads(raw), result.get('usage', {})
 
 
 def audit_word(word):
     wid = word['id']
     try:
-        pass1 = run_audit(
+        pass1, usage1 = run_audit(
             word['de'], word['en'], word['level'],
             word['exercisePrompt'], word['exercisePromptZh'], 'medium',
         )
     except Exception as e:
         return wid, {'error': str(e)}
 
-    record = {'pass1': pass1}
+    record = {'pass1': pass1, 'usage': {'pass1': usage1}}
     if pass1['status'] == 'PASS':
         record['final'] = 'pass'
         return wid, record
 
     try:
-        pass2 = run_audit(
+        pass2, usage2 = run_audit(
             word['de'], word['en'], word['level'],
             pass1['englishSentence'], pass1['chineseSentence'], 'high',
         )
@@ -294,6 +324,7 @@ def audit_word(word):
         return wid, record
 
     record['pass2'] = pass2
+    record['usage']['pass2'] = usage2
     if pass2['status'] == 'PASS' and pass2['confidence'] in ('high', 'medium') and pass1['confidence'] in ('high', 'medium'):
         record['final'] = 'apply'
     else:
@@ -391,6 +422,20 @@ def main():
     with open(REVIEW_PATH, 'w', encoding='utf-8') as f:
         json.dump(review_out, f, ensure_ascii=False, indent=1)
 
+    total_cost_usd, priced_entries, pass2_triggered = 0.0, 0, 0
+    for record in results.values():
+        usage = record.get('usage')
+        if not usage:
+            continue
+        priced_entries += 1
+        if 'pass2' in record or record.get('pass2_error'):
+            pass2_triggered += 1
+        for call_usage in usage.values():
+            total_cost_usd += (
+                call_usage.get('prompt_tokens', 0) * PRICE_PER_TOKEN_IN
+                + call_usage.get('completion_tokens', 0) * PRICE_PER_TOKEN_OUT
+            )
+
     report = {
         'totalChecked': len([r for r in results.values() if 'pass1' in r]),
         'passCount': counts['PASS'],
@@ -399,6 +444,10 @@ def main():
         'errorCount': counts['error'],
         'appliedCount': len(apply_out),
         'reviewCount': len(review_out),
+        'pass2TriggeredCount': pass2_triggered,
+        'totalCostUsd': round(total_cost_usd, 4),
+        'avgCostPerEntryUsd': round(total_cost_usd / priced_entries, 4) if priced_entries else None,
+        'costPricedEntryCount': priced_entries,
     }
     with open(REPORT_PATH, 'w', encoding='utf-8') as f:
         json.dump(report, f, ensure_ascii=False, indent=1)
