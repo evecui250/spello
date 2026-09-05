@@ -290,12 +290,16 @@ export default function AdminPage() {
         />
       </div>
 
-      {/* Word Match game */}
+      {/* Bonus games (Wortpaare + Artikel Blitz) -- this split is still by
+          source only, not by which of the two games was played (see the
+          game_plays migration's new `game` column) -- a real gap now that
+          there are two, worth splitting properly if this dashboard needs
+          to answer "which game" rather than just "how many total". */}
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-3">
         <div>
-          <h2 className="font-semibold text-stone-800">Word Match game</h2>
+          <h2 className="font-semibold text-stone-800">Bonus games</h2>
           <p className="text-stone-400 text-xs -mt-0.5">
-            Completed games (timer ran out), split by where the learner started it from.
+            Completed games (Wortpaare + Artikel Blitz combined), split by where the learner started it from.
           </p>
         </div>
         <div className="flex gap-6">
