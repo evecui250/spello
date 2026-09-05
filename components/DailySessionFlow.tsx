@@ -14,8 +14,8 @@ import {
 import {
   wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint, demoteReviewRound,
   buildMcqChoices, buildReverseMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
-  hasEnoughWordsForGame, buildParagraphBatches, sharedCategoryHint, parseParagraphResponse,
-  MIN_PARAGRAPH_WORDS, combineParagraphExercises,
+  hasEnoughWordsForGame, buildWordsInContextBatches, sharedCategoryHint, parseParagraphResponse,
+  addDistractors, combineParagraphExercises,
 } from '../lib/practice';
 import { REVIEW_PLAN, recordMilestonePass } from '../lib/srs';
 import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks, tokenize, isWordToken, diffAgainstAttempt, applyGlossFallback } from '../lib/words';
@@ -2233,12 +2233,12 @@ export default function DailySessionFlow() {
   }
 
   // The "N words learned" summary's own "Continue" button — routes to the
-  // bonus paragraph offer when today's batch has enough words for at least
-  // one (see buildParagraphBatches), otherwise straight to congrats same as
-  // before this existed.
+  // bonus Words in Context offer when today's batch has enough words for
+  // at least one exercise (see buildWordsInContextBatches), otherwise
+  // straight to congrats same as before this existed.
   function handleFinishStudy() {
     if (!session) return;
-    const batches = buildParagraphBatches(wordsById(session.studyWordIds));
+    const batches = buildWordsInContextBatches(wordsById(session.studyWordIds), getSettings().level);
     persistSession({ ...session, phase: batches.length > 0 ? 'study-paragraph-offer' : 'congrats' });
   }
 
@@ -2256,7 +2256,7 @@ export default function DailySessionFlow() {
   // is one, otherwise congrats (same destination as skipping).
   function handleParagraphComplete() {
     if (!session) return;
-    const batches = buildParagraphBatches(wordsById(session.studyWordIds));
+    const batches = buildWordsInContextBatches(wordsById(session.studyWordIds), getSettings().level);
     const nextIndex = (session.paragraphExerciseIndex ?? 0) + 1;
     if (nextIndex < batches.length) {
       persistSession({ ...session, paragraphExerciseIndex: nextIndex });
@@ -2278,7 +2278,7 @@ export default function DailySessionFlow() {
       return;
     }
     if (paragraphStatus === 'loading') return;
-    const batches = buildParagraphBatches(wordsById(session.studyWordIds));
+    const batches = buildWordsInContextBatches(wordsById(session.studyWordIds), getSettings().level);
     const batch = batches[index];
     if (!batch) return;
     setParagraphStatus('loading');
@@ -2303,6 +2303,12 @@ export default function DailySessionFlow() {
       err => { if (err instanceof AIUnreachableError || err instanceof DailyLimitReachedError) throw err; return null; },
     );
 
+    // Every word already in today's whole session (not just this one
+    // batch) is off-limits as a decoy -- see addDistractors' own comment
+    // on why a word that's actually due for review today would be a
+    // confusing thing to see sitting in a trap slot.
+    const excludeWordIds = new Set([...session.studyWordIds, ...session.reviewWordIds]);
+
     tryGenerate(batch)
       .then(parsed => {
         if (parsed) return parsed;
@@ -2312,20 +2318,20 @@ export default function DailySessionFlow() {
         // if both land (see combineParagraphExercises' own comment for
         // why this stays a single exercise slot rather than growing
         // today's paragraph count). Only attempted when there's enough
-        // words left for two still-valid halves (>= MIN_PARAGRAPH_WORDS
-        // each) — a 2-3 word batch that fails just fails, same as
-        // before, since a below-minimum remainder isn't worth its own
-        // paragraph.
-        if (batch.length < MIN_PARAGRAPH_WORDS * 2) return null;
+        // words left for two non-empty halves -- a standalone 1-word
+        // batch that fails just fails, same as before, since there's
+        // nothing left to split it into.
+        if (batch.length < 2) return null;
         const mid = Math.ceil(batch.length / 2);
         return Promise.all([tryGenerate(batch.slice(0, mid)), tryGenerate(batch.slice(mid))])
           .then(([a, b]) => (a && b ? combineParagraphExercises(a, b) : null));
       })
       .then(parsed => {
         if (!parsed) { setParagraphStatus('error'); return; }
+        const withDistractors = addDistractors(parsed, batch, excludeWordIds);
         const current = getDailySession();
         if (!current) return;
-        persistSession({ ...current, paragraphExercises: { ...current.paragraphExercises, [index]: parsed } });
+        persistSession({ ...current, paragraphExercises: { ...current.paragraphExercises, [index]: withDistractors } });
         setParagraphStatus('ready');
       })
       .catch(e => {
@@ -2624,15 +2630,15 @@ export default function DailySessionFlow() {
   }
 
   if (session.phase === 'study-paragraph-offer') {
-    const batches = buildParagraphBatches(wordsById(session.studyWordIds));
+    const batches = buildWordsInContextBatches(wordsById(session.studyWordIds), getSettings().level);
     const totalWords = batches.flat().length;
     return (
       <div className="text-center py-16">
         <h2 className="text-2xl font-bold text-on-bg mb-2" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
-          Bonus: Build a story!
+          Bonus: Words in Context
         </h2>
         <p className="text-on-bg/80 mb-6 max-w-xs mx-auto">
-          We'll write {batches.length > 1 ? `${batches.length} short German paragraphs` : 'a short German paragraph'} using
+          We'll write {batches.length > 1 ? `${batches.length} short German exercises` : 'a short German exercise'} using
           {' '}{totalWords} of today's new words. Tap each word into the blank where it belongs.
         </p>
         <div className="flex flex-col items-center gap-3">
@@ -2651,7 +2657,7 @@ export default function DailySessionFlow() {
   }
 
   if (session.phase === 'study-paragraph') {
-    const batches = buildParagraphBatches(wordsById(session.studyWordIds));
+    const batches = buildWordsInContextBatches(wordsById(session.studyWordIds), getSettings().level);
     const index = session.paragraphExerciseIndex ?? 0;
     const batch = batches[index];
     // Shouldn't happen (offer screen already confirmed batches.length > 0,
@@ -2663,7 +2669,7 @@ export default function DailySessionFlow() {
     if (paragraphStatus === 'idle' || paragraphStatus === 'loading') {
       return (
         <div className="text-center py-16">
-          <p className="text-on-bg/80 text-sm">Writing your story…</p>
+          <p className="text-on-bg/80 text-sm">Preparing your words in context…</p>
         </div>
       );
     }
@@ -2672,8 +2678,8 @@ export default function DailySessionFlow() {
         <div className="text-center py-16 flex flex-col items-center gap-4">
           <p className="text-on-bg/80 text-sm max-w-xs mx-auto">
             {paragraphStatus === 'limit-reached'
-              ? "You've used up today's AI bonus stories — come back tomorrow!"
-              : "Couldn't put today's story together right now."}
+              ? "You've used up today's AI bonus exercises — come back tomorrow!"
+              : "Couldn't put today's exercise together right now."}
           </p>
           <button
             onClick={handleSkipParagraph}
@@ -2689,7 +2695,7 @@ export default function DailySessionFlow() {
       <div>
         {batches.length > 1 && (
           <div className="text-center text-on-bg/70 text-xs font-semibold uppercase tracking-wide mb-3">
-            Story {index + 1} of {batches.length}
+            Exercise {index + 1} of {batches.length}
           </div>
         )}
         <ParagraphExerciseCard

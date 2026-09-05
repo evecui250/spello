@@ -1344,13 +1344,13 @@ export type SessionPhase =
   // reversed checkpoint now completes introduction.
   | 'review-mcq' | 'review-mcq-reversed' | 'review-rounds' | 'review-matching'
   | 'report'
-  // The bonus end-of-introduction cloze-paragraph exercise (see
-  // buildParagraphBatches/ParagraphExercise in lib/practice.ts) -- reached
-  // straight from study-done's Continue button, only when today's batch has
-  // enough newly-introduced words for at least one paragraph.
+  // The bonus end-of-introduction "Words in Context" exercise (see
+  // buildWordsInContextBatches/ParagraphExercise in lib/practice.ts) --
+  // reached straight from study-done's Continue button, only when today's
+  // batch has enough newly-introduced words for at least one exercise.
   // study-paragraph-offer is the "do it or skip" choice; study-paragraph is
-  // the exercise(s) themselves (one or two, depending on batch size),
-  // cycling via paragraphExerciseIndex below. Either path lands on
+  // the exercise(s) themselves (up to 3, depending on batch size), cycling
+  // via paragraphExerciseIndex below. Either path lands on
   // 'congrats' next, same as when there's nothing to offer at all.
   | 'study-paragraph-offer' | 'study-paragraph'
   | 'congrats'
@@ -1368,7 +1368,9 @@ export interface ParagraphBlank {
   answer: string; // exact inflected form the learner must drop here
 }
 
-// The bonus end-of-introduction cloze paragraph, already parsed from
+// The bonus end-of-introduction "Words in Context" exercise (a short
+// cloze paragraph, or for a group of just 1-2 words, a single standalone
+// sentence -- same shape either way), already parsed from
 // generate-paragraph's raw AI response (see lib/practice.ts's
 // parseParagraphResponse) into a shape the UI can render directly.
 export interface ParagraphExercise {
@@ -1378,15 +1380,20 @@ export interface ParagraphExercise {
   // segments[1], blank 1, ... without re-parsing anything.
   segments: string[];
   blanks: ParagraphBlank[];
-  // blanks' answers, shuffled -- what the learner actually drags from.
-  // Carries wordId alongside each answer (not just the bare string) so
-  // the UI can show a "meaning" lookup per tray chip without ambiguity --
-  // two different words can coincidentally need the identical inflected
-  // form (see parseParagraphResponse's own comment), so matching a tray
-  // slot back to its word by STRING equality alone could resolve the
-  // wrong one.
+  // blanks' answers, PLUS 1-2 decoy chips from already-learned words (see
+  // lib/practice.ts's addDistractors), all shuffled together -- what the
+  // learner actually drags from. tray.length is not necessarily
+  // blanks.length; a decoy never matches any blank's own answer string
+  // (checked when it's added), so it just sits unused once every blank is
+  // correctly filled, existing there specifically so the last blank isn't
+  // solvable by pure elimination. Carries wordId alongside each answer
+  // (not just the bare string) so the UI can show a "meaning" lookup per
+  // tray chip without ambiguity -- two different words can coincidentally
+  // need the identical inflected form (see parseParagraphResponse's own
+  // comment), so matching a tray slot back to its word by STRING equality
+  // alone could resolve the wrong one.
   tray: { answer: string; wordId: string }[];
-  // The story's full text, already resolved to its correct German
+  // The exercise's full text, already resolved to its correct German
   // (no [[i]] placeholders) and translated into the learner's own
   // language, split into parallel sentence-aligned arrays (sentences[i]
   // translates to translations[i]) — powers the post-check translation
@@ -1483,15 +1490,16 @@ export interface DailySession {
   // persisted before this field existed) falls back to studyWordIds
   // wholesale — the previous, imperfect behavior — rather than crashing.
   studyRound1NeededIds?: string[];
-  // Which paragraph batch (see buildParagraphBatches -- a 6+ word day
-  // splits into more than one) is currently showing during
-  // 'study-paragraph'. paragraphExercises caches each batch's AI-generated
-  // result, keyed by index as a string (plain JSON object keys are always
-  // strings), so leaving mid-story and coming back doesn't burn another AI
-  // call regenerating the same paragraph. Deliberately NOT persisting the
-  // learner's in-progress drag placements themselves -- this is a
-  // skippable, unscored bonus, so a refresh mid-drag just restarts that one
-  // paragraph rather than needing full resume fidelity.
+  // Which word group (see buildWordsInContextBatches -- most days with
+  // more new words than one exercise's own target split into more than
+  // one, up to 3) is currently showing during 'study-paragraph'.
+  // paragraphExercises caches each group's AI-generated result, keyed by
+  // index as a string (plain JSON object keys are always strings), so
+  // leaving mid-exercise and coming back doesn't burn another AI call
+  // regenerating the same one. Deliberately NOT persisting the learner's
+  // in-progress drag placements themselves -- this is a skippable,
+  // unscored bonus, so a refresh mid-drag just restarts that one exercise
+  // rather than needing full resume fidelity.
   paragraphExerciseIndex?: number;
   paragraphExercises?: Record<string, ParagraphExercise>;
   earnedPuppies: number;

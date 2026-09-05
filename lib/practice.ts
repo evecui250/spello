@@ -1112,38 +1112,102 @@ export function buildMatchingPages(wordIds: string[]): string[][] {
   return pages;
 }
 
-// The end-of-introduction bonus: an AI-written German paragraph using every
-// word in a batch (see buildParagraphBatches), each blanked out and dragged
-// back in by meaning — see generate-paragraph's own comment for the full
-// generation contract. Optional/skippable, never touches mastery/growth
-// scoring, same reinforcement-only status as the matching-quiz recap.
-export const MIN_PARAGRAPH_WORDS = 2;
-export const MAX_PARAGRAPH_WORDS = 5;
+// The end-of-introduction bonus, "Words in Context": an AI-written German
+// paragraph (or, for a word that doesn't group naturally, a single short
+// standalone sentence -- same generation call and UI, just a smaller
+// target) using a small group of today's newly-introduced words, each
+// blanked out and dragged back in by meaning — see generate-paragraph's
+// own comment for the full generation contract. Optional/skippable, never
+// touches mastery/growth scoring, same reinforcement-only status as the
+// matching-quiz recap.
+//
+// Per-CEFR-level targets for how many words go in one exercise, how many
+// sentences, and roughly how long the German text should be — mirrored
+// server-side in generate-paragraph's own copy of this table (kept in
+// sync by hand, same "no shared module between client and Edge Function"
+// convention as GAME_PLAY_DAILY_POINT_CAP elsewhere in this codebase).
+// These are targets the prompt asks for and generate-paragraph checks
+// "reasonably close to," not hard walls -- naturalness/correctness wins
+// over hitting an exact count.
+export interface WordsInContextRange {
+  minTargets: number; maxTargets: number;
+  minSentences: number; maxSentences: number;
+  minWords: number; maxWords: number;
+}
+export const WORDS_IN_CONTEXT_RANGE: Record<Level, WordsInContextRange> = {
+  A1: { minTargets: 2, maxTargets: 3, minSentences: 2, maxSentences: 3, minWords: 20, maxWords: 35 },
+  A2: { minTargets: 3, maxTargets: 4, minSentences: 3, maxSentences: 4, minWords: 30, maxWords: 50 },
+  B1: { minTargets: 3, maxTargets: 5, minSentences: 4, maxSentences: 5, minWords: 45, maxWords: 70 },
+  B2: { minTargets: 4, maxTargets: 5, minSentences: 4, maxSentences: 6, minWords: 60, maxWords: 85 },
+  // C1/C2 have no real words yet (see Level's own comment in lib/words.ts)
+  // -- kept only so this stays total over every Level value.
+  C1: { minTargets: 4, maxTargets: 5, minSentences: 5, maxSentences: 6, minWords: 70, maxWords: 95 },
+  C2: { minTargets: 4, maxTargets: 5, minSentences: 5, maxSentences: 6, minWords: 70, maxWords: 100 },
+};
 
-// Splits a day's newly-introduced words into paragraph-sized batches of
-// up to MAX_PARAGRAPH_WORDS each — ONE paragraph is always preferred for
-// up to 5 words; only a day with MORE than that gets split into several,
-// so a 4-5 word day still reads as one coherent scene rather than being
-// preemptively chopped into unrelated fragments. Round-robins across
-// ceil(words.length / MAX_PARAGRAPH_WORDS) batches instead of a plain
-// greedy chunk-then-drop-the-remainder split, so no leftover is ever
-// silently dropped as long as the day's total is at least
-// MIN_PARAGRAPH_WORDS — a 6-word day becomes 3+3, an 8-word day becomes
-// 3+3+2, a 10-word day becomes 5+5. A single leftover word (day total
-// < MIN_PARAGRAPH_WORDS) still isn't worth its own paragraph and is
-// dropped. Splitting a genuinely-too-hard batch into smaller ones because
-// the AI itself couldn't weave it into one paragraph is instead handled
-// as a runtime FALLBACK once generation actually fails (see
+// Offering more than this many exercises in one day's bonus round would
+// turn a quick reinforcement activity into a slog -- if there's more to
+// cover than 3 groups' worth, the rest is simply not offered a slot today
+// (see buildWordsInContextBatches below) rather than growing the round
+// indefinitely.
+export const MAX_WORDS_IN_CONTEXT_EXERCISES = 3;
+
+// Splits a day's newly-introduced words into small, exercise-sized groups
+// instead of forcing everything into one paragraph:
+//   1. Words sharing a corpus `category` are grouped together first, up
+//      to this level's maxTargets (most batches won't have this -- only
+//      ~28% of the corpus has a category at all -- so this is a
+//      best-effort first pass, not the whole algorithm).
+//   2. Whatever's left is distributed round-robin into the remaining
+//      slots (same "don't silently drop a leftover" spirit as this
+//      function's own earlier version), still capped at maxTargets/group.
+//   3. Capped at MAX_WORDS_IN_CONTEXT_EXERCISES groups total. Any words
+//      still left over are simply deferred -- not offered a slot today --
+//      prioritized by ORIGINAL ORDER (the first maxTargets*3 words win):
+//      these are all today's brand-new introductions with no
+//      differentiated history yet (no mistakes, no mascot-stage split),
+//      so there's no real "which ones most need practice" signal within
+//      a single day's fresh batch to sort by instead. Original order is
+//      already this app's own SRS-driven day-plan order (see
+//      buildStudyWords), the most defensible proxy available. A deferred
+//      word still gets its normal scheduled reviews regardless.
+//   4. A group of only 1-2 words is exactly the "standalone sentence"
+//      case -- it's still returned here (no MIN_PARAGRAPH_WORDS-style
+//      floor that used to drop a lone leftover entirely), generate-
+//      paragraph just gets told a proportionally smaller target range.
+// Splitting a batch further at generation time because the AI itself
+// couldn't weave it together is a separate, runtime fallback (see
 // DailySessionFlow's generation effect and combineParagraphExercises
-// below) — not preemptively here, since most word combinations are fine
-// as one paragraph and splitting on suspicion alone would fragment a
-// coherent scene for no reason.
-export function buildParagraphBatches(words: Word[]): Word[][] {
-  if (words.length < MIN_PARAGRAPH_WORDS) return [];
-  const numBatches = Math.ceil(words.length / MAX_PARAGRAPH_WORDS);
-  const batches: Word[][] = Array.from({ length: numBatches }, () => []);
-  words.forEach((w, i) => batches[i % numBatches].push(w));
-  return batches.filter(b => b.length >= MIN_PARAGRAPH_WORDS);
+// below) -- not this function's job.
+export function buildWordsInContextBatches(words: Word[], level: Level): Word[][] {
+  const range = WORDS_IN_CONTEXT_RANGE[level] ?? WORDS_IN_CONTEXT_RANGE.B1;
+  const maxTargets = range.maxTargets;
+  // Defers anything beyond 3 groups' worth, prioritizing original order
+  // (see this function's own comment on why that's the proxy used).
+  const pool = words.slice(0, maxTargets * MAX_WORDS_IN_CONTEXT_EXERCISES);
+
+  const groups: Word[][] = [];
+  while (pool.length > 0 && groups.length < MAX_WORDS_IN_CONTEXT_EXERCISES) {
+    const seed = pool.shift()!;
+    const group: Word[] = [seed];
+    // Pull same-category words first, filling toward maxTargets -- keeps
+    // a real semantic cluster together instead of splitting it across
+    // groups just because of where its members fell in the original
+    // order.
+    if (seed.category) {
+      for (let i = pool.length - 1; i >= 0 && group.length < maxTargets; i--) {
+        if (pool[i].category === seed.category) group.push(...pool.splice(i, 1));
+      }
+    }
+    // Top up with whatever's next (no shared category, or a too-small
+    // cluster) so a plain uncategorized batch still packs efficiently
+    // into as few groups as this level's maxTargets allows, rather than
+    // fragmenting into more, smaller groups (down to unnecessary
+    // singletons) than the day's word count actually requires.
+    while (group.length < maxTargets && pool.length > 0) group.push(pool.shift()!);
+    groups.push(group);
+  }
+  return groups;
 }
 
 // Stitches two smaller successful paragraph generations into one combined
@@ -1224,5 +1288,51 @@ export function parseParagraphResponse(
   return {
     segments, blanks, tray: shuffled(blanks.map(b => ({ answer: b.answer, wordId: b.wordId }))),
     sentences, translations: translations.length === sentences.length ? translations : [],
+  };
+}
+
+// How many decoy chips join the real answers in the tray -- enough that
+// the last blank is no longer solvable by pure elimination (today's tray
+// is exactly one chip per blank, so placing every-blank-but-one always
+// leaves exactly the right answer for the last slot), not so many the
+// board turns into a word-search.
+const DISTRACTOR_COUNT = 2;
+
+// Adds 1-2 decoy tray chips from words the learner has ALREADY learned
+// (never an unseen word -- a decoy the learner can't even recognize
+// teaches nothing and just looks like noise) and, ideally, of the same
+// part of speech as this exercise's own targets, so a decoy actually
+// looks plausible rather than obviously out of place. Picked client-side
+// rather than by the AI: simpler, free, and avoids teaching the model to
+// invent a plausible-but-wrong inflected form (a much easier way to
+// accidentally produce a SECOND valid answer for some blank than to
+// produce a genuine decoy).
+//
+// excludeWordIds should cover every word already in today's whole
+// session (not just this one batch) -- a "decoy" that's actually due for
+// review today would be a confusing thing to see sitting in a trap slot.
+export function addDistractors(
+  exercise: ParagraphExercise, batchWords: Word[], excludeWordIds: Set<string>,
+): ParagraphExercise {
+  const progress = getMergedProgressAcrossLevels();
+  const blankAnswers = new Set(exercise.blanks.map(b => b.answer));
+  const batchTypes = new Set(batchWords.map(w => w.type));
+  const candidates = [...WORDS, ...getAllCustomWordsAcrossLevels()].filter(w => (
+    !!progress[w.id]?.mascotStage
+    && !excludeWordIds.has(w.id)
+    // A decoy whose bare form happens to match one of this exercise's
+    // own blank answers would silently score as "correct" in the wrong
+    // slot (ParagraphExerciseCard compares tray answer to blank answer
+    // by exact string equality) -- excluded outright rather than risking
+    // that collision.
+    && !blankAnswers.has(w.de)
+  ));
+  const preferred = shuffled(candidates.filter(w => batchTypes.has(w.type)));
+  const rest = shuffled(candidates.filter(w => !batchTypes.has(w.type)));
+  const picked = [...preferred, ...rest].slice(0, DISTRACTOR_COUNT);
+  if (picked.length === 0) return exercise;
+  return {
+    ...exercise,
+    tray: shuffled([...exercise.tray, ...picked.map(w => ({ answer: w.de, wordId: w.id }))]),
   };
 }

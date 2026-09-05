@@ -237,12 +237,12 @@ export interface ParagraphWordInput {
   perfectTense?: string;
 }
 
-// Generates the bonus end-of-introduction cloze paragraph (see
-// generate-paragraph's own comment for the full contract) for a batch of
-// 2-5 of today's newly-introduced words. Same daily-cap/unreachable
-// handling as every other AI call here -- callers should catch
-// DailyLimitReachedError/AIUnreachableError and let the learner skip
-// today's story rather than block the rest of the session on it.
+// Generates the bonus end-of-introduction "Words in Context" exercise
+// (see generate-paragraph's own comment for the full contract) for a
+// group of 1-5 of today's newly-introduced words. Same daily-cap/
+// unreachable handling as every other AI call here -- callers should
+// catch DailyLimitReachedError/AIUnreachableError and let the learner
+// skip today's exercise rather than block the rest of the session on it.
 export async function generateParagraphExercise(
   level: string,
   words: ParagraphWordInput[],

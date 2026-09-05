@@ -1,13 +1,16 @@
-// Generates the bonus end-of-introduction cloze paragraph: a short German
-// paragraph using every word in today's batch (3-5 words -- see
-// lib/practice.ts's buildParagraphBatches) exactly once, each one blanked
-// out as a `[[i]]` placeholder (i = that word's index in the `words` array
-// this request sent) so the client can splice the learner's drag-and-drop
-// answer back into the exact spot -- see lib/practice.ts's
-// parseParagraphResponse for how the response is consumed. Same
-// key-handling/rate-limiting/ai_usage rationale as generate-sentence: the
-// OpenAI key lives only here, and every call counts against the same
-// combined per-caller daily cap.
+// Generates the bonus end-of-introduction "Words in Context" exercise: a
+// short German paragraph (or, for a group of just 1-2 words that don't
+// cluster naturally with anything else, a single short standalone
+// sentence -- same call, same shape, just a smaller target) using a small
+// group of today's new words -- see lib/practice.ts's
+// buildWordsInContextBatches for how the client decides group boundaries.
+// Each target word is blanked out as a `[[i]]` placeholder (i = that
+// word's index in the `words` array this request sent) so the client can
+// splice the learner's drag-and-drop answer back into the exact spot --
+// see lib/practice.ts's parseParagraphResponse for how the response is
+// consumed. Same key-handling/rate-limiting/ai_usage rationale as
+// generate-sentence: the OpenAI key lives only here, and every call
+// counts against the same combined per-caller daily cap.
 //
 // Two things generate-sentence doesn't need to worry about, both handled
 // here: (1) each word may need a non-dictionary inflected form to read
@@ -23,13 +26,14 @@
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-// Upgraded from gpt-4o-mini (generate-sentence's model) after a real test
-// batch showed a wrong-gender article ("Der Anrede" for a die-word) --
-// worth the extra cost specifically here since this fires far less often
-// than generate-sentence (once per DAY at most, when a learner opts into
-// the bonus, vs. once per NEW WORD), so the aggregate spend stays small
-// while directly addressing "make sure it makes sense" grammatically.
-const MODEL = 'gpt-4o';
+// gpt-5.6-luna (released July 2026, the fast/cheap "nano" tier of the
+// GPT-5.6 family) -- owner's own pick for this specific task: a short,
+// high-volume, cost-sensitive generation, unlike generate-sentence's own
+// separate model choice. It's a reasoning-tier model with real API
+// differences from gpt-4o's plain chat-completion shape -- see
+// callOpenAI's own comment for the two that matter here (no custom
+// temperature at all, and max_completion_tokens instead of max_tokens).
+const MODEL = 'gpt-5.6-luna';
 
 // Same combined per-caller cap as generate-sentence/correct-sentence --
 // every AI Edge Function shares one ai_usage-backed daily ceiling.
@@ -38,17 +42,46 @@ const DAILY_AI_CALL_LIMIT_ANONYMOUS = 300;
 
 // Deliberately tighter and shorter than generate-sentence's WORD_RANGE --
 // this is a whole paragraph a beginner has to read and hold in their head
-// at once, not one sentence, so A1/A2 stay well under what a full leveled
-// reading passage would allow. C1/C2 mirror B2 (no corpus there yet, kept
-// for completeness the same way WORD_RANGE does).
-const PARAGRAPH_RANGE: Record<string, { minSentences: number; maxSentences: number; minWords: number; maxWords: number }> = {
-  A1: { minSentences: 2, maxSentences: 3, minWords: 20, maxWords: 35 },
-  A2: { minSentences: 3, maxSentences: 4, minWords: 35, maxWords: 50 },
-  B1: { minSentences: 4, maxSentences: 5, minWords: 50, maxWords: 75 },
-  B2: { minSentences: 5, maxSentences: 6, minWords: 70, maxWords: 100 },
-  C1: { minSentences: 5, maxSentences: 6, minWords: 70, maxWords: 100 },
-  C2: { minSentences: 5, maxSentences: 6, minWords: 70, maxWords: 100 },
+// at once, not one sentence. Mirrors lib/practice.ts's
+// WORDS_IN_CONTEXT_RANGE (kept in sync by hand -- no shared module exists
+// between client and Edge Function in this codebase, same convention as
+// GAME_PLAY_DAILY_POINT_CAP elsewhere). These are targets the prompt asks
+// for and isReasonableLength checks "reasonably close to," not hard
+// walls -- naturalness/correctness wins over hitting an exact count.
+// C1/C2 mirror B2 (no corpus there yet, kept for completeness).
+interface WordsInContextRange {
+  minTargets: number; maxTargets: number;
+  minSentences: number; maxSentences: number;
+  minWords: number; maxWords: number;
+}
+const WORDS_IN_CONTEXT_RANGE: Record<string, WordsInContextRange> = {
+  A1: { minTargets: 2, maxTargets: 3, minSentences: 2, maxSentences: 3, minWords: 20, maxWords: 35 },
+  A2: { minTargets: 3, maxTargets: 4, minSentences: 3, maxSentences: 4, minWords: 30, maxWords: 50 },
+  B1: { minTargets: 3, maxTargets: 5, minSentences: 4, maxSentences: 5, minWords: 45, maxWords: 70 },
+  B2: { minTargets: 4, maxTargets: 5, minSentences: 4, maxSentences: 6, minWords: 60, maxWords: 85 },
+  C1: { minTargets: 4, maxTargets: 5, minSentences: 5, maxSentences: 6, minWords: 70, maxWords: 95 },
+  C2: { minTargets: 4, maxTargets: 5, minSentences: 5, maxSentences: 6, minWords: 70, maxWords: 100 },
 };
+
+// A group smaller than this level's own minTargets is the "standalone
+// sentence" case (1-2 leftover words that didn't cluster with anything
+// else -- see buildWordsInContextBatches) -- scales the level's normal
+// target range down proportionally rather than needing a second
+// hardcoded table just for the small-group case. Floors keep a 1-word
+// exercise from being asked for an unreasonably tiny (or zero-word)
+// target.
+function effectiveRange(range: WordsInContextRange, count: number): { minSentences: number; maxSentences: number; minWords: number; maxWords: number } {
+  if (count >= range.minTargets) {
+    return { minSentences: range.minSentences, maxSentences: range.maxSentences, minWords: range.minWords, maxWords: range.maxWords };
+  }
+  const ratio = count / range.minTargets;
+  return {
+    minSentences: 1,
+    maxSentences: Math.max(1, Math.round(range.minSentences * ratio)),
+    minWords: Math.max(6, Math.round(range.minWords * ratio)),
+    maxWords: Math.max(12, Math.round(range.maxWords * ratio)),
+  };
+}
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -122,17 +155,15 @@ Deno.serve(async (req: Request) => {
     const body = (await req.json()) as RequestBody;
     const { level, words, themeHint, nativeLanguage } = body;
     const wantsZh = nativeLanguage === 'zh';
-    // 2-5 mirrors MIN_PARAGRAPH_WORDS/MAX_PARAGRAPH_WORDS in
-    // lib/practice.ts -- enforced again here since this is a public
-    // endpoint and the client-side batching is only a courtesy, not a
-    // guarantee. The client's own runtime fallback (see
-    // combineParagraphExercises) also calls this with as few as 2 words
-    // when splitting a failed larger batch in half, so the floor stays
-    // at 2 even though a normal request is usually 3-5.
-    if (!Array.isArray(words) || words.length < 2 || words.length > 5) {
-      return json({ error: 'Expected 2-5 words' }, 400);
+    // Floor of 1 (not 2) -- a standalone-sentence batch of exactly one
+    // word is an explicit, intentional case now (see
+    // buildWordsInContextBatches), not just the runtime split-on-failure
+    // fallback's smallest possible half.
+    if (!Array.isArray(words) || words.length < 1 || words.length > 5) {
+      return json({ error: 'Expected 1-5 words' }, 400);
     }
-    const range = PARAGRAPH_RANGE[level] ?? PARAGRAPH_RANGE.B1;
+    const levelRange = WORDS_IN_CONTEXT_RANGE[level] ?? WORDS_IN_CONTEXT_RANGE.B1;
+    const range = effectiveRange(levelRange, words.length);
 
     // Separable-prefix verbs (thirdPerson/pastTense with a space in them,
     // e.g. "holt ab") turned out unreliable to hand the model as free
@@ -157,25 +188,30 @@ Deno.serve(async (req: Request) => {
       return rest.join(' ');
     });
 
+    // Compact -- de, meaning, part of speech, and (for a noun) its
+    // article/plural. Conjugated forms are only spelled out for the
+    // forced separable-verb case, which genuinely needs the auxiliary +
+    // participle pinned down (see the comment above); an ordinary verb no
+    // longer gets its thirdPerson/pastTense/perfectTense listed at all --
+    // free tense/person choice was already what the prompt asked for.
     const wordList = words
       .map((w, i) => {
-        const meaning = `meaning "${w.en}"`;
+        const participle = forcedParticiple[i];
+        if (participle) {
+          const aux = w.perfectTense!.split(' ')[0];
+          return (
+            `${i}. ${w.de} — ${w.en} — verb, separable-prefix. You MUST use its perfect tense, and keep the ` +
+            'clause containing it very short: just a subject, then the auxiliary, then the placeholder, with ' +
+            'nothing else in that same clause (mention any other people/places/things in a separate sentence ' +
+            `instead). Write "${aux}" as normal text immediately before placeholder [[${i}]] -- no other word ` +
+            `between them -- and the answer for [[${i}]] must be exactly "${participle}" (nothing else, no ` +
+            'prefix elsewhere).'
+          );
+        }
         if (w.type === 'noun') {
-          return `${i}: "${w.de}" (${meaning}; ${[w.article, `plural: ${w.plural || 'none'}`].filter(Boolean).join(', ')})`;
+          return `${i}. ${w.de} — ${w.en} — noun${w.article ? `, ${w.article}` : ''}${w.plural ? `; plural: ${w.plural}` : ''}`;
         }
-        if (w.type === 'verb') {
-          const participle = forcedParticiple[i];
-          if (participle) {
-            const aux = w.perfectTense!.split(' ')[0];
-            return (
-              `${i}: "${w.de}" (${meaning}) -- this is a separable-prefix verb. You MUST use its perfect tense: ` +
-              `write "${aux}" as normal text immediately before placeholder [[${i}]], and the answer ` +
-              `for [[${i}]] must be exactly "${participle}" (nothing else, no prefix elsewhere).`
-            );
-          }
-          return `${i}: "${w.de}" (${meaning}; infinitive; natural tense/person forms: ${[w.thirdPerson, w.pastTense, w.perfectTense].filter(Boolean).join(' / ')})`;
-        }
-        return `${i}: "${w.de}" (${meaning}; ${w.type})`;
+        return `${i}. ${w.de} — ${w.en} — ${w.type}`;
       })
       .join('\n');
 
@@ -185,13 +221,20 @@ Deno.serve(async (req: Request) => {
     // right: the answer string must be the bare participle (checked
     // before), AND the auxiliary must genuinely appear immediately before
     // that placeholder in the paragraph text -- checking the answer alone
-    // isn't enough. Confirmed real: a generation returned answer
-    // "abgeholt" (passing the answer-only check) but the paragraph never
-    // wrote "hat"/"ist" anywhere near [[i]] at all (used it inside a
-    // "um...zu" purpose clause, which needs the infinitive, not a bare
-    // participle) -- structurally fine per parseParagraphResponse, but bad
-    // German. This walks the same `[[i]]` placeholders parseParagraphResponse
-    // parses and checks the last word right before each forced one.
+    // isn't enough. Confirmed real (live test, this rewrite, twice): a
+    // more "natural word order" version of this check/prompt (letting the
+    // aux sit anywhere earlier in the clause, participle at the clause's
+    // own end) sounded right in theory but measurably made gpt-5.6-luna's
+    // actual output WORSE, not better -- it started duplicating the
+    // participle as literal text AND misplacing the placeholder in an
+    // unrelated (often noun-shaped) slot, a much more confusing failure
+    // than this stricter version's own imperfect-but-comprehensible word
+    // order ("hat abgeholt meine Schwester ihr Kind" reads awkwardly but
+    // parses fine; the "natural order" attempt produced outright
+    // nonsense). Reverted to strict adjacency, paired with a prompt
+    // instruction (see the wordList comment above) to keep that specific
+    // clause minimal so the adjacency is actually grammatical rather than
+    // just tolerated.
     function followsForcedForms(paragraph: string, a: string[]): boolean {
       if (!forcedParticiple.some(p => p !== null)) return true;
       const positions = new Map<number, number>(); // placeholder index -> its start offset
@@ -227,6 +270,84 @@ Deno.serve(async (req: Request) => {
       return seen.size === count;
     }
 
+    // New: every answer must actually say something -- Structured Outputs
+    // guarantees the answers array exists and is the right JSON shape, but
+    // not that every entry is non-blank content.
+    function hasNoEmptyAnswers(answers: string[]): boolean {
+      return answers.every(a => typeof a === 'string' && a.trim().length > 0);
+    }
+
+    // New, confirmed real via live testing this rewrite (a 5-word B2
+    // batch): the model can scramble WHICH target word each answers[i]
+    // actually belongs to -- e.g. a verb's inflected form landing at a
+    // noun's index, with a noun's own answer landing somewhere else
+    // entirely. hasValidPlaceholders alone can't catch this (every index
+    // 0..count-1 still appears exactly once as a placeholder; the wrong
+    // WORD is just attached to it), and it's a much more serious failure
+    // than the others here -- the learner would be shown the wrong German
+    // word as "correct" for that blank, not just an awkward sentence.
+    // Heuristic (exact grammatical-inflection matching isn't practical
+    // here): the answer and the target's own dictionary form must share
+    // a long-enough common prefix to be plausibly the same word inflected
+    // (a plural/case/tense ending), which a totally different word landing
+    // at the wrong index will not. forcedParticiple entries are skipped --
+    // followsForcedForms already checks those exactly.
+    function answersMatchWords(answers: string[]): boolean {
+      return words.every((w, i) => {
+        if (forcedParticiple[i]) return true;
+        const a = (answers[i] ?? '').toLowerCase();
+        const stem = w.de.toLowerCase();
+        if (!a) return false;
+        let common = 0;
+        while (common < a.length && common < stem.length && a[common] === stem[common]) common++;
+        return common >= Math.min(4, stem.length);
+      });
+    }
+
+    // New, confirmed real via live testing this rewrite: a noun blank can
+    // land with literally nothing in front of it ("sitzt [[i]]" ->
+    // "sitzt Katze" once resolved -- missing its article entirely).
+    // Heuristic, not exhaustive -- checks the few words immediately
+    // before a noun's placeholder for a recognizable German determiner or
+    // a fixed preposition contraction that already covers it (an
+    // adjective can sit between the two, e.g. "die kleine [[i]]", hence
+    // checking a short window rather than just the one adjacent word).
+    // A false negative here just costs one extra retry, not a wrong
+    // answer -- same low-stakes budget as the other quality checks below.
+    const GERMAN_DETERMINERS = new Set([
+      'der', 'die', 'das', 'den', 'dem', 'des',
+      'ein', 'eine', 'einen', 'einem', 'einer', 'eines',
+      'kein', 'keine', 'keinen', 'keinem', 'keiner', 'keines',
+      'mein', 'meine', 'meinen', 'meinem', 'meiner', 'meines',
+      'dein', 'deine', 'deinen', 'deinem', 'deiner', 'deines',
+      'sein', 'seine', 'seinen', 'seinem', 'seiner', 'seines',
+      'ihr', 'ihre', 'ihren', 'ihrem', 'ihrer', 'ihres',
+      'unser', 'unsere', 'unseren', 'unserem', 'unserer', 'unseres',
+      'dieser', 'diese', 'dieses', 'diesen', 'diesem',
+      'jeder', 'jede', 'jedes', 'jeden', 'jedem',
+      'zum', 'zur', 'im', 'ins', 'am', 'beim', 'vom', 'ans',
+    ]);
+    function nounsHaveArticles(paragraph: string): boolean {
+      return words.every((w, i) => {
+        if (w.type !== 'noun') return true;
+        const m = new RegExp(`\\[\\[${i}\\]\\]`).exec(paragraph);
+        if (!m) return true; // hasValidPlaceholders already covers a missing placeholder
+        const before = paragraph.slice(0, m.index).trim().split(/\s+/).slice(-3)
+          .map(t => t.toLowerCase().replace(/[.,!?]/g, ''));
+        return before.some(t => GERMAN_DETERMINERS.has(t));
+      });
+    }
+
+    // New: the resolved German text should land reasonably close to this
+    // batch's target word-count band -- not exact (naturalness wins over
+    // hitting a count, per the owner's own framing), just not wildly off
+    // in either direction. +/-30% keeps this a sanity check, not a hard
+    // wall the model has to hit precisely.
+    function isReasonableLength(paragraph: string, answers: string[]): boolean {
+      const words = resolvePlaceholders(paragraph, answers).trim().split(/\s+/).filter(Boolean).length;
+      return words >= range.minWords * 0.7 && words <= range.maxWords * 1.3;
+    }
+
     // Splits a fully-resolved (no [[i]] placeholders left) German
     // paragraph into individual sentences -- good enough for these short,
     // controlled, AI-generated everyday scenes (no abbreviations/decimals
@@ -259,7 +380,7 @@ Deno.serve(async (req: Request) => {
     // was previously never checked server-side at all: the client's own
     // parseParagraphResponse (lib/practice.ts) performs exactly this check
     // and silently gives up with NO way to recover, surfacing as
-    // "couldn't put today's story together" for what's usually just one
+    // "couldn't put today's exercise together" for what's usually just one
     // mechanical slip (the model is generally fine on the actual German/
     // naturalness side of this prompt -- see its own comment -- but a
     // stray duplicate or dropped placeholder token is a real, observed
@@ -269,9 +390,28 @@ Deno.serve(async (req: Request) => {
       const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
       if (retry && hasValidPlaceholders(retry.paragraph, retry.answers, words.length)) genResult = retry;
     }
+    // Same severity tier as hasValidPlaceholders above -- a scrambled
+    // answer-to-word mapping is as unusable as a malformed placeholder
+    // set, just a subtler way to get there.
+    if (!answersMatchWords(genResult.answers)) {
+      const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
+      if (retry && answersMatchWords(retry.answers)) genResult = retry;
+    }
     if (!followsForcedForms(genResult.paragraph, genResult.answers)) {
       const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
       if (retry) genResult = retry;
+    }
+    if (!hasNoEmptyAnswers(genResult.answers)) {
+      const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
+      if (retry && hasNoEmptyAnswers(retry.answers)) genResult = retry;
+    }
+    if (!nounsHaveArticles(genResult.paragraph)) {
+      const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
+      if (retry && nounsHaveArticles(retry.paragraph)) genResult = retry;
+    }
+    if (!isReasonableLength(genResult.paragraph, genResult.answers)) {
+      const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
+      if (retry && isReasonableLength(retry.paragraph, retry.answers)) genResult = retry;
     }
     // Same idea, for the translations array specifically -- the model can
     // get the placeholders/forced-forms right and still miscount
@@ -326,12 +466,33 @@ Deno.serve(async (req: Request) => {
       console.error('generate-paragraph: invalid placeholder structure after retry', { paragraph, answers });
       return json({ error: 'AI returned an unusable paragraph structure' }, 502);
     }
+    if (!answersMatchWords(answers)) {
+      console.error('generate-paragraph: answer/word mapping scrambled after retry', { words: words.map(w => w.de), answers });
+      return json({ error: 'AI mismatched an answer to the wrong word' }, 502);
+    }
     if (!followsForcedForms(paragraph, answers)) {
       // Logged, not failed -- after two attempts this is a quality
       // shortfall (the paragraph is still structurally usable, see
       // parseParagraphResponse), not worth burning a third AI call over for
       // a skippable bonus exercise.
       console.warn('generate-paragraph: separable-verb form not followed after retry', { answers, forcedParticiple });
+    }
+    if (!hasNoEmptyAnswers(answers)) {
+      console.error('generate-paragraph: empty answer after retry', { answers });
+      return json({ error: 'AI returned an incomplete answer' }, 502);
+    }
+    if (!nounsHaveArticles(paragraph)) {
+      // Logged, not failed -- a heuristic check (see its own comment), so
+      // a false negative here shouldn't fail an otherwise-fine exercise;
+      // genuinely missing articles are a quality shortfall the exercise
+      // still mostly works around (the surrounding sentence still reads
+      // sensibly minus one article), not worth a third AI call over.
+      console.warn('generate-paragraph: possible missing article before a noun blank after retry', { paragraph });
+    }
+    if (!isReasonableLength(paragraph, answers)) {
+      // Logged, not failed -- same "quality shortfall, not fatal" call as
+      // followsForcedForms above; the exercise is still fully usable.
+      console.warn('generate-paragraph: paragraph length outside target range after retry', { range, paragraph });
     }
     const resolved = resolvePlaceholders(paragraph, answers);
     const sentences = splitSentences(resolved);
@@ -354,6 +515,61 @@ Deno.serve(async (req: Request) => {
   }
 });
 
+// Structured Outputs schema -- guarantees the response is valid JSON
+// shaped exactly like this (right keys, right types), which removes the
+// need for the old try/catch-around-JSON.parse fallback. It does NOT
+// guarantee the *content* rules (placeholder correctness, non-empty
+// answers, translation alignment, length) -- every content-level check
+// above still runs regardless.
+const RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    paragraph: { type: 'string' },
+    answers: { type: 'array', items: { type: 'string' } },
+    translations: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['paragraph', 'answers', 'translations'],
+  additionalProperties: false,
+};
+
+// gpt-5.6-luna is a reasoning-tier model with two real API differences
+// from gpt-4o's plain chat-completion call: it rejects any custom
+// `temperature` outright (400 error, confirmed via research -- omitted
+// entirely below, not just left at a "safe" value), and Chat Completions
+// requires `max_completion_tokens` instead of `max_tokens` for reasoning
+// models. `reasoning_effort` is the actual lever used here in place of
+// temperature -- not a literal substitute (it controls how much the model
+// "thinks," not sampling randomness), but the closest thing this model
+// exposes for fast, direct, low-variance output on a short high-volume
+// task, and matches the owner's own explicit choice of 'none'.
+//
+// One more wrinkle found during research (not something an API key was
+// available here to verify firsthand): a reported case of gpt-5.6-luna/
+// sol/terra rejecting reasoning_effort: 'none' specifically on
+// /chat/completions, unlike other GPT-5-series models where 'none' is a
+// normal valid value. Rather than silently using a different value than
+// requested, or leaving the whole feature broken if that report is
+// accurate, this tries 'none' first and falls back to 'low' exactly once
+// if OpenAI's own error text calls out reasoning_effort as the problem.
+async function callOpenAI(body: Record<string, unknown>, reasoningEffort: 'none' | 'low'): Promise<Response> {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({ ...body, reasoning_effort: reasoningEffort }),
+  });
+  if (!res.ok && reasoningEffort === 'none') {
+    const errText = await res.clone().text();
+    if (errText.toLowerCase().includes('reasoning_effort')) {
+      console.warn('generate-paragraph: reasoning_effort "none" rejected, retrying with "low"', errText);
+      return callOpenAI(body, 'low');
+    }
+  }
+  return res;
+}
+
 async function generateOnce(
   wordList: string,
   count: number,
@@ -362,74 +578,74 @@ async function generateOnce(
   themeHint: string | undefined,
   wantsZh: boolean,
 ): Promise<{ paragraph: string; answers: string[]; translations: string[]; usage: { prompt_tokens?: number; completion_tokens?: number } } | null> {
-  const completion = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+  const completion = await callOpenAI({
+    model: MODEL,
+    max_completion_tokens: 500,
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: 'words_in_context_exercise', strict: true, schema: RESPONSE_SCHEMA },
     },
-    body: JSON.stringify({
-      model: MODEL,
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content:
-            `You are writing a short German reading exercise for a CEFR ${level || 'A1'} learner. ` +
-            `Write ONE short German paragraph, ${range.minSentences}-${range.maxSentences} sentences, ` +
-            `${range.minWords}-${range.maxWords} words total (count every word -- this is a hard ` +
-            'requirement). It must be a coherent, natural, meaningful everyday scene -- never a ' +
-            'string of sentences stitched together just to fit the words in. Keep the tone warm, ' +
-            'wholesome and appropriate for all ages: no violence, death, danger, illness, conflict, ' +
-            'or anything upsetting or controversial. Make it a plain, made-up, generic everyday ' +
-            'scene (a family, friends, a normal day, a hobby, a trip) -- NOT tied to any real event. ' +
-            'Never mention politics, religion, or any other sensitive/divisive topic. Never name a ' +
-            'real person, company, brand, or organization -- use invented or generic names only ' +
-            '(e.g. "Anna", "Herr Schmidt", "das Café", never a real celebrity, politician, or ' +
-            'company). Never state or imply any historical fact, date, or claim -- nothing depends ' +
-            'on getting real-world facts right, so simply don\'t reference real history at all. ' +
-            (themeHint ? `If it fits naturally, build the scene around the theme "${themeHint}". ` : '') +
-            `The paragraph must use EVERY ONE of these ${count} words exactly once, each in its ` +
-            'most natural inflected/conjugated form for its place in the sentence (nouns may need ' +
-            'their plural or a different case ending via the given article; verbs may use any ' +
-            'natural tense/person, not just the infinitive):\n' +
-            wordList +
-            '\n\nFor each of these words, put a placeholder token `[[i]]` (i = the number before ' +
-            'that word above) exactly where its inflected form belongs in the paragraph text -- the ' +
-            'placeholder REPLACES that word. Never write that German word (in any form) anywhere ' +
-            'else in the paragraph too -- each of the given words must appear EXACTLY ONCE in the ' +
-            'whole text, at its placeholder, and nowhere else. Follow each word\'s own instructions ' +
-            'above exactly, especially any separable-prefix verb\'s forced perfect-tense wording. ' +
-            'Every index from 0 to ' +
-            (count - 1) +
-            ' must appear exactly once. ' +
-            `Also translate the paragraph into ${wantsZh ? 'natural, fluent Simplified Chinese' : 'natural, fluent English'} ` +
-            '(meaning-for-meaning, not word-for-word), split into a "translations" array with EXACTLY ' +
-            'one entry per sentence of the German paragraph, in the SAME order they appear -- ' +
-            'translations.length must equal the number of sentences you actually wrote. Each ' +
-            'translations[i] must correspond to exactly one German sentence, so a reader can match ' +
-            'them up one-to-one -- before writing the translations array, re-read the German ' +
-            'paragraph you just wrote and number its sentences by their sentence-ending punctuation ' +
-            '(. ! ?) in left-to-right order; translations[i] must translate exactly the sentence you ' +
-            'numbered i, not a paraphrase pieced together from a different one. ' +
-            (wantsZh
-              ? "Chinese verbs don't inflect for tense the way German does, so keep each sentence's " +
-                'tense unambiguous: use the completed-action particle 了 or an explicit time word ' +
-                "where the German is a completed/past action, and don't add 了 where it's present/" +
-                'habitual. '
-              : '') +
-            'Respond with exactly this JSON: ' +
-            '{"paragraph": "... [[0]] ... [[1]] ...", "answers": ["form for word 0", "form for word 1", ...], ' +
-            '"translations": ["translation of sentence 1", "translation of sentence 2", ...]} ' +
-            '-- answers[i] is the exact inflected form you used at placeholder [[i]], in the same ' +
-            'order as the numbered word list above (not the order they appear in the paragraph).',
-        },
-        { role: 'user', content: 'Write the paragraph now.' },
-      ],
-      temperature: 0.8,
-      max_tokens: 700,
-    }),
-  });
+    messages: [
+      {
+        role: 'system',
+        content:
+          `You create high-quality German fill-in-the-blank exercises for CEFR ${level || 'A1'} learners.\n\n` +
+          'Write one natural, coherent everyday scene using the target words below.\n\n' +
+          'Target:\n' +
+          `- ${range.minSentences}-${range.maxSentences} sentences\n` +
+          `- approximately ${range.minWords}-${range.maxWords} words\n\n` +
+          (themeHint ? `If it fits naturally, build the scene around the theme "${themeHint}".\n\n` : '') +
+          'TARGET WORDS:\n' +
+          wordList +
+          '\n\n' +
+          'Requirements:\n' +
+          '- First silently choose a simple scene where all target words fit naturally.\n' +
+          '- The text must sound like natural German, not unrelated sentences joined together to include vocabulary.\n' +
+          `- Use grammar and vocabulary appropriate for CEFR ${level || 'A1'}.\n` +
+          '- Use every target word with exactly the supplied meaning.\n' +
+          '- Use each target exactly once, in the grammatically correct inflected or conjugated form.\n' +
+          '- Replace that form with its corresponding [[i]] placeholder (i = the number before that word above) -- ' +
+          'the placeholder REPLACES the word.\n' +
+          '- For a noun target, the placeholder replaces ONLY the noun itself -- write whatever article, ' +
+          'possessive, or quantifier the sentence grammatically needs (e.g. "die", "meine", "ein") as normal ' +
+          'text immediately before the placeholder, unless a fixed preposition contraction (e.g. "zum", "im") ' +
+          'already covers it. A bare noun placeholder with nothing in front of it (e.g. "sitzt [[i]]") is wrong ' +
+          'unless that is genuinely how German omits the article there.\n' +
+          '- Do not use another form of that target elsewhere in the text -- each target appears exactly once, at ' +
+          'its placeholder, and nowhere else.\n' +
+          '- Follow each word\'s own instructions above exactly, especially any separable-prefix verb\'s forced ' +
+          'perfect-tense wording.\n' +
+          '- Every blank must have enough context that the intended answer is clearly correct.\n' +
+          '- Prefer simple, idiomatic German over creative or complicated writing.\n' +
+          '- Use only fictional, ordinary, all-ages everyday situations -- a family, friends, a normal day, a ' +
+          'hobby, a trip -- never tied to a real event.\n' +
+          '- Avoid sensitive topics (politics, religion, violence, danger, illness), real people, brands, ' +
+          'organizations, historical events, and factual claims -- nothing here depends on getting a real-world ' +
+          'fact right, so simply don\'t reference any.\n' +
+          `- Translate each German sentence naturally into ${wantsZh ? 'Simplified Chinese' : 'English'} ` +
+          '(meaning-for-meaning, not word-for-word) -- one translations[i] entry per German sentence, in the ' +
+          'same left-to-right order, so translations.length equals the number of sentences you actually wrote. ' +
+          'Before writing the translations array, re-read the German paragraph you just wrote and number its ' +
+          'sentences by their sentence-ending punctuation (. ! ?); translations[i] must translate exactly the ' +
+          'sentence you numbered i, not a paraphrase pieced together from a different one.' +
+          (wantsZh
+            ? "\n- Chinese verbs don't inflect for tense the way German does, so keep each sentence's tense " +
+              'unambiguous: use the completed-action particle 了 or an explicit time word where the German is a ' +
+              "completed/past action, and don't add 了 where it's present/habitual."
+            : '') +
+          '\n\nBefore responding, silently verify:\n' +
+          '1. the German is grammatical and idiomatic;\n' +
+          '2. the scene is coherent and meaningful;\n' +
+          '3. every target keeps its supplied meaning;\n' +
+          '4. every answer fits its blank grammatically and semantically;\n' +
+          '5. every [[i]] appears exactly once;\n' +
+          '6. answers[i] corresponds to [[i]];\n' +
+          '7. translations match the German sentences 1:1.\n\n' +
+          'Return only the structured output required by the API schema.',
+      },
+      { role: 'user', content: 'Write the exercise now.' },
+    ],
+  }, 'none');
 
   if (!completion.ok) {
     console.error('OpenAI error:', await completion.text());
