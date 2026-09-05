@@ -164,15 +164,26 @@ export default function HomePage() {
   const handleClick = isDoneForNow ? startExtraRound : inProgress ? () => router.push('/practice') : startSession;
 
   return (
-    <div className="relative flex flex-col items-center gap-5 py-2">
+    // Capped to a phone-proportioned column (not the page's own wider
+    // max-w-2xl) so this doesn't stretch into a spread-out-looking row on
+    // a laptop — every other element below is centered within this same
+    // width. min-h + the flex-1 content block below split the screen into
+    // a pinned top row and a vertically-centered rest, so short content
+    // (e.g. the plain "done" pill) distributes its leftover space instead
+    // of leaving a big dead gap at the bottom before the fixed nav.
+    <div className="relative flex flex-col mx-auto w-full max-w-sm min-h-[calc(100dvh-11rem)] py-2">
       <div className="w-full flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-on-bg/70">
-            {nickname ? `${greetingWord()},` : `${greetingWord()}!`}
-          </p>
-          {nickname && (
-            <h1 className="text-2xl font-bold text-on-bg -mt-0.5" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
-              {nickname}
+          {nickname ? (
+            <>
+              <p className="text-sm font-medium text-on-bg/70">{greetingWord()},</p>
+              <h1 className="text-2xl font-bold text-on-bg -mt-0.5" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+                {nickname}
+              </h1>
+            </>
+          ) : (
+            <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+              {greetingWord()}!
             </h1>
           )}
         </div>
@@ -186,6 +197,7 @@ export default function HomePage() {
         </button>
       </div>
 
+      <div className="flex-1 flex flex-col items-center justify-center gap-5">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`${BASE}/${heroImageFor(avatarId)}`}
@@ -222,13 +234,13 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="w-px h-9 bg-white/15 shrink-0" />
-              <div className="flex-1 flex items-center gap-2 justify-end text-right">
+              <div className="flex-1 flex items-center gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`${BASE}/icon_review.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
                 <div>
                   <div className="font-bold text-on-bg font-mono">{previewReviewCount}/{totalReviewCount}</div>
                   <div className="text-xs text-on-bg/65">to review</div>
                 </div>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`${BASE}/icon_review.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
               </div>
             </div>
             <button
@@ -259,6 +271,7 @@ export default function HomePage() {
             </div>
           </Link>
         )}
+      </div>
       </div>
 
       {petModalOpen && (
