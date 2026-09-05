@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import WordMatchGame from '../../components/WordMatchGame';
+import ArtikelBlitzGame from '../../components/ArtikelBlitzGame';
+import GamePicker from '../../components/GamePicker';
 import { MascotStageId } from '../../lib/storage';
 
 // Standalone page for the game — no longer linked from Settings (owner
@@ -62,6 +64,11 @@ export default function GamePage() {
   // `output: 'export'` -- same reasoning as DailySessionFlow's own
   // previewSignInNudge param.
   const [source, setSource] = useState<'settings_preview' | 'daily_flow' | ReviewSource>('settings_preview');
+  // Only relevant for the plain settings_preview entry (no ?source= at
+  // all) -- the four *_review links go straight to Wortpaare, focused on
+  // one mascot stage, where a picker makes no sense (Artikel Blitz has no
+  // stage-focus concept).
+  const [activeGame, setActiveGame] = useState<'picker' | 'wortpaare' | 'artikel_blitz'>('picker');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -85,5 +92,7 @@ export default function GamePage() {
     );
   }
 
+  if (activeGame === 'picker') return <GamePicker onPick={setActiveGame} />;
+  if (activeGame === 'artikel_blitz') return <ArtikelBlitzGame source={source as 'settings_preview' | 'daily_flow'} />;
   return <WordMatchGame source={source} />;
 }

@@ -51,6 +51,66 @@ export function hasEnoughWordsForGame(): boolean {
   return false;
 }
 
+// --- Artikel Blitz / Mistake Notebook Articles tab -------------------
+
+// A short, curated exclusion list -- the corpus itself has no "this noun
+// is ambiguous" flag (Word.article is a single value), so genuinely
+// dual-gender nouns (regional/meaning-dependent gender) are excluded here
+// by hand rather than detected. Matched against Word.de exactly; easy to
+// extend later if another one turns up.
+const AMBIGUOUS_ARTICLE_NOUNS = new Set(['Joghurt', 'Liter', 'Meter', 'Teil', 'Virus']);
+
+// The full corpus-wide (not active-level-only) pool of nouns Artikel Blitz
+// and the Articles tab can ever draw from -- same "every level, plus
+// custom words" scope as WordMatchGame's own getLearnedWords, since
+// article practice isn't tied to whichever book is currently active.
+export function articleCandidateWords(): Word[] {
+  return [...WORDS, ...getAllCustomWordsAcrossLevels()]
+    .filter(w => w.type === 'noun' && w.article && !AMBIGUOUS_ARTICLE_NOUNS.has(w.de));
+}
+
+export type ArticleFamiliarity = 'mistake' | 'learning' | 'mastered' | 'unseen';
+
+// Tracks article mastery independently of word mastery (mascotStage) --
+// a word can be fully learned or even mastered and still have its
+// article wrong, which is exactly the case 'mistake' below needs to
+// outrank both.
+export function articleFamiliarity(p: WordProgress | undefined): ArticleFamiliarity {
+  if (p?.articleMistake) return 'mistake';
+  if (p?.fullyMastered) return 'mastered';
+  if (p?.mascotStage) return 'learning';
+  return 'unseen';
+}
+
+// Called the moment a wrong article answer lands (Artikel Blitz, either
+// mode) -- always overwrites any previous mistake state (a fresh wrong
+// answer resets recall progress, even mid-streak) and bumps the lifetime
+// counter, which clearing never touches (see WordProgress's own comment).
+export function recordArticleMistake(p: WordProgress): WordProgress {
+  return {
+    ...p,
+    articleMistake: { at: new Date().toISOString() },
+    articleRecallStreak: 0,
+    articleMistakeCount: (p.articleMistakeCount ?? 0) + 1,
+  };
+}
+
+// Called on a correct article answer. A no-op if there's no active
+// mistake to clear (the overwhelmingly common case -- most correct
+// answers aren't recalls at all). Two correct recalls in a row since the
+// mistake was set clears it entirely (deleted, not just zeroed) --
+// keeps historical stats (articleMistakeCount) but drops out of the
+// active Mistake Notebook list.
+export function recordArticleRecall(p: WordProgress): WordProgress {
+  if (!p.articleMistake) return p;
+  const streak = (p.articleRecallStreak ?? 0) + 1;
+  if (streak >= 2) {
+    const { articleMistake: _m, articleRecallStreak: _s, ...rest } = p;
+    return rest;
+  }
+  return { ...p, articleRecallStreak: streak };
+}
+
 const WORDS_BY_ID = new Map(WORDS.map(w => [w.id, w]));
 
 // Looks up words by id, preserving order and silently dropping unknown

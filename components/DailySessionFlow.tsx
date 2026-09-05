@@ -30,6 +30,8 @@ import DachshundMascot from './Mascot';
 import { PointsIcon } from './icons';
 import CongratsModal from './CongratsModal';
 import WordMatchGame from './WordMatchGame';
+import ArtikelBlitzGame from './ArtikelBlitzGame';
+import GamePicker from './GamePicker';
 import SignInNudge from './SignInNudge';
 import AiUnlockCelebration from './AiUnlockCelebration';
 import WordInfoPanel from './WordInfoPanel';
@@ -1272,6 +1274,12 @@ export default function DailySessionFlow() {
   }, []);
   const [showSignInNudge, setShowSignInNudge] = useState(false);
   const [showAiUnlockCelebration, setShowAiUnlockCelebration] = useState(false);
+  // Which of the two bonus-round games is showing during session.phase
+  // === 'play' (see GamePicker) — purely a within-render choice, not
+  // persisted to DailySession, same reasoning as WordMatchGame's own
+  // internal phase state. Reset to the picker every time 'play' is
+  // (re)entered, in handleCloseCongrats below.
+  const [activeGame, setActiveGame] = useState<'picker' | 'wortpaare' | 'artikel_blitz'>('picker');
 
   // Dev/design preview: /practice/?previewSignInNudge=1 or
   // ?previewAiUnlock=1 show the matching one-off card immediately, without
@@ -2371,6 +2379,7 @@ export default function DailySessionFlow() {
     // "Play" as a real destination in the first place, so a learner who
     // never sees it promised there never lands on it here either.
     if (session && hasEnoughWordsForGame()) {
+      setActiveGame('picker');
       persistSession({ ...session, phase: 'play' });
       return;
     }
@@ -2768,7 +2777,14 @@ export default function DailySessionFlow() {
   }
 
   if (session.phase === 'play') {
-    return <WordMatchGame source="daily_flow" onQuit={handleQuitPlay} />;
+    if (activeGame === 'picker') {
+      return <GamePicker onPick={setActiveGame} />;
+    }
+    const onChooseGame = () => setActiveGame('picker');
+    if (activeGame === 'artikel_blitz') {
+      return <ArtikelBlitzGame source="daily_flow" onQuit={handleQuitPlay} onChooseGame={onChooseGame} />;
+    }
+    return <WordMatchGame source="daily_flow" onQuit={handleQuitPlay} onChooseGame={onChooseGame} />;
   }
 
   if (session.phase === 'done') {

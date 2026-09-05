@@ -263,3 +263,25 @@ input, textarea, select {
 .animate-mist {
   animation: mist-drift 14s ease-in-out infinite;
 }
+
+/* Artikel Blitz */
+
+@keyframes shake-btn {
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+.animate-shake {
+  animation: shake-btn 0.4s ease;
+}
+
+@keyframes pet-bounce {
+  0% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-8px) scale(1.12); }
+  100% { transform: translateY(0) scale(1); }
+}
+.animate-pet-happy {
+  animation: pet-bounce 0.4s cubic-bezier(.34,1.56,.64,1);
+}
+.animate-pet-sad {
+  animation: shake-btn 0.4s ease;
+}

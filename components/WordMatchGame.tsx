@@ -128,6 +128,12 @@ interface Props {
   // its own to navigate away with, and the whole point there is "play
   // again and again, or finish for today," not a one-shot preview.
   onQuit?: () => void;
+  // Only ever passed alongside onQuit, from DailySessionFlow's bonus
+  // round now that there are two games (see GamePicker) — when present,
+  // the results screen leads with "Choose a game" instead of "Play
+  // again" as the primary action (still available, just demoted to a
+  // secondary link) so returning to the picker is the obvious next step.
+  onChooseGame?: () => void;
   // Narrows the word pool to only ONE mascot stage — see getLearnedWords'
   // own comment. Every other prop below is cosmetic text overrides for
   // that same mode (app/game/page.tsx's ?source=*_review cases), so this
@@ -147,7 +153,7 @@ interface Props {
 }
 
 export default function WordMatchGame({
-  source, onQuit, focus, title = 'Word Match', subtitle, notEnoughMessage,
+  source, onQuit, onChooseGame, focus, title = 'Wortpaare', subtitle, notEnoughMessage,
   homeHref = '/', homeLabel = '← Home', quitLabel = 'Finish for today',
 }: Props) {
   const [theme, setTheme] = useState<Theme>('forest');
@@ -430,14 +436,34 @@ export default function WordMatchGame({
               <PointsIcon className="w-4 h-4" /> +1 point
             </div>
           )}
-          <button
-            type="button"
-            onClick={startGame}
-            className="w-full max-w-[220px] text-white py-3.5 rounded-full font-bold text-lg shadow-md active:scale-95 transition-all mt-2"
-            style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
-          >
-            Play again
-          </button>
+          {onChooseGame ? (
+            <>
+              <button
+                type="button"
+                onClick={onChooseGame}
+                className="w-full max-w-[220px] text-white py-3.5 rounded-full font-bold text-lg shadow-md active:scale-95 transition-all mt-2"
+                style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
+              >
+                Choose a game →
+              </button>
+              <button
+                type="button"
+                onClick={startGame}
+                className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
+              >
+                Play again
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={startGame}
+              className="w-full max-w-[220px] text-white py-3.5 rounded-full font-bold text-lg shadow-md active:scale-95 transition-all mt-2"
+              style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
+            >
+              Play again
+            </button>
+          )}
           {onQuit && (
             <button
               type="button"

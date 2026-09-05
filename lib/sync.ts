@@ -68,6 +68,23 @@ function stageRank(p: WordProgress): number {
 // stale/legacy record can carry a mismatched round value that has nothing
 // to do with actual milestones passed, which used to let a stale remote
 // row silently overwrite correct local progress).
+// Article mastery is a genuinely independent dimension from word mastery
+// (see WordProgress's own comment) -- reconciled separately by its own
+// "most recent activity wins" rule so a more recent article mistake/
+// recall on the losing side of the word-mastery comparison above never
+// gets silently dropped just because that side lost on stage/reviews.
+function mergeArticleFields(l: WordProgress, r: WordProgress): Pick<WordProgress, 'articleMistake' | 'articleRecallStreak' | 'articleMistakeCount'> {
+  const lAt = l.articleMistake?.at ?? '';
+  const rAt = r.articleMistake?.at ?? '';
+  const winner = rAt > lAt ? r : l;
+  const count = Math.max(l.articleMistakeCount ?? 0, r.articleMistakeCount ?? 0);
+  return {
+    articleMistake: winner.articleMistake,
+    articleRecallStreak: winner.articleRecallStreak,
+    articleMistakeCount: count || undefined,
+  };
+}
+
 function mergeProgress(
   local: Record<string, WordProgress>,
   remote: Record<string, WordProgress>,
@@ -82,7 +99,8 @@ function mergeProgress(
       : r.successfulReviews !== l.successfulReviews
         ? r.successfulReviews > l.successfulReviews
         : (r.lastPracticed ?? '') > (l.lastPracticed ?? '');
-    if (remoteIsFurther) merged[id] = r;
+    const winner = remoteIsFurther ? r : l;
+    merged[id] = { ...winner, ...mergeArticleFields(l, r) };
   }
   return merged;
 }

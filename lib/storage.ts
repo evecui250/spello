@@ -73,6 +73,21 @@ export interface WordProgress {
   // last time alongside the correction, same as the in-session correction
   // screen already does.
   lastMistake?: { englishPrompt?: string; englishPromptZh?: string; userInput: string; correctedSentence: string; wordForm: string; at?: string };
+
+  // Article mastery (der/die/das), tracked separately from word mastery
+  // above -- a word can be fully learned/mastered (mascotStage set, even
+  // fullyMastered) and still have its article wrong, which is exactly
+  // what Artikel Blitz and the Mistake Notebook's Articles tab need to
+  // know. articleMistake present = an active, unresolved mistake (shows
+  // in the notebook); cleared (deleted) once articleRecallStreak reaches
+  // 2 correct recalls in a row since it was set -- see lib/practice.ts's
+  // recordArticleMistake/recordArticleRecall, the only two places that
+  // should ever touch these three fields. articleMistakeCount is a
+  // lifetime count, NEVER reset by clearing -- keeps historical stats
+  // even after the active mistake is gone.
+  articleMistake?: { at: string };
+  articleRecallStreak?: number;
+  articleMistakeCount?: number;
 }
 
 export interface Streak {
@@ -785,6 +800,26 @@ export function saveWordProgress(p: WordProgress): void {
   const all = getAllProgress();
   all[p.id] = p;
   saveAllProgress(all);
+  notifyProgressChanged();
+}
+
+// Level-aware siblings of the two functions above -- needed by anything
+// that reads/writes progress for a word pool spanning EVERY level (e.g.
+// Artikel Blitz, corpus-wide like WordMatchGame's own word pool), where
+// "the active level" isn't necessarily the word's own level. Using
+// getWordProgress/saveWordProgress for a word from a different level than
+// whichever one is currently active would silently read/write the wrong
+// level's store -- either missing that word's real progress entirely, or
+// creating a stray duplicate record disconnected from it.
+export function getWordProgressForLevel(level: Level, id: string): WordProgress {
+  const all = getAllProgressForLevel(level);
+  return all[id] ?? normalizeProgress(id, undefined);
+}
+
+export function saveWordProgressForLevel(level: Level, p: WordProgress): void {
+  const all = getAllProgressForLevel(level);
+  all[p.id] = p;
+  saveAllProgressForLevel(level, all);
   notifyProgressChanged();
 }
 
