@@ -24,4 +24,9 @@ scripts/.regenerate-cache.json
 scripts/.final-keep-list.json
 scripts/.to-apply.json
 scripts/.final-apply.json
+scripts/.exercise-audit-cache.json
+scripts/.exercise-audit-apply.json
+scripts/.exercise-audit-review.json
+scripts/.exercise-audit-report.json
 scripts/__pycache__/
+lib/words.ts.bak-*

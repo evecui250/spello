@@ -82,6 +82,37 @@ def word_count(s):
     return len(re.findall(r"[A-Za-z']+", s))
 
 
+SENTENCE_SCHEMA = {
+    'type': 'object',
+    'properties': {'sentence': {'type': 'string'}},
+    'required': ['sentence'],
+    'additionalProperties': False,
+}
+
+
+# gpt-5.6-sol is a reasoning-tier model: no custom temperature (rejected
+# outright), max_completion_tokens instead of max_tokens, and a reported
+# (never yet observed here) risk that some non-default reasoning_effort
+# values get rejected on /chat/completions. 'high' is used deliberately since
+# corpus quality matters more than cost/speed here, with a one-time fallback
+# to 'medium' if OpenAI's own error text specifically calls out
+# reasoning_effort as the problem.
+def call_with_reasoning_fallback(body, reasoning_effort):
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps({**body, "reasoning_effort": reasoning_effort}).encode(),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        err_text = e.read().decode(errors='replace')
+        if reasoning_effort == 'high' and 'reasoning_effort' in err_text.lower():
+            return call_with_reasoning_fallback(body, 'medium')
+        raise
+
+
 def call_openai(word, vocab_cache):
     level = word['level']
     vocab = vocab_cache.get(level, [])
@@ -119,7 +150,7 @@ def call_openai(word, vocab_cache):
         f'Before finalizing, recall "{word["de"]}"\'s actual German grammar (which case/'
         'preposition it governs, whether it takes a direct object, an infinitive clause, '
         'etc.) and make sure the English sentence you write actually calls for that exact '
-        'pattern. Respond with exactly this JSON: {"sentence": "..."}.'
+        'pattern. Respond only with the structured output required by the schema.'
     )
     messages = [
         {"role": "system", "content": system_prompt},
@@ -128,17 +159,15 @@ def call_openai(word, vocab_cache):
     last_sentence, length_attempts, rate_limit_retries = None, 0, 0
     while length_attempts < 2:
         body = {
-            "model": "gpt-4o-mini", "response_format": {"type": "json_object"},
-            "messages": messages, "temperature": 0.7, "max_tokens": 120,
+            "model": "gpt-5.6-sol",
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "exercise_sentence", "strict": True, "schema": SENTENCE_SCHEMA},
+            },
+            "messages": messages, "max_completion_tokens": 500,
         }
-        req = urllib.request.Request(
-            "https://api.openai.com/v1/chat/completions",
-            data=json.dumps(body).encode(),
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"},
-        )
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                result = json.loads(resp.read())
+            result = call_with_reasoning_fallback(body, 'high')
             raw = result['choices'][0]['message']['content']
             sentence = json.loads(raw).get('sentence', '').strip()
         except urllib.error.HTTPError as e:
