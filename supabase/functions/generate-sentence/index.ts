@@ -33,7 +33,8 @@ const DAILY_AI_CALL_LIMIT_ANONYMOUS = 300;
 // standalone copy in scripts/generate-exercise-prompts.py (which
 // pre-generates the vast majority of exercisePrompt values baked into
 // lib/words.ts), so this live fallback stays consistent with the
-// pre-generated majority.
+// pre-generated majority. A SOFT target, not a hard limit — see the
+// prompt below; naturalness and correct target-word usage always win.
 const WORD_RANGE: Record<string, { min: number; max: number }> = {
   A1: { min: 3, max: 6 },
   A2: { min: 4, max: 8 },
@@ -41,6 +42,18 @@ const WORD_RANGE: Record<string, { min: number; max: number }> = {
   B2: { min: 8, max: 14 },
   C1: { min: 10, max: 16 },
   C2: { min: 12, max: 18 },
+};
+
+// Vocabulary-restriction stance per level — also a preference, not a
+// prohibition (see the prompt below). Kept in sync with the same dict in
+// scripts/generate-exercise-prompts.py.
+const LEVEL_VOCAB_GUIDANCE: Record<string, string> = {
+  A1: 'strongly prefer high-frequency A1 vocabulary and very simple sentence structure',
+  A2: 'strongly prefer A1 vocabulary or common A2 words',
+  B1: 'prefer A1/A2 vocabulary; a B1-level word is fine when it is genuinely useful',
+  B2: 'prefer A1-B1 vocabulary; a B2-level word is fine when it is genuinely useful',
+  C1: 'vocabulary restriction loosens further at this level — prioritize natural, idiomatic usage',
+  C2: 'vocabulary restriction loosens further at this level — prioritize natural, idiomatic usage',
 };
 
 const CORS_HEADERS = {
@@ -102,6 +115,7 @@ Deno.serve(async (req: Request) => {
     }
     const vocab = (Array.isArray(knownVocabulary) ? knownVocabulary : []).slice(0, MAX_KNOWN_WORDS);
     const { min: minWords, max: maxWords } = WORD_RANGE[level] ?? { min: 6, max: 14 };
+    const vocabGuidance = LEVEL_VOCAB_GUIDANCE[level] ?? LEVEL_VOCAB_GUIDANCE.B1;
     const wantsZh = nativeLanguage === 'zh';
 
     const completion = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -121,18 +135,28 @@ Deno.serve(async (req: Request) => {
               'learner. Write ONE natural English sentence that: (1) uses the word ' +
               `"${wordEn}" (or a close natural inflection, e.g. its plural or a verb form) — ` +
               'this is the new word being introduced, and the sentence MUST include it; ' +
-              '(2) otherwise ONLY uses vocabulary from this list of words the learner already ' +
-              `knows: ${vocab.join(', ')}. You may always use ordinary English function words ` +
-              'and grammar (a, the, is, was, to, in, and, of, etc.) even if not in that list. ' +
-              `(3) The sentence MUST be between ${minWords} and ${maxWords} words long ` +
-              '(inclusive) — count every word, this is a hard requirement, not a suggestion. ' +
+              '(2) VOCABULARY is a preference, not a prohibition: prefer vocabulary from this ' +
+              `list of words the learner already knows: ${vocab.join(', ')}. A word from the ` +
+              `SAME level (${level || 'A1'}) that is not yet in that list is fine when it is ` +
+              `genuinely useful for a natural sentence or a natural collocation with the ` +
+              `target word — ${vocabGuidance}. Avoid clearly HIGHER-level vocabulary unless it ` +
+              'is genuinely necessary for the sentence to be idiomatic or for the target ' +
+              'word\'s meaning to come through correctly. Never sacrifice natural, idiomatic ' +
+              'phrasing, or the target word\'s accurate meaning, just to stay within the ' +
+              'known-vocabulary list — a natural sentence using one same-level word beats an ' +
+              'awkward one that avoids it. You may always use ordinary English function words ' +
+              'and grammar (a, the, is, was, to, in, and, of, etc.) regardless of level. ' +
+              `(3) LENGTH is a soft target, not a hard limit: aim for roughly ${minWords}-` +
+              `${maxWords} words, but a sentence a little shorter or longer is completely fine ` +
+              'when that is what natural phrasing or correct use of the target word calls for ' +
+              '— never pad or trim a sentence artificially just to hit this range. ' +
               'The sentence should be meaningful and make sense on its own, not a trivial or ' +
               'random-sounding string of words — and prefer something a real person would ' +
               'plausibly actually say or write (daily routines, work, family, food, weather, ' +
               'travel, shopping, making plans, asking for help) over a flat, generic textbook ' +
-              'illustration of the word\'s dictionary meaning. Given the vocabulary limits above, ' +
-              'a short, bare sentence is sometimes unavoidable — that\'s fine — but when several ' +
-              'options fit equally well within the constraints, pick the one that sounds like ' +
+              'illustration of the word\'s dictionary meaning. Given the vocabulary preference ' +
+              'above, a short, plain sentence is sometimes the most natural choice — that\'s ' +
+              'fine — but when several options fit equally well, pick the one that sounds like ' +
               'something a person would genuinely say, not the blandest grammatically-valid one. ' +
               `(4) CRITICAL: the German word actually being practiced is "${wordDe}", not just ` +
               `any word meaning "${wordEn}" — the English sentence you write will later be ` +

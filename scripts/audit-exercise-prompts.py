@@ -55,6 +55,23 @@ REPORT_PATH = os.path.join(SCRIPT_DIR, '.exercise-audit-report.json')
 MODEL = 'gpt-5.6-sol'
 MAX_WORKERS = 4
 
+# Bumped whenever build_prompt's audit criteria change materially — a
+# cached result whose promptVersion doesn't match this is treated as if it
+# were never audited at all (see main()'s cache-loading), so a criteria
+# change can never silently reuse a judgment made under the old rules. v1
+# was the original strict-CEFR pass (the 50-word sample test run); v2
+# relaxed sentence length and vocabulary from hard limits to soft
+# preferences.
+PROMPT_VERSION = 'v2-soft-cefr'
+
+# Sentence-length target per level — a SOFT preference now (see
+# build_prompt below), kept in sync with the same dict in
+# generate-exercise-prompts.py and the generate-sentence Edge Function.
+WORD_RANGE = {
+    'A1': (3, 6), 'A2': (4, 8), 'B1': (6, 12), 'B2': (8, 14),
+    'C1': (10, 16), 'C2': (12, 18),
+}
+
 # gpt-5.6-sol's promotional pricing (through Nov 2026): $4/$20 per 1M
 # input/output tokens. Corpus-build-tool-local — this is a one-off script,
 # not the live app's admin-stats tracking, so it doesn't share that file's
@@ -124,9 +141,45 @@ AUDIT_SCHEMA = {
     'additionalProperties': False,
 }
 
+_AUDIT_REQUIRED_FIELDS = AUDIT_SCHEMA['required']
+
+
+# Defensive validation of the model's own Structured Output — strict-mode
+# Structured Outputs SHOULD guarantee this shape server-side, but this
+# script runs unattended for hours across a real paid batch, so a single
+# malformed/truncated response must never crash the whole run (or the
+# whole ThreadPoolExecutor batch, since an uncaught exception inside a
+# worker re-raises when its Future.result() is read in main()). Raising
+# here routes a bad response through the exact same error-handling path
+# genuine API/network failures already use, rather than a KeyError
+# surfacing somewhere unrelated.
+def validate_audit_result(d):
+    if not isinstance(d, dict):
+        raise ValueError(f'response was not a JSON object: {d!r}')
+    missing = [k for k in _AUDIT_REQUIRED_FIELDS if k not in d]
+    if missing:
+        raise ValueError(f'response missing required field(s): {missing}')
+    if d['status'] not in ('PASS', 'IMPROVE', 'REGENERATE'):
+        raise ValueError(f"invalid status: {d['status']!r}")
+    if d['confidence'] not in ('high', 'medium', 'low'):
+        raise ValueError(f"invalid confidence: {d['confidence']!r}")
+    return d
+
+
+LEVEL_VOCAB_GUIDANCE = {
+    'A1': 'strongly prefer high-frequency A1 vocabulary and very simple sentences',
+    'A2': 'strongly prefer A1 vocabulary or common A2 words',
+    'B1': 'prefer A1/A2 vocabulary; a B1-level word is fine when it is genuinely useful',
+    'B2': 'prefer A1-B1 vocabulary; a B2-level word is fine when it is genuinely useful',
+    'C1': 'vocabulary restriction loosens further at this level — prioritize natural, idiomatic usage',
+    'C2': 'vocabulary restriction loosens further at this level — prioritize natural, idiomatic usage',
+}
+
 
 def build_prompt(de, en, level, english_sentence, chinese_sentence):
     zh_line = f'"{chinese_sentence}"' if chinese_sentence else '(none provided)'
+    min_w, max_w = WORD_RANGE.get(level, (6, 14))
+    vocab_guidance = LEVEL_VOCAB_GUIDANCE.get(level, LEVEL_VOCAB_GUIDANCE['B1'])
     return (
         f'You are auditing a German vocabulary app\'s translation-exercise sentences for '
         f'CEFR {level} learners. Each exercise gives a learner an English sentence to '
@@ -135,36 +188,62 @@ def build_prompt(de, en, level, english_sentence, chinese_sentence):
         f'CEFR level: {level}\n'
         f'EXISTING ENGLISH EXERCISE SENTENCE: "{english_sentence}"\n'
         f'EXISTING CHINESE EXERCISE SENTENCE: {zh_line}\n\n'
-        'THE CENTRAL QUESTION: does this exercise naturally elicit the exact German target '
-        f'word being taught — i.e. if a learner correctly translates the English sentence '
-        f'into German, would "{de}" (in its correct grammatical form) be one of the most '
-        'natural words they\'d reach for, not merely a technically-possible one?\n\n'
-        'A sentence should NOT pass merely because the target word is technically able to '
-        'fit — German often has several words sharing the same English gloss, each with '
-        f'different nuance/grammar/register, and an exercise that could just as easily (or '
-        f'more easily) be answered with a different German word is a bad exercise even if '
-        f'"{de}" isn\'t wrong per se.\n\n'
-        'PASS only when ALL of the following hold:\n'
+        'Judge this exercise against these priorities, IN ORDER. A higher-priority issue '
+        'always matters more than a lower one, and a LOWER-priority nitpick alone should '
+        'NEVER by itself cause an IMPROVE/REGENERATE classification:\n\n'
+        '1. NATURAL ENGLISH — does the English sentence itself read naturally, not stilted '
+        'or artificial?\n'
+        '2. TARGET WORD FIT (the central question) — does this exercise naturally elicit '
+        f'the exact German target word being taught? If a learner correctly translates the '
+        f'English sentence into German, would "{de}" (in its correct grammatical form) be '
+        'one of the most natural words they\'d reach for — not merely a technically-possible '
+        'one? German often has several words sharing the same English gloss, each with '
+        'different nuance/grammar/register; an exercise that could just as easily (or more '
+        f'easily) be answered with a DIFFERENT German word is a bad exercise even if "{de}" '
+        'isn\'t wrong per se.\n'
+        '3. NATURAL/CORRECT CANONICAL GERMAN — is the German translation itself '
+        'grammatically correct and idiomatic (right case/preposition, transitivity, word '
+        'order)?\n'
+        '4. EN/DE/ZH AGREEMENT — do the English sentence, the canonical German, and the '
+        'Chinese version (when one is given) all express the same intended meaning?\n'
+        f'5. CEFR-APPROPRIATE DIFFICULTY — is the sentence\'s overall difficulty roughly '
+        f'right for CEFR {level} (not needlessly complex for the level, not so trivial it '
+        'teaches nothing)? This is a soft judgment call, not a precise gate.\n'
+        '6. NON-TARGET VOCABULARY DIFFICULTY — is vocabulary OTHER than the target '
+        f'unnecessarily hard for the level? {vocab_guidance}. A word from the SAME level, or '
+        'one genuinely useful for natural phrasing or a natural collocation, is FINE — do '
+        'not flag this alone. Only a CLEARLY higher-level word used where a simpler one '
+        'would have worked just as naturally is worth noting here.\n'
+        f'7. SENTENCE LENGTH — roughly {min_w}-{max_w} words is a soft preference for this '
+        'level when practical, not a requirement. Do not flag a sentence for being '
+        'moderately shorter or longer than this range if it otherwise reads naturally.\n\n'
+        'The decision to IMPROVE/REGENERATE should be driven overwhelmingly by priorities '
+        '1-4 (does the sentence naturally elicit the target word, and is everything correct '
+        'and mutually consistent) — never by priority 6 or 7 alone. Naturalness and correct '
+        'target-word usage always outrank vocabulary/length polish: a sentence that '
+        'correctly, naturally elicits the target word but contains one same-level word or '
+        'runs a bit long/short should PASS, not IMPROVE.\n\n'
+        'PASS unless a real priority-1-through-5 issue exists — a priority-6/7 observation '
+        'alone is never sufficient grounds for IMPROVE/REGENERATE:\n'
         f'- "{de}" is a natural, idiomatic way to translate the relevant part of the '
-        'sentence\'s meaning;\n'
-        f'- a learner arriving at the intended German translation would reasonably reach '
-        f'for "{de}" specifically;\n'
+        'sentence\'s meaning, and there is no clearly more natural German synonym that would '
+        'make this exercise misleading (priority 2);\n'
         '- the sentence\'s context reflects the target word\'s actual semantic nuance and '
-        'grammatical behavior (the case/preposition it governs, transitivity, etc.);\n'
-        '- there is no clearly more natural German synonym that would make this exercise '
-        'misleading (i.e. a learner translating naturally would likely reach for a '
-        'DIFFERENT German word instead);\n'
-        f'- the sentence is natural, meaningful, and appropriate in difficulty for CEFR '
-        f'{level} (not needlessly complex, and not artificially simple);\n'
-        '- the English and Chinese versions (when a Chinese version is given) express the '
-        'same intended meaning as each other.\n\n'
+        'grammatical behavior (priorities 2-3);\n'
+        '- the English, canonical German, and Chinese (when given) agree in meaning '
+        '(priority 4);\n'
+        f'- the sentence is natural and roughly appropriate in difficulty for CEFR {level} '
+        '(priority 5) — this is a loose fit check, not a strict one.\n\n'
         'Classify the existing sentence as exactly one of:\n'
-        '- "PASS" — meets every criterion above; keep it as-is.\n'
-        '- "IMPROVE" — the core scenario is basically fine but needs a targeted fix (e.g. '
-        'wrong preposition/case cue, a detail nudging toward a competing synonym, a minor '
-        'naturalness issue) while keeping roughly the same scenario.\n'
+        '- "PASS" — no real priority-1-through-5 issue; keep it as-is, even if it has a '
+        'minor priority-6/7 quirk.\n'
+        '- "IMPROVE" — the core scenario is basically fine but needs a targeted fix to a '
+        'priority-1-through-5 issue (e.g. wrong preposition/case cue, a detail nudging '
+        'toward a competing synonym, an EN/DE/ZH mismatch) while keeping roughly the same '
+        'scenario.\n'
         '- "REGENERATE" — the sentence\'s whole scenario/structure doesn\'t naturally fit '
-        'the target word\'s real usage and needs to be rebuilt from scratch around it.\n\n'
+        'the target word\'s real usage (priority 2) and needs to be rebuilt from scratch '
+        'around it.\n\n'
         'If IMPROVE or REGENERATE, you must also produce a replacement. Design the '
         'replacement AROUND THE GERMAN TARGET WORD\'S OWN MEANING, GRAMMAR, AND NUANCE — '
         'not around the English gloss in isolation (the English gloss is often ambiguous or '
@@ -295,10 +374,24 @@ def run_audit(de, en, level, english_sentence, chinese_sentence, reasoning_effor
             de, en, level, english_sentence, chinese_sentence, reasoning_effort,
             rate_limit_retries, ESCALATED_MAX_TOKENS, True,
         )
-    return json.loads(raw), result.get('usage', {})
+    parsed = validate_audit_result(json.loads(raw))
+    return parsed, result.get('usage', {})
 
 
-def audit_word(word):
+# A network/HTTP failure at the pass-1 stage wastes essentially no money
+# (nothing was generated yet) and is usually transient, so it's worth
+# retrying automatically across resumes rather than requiring a person to
+# notice and re-run it manually — but a persistently-broken entry (a real,
+# non-transient problem: content-policy refusal, a permanently malformed
+# prompt, etc.) must eventually stop being retried and surface for a human
+# to look at, rather than silently burning a request every single run
+# forever. attempts is carried forward from any prior cached attempt (see
+# main()'s resumability logic) so this cap holds across separate
+# invocations, not just within one.
+MAX_ERROR_RETRIES = 3
+
+
+def audit_word(word, prior_attempts=0):
     wid = word['id']
     try:
         pass1, usage1 = run_audit(
@@ -306,9 +399,14 @@ def audit_word(word):
             word['exercisePrompt'], word['exercisePromptZh'], 'medium',
         )
     except Exception as e:
-        return wid, {'error': str(e)}
+        attempts = prior_attempts + 1
+        return wid, {
+            'error': str(e), 'attempts': attempts,
+            'terminal': attempts >= MAX_ERROR_RETRIES,
+            'promptVersion': PROMPT_VERSION,
+        }
 
-    record = {'pass1': pass1, 'usage': {'pass1': usage1}}
+    record = {'pass1': pass1, 'usage': {'pass1': usage1}, 'promptVersion': PROMPT_VERSION}
     if pass1['status'] == 'PASS':
         record['final'] = 'pass'
         return wid, record
@@ -367,16 +465,45 @@ def main():
     if os.path.exists(CACHE_PATH):
         with open(CACHE_PATH, encoding='utf-8') as f:
             results = json.load(f)
+        stale_ids = [wid for wid, r in results.items() if r.get('promptVersion') != PROMPT_VERSION]
+        if stale_ids:
+            preview = sorted(stale_ids)[:10]
+            more = f' and {len(stale_ids) - 10} more' if len(stale_ids) > 10 else ''
+            print(
+                f'{len(stale_ids)} cached result(s) predate audit-prompt version '
+                f'{PROMPT_VERSION!r} (or have none recorded) and will be RE-AUDITED under the '
+                f'current prompt, not reused: {preview}{more}', file=sys.stderr,
+            )
 
-    targets = [w for w in words if w['id'] not in results]
+    # An id needs (re-)auditing if: never audited, audited under a stale
+    # prompt version (full re-audit, not a "retry" — attempts resets to 0),
+    # or left as a non-terminal error by a prior run (retried, carrying its
+    # attempt count forward so MAX_ERROR_RETRIES holds across invocations).
+    def needs_audit(wid):
+        record = results.get(wid)
+        if record is None:
+            return True, 0
+        if record.get('promptVersion') != PROMPT_VERSION:
+            return True, 0
+        if 'error' in record and not record.get('terminal'):
+            return True, record.get('attempts', 0)
+        return False, 0
+
+    targets, target_attempts = [], {}
+    for w in words:
+        needs, attempts = needs_audit(w['id'])
+        if needs:
+            targets.append(w)
+            target_attempts[w['id']] = attempts
     if args.limit is not None:
         targets = targets[:args.limit]
-    print(f'{len(targets)} words to audit (resuming {len(results)} already cached)', file=sys.stderr)
+    already_done = len(words) - len(targets)
+    print(f'{len(targets)} words to audit ({already_done} already done under the current prompt version)', file=sys.stderr)
 
     by_id = {w['id']: w for w in words}
     start = time.time()
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = {pool.submit(audit_word, w): w for w in targets}
+        futures = {pool.submit(audit_word, w, target_attempts.get(w['id'], 0)): w for w in targets}
         done = 0
         for fut in as_completed(futures):
             wid, record = fut.result()
@@ -391,22 +518,54 @@ def main():
         json.dump(results, f, ensure_ascii=False, indent=1)
 
     apply_out, review_out = {}, {}
-    counts = {'PASS': 0, 'IMPROVE': 0, 'REGENERATE': 0, 'error': 0}
+    counts = {'PASS': 0, 'IMPROVE': 0, 'REGENERATE': 0}
+    by_level = {}
+    error_count, terminal_error_count = 0, 0
     for wid, record in results.items():
         word = by_id.get(wid)
         if word is None:
             continue
-        pass1 = record.get('pass1')
-        if pass1 is None:
-            counts['error'] += 1
+        # Excludes any entry not yet re-audited this run under the current
+        # prompt (e.g. left outside a --limit/--ids slice) — it'll be
+        # picked up and reported once it actually gets re-audited.
+        if record.get('promptVersion') != PROMPT_VERSION:
             continue
-        counts[pass1['status']] = counts.get(pass1['status'], 0) + 1
+
+        level_counts = by_level.setdefault(word['level'], {
+            'PASS': 0, 'IMPROVE': 0, 'REGENERATE': 0, 'applied': 0, 'review': 0, 'error': 0,
+        })
+
+        if 'error' in record:
+            error_count += 1
+            level_counts['error'] += 1
+            if record.get('terminal'):
+                terminal_error_count += 1
+            # Always surfaced, terminal or not — an entry that failed
+            # every attempt is never silently dropped, and one still
+            # eligible for retry is still visible (flagged pendingRetry)
+            # rather than invisibly missing from every output file.
+            review_out[wid] = {
+                'de': word['de'], 'en': word['en'], 'level': word['level'],
+                'oldEnglishSentence': word['exercisePrompt'],
+                'oldChineseSentence': word['exercisePromptZh'],
+                'error': record['error'],
+                'attempts': record.get('attempts', 1),
+                'pendingRetry': not record.get('terminal', False),
+            }
+            continue
+
+        pass1 = record['pass1']
+        counts[pass1['status']] += 1
+        level_counts[pass1['status']] += 1
         if record['final'] == 'apply':
             pass2 = record['pass2']
             apply_out[wid] = {
                 'englishSentence': pass2['englishSentence'],
                 'chineseSentence': pass2['chineseSentence'],
+                'canonicalGerman': pass2['canonicalGerman'],
+                'targetForm': pass2['targetForm'],
             }
+            level_counts['applied'] += 1
         elif record['final'] == 'review':
             review_out[wid] = {
                 'de': word['de'], 'en': word['en'], 'level': word['level'],
@@ -416,18 +575,26 @@ def main():
                 'pass2': record.get('pass2'),
                 'pass2Error': record.get('pass2_error'),
             }
+            level_counts['review'] += 1
 
     with open(APPLY_PATH, 'w', encoding='utf-8') as f:
         json.dump(apply_out, f, ensure_ascii=False, indent=1)
     with open(REVIEW_PATH, 'w', encoding='utf-8') as f:
         json.dump(review_out, f, ensure_ascii=False, indent=1)
 
-    total_cost_usd, priced_entries, pass2_triggered = 0.0, 0, 0
+    # Cost is summed across EVERY priced entry ever recorded in the cache
+    # (including a stale prompt version) — this is real cumulative spend,
+    # not just this run's — but stalePricedEntryCount says how much of that
+    # reflects superseded (pre-relaunch) judgments, so the two numbers are
+    # never confused with each other.
+    total_cost_usd, priced_entries, stale_priced_entries, pass2_triggered = 0.0, 0, 0, 0
     for record in results.values():
         usage = record.get('usage')
         if not usage:
             continue
         priced_entries += 1
+        if record.get('promptVersion') != PROMPT_VERSION:
+            stale_priced_entries += 1
         if 'pass2' in record or record.get('pass2_error'):
             pass2_triggered += 1
         for call_usage in usage.values():
@@ -437,17 +604,22 @@ def main():
             )
 
     report = {
-        'totalChecked': len([r for r in results.values() if 'pass1' in r]),
+        'promptVersion': PROMPT_VERSION,
+        'totalChecked': counts['PASS'] + counts['IMPROVE'] + counts['REGENERATE'],
         'passCount': counts['PASS'],
         'improveCount': counts['IMPROVE'],
         'regenerateCount': counts['REGENERATE'],
-        'errorCount': counts['error'],
+        'errorCount': error_count,
+        'terminalErrorCount': terminal_error_count,
         'appliedCount': len(apply_out),
         'reviewCount': len(review_out),
         'pass2TriggeredCount': pass2_triggered,
+        'totalApiCalls': priced_entries + pass2_triggered,
         'totalCostUsd': round(total_cost_usd, 4),
         'avgCostPerEntryUsd': round(total_cost_usd / priced_entries, 4) if priced_entries else None,
         'costPricedEntryCount': priced_entries,
+        'stalePricedEntryCount': stale_priced_entries,
+        'byLevel': by_level,
     }
     with open(REPORT_PATH, 'w', encoding='utf-8') as f:
         json.dump(report, f, ensure_ascii=False, indent=1)

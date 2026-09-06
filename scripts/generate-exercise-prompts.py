@@ -32,11 +32,22 @@ API_KEY = os.environ.get('OPENAI_API_KEY')
 if not API_KEY:
     sys.exit('Set OPENAI_API_KEY in the environment before running this script.')
 
-# Kept in sync with lib/practice.ts's EXERCISE_SENTENCE_WORD_RANGE and the
-# generate-sentence Edge Function's WORD_RANGE — chosen by level difficulty.
+# Sentence-length target per level, and the vocabulary-restriction stance
+# per level — both SOFT preferences, not hard limits (see call_openai's
+# prompt below): naturalness and correct use of the target word always win
+# over hitting a word count or avoiding a same-level word. Kept in sync
+# with the generate-sentence Edge Function's own copies of both.
 WORD_RANGE = {
     'A1': (3, 6), 'A2': (4, 8), 'B1': (6, 12), 'B2': (8, 14),
     'C1': (10, 16), 'C2': (12, 18),
+}
+LEVEL_VOCAB_GUIDANCE = {
+    'A1': 'strongly prefer high-frequency A1 vocabulary and very simple sentence structure',
+    'A2': 'strongly prefer A1 vocabulary or common A2 words',
+    'B1': 'prefer A1/A2 vocabulary; a B1-level word is fine when it is genuinely useful',
+    'B2': 'prefer A1-B1 vocabulary; a B2-level word is fine when it is genuinely useful',
+    'C1': 'vocabulary restriction loosens further at this level — prioritize natural, idiomatic usage',
+    'C2': 'vocabulary restriction loosens further at this level — prioritize natural, idiomatic usage',
 }
 PREREQUISITE_LEVELS = {
     'A1': [], 'A2': ['A1'], 'B1': ['A1', 'A2'], 'B2': ['A1', 'A2', 'B1'],
@@ -117,22 +128,32 @@ def call_openai(word, vocab_cache):
     level = word['level']
     vocab = vocab_cache.get(level, [])
     min_w, max_w = WORD_RANGE.get(level, (6, 14))
+    vocab_guidance = LEVEL_VOCAB_GUIDANCE.get(level, LEVEL_VOCAB_GUIDANCE['B1'])
     system_prompt = (
         f"You are writing a translation exercise for a CEFR {level} German learner. "
         f'Write ONE natural English sentence that: (1) uses the word "{word["en"]}" (or a '
         'close natural inflection, e.g. its plural or a verb form) — this is the new word '
-        'being introduced, and the sentence MUST include it; (2) otherwise ONLY uses '
-        f'vocabulary from this list of words the learner already knows: {", ".join(vocab)}. '
-        'You may always use ordinary English function words and grammar (a, the, is, was, '
-        'to, in, and, of, etc.) even if not in that list. (3) The sentence MUST be between '
-        f'{min_w} and {max_w} words long (inclusive) — count every word, this is a hard '
-        'requirement, not a suggestion. The sentence should be meaningful and make sense on '
+        'being introduced, and the sentence MUST include it; (2) VOCABULARY is a preference, '
+        f'not a prohibition: prefer vocabulary from this list of words the learner already '
+        f'knows: {", ".join(vocab)}. A word from the SAME level ({level}) that is not yet in '
+        'that list is fine when it is genuinely useful for a natural sentence or a natural '
+        f'collocation with the target word — {vocab_guidance}. Avoid clearly HIGHER-level '
+        'vocabulary unless it is genuinely necessary for the sentence to be idiomatic or for '
+        'the target word\'s meaning to come through correctly. Never sacrifice natural, '
+        'idiomatic phrasing, or the target word\'s accurate meaning, just to stay within the '
+        'known-vocabulary list — a natural sentence using one same-level word beats an '
+        'awkward one that avoids it. You may always use ordinary English function words and '
+        'grammar (a, the, is, was, to, in, and, of, etc.) regardless of level. (3) LENGTH is a '
+        f'soft target, not a hard limit: aim for roughly {min_w}-{max_w} words, but a sentence '
+        'a little shorter or longer is completely fine when that is what natural phrasing or '
+        'correct use of the target word calls for — never pad or trim a sentence artificially '
+        'just to hit this range. The sentence should be meaningful and make sense on '
         'its own, not a trivial or random-sounding string of words — and prefer something a '
         'real person would plausibly actually say or write (daily routines, work, family, '
         'food, weather, travel, shopping, making plans, asking for help) over a flat, generic '
-        'textbook illustration of the word\'s dictionary meaning. Given the vocabulary limits '
-        'above, a short, bare sentence is sometimes unavoidable — that\'s fine — but when '
-        'several options fit equally well within the constraints, pick the one that sounds '
+        'textbook illustration of the word\'s dictionary meaning. Given the vocabulary '
+        'preference above, a short, plain sentence is sometimes the most natural choice — '
+        'that\'s fine — but when several options fit equally well, pick the one that sounds '
         'like something a person would genuinely say, not the blandest grammatically-valid one. '
         f'(4) CRITICAL: the German word actually being practiced is "{word["de"]}", not just '
         f'any word meaning "{word["en"]}" — the English sentence will later be translated '
@@ -193,13 +214,20 @@ def call_openai(word, vocab_cache):
             return word['id'], last_sentence, str(e)
         wc = word_count(sentence)
         length_attempts += 1
-        if min_w <= wc <= max_w or length_attempts >= 2:
+        # Length is a soft target (see the prompt above) — only worth a
+        # nudge when the sentence is clearly, not just marginally, outside
+        # the range; a one- or two-word overshoot is exactly the kind of
+        # thing that shouldn't cost a retry.
+        soft_min, soft_max = max(1, min_w - 2), max_w + 4
+        if soft_min <= wc <= soft_max or length_attempts >= 2:
             return word['id'], sentence, None
         last_sentence = sentence
         messages.append({"role": "assistant", "content": raw})
         messages.append({"role": "user", "content": (
-            f'Your sentence "{sentence}" has {wc} words — that is outside the required '
-            f'{min_w}-{max_w} word range. Try again, strictly within that range.'
+            f'Your sentence "{sentence}" has {wc} words, which is quite far from the '
+            f'{min_w}-{max_w} word target for this level. If you can naturally tighten or '
+            'expand it without hurting naturalness or the target word\'s fit, try again — '
+            'otherwise your original answer is fine as-is.'
         )})
     return word['id'], last_sentence, None
 
