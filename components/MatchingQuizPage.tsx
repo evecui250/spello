@@ -81,8 +81,20 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
     setSelectedEnglish(text);
   };
 
+  // Shared "tactile tile" treatment for every pairing button below (idle/
+  // hover/selected/wrong/correct) — soft resting depth, a lift on hover,
+  // and a pulsing ring while a tile is selected and waiting for its pair,
+  // instead of a flat color-only state change.
+  const TILE_IDLE = 'border-2 border-paper-line bg-paper/90 text-ink shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-accent/60 active:translate-y-0 active:scale-[0.98]';
+  const TILE_SELECTED = 'border-2 border-accent bg-accent/10 text-label shadow-md animate-pulse';
+  const TILE_WRONG = 'border-2 border-clay bg-clay/20 text-clay shadow-sm';
+  const TILE_CORRECT = 'border-2 border-good-deep bg-good/25 text-good-deep shadow-sm';
+
   return (
-    <div className="flex flex-col gap-5">
+    // Vertically centered in whatever space this page leaves below the
+    // fixed nav/roadmap bar — same min-height convention Home already uses
+    // (see app/page.tsx) — rather than sitting pinned to the top.
+    <div className="flex flex-col justify-center min-h-[calc(100dvh-11rem)]">
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-4">
         <div className="text-sm font-medium text-label">Match each word to its meaning</div>
         {/* One shared grid (German+English interleaved in DOM order) rather
@@ -99,33 +111,35 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
             const isCorrect = correctIds.has(w.id);
             const isSelected = selectedGerman === w.id;
             const isWrong = wrongFlash?.german === w.id;
-            let germanCls = 'border-2 border-accent/30 bg-paper/80 text-ink hover:border-accent/70 hover:bg-paper';
-            if (isCorrect) germanCls = 'border-2 border-good-deep bg-good/25 text-good-deep';
-            else if (isWrong) germanCls = 'border-2 border-clay bg-clay/20 text-clay';
-            else if (isSelected) germanCls = 'border-2 border-accent bg-accent/10 text-label';
+            let germanCls = TILE_IDLE;
+            if (isCorrect) germanCls = TILE_CORRECT;
+            else if (isWrong) germanCls = TILE_WRONG;
+            else if (isSelected) germanCls = TILE_SELECTED;
 
             const text = shuffledEn[i];
             const enIsCorrect = words.some(ew => correctIds.has(ew.id) && glossFor(ew, nativeLanguage) === text);
             const enIsSelected = selectedEnglish === text;
             const enIsWrong = wrongFlash?.english === text;
-            let enCls = 'border-2 border-accent/30 bg-paper/80 text-ink hover:border-accent/70 hover:bg-paper';
-            if (enIsCorrect) enCls = 'border-2 border-good-deep bg-good/25 text-good-deep';
-            else if (enIsWrong) enCls = 'border-2 border-clay bg-clay/20 text-clay';
-            else if (enIsSelected) enCls = 'border-2 border-accent bg-accent/10 text-label';
+            let enCls = TILE_IDLE;
+            if (enIsCorrect) enCls = TILE_CORRECT;
+            else if (enIsWrong) enCls = TILE_WRONG;
+            else if (enIsSelected) enCls = TILE_SELECTED;
 
             return (
               <Fragment key={w.id}>
                 <button
                   onClick={() => pickGerman(w.id)}
                   disabled={isCorrect || !!wrongFlash}
-                  className={`px-3 py-2.5 rounded-xl font-semibold text-sm text-left transition-colors ${germanCls}`}
+                  className={`px-3.5 py-3 rounded-2xl text-left transition-all duration-200 ${germanCls}`}
                 >
-                  {w.article ? `${w.article} ` : ''}{w.de}
+                  <span className="font-semibold text-base" style={{ fontFamily: 'var(--font-fraunces)' }}>
+                    {w.article ? `${w.article} ` : ''}{w.de}
+                  </span>
                 </button>
                 <button
                   onClick={() => pickEnglish(text)}
                   disabled={enIsCorrect || !!wrongFlash}
-                  className={`px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-colors ${enCls}`}
+                  className={`px-3.5 py-3 rounded-2xl text-sm font-medium text-left transition-all duration-200 ${enCls}`}
                 >
                   {text}
                 </button>

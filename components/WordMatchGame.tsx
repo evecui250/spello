@@ -320,7 +320,10 @@ export default function WordMatchGame({
   const timerFraction = Math.max(0, timeLeft / GAME_DURATION);
 
   return (
-    <div className="flex flex-col gap-5">
+    // min-h/justify-center centers whichever phase is showing in the space
+    // below the title row (same min-height convention Home already uses,
+    // see app/page.tsx) — previously this content sat pinned to the top.
+    <div className="flex flex-col gap-5 min-h-[calc(100dvh-11rem)]">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>{title}</h1>
         {onQuit ? (
@@ -334,6 +337,7 @@ export default function WordMatchGame({
         )}
       </div>
 
+      <div className="flex-1 flex flex-col justify-center gap-5">
       {phase === 'intro' && (
         <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-4 items-center text-center">
           <h2 className="text-lg font-bold text-ink">Match words against the clock</h2>
@@ -387,36 +391,42 @@ export default function WordMatchGame({
               doesn't drag its own column out of alignment with the other. */}
           <div className="grid grid-cols-2 gap-3">
             {roundWords.map((w, i) => {
+              // Same tactile-tile treatment as MatchingQuizPage's own
+              // (soft resting depth, hover lift, pulsing while selected) —
+              // matched keeps its own fade-out (opacity-0 scale-90), which
+              // already reads as a satisfying "resolved" exit.
               const isMatched = matchedIds.has(w.id);
               const isSelected = selectedGerman === w.id;
               const isWrong = wrongFlash?.german === w.id;
-              let germanCls = 'border-2 border-accent/30 bg-paper/80 text-ink hover:border-accent/70';
+              let germanCls = 'border-2 border-paper-line bg-paper/90 text-ink shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-accent/60 active:translate-y-0 active:scale-[0.98]';
               if (isMatched) germanCls = 'border-2 border-good-deep bg-good/25 text-good-deep opacity-0 scale-90 pointer-events-none';
-              else if (isWrong) germanCls = 'border-2 border-clay bg-clay/20 text-clay';
-              else if (isSelected) germanCls = 'border-2 border-accent bg-accent/10 text-label';
+              else if (isWrong) germanCls = 'border-2 border-clay bg-clay/20 text-clay shadow-sm';
+              else if (isSelected) germanCls = 'border-2 border-accent bg-accent/10 text-label shadow-md animate-pulse';
 
               const text = shuffledEn[i];
               const enIsMatched = roundWords.some(rw => matchedIds.has(rw.id) && glossFor(rw, nativeLanguage) === text);
               const enIsSelected = selectedEnglish === text;
               const enIsWrong = wrongFlash?.english === text;
-              let enCls = 'border-2 border-accent/30 bg-paper/80 text-ink hover:border-accent/70';
+              let enCls = 'border-2 border-paper-line bg-paper/90 text-ink shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-accent/60 active:translate-y-0 active:scale-[0.98]';
               if (enIsMatched) enCls = 'border-2 border-good-deep bg-good/25 text-good-deep opacity-0 scale-90 pointer-events-none';
-              else if (enIsWrong) enCls = 'border-2 border-clay bg-clay/20 text-clay';
-              else if (enIsSelected) enCls = 'border-2 border-accent bg-accent/10 text-label';
+              else if (enIsWrong) enCls = 'border-2 border-clay bg-clay/20 text-clay shadow-sm';
+              else if (enIsSelected) enCls = 'border-2 border-accent bg-accent/10 text-label shadow-md animate-pulse';
 
               return (
                 <Fragment key={w.id}>
                   <button
                     onClick={() => pickGerman(w.id)}
                     disabled={isMatched || !!wrongFlash}
-                    className={`px-3 py-2.5 rounded-xl font-semibold text-sm text-left transition-all duration-300 ${germanCls}`}
+                    className={`px-3.5 py-3 rounded-2xl text-left transition-all duration-200 ${germanCls}`}
                   >
-                    {w.article ? `${w.article} ` : ''}{w.de}
+                    <span className="font-semibold text-base" style={{ fontFamily: 'var(--font-fraunces)' }}>
+                      {w.article ? `${w.article} ` : ''}{w.de}
+                    </span>
                   </button>
                   <button
                     onClick={() => pickEnglish(text)}
                     disabled={enIsMatched || !!wrongFlash}
-                    className={`px-3 py-2.5 rounded-xl text-sm font-medium text-left transition-all duration-300 ${enCls}`}
+                    className={`px-3.5 py-3 rounded-2xl text-sm font-medium text-left transition-all duration-200 ${enCls}`}
                   >
                     {text}
                   </button>
@@ -475,6 +485,7 @@ export default function WordMatchGame({
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }
