@@ -1,0 +1,39 @@
+name: Deploy Supabase Edge Functions
+
+# Only Edge Function code ever needed a manual `supabase functions deploy`
+# before this existed -- everything else (the static Next.js site) already
+# auto-deploys via deploy.yml on every push to main. This closes that gap:
+# any push touching supabase/functions/** deploys every function in that
+# directory (matching it as the source of truth, so a newly-added function
+# is picked up automatically without editing this workflow), the same
+# `--use-api` (no Docker needed in CI) + `--project-ref` invocation already
+# used manually this session. workflow_dispatch is here too, for deploying
+# on demand without needing an unrelated commit to trigger it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+  workflow_dispatch:
+
+# Supabase's own official setup action + CLI read this env var for
+# non-interactive auth -- no `supabase login`/`supabase link` step needed.
+# Generate a Personal Access Token at
+# https://supabase.com/dashboard/account/tokens and add it as a repository
+# secret named SUPABASE_ACCESS_TOKEN (Settings -> Secrets and variables ->
+# Actions) before this workflow can actually deploy anything.
+env:
+  SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+  PROJECT_REF: whjiebzglefivvczvpfb
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - run: supabase functions deploy --project-ref "$PROJECT_REF" --use-api
