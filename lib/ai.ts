@@ -11,6 +11,13 @@ import { WordType } from './words';
 export interface SentenceCorrectionResult {
   sentence: string;
   wordForm: string;
+  // Whether the model treated the learner's own attempt as already
+  // correct, repaired it, or had to discard it and provide a fresh
+  // translation — kept internal for now (not surfaced in the UI), which
+  // already derives "was this a no-op" itself via a char-level diff
+  // against the learner's actual attempt (see DailySessionFlow's
+  // correctionDiff, which is also what drives which words get underlined).
+  status?: 'correct' | 'corrected' | 'replaced';
 }
 
 // Thrown by generateSentence/correctSentence when the server-side daily cap
@@ -150,12 +157,16 @@ export async function correctSentence(
   level: string,
   englishPrompt: string,
   userTranslation?: string,
+  // Forward-compat only — no corpus field feeds this yet (see
+  // correct-sentence's own RequestBody comment). Passed through as
+  // CONTEXT for the model, never as the one correct answer.
+  canonicalGerman?: string,
 ): Promise<SentenceCorrectionResult> {
-  const { data, error } = await invokeWithTimeout<{ sentence?: string; wordForm?: string; limitReached?: boolean }>('correct-sentence', { wordId, wordDe, level, englishPrompt, userTranslation });
+  const { data, error } = await invokeWithTimeout<{ sentence?: string; wordForm?: string; status?: SentenceCorrectionResult['status']; limitReached?: boolean }>('correct-sentence', { wordId, wordDe, level, englishPrompt, userTranslation, canonicalGerman });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (!data?.sentence || !data?.wordForm) throw new Error('Malformed AI response');
-  return { sentence: data.sentence, wordForm: data.wordForm };
+  return { sentence: data.sentence, wordForm: data.wordForm, status: data.status };
 }
 
 // A single misspelled word, paired with its correction — kept as
@@ -169,22 +180,39 @@ export interface SpellingMistake {
   correct: string;
 }
 
+// One grammar/word-order/word-form/meaning point, opened in the dedicated
+// "Why?" sheet (see WhyExplanationSheet) — wrong/correct are exact verbatim
+// substrings of the learner's attempt/the correction respectively (same
+// convention as SpellingMistake), so the sheet can diff and highlight them
+// the same way rather than parsing them back out of prose.
+export interface ExplanationPoint {
+  type: 'grammar' | 'word_order' | 'word_form' | 'meaning';
+  wrong: string;
+  correct: string;
+  explanation: string;
+}
+
 export interface ExplanationResult {
-  points: string[];
+  summary: string;
+  points: ExplanationPoint[];
   spelling: SpellingMistake[];
 }
 
-// The "Why?" button — a short, on-demand GRAMMAR explanation (article/
-// case, adjective endings, verb tense, word order, preposition choice,
-// word-class mix-ups) of a single correction, PLUS every pure spelling
-// slip found separately (see SpellingMistake) — only ever called if the
-// learner taps for it (never part of the main check flow, so it never
-// adds latency there). `points` is capped at 3 short bullets, in the
-// learner's own nativeLanguage; `spelling` has no such cap (a sentence
-// with three typos should surface all three, not just the first). Shares
-// correct-sentence's daily cap (see explain-correction's own comment) and
-// throws the same way, so callers can reuse the exact same error handling
-// (AIUnreachableError/DailyLimitReachedError) already built for corrections.
+const EXPLANATION_POINT_TYPES = new Set(['grammar', 'word_order', 'word_form', 'meaning']);
+
+// The "Why?" button — opens a dedicated explanation sheet (see
+// WhyExplanationSheet) with a short summary plus 2-4 structured points
+// (article/case, adjective endings, verb tense, word order, preposition
+// choice, word-class mix-ups), PLUS every pure spelling slip found
+// separately (see SpellingMistake) — only ever called if the learner taps
+// for it (never part of the main check flow, so it never adds latency
+// there). `points` is capped via maxPoints (a correction that only changed
+// one word has one real point to make); `spelling` has no such cap (a
+// sentence with three typos should surface all three, not just the
+// first). Shares correct-sentence's daily cap (see explain-correction's
+// own comment) and throws the same way, so callers can reuse the exact
+// same error handling (AIUnreachableError/DailyLimitReachedError) already
+// built for corrections.
 export async function explainCorrection(
   wordId: string,
   wordDe: string,
@@ -194,15 +222,19 @@ export async function explainCorrection(
   nativeLanguage: 'en' | 'zh' = 'en',
   maxPoints?: number,
 ): Promise<ExplanationResult> {
-  const { data, error } = await invokeWithTimeout<{ points?: string[]; spelling?: SpellingMistake[]; limitReached?: boolean }>('explain-correction', { wordId, wordDe, level, originalAttempt, correctedSentence, nativeLanguage, maxPoints });
+  const { data, error } = await invokeWithTimeout<{ summary?: string; points?: ExplanationPoint[]; spelling?: SpellingMistake[]; limitReached?: boolean }>('explain-correction', { wordId, wordDe, level, originalAttempt, correctedSentence, nativeLanguage, maxPoints });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
-  const points = Array.isArray(data?.points) ? data.points : [];
+  const points = Array.isArray(data?.points)
+    ? data.points.filter((p): p is ExplanationPoint =>
+        !!p && typeof p.type === 'string' && EXPLANATION_POINT_TYPES.has(p.type)
+        && typeof p.wrong === 'string' && typeof p.correct === 'string' && typeof p.explanation === 'string')
+    : [];
   const spelling = Array.isArray(data?.spelling)
     ? data.spelling.filter((s): s is SpellingMistake => !!s && typeof s.wrong === 'string' && typeof s.correct === 'string')
     : [];
   if (points.length === 0 && spelling.length === 0) throw new Error('Malformed AI response');
-  return { points, spelling };
+  return { summary: typeof data?.summary === 'string' ? data.summary : '', points, spelling };
 }
 
 export interface GeneratedParagraph {

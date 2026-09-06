@@ -12,6 +12,7 @@ import TextSpeakerButton from './TextSpeakerButton';
 import WordInfoPanel from './WordInfoPanel';
 import GlossPopup from './GlossPopup';
 import { PointsIcon } from './icons';
+import WhyExplanationSheet from './WhyExplanationSheet';
 
 interface Props {
   word: Word;
@@ -48,6 +49,9 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
   const [selectedPromptGlossToken, setSelectedPromptGlossToken] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<ExplanationResult | null>(null);
   const [explanationStatus, setExplanationStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached'>('idle');
+  // Whether the dedicated Why? sheet is open — see DailySessionFlow's own
+  // identical state for why this is separate from `explanation` itself.
+  const [showWhySheet, setShowWhySheet] = useState(false);
   // Set true only when a perfect correction actually earns a NEW point --
   // i.e. this word hadn't already been touched today via the normal
   // study/review flow (points are 1-per-distinct-word-per-day, driven by
@@ -137,6 +141,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
   };
 
   async function handleExplain() {
+    if (explanation) { setShowWhySheet(true); return; }
     if (!result) return;
     setExplanationStatus('loading');
     try {
@@ -144,6 +149,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
       const explained = await explainCorrection(word.id, word.de, level, input, result.sentence, nativeLanguage, maxPoints);
       setExplanation(explained);
       setExplanationStatus('idle');
+      setShowWhySheet(true);
     } catch (e) {
       setExplanationStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
     }
@@ -271,7 +277,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
       {result && diff && (
         <>
           <div className="relative bg-good/25 border border-good rounded-xl px-4 py-3">
-            {!diff.perfect && !explanation && (
+            {!diff.perfect && (
               <button
                 type="button"
                 onClick={handleExplain}
@@ -325,14 +331,8 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
               })}
             </div>
           </div>
-          {!diff.perfect && explanation && (
-            <div className="flex flex-col gap-1.5 -mt-1 bg-accent/10 rounded-lg px-4 py-2">
-              {explanation.points.length > 0 && (
-                <ul className="list-disc pl-5 flex flex-col gap-1 text-sm text-ink">
-                  {explanation.points.map((point, i) => <li key={i}>{point}</li>)}
-                </ul>
-              )}
-            </div>
+          {showWhySheet && explanation && (
+            <WhyExplanationSheet explanation={explanation} onClose={() => setShowWhySheet(false)} />
           )}
           {!diff.perfect && explanationStatus === 'error' && (
             <p className="text-clay text-xs -mt-1">Couldn't load an explanation — try again.</p>

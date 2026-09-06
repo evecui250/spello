@@ -14,7 +14,7 @@
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const MODEL = 'gpt-4o-mini';
+const MODEL = 'gpt-5.6-terra';
 
 // Same flat daily cap correct-sentence uses, and counted together with it
 // (see the query below, which doesn't filter by kind) — this is a bonus
@@ -40,8 +40,15 @@ interface RequestBody {
   // How many words the correction actually changed (see DailySessionFlow's
   // correctionDiff) — caller-supplied ceiling on how many points make
   // sense at all; a correction that touched one word has one real point to
-  // make, not three. Clamped to [1, 3] here regardless of what's sent.
+  // make, not four. Clamped to [1, 4] here regardless of what's sent.
   maxPoints?: number;
+}
+
+interface ExplanationPoint {
+  type?: string;
+  wrong?: string;
+  correct?: string;
+  explanation?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -90,181 +97,190 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Sentence too long' }, 400);
     }
     const lang = nativeLanguage === 'zh' ? 'Chinese' : 'English';
-    const pointCap = Math.min(3, Math.max(1, Math.round(maxPoints ?? 3)));
+    // "2-4" is the useful range for a typical correction, but a correction
+    // that only touched one word has at most one real point to make —
+    // asking for "up to 4" regardless used to pad out trivial corrections
+    // with filler (the exact reason this cap, computed from how many words
+    // actually changed, exists at all). Ceiling raised from 3 to 4 to match
+    // the new prompt's own "2-4" guidance.
+    const pointCap = Math.min(4, Math.max(1, Math.round(maxPoints ?? 4)));
 
-    const completion = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are a German tutor. A beginner learner (CEFR ' + (level || 'A1') + ') tried to ' +
-              `translate a sentence, practicing the word "${wordDe}". Their attempt: "${originalAttempt || '(nothing — they left it blank)'}". ` +
-              `The correct sentence is: "${correctedSentence}". ` +
-              'FIRST, carefully go word by word through BOTH sentences and list every single word ' +
-              'that differs at all between the attempt and the correction — do not skip any, ' +
-              'including a subtle one- or two-letter difference that looks like a typo (e.g. ' +
-              '"geziegt" vs "gezeigt"); missing one of these is a real failure. For EACH changed ' +
-              'word, decide which of the two buckets below it belongs to — every changed word goes ' +
-              'in exactly one bucket, never both, and never silently dropped: ' +
-              '\n\n' +
-              '1) SPELLING — the exact same word, just misspelled (letters added/dropped/swapped/' +
-              'transposed), with NO actual difference in grammatical form or meaning (e.g. ' +
-              '"Testergbnis"/"Testergebnis", "Dokter"/"Doktor", "geziegt"/"gezeigt"). If the word ' +
-              'ALSO changed grammatical form on top of the misspelling — most commonly singular to ' +
-              'plural, e.g. attempt "Ergenbnis" (a typo for "Ergebnis") but the correction needs ' +
-              '"Ergebnisse" (plural) — that is NOT pure spelling: the number itself is a genuine ' +
-              'grammar difference (bucket 2 below), so it needs its own grammar point (e.g. \'"für ' +
-              'bessere Ergebnisse" needs the plural "Ergebnisse", not singular "Ergebnis"\') even ' +
-              'though the base word also happens to be misspelled — do not let the typo cause the ' +
-              'plural requirement to go unmentioned entirely. Put every one ' +
-              'of these in the "spelling" array as {"wrong": "...", "correct": "..."} using the exact ' +
-              'substrings verbatim as they appear in the attempt and correction respectively — do ' +
-              'not paraphrase them, and do not also make a grammar point about them. Capitalization ' +
-              '(German capitalizes every noun) and hyphenation differences belong here too, not as ' +
-              'their own grammar point. There is no cap on how many spelling entries you list — a ' +
-              'sentence with three typos needs all three, not just the first. Do NOT put two ' +
-              'DIFFERENT WORDS here just because the correction swapped one for the other — a real, ' +
-              'confirmed mistake: "aufwenden" (a real verb meaning "to expend/spend") was filed as a ' +
-              '"spelling" fix for "verbringen" (an entirely different verb, "to spend time"). Two ' +
-              'distinct dictionary words are a WORD-CHOICE issue (bucket 2 below), never spelling — ' +
-              'if you cannot tell which bucket a pair belongs in, ask: would a native speaker call ' +
-              'the wrong version a TYPO of the right one, or a DIFFERENT WORD? Only the former is ' +
-              'spelling. ' +
-              '\n\n' +
-              '2) GRAMMAR — a genuine difference in form, agreement, tense, case, word choice, a ' +
-              `word missing entirely, or word ORDER. Identify AT MOST ${pointCap} of these as ` +
-              'concrete points the learner should take away — but fewer is better than more: only ' +
-              'include a point for a mistake that is actually there. That said, do NOT under-report ' +
-              'either — if there are genuinely 2-3 DISTINCT real grammar issues (e.g. a wrong ' +
-              'article AND a wrong adjective ending AND a wrong possessive-pronoun case, all in the ' +
-              'same sentence), give each its own point, up to the cap; "fewer is better" means never ' +
-              'padding the list with a minor or borderline point just to fill it out, not skipping a ' +
-              'second or third issue that is actually there to keep the list short. This applies even ' +
-              'when both changed words sit right next to each other in the SAME noun phrase and share ' +
-              'the same underlying cause — a real, confirmed miss: the attempt had "einen neue ' +
-              'Projekt" and the correction was "ein neues Projekt" (Projekt is neuter), and only the ' +
-              'article ("einen" -> "ein") was ever mentioned — the adjective ending ("neue" -> ' +
-              '"neues", the SAME neuter agreement applied to a different word) needs its own point ' +
-              'too, not just the article. If there is ' +
-              'truly only one real grammar issue, return exactly one point. Covers: article/case ' +
-              '(der/die/das, den/dem/der agreement), adjective endings, verb tense/conjugation, ' +
-              'preposition choice, a word-class mix-up (e.g. using a verb form where a noun was ' +
-              'needed, like "reisen" [to travel] instead of "Reisende" [traveler]); a WORD MISSING ' +
-              'ENTIRELY from the attempt that the correction added (most commonly a dropped article ' +
-              'before a noun, e.g. attempt has "mit Familie", correction has "mit der Familie") — ' +
-              'this is not a "changed word" since nothing in the attempt corresponds to it, so ' +
-              'checking for insertions specifically, not just substitutions, matters; a real, ' +
-              'confirmed miss: a dropped "der" before a dative noun went completely unreported while ' +
-              'a minor, defensible word-choice difference got explained instead — a genuinely missing ' +
-              'required word always outranks a debatable vocabulary choice, prioritize it; a WORD ' +
-              'CHOICE difference ONLY when the attempt\'s word is actually wrong given the sentence\'s ' +
-              'meaning (e.g. a verb that does not fit the intended action at all) — if the attempt\'s ' +
-              'word is a valid near-synonym of the correction (defensible, just less idiomatic, not ' +
-              'objectively wrong), leave it out of the points entirely rather than lecture on a ' +
-              'preference; AND word order — TWO DISTINCT rules, name which one actually applies, ' +
-              'do not just describe the symptom: (a) MAIN clause verb-second (V2) — the finite verb ' +
-              'is always the SECOND element of a main clause, right after the subject (or after ' +
-              'whatever else opens the clause), never later; a real, confirmed miss of exactly this ' +
-              'shape: the attempt wrote "Die Eltern oft hart arbeiten..." (verb pushed to the end, ' +
-              'English word order) instead of "Die Eltern arbeiten oft hart..." — the point must ' +
-              'name the RULE, not just the swap: \'The finite verb "arbeiten" must be the second ' +
-              'element of the clause, right after the subject "Die Eltern" — not moved to the end.\' ' +
-              'A point that only says \'"oft" should come after "arbeiten"\' describes the symptom ' +
-              'without ever saying WHY (the verb belongs in second position), which is exactly the ' +
-              'rule the learner actually needs; (b) SUBORDINATE clauses (e.g. after "dass", "weil", ' +
-              '"obwohl") require the OPPOSITE — the finite verb moves to the very end of the clause. ' +
-              'For either rule, if the learner\'s word is already the CORRECT word/form but just in ' +
-              'the wrong position, that is a word-order mistake, not a form mistake — say so ' +
-              'explicitly by naming where it belongs AND which rule requires it (e.g. \'After ' +
-              '"dass", the finite verb "war" must move to the end of the clause.\'). NEVER phrase a ' +
-              'point as \'"X" should be "X"\' ' +
-              '(the same word on both sides) — if you catch yourself about to write that, it is ' +
-              'almost always actually a word-order issue described wrong; fix the phrasing to ' +
-              'describe the position, not a form change. A real, confirmed miss of a related shape: ' +
-              'the attempt wrote BOTH "hat gefühlt" (a wrong, unrelated verb/tense) AND a badly-' +
-              'misspelled "emfpinden" elsewhere, expressing the same idea twice — the correction ' +
-              'simply drops the redundant "hat gefühlt" and keeps (the now-corrected) "empfinden". ' +
-              'A point phrased as \'"empfinden" should be used instead of "hat gefühlt"\' is ' +
-              'misleading here — the learner DID already write (a misspelled) "empfinden" elsewhere ' +
-              'in the same sentence, so implying they never used it at all is wrong. When the ' +
-              'attempt expresses one idea with two different words/phrases and the correction just ' +
-              'removes the redundant one, that is a style/redundancy fix, not a clean grammar rule — ' +
-              'omit it from points entirely rather than describe it in a way that misstates what the ' +
-              'learner actually wrote. Before writing each point, re-read the ' +
-              "attempt's actual word order carefully and confirm EXACTLY which word or phrase in " +
-              'the attempt the point is about, and what that word was governing/modifying THERE ' +
-              '(not what a similar-looking word would typically govern) — German word order means a ' +
-              'preposition/article near one noun in the attempt can land near a different noun in ' +
-              'the correction, or vice versa; do not assume based on position alone. If you are not ' +
-              'sure which specific word changed or what it was attached to, leave that point out ' +
-              'rather than risk mis-describing it. Before including ANY point, check the exact word/ ' +
-              'phrase you are about to quote as "wrong" against what you are about to quote as ' +
-              '"correct" — if they are character-for-character identical, that word did NOT actually ' +
-              'change between the attempt and the correction (a real case: "Erwerb" appeared ' +
-              'unchanged in both, yet a point was invented claiming it needed to agree with a nearby ' +
-              'plural noun — it did not, nothing about it was wrong). Do not invent an agreement/case ' +
-              'reason for a word just because a plural or other noun sits nearby; find whichever word ' +
-              'ACTUALLY differs instead, or omit the point entirely if nothing nearby actually does. ' +
-              'Only flag something as a mistake if the German ' +
-              'grammar OBJECTIVELY requires a specific form given what the English sentence actually ' +
-              'says. If the English sentence itself is silent or ambiguous on a detail — most ' +
-              'commonly formal vs informal address ("Sie" vs "du/ihn/ihm/dich"), or a pronoun that ' +
-              'does not pin down gender/number/formality — and the learner picked one valid reading ' +
-              'of that ambiguity, do NOT treat it as wrong, even though the correction happens to use ' +
-              'a different valid choice; leave it out of the points entirely rather than describe it ' +
-              'as a mistake. Do not simply say a word "was wrong" — every point must explain the ' +
-              'actual grammar rule behind the fix, briefly, so it is something the learner can apply ' +
-              'next time. For an AGREEMENT fix specifically (adjective ending, article, or ' +
-              'possessive pronoun matching a noun\'s gender/case), use this compact shape and ' +
-              'nothing more verbose: \'"[word]" before "[noun]" should be "[corrected form]" ' +
-              'because "[noun]" is [gender/case].\' State the answer directly in that shape — do not ' +
-              'restate the rule abstractly first (e.g. "the adjective needs the correct ending") ' +
-              'before finally giving the specific answer. The same directness applies to every other ' +
-              'point too: lead with the concrete fact itself, not a restated category label. For ' +
-              'example, in Chinese, prefer a compact phrasing like \'"Sozialarbeiter" 是阳性，所以' +
-              '是der而不是die\' over a longer \'名词的性别和格需要正确匹配，例如"der ' +
-              'Sozialarbeiter"而不是"die Sozialarbeiter"\' — same information, without the ' +
-              'throat-clearing. Skip anything you are not confident is actually correct — accuracy ' +
-              `matters more than reaching ${pointCap}; fewer solid points beats padding out to ` +
-              `${pointCap} with a shaky one. If the attempt was blank, too garbled, or simply used ` +
-              'different (not wrong) vocabulary with no real grammar issue to point out, return a ' +
-              'single point that briefly says what the correct sentence means instead. Each point ' +
-              `must be ONE short, plain sentence (no more than ~20 words), written in ${lang}, and ` +
-              'must NOT repeat the full corrected sentence back — the learner can already see it. ' +
-              '\n\n' +
-              'Respond with exactly this JSON: {"points": ["...", ...], "spelling": [{"wrong": ' +
-              '"...", "correct": "..."}, ...]}. Either array may be empty (e.g. spelling: [] if ' +
-              'there were no pure spelling mistakes at all), but not both.',
+    const EXPLANATION_SCHEMA = {
+      type: 'object',
+      properties: {
+        summary: { type: 'string' },
+        points: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', enum: ['grammar', 'word_order', 'word_form', 'meaning'] },
+              wrong: { type: 'string' },
+              correct: { type: 'string' },
+              explanation: { type: 'string' },
+            },
+            required: ['type', 'wrong', 'correct', 'explanation'],
+            additionalProperties: false,
           },
-        ],
-        temperature: 0.2,
-        max_tokens: 350,
-      }),
-    });
+        },
+        spelling: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { wrong: { type: 'string' }, correct: { type: 'string' } },
+            required: ['wrong', 'correct'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['summary', 'points', 'spelling'],
+      additionalProperties: false,
+    };
 
-    if (!completion.ok) {
-      const errText = await completion.text();
-      console.error('OpenAI error (explain-correction):', errText);
-      return json({ error: 'Explanation failed' }, 502);
+    const systemPrompt =
+      `You are a German tutor explaining a correction to a CEFR ${level || 'A1'} learner, ` +
+      `practicing the target word "${wordDe}".\n\n` +
+      `Learner wrote:\n${originalAttempt || '(nothing — they left it blank)'}\n\n` +
+      `Corrected sentence:\n${correctedSentence}\n\n` +
+      "Explain the meaningful differences between the learner's sentence and the corrected " +
+      'sentence.\n\n' +
+      'Rules:\n' +
+      '- Compare both sentences carefully before explaining.\n' +
+      '- Explain only things that actually changed.\n' +
+      '- Do not invent a grammar reason for an unchanged word — before including ANY point, ' +
+      'check the exact word/phrase you are about to call "wrong" against what you are about ' +
+      'to call "correct": if they are character-for-character identical, that word did NOT ' +
+      'actually change, and no point should exist for it (a real, confirmed miss: "Erwerb" ' +
+      'appeared unchanged in both sentences, yet a point was invented claiming it needed to ' +
+      'agree with a nearby plural noun — it did not).\n' +
+      '- Do not criticize valid alternative wording — if the source sentence is silent or ' +
+      'ambiguous on a detail (most commonly formal "Sie" vs. informal "du"), and the learner ' +
+      'picked one valid reading, that is not a mistake even if the correction happens to use ' +
+      'a different valid choice.\n' +
+      '- Separate pure spelling mistakes (same word, just misspelled — no change in ' +
+      'grammatical form or meaning) from grammar, word order, word form, or meaning errors. ' +
+      'Put spelling in the "spelling" array using the exact substrings verbatim, and do not ' +
+      'also make a point about the same pair.\n' +
+      '- Two different words are never merely a spelling mistake (a real, confirmed miss: ' +
+      '"aufwenden" — a real verb meaning "to expend effort/resources" — was filed as a ' +
+      '"spelling" fix for "verbringen", an entirely different verb meaning "to spend time"; ' +
+      'that is a word-choice/meaning point, never spelling). If a word ALSO changed ' +
+      'grammatical form on top of a misspelling (most commonly singular to plural), the form ' +
+      'change still needs its own point even though the base word is also misspelled — do not ' +
+      'let the typo cause a real grammar requirement to go unmentioned.\n' +
+      '- A WORD MISSING ENTIRELY from the attempt that the correction added (most commonly a ' +
+      'dropped article before a noun, e.g. attempt has "mit Familie", correction has "mit der ' +
+      'Familie") is a real point — check for insertions specifically, not just substitutions; ' +
+      'a genuinely missing required word always outranks a more minor or debatable difference.\n' +
+      '- Group related surface changes into one pedagogical point when they come from the ' +
+      'same rule. Example: "mit die Freunde" -> "mit den Freunden" should normally be ' +
+      'explained as one dative issue, not two unrelated mistakes.\n' +
+      '- For word order, name the actual rule, not just the symptom — two distinct rules: ' +
+      '(a) MAIN clause verb-second (V2): the finite verb is always the second element of a ' +
+      'main clause; (b) SUBORDINATE clauses (after "dass", "weil", "obwohl", etc.) require the ' +
+      'OPPOSITE — the finite verb moves to the very end. If a word is already the correct ' +
+      'form but just in the wrong position, that is word_order, not word_form — never phrase ' +
+      'a point as "X should be X" (identical on both sides); that almost always means it is ' +
+      'actually a position issue described wrong.\n' +
+      '- When the attempt expresses one idea with two different words/phrases (redundantly) ' +
+      'and the correction just removes the redundant one, treat that as a style/redundancy ' +
+      'fix — if the "wrong" side would misleadingly imply the learner never used the correct ' +
+      'word at all when they actually did (elsewhere, even if misspelled), leave it out of the ' +
+      'points entirely rather than describe it in a way that misstates what they wrote.\n' +
+      `- Explain the most useful points only, up to a maximum of ${pointCap}. Fewer is better ` +
+      'than more — accuracy matters more than reaching the cap; only include a point for a ' +
+      'mistake that is actually there, but do not under-report either: if there are genuinely ' +
+      'several distinct real issues in the same sentence, give each its own point, up to the ' +
+      'cap.\n' +
+      '- For each point:\n' +
+      '  1. show what changed (in "wrong"/"correct", as exact verbatim substrings from the ' +
+      'attempt/correction respectively);\n' +
+      '  2. explain why in "explanation";\n' +
+      '  3. give a very short rule or contrast when useful — lead with the concrete fact ' +
+      'itself, not a restated category label (e.g. state directly which gender/case applies ' +
+      'and why, rather than first saying "the adjective needs the correct ending").\n' +
+      '- Keep explanations tied to this exact sentence.\n' +
+      '- Adapt terminology to CEFR level: A1/A2 uses plain language first with minimal grammar ' +
+      'jargon; B1+ may use grammar terms when helpful.\n' +
+      '- Do not repeat the same issue in multiple points.\n' +
+      '- If the attempt was blank, too garbled, or simply used different (not wrong) ' +
+      'vocabulary with no real grammar issue to point out, return one point that briefly says ' +
+      'what the corrected sentence means instead.\n' +
+      `- Write "summary" and every point/explanation in ${lang}. "summary" is one short ` +
+      'sentence and must NOT repeat the full corrected sentence back — the learner can already ' +
+      'see it.\n\n' +
+      'Return only the structured output required by the schema. Either "points" or ' +
+      '"spelling" may be empty, but not both.';
+
+    // gpt-5.6-terra is a reasoning-tier model: no custom temperature
+    // (rejected outright), max_completion_tokens instead of max_tokens, and
+    // a reported (never observed here) risk that some non-default
+    // reasoning_effort values get rejected on /chat/completions — falls
+    // back one step (medium -> low) only if OpenAI's own error text
+    // specifically names reasoning_effort. Also: reasoning tokens are
+    // billed from (and can exhaust) this same max_completion_tokens budget,
+    // confirmed live while fixing the corpus-audit scripts this session —
+    // 1500 gives real headroom for a 2-4-point structured explanation, with
+    // a one-time escalation to 3000 if a completion still comes back empty.
+    async function callOpenAI(
+      requestBody: Record<string, unknown>,
+      reasoningEffort: 'medium' | 'low',
+      maxTokens: number,
+      escalated = false,
+    ): Promise<{ result: Record<string, unknown>; raw: string }> {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({ ...requestBody, reasoning_effort: reasoningEffort, max_completion_tokens: maxTokens }),
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        if (reasoningEffort === 'medium' && errText.toLowerCase().includes('reasoning_effort')) {
+          console.warn('explain-correction: reasoning_effort "medium" rejected, retrying with "low"', errText);
+          return callOpenAI(requestBody, 'low', maxTokens, escalated);
+        }
+        throw new Error(`OpenAI error: ${errText}`);
+      }
+
+      const result = await resp.json();
+      const raw: string = result.choices?.[0]?.message?.content ?? '';
+      if (!raw.trim() && !escalated) {
+        return callOpenAI(requestBody, reasoningEffort, 3000, true);
+      }
+      return { result, raw };
     }
 
-    const result = await completion.json();
-    const raw: string = result.choices?.[0]?.message?.content ?? '{}';
-    let parsed: { points?: string[]; spelling?: { wrong?: string; correct?: string }[] } = {};
+    let completionResult: { result: Record<string, unknown>; raw: string };
+    try {
+      completionResult = await callOpenAI(
+        {
+          model: MODEL,
+          response_format: {
+            type: 'json_schema',
+            json_schema: { name: 'explanation', strict: true, schema: EXPLANATION_SCHEMA },
+          },
+          messages: [{ role: 'system', content: systemPrompt }],
+        },
+        'medium',
+        1500,
+      );
+    } catch (err) {
+      console.error('OpenAI error (explain-correction):', err);
+      return json({ error: 'Explanation failed' }, 502);
+    }
+    const { result, raw } = completionResult;
+
+    let parsed: { summary?: string; points?: ExplanationPoint[]; spelling?: { wrong?: string; correct?: string }[] } = {};
     try {
       parsed = JSON.parse(raw);
     } catch {
       // leave parsed empty — caught by the check below
     }
-    const usage = result.usage ?? {};
+    const usage = (result.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined) ?? {};
     await supabase.from('ai_usage').insert({
       user_id: userId,
       ip_address: ip,
@@ -276,43 +292,29 @@ Deno.serve(async (req: Request) => {
       kind: 'explanation',
     });
 
-    // Hard backstop for the exact failure the prompt above tries to head
-    // off ("Erwerb" should be "Erwerb" because it needs to match the
-    // plural "Fähigkeiten" — a real, confirmed case where the model
-    // invented an agreement reason for a word that hadn't actually
-    // changed at all). Catches the same-quoted-substring-twice shape
-    // regardless of phrasing, so a prompt-compliance slip still can't
-    // reach the learner as a nonsensical point. Two real, confirmed gaps
-    // fixed here: (1) this only ever matched double quotes, but the model
-    // routinely uses single quotes instead (unsurprising inside a JSON
-    // string value, where a literal ' needs no escaping but a literal "
-    // does); (2) the gap between the repeated word excluded ANY quote
-    // character at all, so a point mentioning a THIRD quoted word in
-    // between ("'die' before 'Bedürfnisse' should be 'die' because
-    // 'Bedürfnisse' is plural") couldn't match either — only a period
-    // (keeping the check within one point/sentence) is excluded from the
-    // gap now, not quotes generally.
-    const SAME_WORD_POINT = /["']([^"']+)["'][^.]*\bshould be\b[^.]*["']\1["']/i;
-    let points = Array.isArray(parsed.points)
-      ? parsed.points.filter(p => typeof p === 'string' && p.trim() && !SAME_WORD_POINT.test(p))
-      : [];
+    // Structured Outputs gives every point explicit "wrong"/"correct"
+    // fields now, instead of prose a regex had to fish through — the
+    // backstops below are the same guards this session already proved it
+    // needs (each with its own real, confirmed miss in the comments), just
+    // rewritten against structured fields, which makes them exact instead
+    // of fuzzy.
     let spelling = Array.isArray(parsed.spelling)
       ? parsed.spelling.filter((s): s is { wrong: string; correct: string } =>
           !!s && typeof s.wrong === 'string' && !!s.wrong.trim() && typeof s.correct === 'string' && !!s.correct.trim()
-          // Same backstop as SAME_WORD_POINT above, for the structured
-          // side: a "spelling mistake" that's actually identical on both
-          // sides isn't one.
+          // A "spelling mistake" that's identical on both sides isn't one —
+          // same intent as the old prose-based SAME_WORD_POINT check, now a
+          // direct field comparison instead of a regex over free text.
           && s.wrong.trim() !== s.correct.trim())
       : [];
 
     // Real, confirmed case: the model classified "aufwenden" -> "verbringen"
     // (two entirely different verbs) as "spelling", despite the prompt's own
     // explicit definition (same word, just misspelled) ruling that out --
-    // instructions alone weren't reliable enough here, same reason
-    // SAME_WORD_POINT exists as a hard backstop rather than just a prompt
-    // request. A genuine typo has a small edit distance relative to word
-    // length (confirmed against real corpus examples: "gefült"/"gefühlt" ~15%
-    // different, "geziegt"/"gezeigt" ~28%); two different words don't
+    // instructions alone weren't reliable enough here, same reason this
+    // exists as a hard backstop rather than just a prompt request. A genuine
+    // typo has a small edit distance relative to word length (confirmed
+    // against real corpus examples: "gefült"/"gefühlt" ~15% different,
+    // "geziegt"/"gezeigt" ~28%); two different words don't
     // ("aufwenden"/"verbringen" ~70%). Anything over half the longer word's
     // length is dropped from spelling entirely, not reclassified as a
     // grammar point either -- if it's a defensible near-synonym rather than
@@ -333,26 +335,33 @@ Deno.serve(async (req: Request) => {
     // article), never spelling.
     spelling = spelling.filter(s => s.wrong.trim().split(/\s+/).length === s.correct.trim().split(/\s+/).length);
 
-    // Real, confirmed case: a spelling entry ("bissen" -> "bisschen") got a
-    // SECOND, redundant point ALSO explaining "'bissen' should be
-    // 'bisschen' for the correct spelling" -- directly contradicting the
-    // prompt's own explicit "do not also make a grammar point about them"
-    // instruction for spelling entries. A code-level filter closes this
-    // the same way SAME_WORD_POINT does for a different compliance slip:
-    // drop any point that explicitly says "spelling" (the exact tell in
-    // the real case) or that quotes BOTH sides of an already-listed
-    // spelling entry (a near-certain restatement regardless of phrasing).
-    points = points.filter(p => {
-      const lower = p.toLowerCase();
-      if (lower.includes('spelling')) return false;
-      return !spelling.some(s => lower.includes(s.wrong.trim().toLowerCase()) && lower.includes(s.correct.trim().toLowerCase()));
-    });
+    const spellingSet = new Set(spelling.map(s => `${s.wrong.trim().toLowerCase()}|${s.correct.trim().toLowerCase()}`));
+    const validTypes = new Set(['grammar', 'word_order', 'word_form', 'meaning']);
+    let points = Array.isArray(parsed.points)
+      ? parsed.points.filter((p): p is Required<ExplanationPoint> =>
+          !!p && typeof p.wrong === 'string' && !!p.wrong.trim()
+          && typeof p.correct === 'string' && !!p.correct.trim()
+          && typeof p.explanation === 'string' && !!p.explanation.trim()
+          && typeof p.type === 'string' && validTypes.has(p.type)
+          // Same backstop as the spelling filter above: a point claiming a
+          // change where "wrong" and "correct" are identical is exactly the
+          // invented-agreement-for-an-unchanged-word bug (the real "Erwerb"
+          // case) — now caught as a trivial equality check instead of a
+          // regex over prose, since the fields are structured.
+          && p.wrong.trim() !== p.correct.trim()
+          // Real, confirmed case: a spelling entry ("bissen" -> "bisschen")
+          // got a SECOND, redundant point ALSO explaining the same fix --
+          // directly contradicting the "do not also make a point about the
+          // same pair" instruction. Drop any point that restates an
+          // already-listed spelling entry's exact wrong/correct pair.
+          && !spellingSet.has(`${p.wrong.trim().toLowerCase()}|${p.correct.trim().toLowerCase()}`))
+      : [];
 
     if (points.length === 0 && spelling.length === 0) {
       console.error('Malformed AI response (explain-correction):', raw);
       return json({ error: 'AI returned an empty explanation' }, 502);
     }
-    return json({ points, spelling });
+    return json({ summary: typeof parsed.summary === 'string' ? parsed.summary : '', points, spelling });
   } catch (err) {
     console.error('explain-correction error:', err);
     return json({ error: 'Unexpected error' }, 500);

@@ -36,7 +36,7 @@
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const MODEL = 'gpt-4o-mini';
+const MODEL = 'gpt-5.6-terra';
 
 // A safety net against a bug or scripted abuse burning through spend, not a
 // ration on legitimate studying — a full day's batch rarely calls this more
@@ -65,6 +65,11 @@ interface RequestBody {
   level: string;
   englishPrompt: string;
   userTranslation?: string;
+  // Forward-compat only — no corpus field feeds this yet. If lib/words.ts
+  // ever gains a canonical reference translation per word, this lets it
+  // flow through as CONTEXT for the model, never as the one correct
+  // answer (see the prompt's own "Reference (context only...)" framing).
+  canonicalGerman?: string;
 }
 
 // Plain Levenshtein edit distance — used below to check that the model's
@@ -168,7 +173,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as RequestBody;
-    const { wordId, wordDe, level, englishPrompt, userTranslation } = body;
+    const { wordId, wordDe, level, englishPrompt, userTranslation, canonicalGerman } = body;
     if (!wordId || !wordDe || !englishPrompt) {
       return json({ error: 'Missing wordId, wordDe, or englishPrompt' }, 400);
     }
@@ -177,93 +182,131 @@ Deno.serve(async (req: Request) => {
     }
     const hasUserInput = !!userTranslation && userTranslation.trim().length > 0;
 
-    const systemPrompt =
-              'You are a German tutor helping a learner practice new vocabulary. The ' +
-              `exercise sentence, to be translated into German, is: "${englishPrompt}" — ` +
-              `specifically testing the word "${wordDe}" (CEFR ${level || 'A1'}). ` +
-              (hasUserInput
-                ? 'The learner attempted a translation (given in the next message). First, ' +
-                  'decide whether their attempt tries to render the target word in German at ' +
-                  'all — in ANY form (any conjugation, declension, case ending, or plural). If ' +
-                  'it is a noun, do NOT require the article (der/die/das) to be present or ' +
-                  'correct — only the core word matters for this check. If it DOES, correct ' +
-                  'THEIR OWN translation attempt: fix grammar, spelling, and word order, AND fix ' +
-                  'any OTHER word (i.e. not the target word itself — see the exception below) ' +
-                  'whose MEANING does not actually match what the corresponding part of ' +
-                  'the English sentence says — a genuine mistranslation, not just a stylistic ' +
-                  'choice (e.g. if the English says "departure" and they wrote a word that means ' +
-                  '"trip" or "outing" instead, that is wrong and must be corrected to the word ' +
-                  'that actually means "departure" — do not just fix its grammar and leave the ' +
-                  'wrong meaning in place; be equally strict about every other word choice in the ' +
-                  'sentence). This includes content the learner OMITTED entirely, not just words ' +
-                  'they got wrong — check every part of the English sentence (including ' +
-                  'adverbs/adjectives modifying another word, e.g. "carefully" in "packed ' +
-                  'carefully") against their attempt, and if some part of the English meaning is ' +
-                  'simply missing from what they wrote (not mistranslated, just never attempted ' +
-                  'at all), ADD it into your corrected sentence so the output conveys the FULL ' +
-                  'meaning of the English sentence — never silently drop a concept just because ' +
-                  'the learner did. This applies just as much to a MAIN VERB the English sentence ' +
-                  'has TWO of (not just a modifier) — a sentence like "The company DECIDED to ' +
-                  'commission a new project" expresses two distinct actions (deciding, then ' +
-                  'commissioning), and the corrected sentence must convey BOTH, even if the ' +
-                  "learner's attempt at the first one (e.g. a garbled attempt at \"entschieden\") " +
-                  'was too broken to fix cleanly — a real, confirmed miss: an attempt garbled both ' +
-                  'verbs of exactly this sentence, and the correction kept only "beauftragt" ' +
-                  '(commissioned), silently dropping "decided" entirely instead of producing ' +
-                  'something like "Das Unternehmen hat sich entschieden, ein neues Projekt zu ' +
-                  'beauftragen" or "...hat entschieden, ... zu beauftragen". Before finalizing your ' +
-                  'output, count how many distinct verbs/actions the English sentence actually has ' +
-                  'and confirm your German sentence expresses every one of them, not just whichever ' +
-                  'one contains the target word. You MAY keep a word choice that is a ' +
-                  'genuinely valid synonym correctly conveying the same meaning (different ' +
-                  'learners can validly translate the same sentence differently — real synonyms, ' +
-                  'word order) — but every word in your output must actually mean what the ' +
-                  'corresponding part of the English sentence means; do not preserve their overall ' +
-                  'sentence structure/approach at the expense of accuracy. This applies especially ' +
-                  'to PREPOSITIONS: German often has more than one preposition that correctly ' +
-                  'expresses the same English one in a given context (e.g. "während" and "in" can ' +
-                  'both correctly translate "during" before a noun phrase; "an" can govern several ' +
-                  'different relationships) — only replace the learner\'s preposition if it is ' +
-                  'actually grammatically wrong or changes the meaning for THAT context, never ' +
-                  'just because a different preposition you\'d have picked also works. Relatedly, ' +
-                  'German preposition+article contractions (im/in dem, am/an dem, zum/zu dem, ' +
-                  'zur/zu der, beim/bei dem, vom/von dem, ins/in das, ans/an das, aufs/auf das) ' +
-                  'are both EQUALLY CORRECT forms of the same phrase, not an error in either ' +
-                  'direction (a real case: a learner wrote "in dem" and it was wrongly changed ' +
-                  'to "im") — leave whichever one the learner used exactly as they wrote it. ' +
-                  `EXCEPTION, and this overrides everything above: never replace the target word ` +
-                  `"${wordDe}" itself with a different German word, even if you think a different ` +
-                  'word fits the English sentence better — the whole point of this exercise is ' +
-                  `practicing "${wordDe}" specifically, and the English sentence was written to ` +
-                  'fit it, so treat their use of it as correct by construction. If they used it, ' +
-                  'keep it and only fix its inflected FORM if that form is wrong (conjugation, ' +
-                  'case, agreement) — never swap in a synonym instead. If it does NOT attempt ' +
-                  'the target word at all, or their attempt is too garbled or unrelated to the ' +
-                  'English sentence to fix, IGNORE their attempt entirely and produce a fresh, ' +
-                  'natural German translation of the English sentence instead. Either way, you ' +
-                  'must always return a complete, correct German sentence that uses the target ' +
-                  'word — never refuse or report failure. '
-                : 'Produce a natural, fluent German translation of that English sentence. ') +
-              `Make sure "${wordDe}" is correctly conjugated for its subject and tense in your ` +
-              'output (in its correct inflected form, which may differ from the dictionary ' +
-              'form). This applies even to modern loanword verbs borrowed from English, which ' +
-              'conjugate exactly like any regular German weak verb: "chatten" -> "ich chatte", ' +
-              '"du chattest"; "googeln" -> "er googelt"; "liken" -> "ich like", "sie liked". ' +
-              `Before answering, double-check that "${wordDe}" is not left as a bare, ` +
-              'unconjugated infinitive in your output where German grammar requires a ' +
-              'conjugated form — that is a common mistake to avoid. Always end your ' +
-              'sentence with correct terminal punctuation matching the English sentence\'s own ' +
-              'punctuation (a period, question mark, or exclamation mark) — add it even if the ' +
-              'learner\'s attempt omitted it. Final check before you answer: read your own output ' +
-              `sentence back and confirm it actually contains a real inflected form of "${wordDe}" ` +
-              '— if it does not, that is wrong, fix it before responding. Respond with exactly ' +
-              'this JSON: {"sentence": "...", ' +
-              '"wordForm": the exact inflected form of the word as it literally appears, ' +
-              'verbatim, inside "sentence" — this must be an exact substring match so it can be ' +
-              'highlighted}.';
+    // Only sent as CONTEXT, never as the required answer — see
+    // RequestBody's own comment on canonicalGerman (no corpus field feeds
+    // this today; this is forward-compat plumbing).
+    const referenceLine = canonicalGerman
+      ? `\n\nReference (context only — a valid example, NOT the required answer):\n${canonicalGerman}`
+      : '';
+
+    const systemPrompt = hasUserInput
+      ? "You are a German tutor correcting a learner's translation.\n\n" +
+        `CEFR level:\n${level || 'A1'}\n\n` +
+        `Source sentence:\n${englishPrompt}\n\n` +
+        `Target German word:\n${wordDe}\n\n` +
+        `Learner's German:\n${userTranslation}` +
+        referenceLine +
+        '\n\nYour task is to return a correct German sentence while preserving the ' +
+        "learner's own valid choices as much as possible.\n\n" +
+        'Rules:\n' +
+        '- Accept any natural German translation that preserves the source meaning.\n' +
+        '- Fix only genuine errors in grammar, spelling, word order, word form, omitted ' +
+        'meaning, or mistranslation.\n' +
+        '- Do not rewrite a correct sentence just to match your preferred style.\n' +
+        '- Preserve valid synonyms, contractions, sentence structures, person/register, ' +
+        'tense, and phrasing.\n' +
+        '- If the learner attempted the target word, do not replace it with another German word.\n' +
+        "- Correct the target word's conjugation, declension, case, or form if necessary.\n" +
+        '- If the learner did not attempt the target word, or the attempt is too ' +
+        'incomplete/unrelated to repair, provide a fresh natural German translation that ' +
+        'correctly uses the target word.\n' +
+        '- This includes content the learner OMITTED entirely, not just words they got ' +
+        'wrong — if the English sentence has two distinct actions/verbs (e.g. "The company ' +
+        'DECIDED to commission a new project"), the corrected sentence must convey BOTH, even ' +
+        "if the learner's attempt at one of them was too broken to fix cleanly — never " +
+        'silently drop a concept just because the learner did.\n' +
+        '- Do not reorder words unless word order is itself the error being fixed — a valid ' +
+        'alternative word order is not a mistake.\n' +
+        '- German preposition+article contractions (im/in dem, am/an dem, zum/zu dem, ' +
+        'zur/zu der, beim/bei dem, vom/von dem, ins/in das, ans/an das, aufs/auf das) are ' +
+        'equally correct forms of the same phrase — never change one to the other, in either ' +
+        "direction, if the learner's form was already valid.\n" +
+        '- Return one complete German sentence with correct punctuation.\n\n' +
+        'Before responding, silently verify:\n' +
+        '1. the German is grammatical and idiomatic;\n' +
+        '2. the source meaning is preserved;\n' +
+        '3. valid learner choices were not unnecessarily changed;\n' +
+        '4. the target word is used correctly;\n' +
+        '5. no stylistic preference was treated as an error.\n\n' +
+        'Return only the structured output required by the schema. "status" must be ' +
+        '"correct" if no substantive correction was needed, "corrected" if you repaired the ' +
+        "learner's sentence, or \"replaced\" if you had to discard their attempt and provide " +
+        'a fresh translation. "wordForm" must be the exact inflected form of the target word ' +
+        'EXACTLY as it appears verbatim inside "sentence" (a real substring match, so it can ' +
+        'be highlighted) — for a separable verb, use just the single conjugated/finite word ' +
+        'that appears (e.g. "rufe"), never a span like "rufe ... an" that is not a literal ' +
+        'contiguous substring. This applies even to modern loanword verbs borrowed from ' +
+        'English, which conjugate like any regular German weak verb: "chatten" -> "ich ' +
+        'chatte"; "googeln" -> "er googelt"; "liken" -> "sie liked".'
+      : 'You are a German tutor providing an example translation for a learner to study.\n\n' +
+        `CEFR level:\n${level || 'A1'}\n\n` +
+        `Source sentence:\n${englishPrompt}\n\n` +
+        `Target German word:\n${wordDe}` +
+        referenceLine +
+        '\n\nProduce a natural, fluent, idiomatic German translation of the source sentence ' +
+        `that correctly uses "${wordDe}" (in its correct inflected form). Return one complete ` +
+        'German sentence with correct punctuation. Return only the structured output required ' +
+        'by the schema, with "status" set to "replaced" and "wordForm" the exact inflected ' +
+        'form of the target word EXACTLY as it appears verbatim inside "sentence".';
 
     type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
-    type ModelResult = { parsed: { sentence?: string; wordForm?: string }; raw: string; usage: { prompt_tokens?: number; completion_tokens?: number } };
+    type ParsedCorrection = { sentence?: string; wordForm?: string; status?: 'correct' | 'corrected' | 'replaced' };
+    type ModelResult = { parsed: ParsedCorrection; raw: string; usage: { prompt_tokens?: number; completion_tokens?: number } };
+
+    const CORRECTION_SCHEMA = {
+      type: 'object',
+      properties: {
+        sentence: { type: 'string' },
+        wordForm: { type: 'string' },
+        status: { type: 'string', enum: ['correct', 'corrected', 'replaced'] },
+      },
+      required: ['sentence', 'wordForm', 'status'],
+      additionalProperties: false,
+    };
+
+    // gpt-5.6-terra is a reasoning-tier model: no custom temperature
+    // (rejected outright), max_completion_tokens instead of max_tokens, and
+    // a reported (never observed here) risk that some non-default
+    // reasoning_effort values get rejected on /chat/completions — falls
+    // back one step (medium -> low) only if OpenAI's own error text
+    // specifically names reasoning_effort. Also: reasoning tokens are
+    // billed from (and can exhaust) this same max_completion_tokens budget,
+    // confirmed live while fixing the corpus-audit scripts this session —
+    // 700 gives real headroom over the old 120-token cap for that reason,
+    // with a one-time escalation to 1500 if a completion still comes back
+    // empty.
+    async function callOpenAI(
+      requestBody: Record<string, unknown>,
+      reasoningEffort: 'medium' | 'low',
+      maxTokens: number,
+      escalated = false,
+    ): Promise<{ result: Record<string, unknown>; raw: string }> {
+      const completion = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({ ...requestBody, reasoning_effort: reasoningEffort, max_completion_tokens: maxTokens }),
+      });
+
+      if (!completion.ok) {
+        const errText = await completion.text();
+        if (reasoningEffort === 'medium' && errText.toLowerCase().includes('reasoning_effort')) {
+          console.warn('correct-sentence: reasoning_effort "medium" rejected, retrying with "low"', errText);
+          return callOpenAI(requestBody, 'low', maxTokens, escalated);
+        }
+        console.error('OpenAI error:', errText);
+        throw new Error('AI correction failed');
+      }
+
+      const result = await completion.json();
+      const raw: string = result.choices?.[0]?.message?.content ?? '';
+      if (!raw.trim() && !escalated) {
+        return callOpenAI(requestBody, reasoningEffort, 1500, true);
+      }
+      return { result, raw };
+    }
 
     // One real OpenAI call + parse, logged to ai_usage on its own — pulled
     // out into its own function so the "target word went missing" retry
@@ -271,44 +314,26 @@ Deno.serve(async (req: Request) => {
     // time with an extended message list, rather than duplicating the
     // fetch/parse/log logic.
     async function callModel(messages: ChatMessage[]): Promise<ModelResult> {
-      const completion = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
+      const { result, raw } = await callOpenAI(
+        {
           model: MODEL,
-          response_format: { type: 'json_object' },
+          response_format: {
+            type: 'json_schema',
+            json_schema: { name: 'correction', strict: true, schema: CORRECTION_SCHEMA },
+          },
           messages,
-          temperature: 0.3,
-          // Trimmed down from 350 — this response used to also carry a
-          // per-word lemma map for tap-to-look-up, which was by far the
-          // biggest chunk of output and made this call noticeably slow
-          // (output tokens are generated sequentially, so cutting them
-          // cuts wall-clock time almost linearly). That lookup now comes
-          // from a separate sentence-glosses call fired after the
-          // correction already renders (see DailySessionFlow) instead of
-          // blocking the correction itself on it.
-          max_tokens: 120,
-        }),
-      });
+        },
+        'medium',
+        700,
+      );
 
-      if (!completion.ok) {
-        const errText = await completion.text();
-        console.error('OpenAI error:', errText);
-        throw new Error('AI correction failed');
-      }
-
-      const result = await completion.json();
-      const raw: string = result.choices?.[0]?.message?.content ?? '{}';
-      let parsed: { sentence?: string; wordForm?: string } = {};
+      let parsed: ParsedCorrection = {};
       try {
         parsed = JSON.parse(raw);
       } catch {
         // leave parsed empty — caught by the caller
       }
-      const usage = result.usage ?? {};
+      const usage = (result.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined) ?? {};
       await supabase.from('ai_usage').insert({
         user_id: userId,
         ip_address: ip,
@@ -378,7 +403,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return json({ sentence: parsed.sentence, wordForm: parsed.wordForm });
+    return json({ sentence: parsed.sentence, wordForm: parsed.wordForm, status: parsed.status });
   } catch (err) {
     console.error('correct-sentence error:', err);
     return json({ error: 'Unexpected error' }, 500);

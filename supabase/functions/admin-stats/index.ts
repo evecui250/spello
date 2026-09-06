@@ -74,6 +74,7 @@ const MODEL_PRICING: Record<string, { inputPerM: number; outputPerM: number }> =
   'gpt-4o-mini': { inputPerM: 0.15, outputPerM: 0.60 },
   'gpt-4o': { inputPerM: 2.50, outputPerM: 10.00 },
   'gpt-5.6-luna': { inputPerM: 0.20, outputPerM: 1.20 },
+  'gpt-5.6-terra': { inputPerM: 2.00, outputPerM: 12.00 },
   'tts-1-hd': { inputPerM: 30.00, outputPerM: 0 },
 };
 // Any model not in the table above (a future swap this file hasn't been
