@@ -19,15 +19,9 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-// Kept in sync with lib/shop.ts's own copy.
-const GAME_PLAY_DAILY_POINT_CAP = 5;
 const ACCESSORY_CATALOG: Record<string, number> = {
   'leather-collar': 200,
 };
-
-function dateStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 interface RequestBody {
   accessoryId: string;
@@ -68,19 +62,15 @@ Deno.serve(async (req: Request) => {
     if (existing) return json({ ok: false, error: 'Already owned' }, 400);
 
     async function computeBalance(): Promise<number> {
-      const [{ data: activityRows }, { data: gameRows }, { data: ownedRows }] = await Promise.all([
+      const [{ data: activityRows }, { count: gameCount }, { data: ownedRows }] = await Promise.all([
         admin.from('daily_activity').select('words_studied').eq('user_id', userId),
-        admin.from('game_plays').select('created_at').eq('user_id', userId),
+        admin.from('game_plays').select('id', { count: 'exact', head: true }).eq('user_id', userId),
         admin.from('owned_accessories').select('cost_paid').eq('user_id', userId),
       ]);
       const earnedFromWords = (activityRows ?? []).reduce((s, r) => s + (r.words_studied ?? 0), 0);
-      const gamesByDay = new Map<string, number>();
-      for (const row of gameRows ?? []) {
-        const day = dateStr(new Date(row.created_at));
-        gamesByDay.set(day, (gamesByDay.get(day) ?? 0) + 1);
-      }
-      let earnedFromGames = 0;
-      for (const count of gamesByDay.values()) earnedFromGames += Math.min(count, GAME_PLAY_DAILY_POINT_CAP);
+      // No daily cap -- every completed game earns a point (see
+      // get-my-profile's identical change).
+      const earnedFromGames = gameCount ?? 0;
       const spent = (ownedRows ?? []).reduce((s, r) => s + (r.cost_paid ?? 0), 0);
       return earnedFromWords + earnedFromGames - spent;
     }

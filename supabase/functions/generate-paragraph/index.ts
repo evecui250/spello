@@ -45,7 +45,7 @@ const DAILY_AI_CALL_LIMIT_ANONYMOUS = 300;
 // at once, not one sentence. Mirrors lib/practice.ts's
 // WORDS_IN_CONTEXT_RANGE (kept in sync by hand -- no shared module exists
 // between client and Edge Function in this codebase, same convention as
-// GAME_PLAY_DAILY_POINT_CAP elsewhere). These are targets the prompt asks
+// ACCESSORY_CATALOG elsewhere). These are targets the prompt asks
 // for and isReasonableLength checks "reasonably close to," not hard
 // walls -- naturalness/correctness wins over hitting an exact count.
 // C1/C2 mirror B2 (no corpus there yet, kept for completeness).

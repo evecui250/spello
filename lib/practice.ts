@@ -1136,7 +1136,7 @@ export function buildMatchingPages(wordIds: string[]): string[][] {
 // sentences, and roughly how long the German text should be — mirrored
 // server-side in generate-paragraph's own copy of this table (kept in
 // sync by hand, same "no shared module between client and Edge Function"
-// convention as GAME_PLAY_DAILY_POINT_CAP elsewhere in this codebase).
+// convention as ACCESSORY_CATALOG elsewhere in this codebase).
 // These are targets the prompt asks for and generate-paragraph checks
 // "reasonably close to," not hard walls -- naturalness/correctness wins
 // over hitting an exact count.

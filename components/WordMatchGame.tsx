@@ -9,7 +9,6 @@ import { speakWord } from '../lib/speech';
 import { getOrCreateDeviceId } from '../lib/telemetry';
 import { supabase } from '../lib/supabase';
 import { GAME_MIN_WORDS_REQUIRED } from '../lib/practice';
-import { willGamePlayEarnPoint } from '../lib/shop';
 import { PointsIcon } from './icons';
 
 // The actual "match the German word to its meaning" game, shared by every
@@ -162,9 +161,9 @@ export default function WordMatchGame({
   const [phase, setPhase] = useState<Phase>('intro');
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [matchedCount, setMatchedCount] = useState(0);
-  // Only signed-in players actually earn a point for a completed game
-  // (see lib/shop.ts's GAME_PLAY_DAILY_POINT_CAP) — set alongside the
-  // game_plays insert below rather than shown unconditionally.
+  // Only signed-in players actually earn a point for a completed game —
+  // set alongside the game_plays insert below rather than shown
+  // unconditionally.
   const [earnedPoint, setEarnedPoint] = useState(false);
 
   const [roundWords, setRoundWords] = useState<Word[]>([]);
@@ -252,7 +251,7 @@ export default function WordMatchGame({
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user.id) setEarnedPoint(await willGamePlayEarnPoint());
+        if (session?.user.id) setEarnedPoint(true);
         await supabase.from('game_plays').insert({
           device_id: getOrCreateDeviceId(),
           user_id: session?.user.id ?? null,

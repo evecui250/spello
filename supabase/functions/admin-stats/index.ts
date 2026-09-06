@@ -16,11 +16,6 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ADMIN_EMAIL = Deno.env.get('ADMIN_EMAIL') || 'evecui250@gmail.com';
 
-// Kept in sync with lib/shop.ts's own copy (and get-leaderboard/
-// get-my-profile/buy-accessory's) -- see that file's comment for why
-// this cap exists.
-const GAME_PLAY_DAILY_POINT_CAP = 5;
-
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -561,7 +556,7 @@ Deno.serve(async (req: Request) => {
     // Edge Functions). "Total accumulated" is earned, before any
     // spending; "points left" is earned minus spent.
     const { data: allActivityRows } = await admin.from('daily_activity').select('user_id, words_studied');
-    const { data: allGameRows } = await admin.from('game_plays').select('user_id, created_at').not('user_id', 'is', null);
+    const { data: allGameRows } = await admin.from('game_plays').select('user_id').not('user_id', 'is', null);
     const { data: allOwnedRows } = await admin.from('owned_accessories').select('user_id, cost_paid');
     const { data: profileRows } = await admin.from('profiles').select('user_id, nickname');
 
@@ -569,19 +564,13 @@ Deno.serve(async (req: Request) => {
     for (const row of allActivityRows ?? []) {
       earnedFromWordsByUser.set(row.user_id, (earnedFromWordsByUser.get(row.user_id) ?? 0) + (row.words_studied ?? 0));
     }
-    const gamesByUserDay = new Map<string, Map<string, number>>();
+    // No daily cap -- every completed game earns a point (see the commit
+    // removing GAME_PLAY_DAILY_POINT_CAP from here and get-leaderboard/
+    // get-my-profile/buy-accessory), so this is a flat per-user count.
+    const earnedFromGamesByUser = new Map<string, number>();
     for (const row of allGameRows ?? []) {
       const uid = row.user_id as string;
-      const day = dateStr(new Date(row.created_at));
-      const byDay = gamesByUserDay.get(uid) ?? new Map<string, number>();
-      byDay.set(day, (byDay.get(day) ?? 0) + 1);
-      gamesByUserDay.set(uid, byDay);
-    }
-    const earnedFromGamesByUser = new Map<string, number>();
-    for (const [uid, byDay] of gamesByUserDay) {
-      let total = 0;
-      for (const count of byDay.values()) total += Math.min(count, GAME_PLAY_DAILY_POINT_CAP);
-      earnedFromGamesByUser.set(uid, total);
+      earnedFromGamesByUser.set(uid, (earnedFromGamesByUser.get(uid) ?? 0) + 1);
     }
     const spentByUser = new Map<string, number>();
     for (const row of allOwnedRows ?? []) {

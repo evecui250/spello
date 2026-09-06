@@ -1,10 +1,9 @@
 // Public (no auth) weekly/monthly points leaderboard for the Progress
 // page — see components/Leaderboard.tsx. Points = 1 per unique word
 // studied per day (daily_activity.words_studied, any SRS stage) + 1 per
-// Word Match game played (game_plays), capped per calendar day (see
-// GAME_PLAY_DAILY_POINT_CAP below — kept in sync with lib/shop.ts's own
-// copy and get-my-profile/buy-accessory's, no shared module exists in
-// this codebase to import it from instead).
+// completed game (game_plays), no cap — every game played is genuine
+// practice, same as every word studied (see the commit removing
+// GAME_PLAY_DAILY_POINT_CAP from here and get-my-profile/buy-accessory).
 //
 // Deployed --no-verify-jwt, same reasoning as record-anon-activity:
 // signed-out visitors can view the leaderboard (a soft sign-up nudge),
@@ -29,7 +28,6 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
 };
 
-const GAME_PLAY_DAILY_POINT_CAP = 5;
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Comfortably covers both "1st of this month" and "Monday of this week"
 // even right at a month boundary (a week can start in the previous
@@ -108,7 +106,9 @@ Deno.serve(async (req: Request) => {
     const emailByUserId = new Map((usersData?.users ?? []).map(u => [u.id, u.email ?? null]));
 
     // One combined per-user, per-day points map: daily_activity's
-    // words_studied plus game_plays counted per day and capped there.
+    // words_studied plus game_plays counted per day (still bucketed by
+    // day, not just totaled, since buildWindow below needs to attribute
+    // each point to the day it was earned for week/month filtering).
     const gamesByUserDay = new Map<string, Map<string, number>>();
     for (const row of gameRows ?? []) {
       const uid = row.user_id as string;
@@ -128,8 +128,7 @@ Deno.serve(async (req: Request) => {
     for (const [uid, byDay] of gamesByUserDay) {
       const merged = pointsByUserDay.get(uid) ?? new Map<string, number>();
       for (const [day, count] of byDay) {
-        const capped = Math.min(count, GAME_PLAY_DAILY_POINT_CAP);
-        merged.set(day, (merged.get(day) ?? 0) + capped);
+        merged.set(day, (merged.get(day) ?? 0) + count);
       }
       pointsByUserDay.set(uid, merged);
     }

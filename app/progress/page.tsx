@@ -15,6 +15,7 @@ import DachshundMascot from '../../components/Mascot';
 import ActivityCalendar from '../../components/ActivityCalendar';
 import Leaderboard from '../../components/Leaderboard';
 import { THEME_CONFIG } from '../../components/AppBackground';
+import { PointsIcon } from '../../components/icons';
 
 // A fixed pixel cap for the tallest bar, not a percentage of some
 // surrounding flex container's own height — reported as still clipping
@@ -141,25 +142,6 @@ export default function ProgressPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Progress</h1>
 
-      {/* One review round mixing everything learned (mastered + still-
-          learning), replacing the old per-stage-only rapid reviews (see
-          WordMatchGame's own pickRoundWords — it already reserves slots
-          for mastered words whenever a round draws from the full pool,
-          not just a single stage, so this needed no new sampling logic,
-          just a route that doesn't narrow to one stage). A learner found
-          reviewing just one mascot stage at a time confusing/not useful;
-          gated on the same hasEnoughWordsForGame() threshold the bonus
-          round itself uses, so this never promises a destination with too
-          little vocabulary behind it to fill even one board. */}
-      {hasEnoughWordsForGame() && (
-        <Link
-          href="/game/?source=rapid_review"
-          className="flex items-center justify-center gap-1.5 bg-accent text-white text-sm font-semibold py-3 rounded-xl hover:bg-accent-deep active:scale-95 transition-all shadow-sm"
-        >
-          ⚡ Rapid review (45 sec)
-        </Link>
-      )}
-
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
         <div className="flex items-center justify-between gap-2 mb-1">
           <h2 className="font-semibold text-ink">Words breakdown</h2>
@@ -180,6 +162,26 @@ export default function ProgressPage() {
             </div>
           )}
         </div>
+        {/* One review round mixing everything learned (mastered + still-
+            learning), replacing the old per-stage-only rapid reviews (see
+            WordMatchGame's own pickRoundWords — it already reserves slots
+            for mastered words whenever a round draws from the full pool,
+            not just a single stage, so this needed no new sampling logic,
+            just a route that doesn't narrow to one stage). A learner found
+            reviewing just one mascot stage at a time confusing/not useful;
+            gated on the same hasEnoughWordsForGame() threshold the bonus
+            round itself uses, so this never promises a destination with
+            too little vocabulary behind it to fill even one board. Small
+            and tucked into this card (not a page-level banner) — it's a
+            secondary shortcut, not the main thing this page is for. */}
+        {hasEnoughWordsForGame() && (
+          <Link
+            href="/game/?source=rapid_review"
+            className="inline-flex items-center gap-1 self-start bg-accent text-white text-xs font-semibold px-3 py-1.5 rounded-full hover:bg-accent-deep active:scale-95 transition-all mb-2"
+          >
+            ⚡ Rapid review (1 <PointsIcon className="w-3 h-3" />)
+          </Link>
+        )}
         <p className="text-ink-soft text-sm mb-1">
           {scope === 'all'
             ? `${totalWords} words total across ${activeLevels.length} vocabulary book${activeLevels.length === 1 ? '' : 's'}.`

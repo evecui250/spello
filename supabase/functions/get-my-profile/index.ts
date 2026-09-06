@@ -20,14 +20,6 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
 };
 
-// Kept in sync with lib/shop.ts's own copy and get-leaderboard/
-// buy-accessory's — see lib/shop.ts's comment for why this cap exists.
-const GAME_PLAY_DAILY_POINT_CAP = 5;
-
-function dateStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: CORS_HEADERS });
@@ -47,22 +39,18 @@ Deno.serve(async (req: Request) => {
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const [{ data: profileRow }, { data: activityRows }, { data: gameRows }, { data: ownedRows }] = await Promise.all([
+    const [{ data: profileRow }, { data: activityRows }, { count: gameCount }, { data: ownedRows }] = await Promise.all([
       admin.from('profiles').select('nickname, avatar_id, equipped_accessory_id, leaderboard_opt_out').eq('user_id', userId).maybeSingle(),
       admin.from('daily_activity').select('words_studied').eq('user_id', userId),
-      admin.from('game_plays').select('created_at').eq('user_id', userId),
+      admin.from('game_plays').select('id', { count: 'exact', head: true }).eq('user_id', userId),
       admin.from('owned_accessories').select('accessory_id, cost_paid').eq('user_id', userId),
     ]);
 
     const earnedFromWords = (activityRows ?? []).reduce((s, r) => s + (r.words_studied ?? 0), 0);
-
-    const gamesByDay = new Map<string, number>();
-    for (const row of gameRows ?? []) {
-      const day = dateStr(new Date(row.created_at));
-      gamesByDay.set(day, (gamesByDay.get(day) ?? 0) + 1);
-    }
-    let earnedFromGames = 0;
-    for (const count of gamesByDay.values()) earnedFromGames += Math.min(count, GAME_PLAY_DAILY_POINT_CAP);
+    // No daily cap -- every completed game earns a point, same as every
+    // word studied does, since either way the learner is genuinely
+    // practicing (see the commit removing GAME_PLAY_DAILY_POINT_CAP).
+    const earnedFromGames = gameCount ?? 0;
 
     const spent = (ownedRows ?? []).reduce((s, r) => s + (r.cost_paid ?? 0), 0);
     const balance = earnedFromWords + earnedFromGames - spent;

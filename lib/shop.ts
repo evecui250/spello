@@ -72,38 +72,6 @@ export const ACCESSORY_CATALOG: AccessoryOption[] = [
   { id: 'leather-collar', name: 'Leather Collar', cost: 200, icon: 'item_leather_collar_icon.png' },
 ];
 
-// How many of a user's game_plays rows count toward points PER CALENDAR
-// DAY -- game_plays has zero insert rate-limiting and a nullable,
-// self-reported user_id (see components/WordMatchGame.tsx's insert), so
-// this bounds the abuse surface to a fixed small amount per day
-// regardless of how many rows someone spams. Applied at aggregation time
-// in get-leaderboard/get-my-profile/buy-accessory -- kept in sync as a
-// literal duplicate of the same constant in each of those three Edge
-// Functions (no shared module exists in this codebase to import it from).
-export const GAME_PLAY_DAILY_POINT_CAP = 5;
-
-// Whether the game about to be recorded (see WordMatchGame's/
-// ArtikelBlitzGame's own game_plays insert) will actually earn a point,
-// checked BEFORE that insert so the caller can show an honest "+1 point"
-// instead of an unconditional one. Real report: a learner saw "+1 point"
-// after a rapid-review round but their total on Settings never moved --
-// they'd simply already played enough games that day to hit
-// GAME_PLAY_DAILY_POINT_CAP, and the UI had no way to know that (it only
-// checked "am I signed in", never "am I still under today's cap"). Mirrors
-// get-my-profile's own UTC-day bucketing exactly, since that's the balance
-// this is trying to predict.
-export async function willGamePlayEarnPoint(): Promise<boolean> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return false;
-  const todayUtcStart = `${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`;
-  const { count } = await supabase
-    .from('game_plays')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', session.user.id)
-    .gte('created_at', todayUtcStart);
-  return (count ?? 0) < GAME_PLAY_DAILY_POINT_CAP;
-}
-
 export interface MyProfile {
   nickname: string | null;
   avatarId: string;
