@@ -208,7 +208,11 @@ Deno.serve(async (req: Request) => {
       'what the corrected sentence means instead.\n' +
       `- Write "summary" and every point/explanation in ${lang}. "summary" is one short ` +
       'sentence and must NOT repeat the full corrected sentence back — the learner can already ' +
-      'see it.\n\n' +
+      'see it.\n' +
+      '- When quoting a German word or phrase inside "explanation" or "summary", always use ' +
+      'a plain straight double quote (") on both sides — never a curly/smart quote (" or "), ' +
+      'a single quote, or German-style low-high quotes („ and "). Stay consistent within and ' +
+      'across every field in this response.\n\n' +
       'Return only the structured output required by the schema. Either "points" or ' +
       '"spelling" may be empty, but not both.';
 
@@ -361,7 +365,18 @@ Deno.serve(async (req: Request) => {
       console.error('Malformed AI response (explain-correction):', raw);
       return json({ error: 'AI returned an empty explanation' }, 502);
     }
-    return json({ summary: typeof parsed.summary === 'string' ? parsed.summary : '', points, spelling });
+    // Backstop for the prompt's own quotation-mark instruction — a real,
+    // confirmed report ("the quotation marks are weird, sometimes „,
+    // sometimes swapped") of the model inconsistently mixing plain ASCII
+    // quotes, curly/smart quotes, and German-style low-high „..." quotes
+    // across different calls and even within the same field. Normalized
+    // to plain ASCII regardless of what actually came back, same
+    // "instruction plus code enforcement" pattern as every other guard in
+    // this file, rather than trusting compliance alone.
+    const summary = normalizeQuotes(typeof parsed.summary === 'string' ? parsed.summary : '');
+    points = points.map(p => ({ ...p, explanation: normalizeQuotes(p.explanation) }));
+
+    return json({ summary, points, spelling });
   } catch (err) {
     console.error('explain-correction error:', err);
     return json({ error: 'Unexpected error' }, 500);
@@ -373,6 +388,16 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
+}
+
+// Curly/smart double quotes (U+201C/U+201D) and German-style low-high
+// quotes (U+201E/U+201C) all normalize to a plain ASCII ", regardless of
+// which the model happened to use — see the prompt's own instruction and
+// this call site's comment for why this can't just be left to compliance.
+// Single-quote variants (U+2018/U+2019) normalize to a plain apostrophe
+// the same way, for the same reason.
+function normalizeQuotes(s: string): string {
+  return s.replace(/[“”„‟]/g, '"').replace(/[‘’]/g, "'");
 }
 
 // Standard edit distance -- used above purely to tell "a genuine typo of
