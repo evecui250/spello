@@ -632,10 +632,23 @@ async function generateOnce(
           'specific singular noun genuinely needs (a bare "sitzt [[i]]" for a specific cat sitting somewhere ' +
           'is wrong; it needs "sitzt die [[i]]" or similar).\n' +
           '- Do not use another form of that target elsewhere in the text -- each target appears exactly once, at ' +
-          'its placeholder, and nowhere else.\n' +
+          'its placeholder, and nowhere else. If you need to refer back to it again later, do NOT substitute a ' +
+          'vague pronoun (eins, es, keins, welche(s), or a bare der/die/das standing alone for a noun) -- that ' +
+          'kind of stand-in is confusing here specifically because its antecedent may itself be hidden behind a ' +
+          'placeholder the learner has not resolved yet. Restructure instead: repeat the noun itself, describe it ' +
+          'a different way, or simply avoid needing a second reference at all. Every sentence must be fully ' +
+          'understandable on its own, without the reader having to resolve an ambiguous reference.\n' +
           '- Follow each word\'s own instructions above exactly, especially any separable-prefix verb\'s forced ' +
           'perfect-tense wording.\n' +
-          '- Every blank must have enough context that the intended answer is clearly correct.\n' +
+          '- Every blank must have enough SPECIFIC context that its target is clearly the best-fitting word, not ' +
+          'merely one of several common words that would fit equally well -- a generic sentence like "In summer ' +
+          'we like to drink ___" fits Tee, Kaffee, Wasser, or Saft equally naturally, so it does not actually ' +
+          'test whether the learner knows THIS target specifically; add a concrete detail (a reason, a ' +
+          'description, a specific situation) that make this target clearly the natural choice over other ' +
+          'everyday words of the same kind. This matters most when two or more targets in THIS list are close ' +
+          'synonyms or share a category (e.g. two beverages, two modes of transport) -- each one\'s own context ' +
+          'must clearly favor that specific word over the other target, never read as interchangeable between ' +
+          'them.\n' +
           '- Prefer simple, idiomatic German over creative or complicated writing.\n' +
           '- Use only fictional, ordinary, all-ages everyday situations -- a family, friends, a normal day, a ' +
           'hobby, a trip -- never tied to a real event.\n' +
@@ -661,7 +674,11 @@ async function generateOnce(
           '5. every [[i]] appears exactly once, in whatever order the scene naturally calls for;\n' +
           '6. every answer entry\'s "index" field correctly matches the [[i]] it belongs to -- this is the one ' +
           'most worth double-checking, since a mismatched index teaches the learner the wrong word entirely;\n' +
-          '7. translations match the German sentences 1:1.\n\n' +
+          '7. translations match the German sentences 1:1;\n' +
+          '8. no vague pronoun (eins, es, keins, a bare der/die/das) stands in for an earlier noun anywhere in ' +
+          'the text;\n' +
+          '9. no blank\'s context is so generic that a different common word of the same kind would fit it ' +
+          'equally naturally -- especially between two targets sharing a category.\n\n' +
           'Return only the structured output required by the API schema.',
       },
       { role: 'user', content: 'Write the exercise now.' },

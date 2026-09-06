@@ -125,20 +125,35 @@ Deno.serve(async (req: Request) => {
       'a short self-contained phrase (German usage + a brief English gloss in parentheses). Leave ' +
       'this field out entirely for the many ordinary words that have no such fixed usage worth ' +
       'flagging -- most nouns/verbs should NOT get this field, only genuinely idiomatic ones.';
+    // Every real word gets an entry now -- articles, pronouns, prepositions,
+    // and conjunctions used to be skipped entirely (the theory being they
+    // carry no independent translatable meaning), but that meant a learner
+    // could tap a word and get NOTHING, which is a worse experience than a
+    // plain-but-real gloss -- a real, confirmed report: "im" (a
+    // preposition+article contraction) was never clickable anywhere in the
+    // app because of this exact skip rule. Punctuation is still the only
+    // thing genuinely worth omitting.
+    const closedClassHandling =
+      'Every word gets an entry -- including articles, personal/demonstrative pronouns, ' +
+      'prepositions, and conjunctions -- with a real, useful lemma/gloss for each: for an ' +
+      'ARTICLE/PRONOUN/CONJUNCTION, "lemma" is its own dictionary form and "gloss" its plain ' +
+      `meaning (omit the grammar fields below for these). For a PREPOSITION+ARTICLE ` +
+      'CONTRACTION (im, am, zum, zur, beim, vom, ins, ans, aufs, etc.), "lemma" is the ' +
+      'expanded two-word form it stands for (e.g. "im" -> "in dem", "zum" -> "zu dem") and ' +
+      `"gloss" its plain meaning (e.g. "in the"). Only pure punctuation is skipped -- never a ` +
+      'real word.';
     const promptText = direction === 'native-to-de'
       ? `For this ${lang} sentence (a CEFR ${level || 'A1'} learner is about to translate it ` +
-        `INTO German): "${sentence}", produce a JSON object mapping EVERY distinct content word ` +
+        `INTO German): "${sentence}", produce a JSON object mapping EVERY distinct word ` +
         '(as it literally appears there, preserving capitalization) to a German dictionary-form ' +
         'word or short phrase a learner could use for it when translating this sentence into ' +
         'German, as "lemma" (the exact uninflected dictionary form: infinitive for verbs, ' +
         'singular nominative for nouns, positive form for adjectives/adverbs), plus that same ' +
         `word's own dictionary/base form in ${lang} as "gloss" (e.g. "packed" -> gloss "pack"). ` +
-        `${grammarFields} ` +
-        'Skip only pure grammar words that carry no independent translatable meaning of their ' +
-        "own — articles (a/the), personal/demonstrative pronouns (it/this/that), prepositions, " +
-        'conjunctions, and punctuation. Quantifiers and determiners such as "all", "every", ' +
-        '"some", "many", "each", "several", and "both" DO carry real translatable meaning and ' +
-        'must be included, not skipped (e.g. "all" -> lemma "alle"). Respond with exactly this ' +
+        `${grammarFields} ${closedClassHandling} Quantifiers and determiners such as "all", ` +
+        '"every", "some", "many", "each", "several", and "both" carry real translatable ' +
+        'meaning (e.g. "all" -> lemma "alle") -- treat them like ordinary content words, not ' +
+        'like the closed-class words above. Respond with exactly this ' +
         'JSON: {"words": {"word1": {"lemma": "...", "gloss": "...", "article": "...", ' +
         '"plural": "...", "thirdPerson": "...", "pastTense": "...", "perfectTense": "...", ' +
         '"prepositionNote": "..."}, ...}}.'
@@ -152,8 +167,8 @@ Deno.serve(async (req: Request) => {
         `form into ${lang}. ${grammarFields} Include separable-prefix verbs split apart ` +
         'by German word order, each part mapping to the SAME full lemma (e.g. a sentence with ' +
         '"sagt ... ab" for "absagen" should map BOTH "sagt" and "ab" to lemma "absagen", both ' +
-        'with the same translation and the same grammar fields). Skip bare articles ' +
-        '(der/die/das/ein/eine/einen/etc.) and punctuation. Respond with exactly this JSON: ' +
+        `with the same translation and the same grammar fields). ${closedClassHandling} ` +
+        'Respond with exactly this JSON: ' +
         '{"words": {"word1": {"lemma": "...", "gloss": "...", "article": "...", "plural": "...", ' +
         `"thirdPerson": "...", "pastTense": "...", "perfectTense": "...", "prepositionNote": "..."}, ` +
         `...}}, each gloss in ${lang}.`;

@@ -1317,6 +1317,17 @@ export function addDistractors(
   const progress = getMergedProgressAcrossLevels();
   const blankAnswers = new Set(exercise.blanks.map(b => b.answer));
   const batchTypes = new Set(batchWords.map(w => w.type));
+  // Best-effort mitigation for a real reported case (Tee/Kaffee both
+  // "completely natural" for the same blank): a decoy sharing a target's
+  // own corpus category is a near-perfect substitute far more often than
+  // an unrelated word is, so it's excluded outright when that data
+  // exists. Partial coverage only -- only ~28% of the corpus has a
+  // category tagged at all (Tee/Kaffee themselves don't), so the real
+  // fix for that failure mode is generate-paragraph's own prompt now
+  // requiring each blank's context to specifically discriminate its
+  // target from same-category alternatives; this is defense in depth on
+  // top of that, not a replacement for it.
+  const batchCategories = new Set(batchWords.map(w => w.category).filter((c): c is string => !!c));
   const candidates = [...WORDS, ...getAllCustomWordsAcrossLevels()].filter(w => (
     !!progress[w.id]?.mascotStage
     && !excludeWordIds.has(w.id)
@@ -1326,6 +1337,7 @@ export function addDistractors(
     // by exact string equality) -- excluded outright rather than risking
     // that collision.
     && !blankAnswers.has(w.de)
+    && !(w.category && batchCategories.has(w.category))
   ));
   const preferred = shuffled(candidates.filter(w => batchTypes.has(w.type)));
   const rest = shuffled(candidates.filter(w => !batchTypes.has(w.type)));

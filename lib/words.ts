@@ -3627,6 +3627,41 @@ const INFLECTION_SUFFIXES = [
   'er', 'es', 'et', 'ie', 'st', 'te', 'n', 'e', 't', 's',
 ];
 
+// Closed-class grammar words — the inflection-suffix-stripping fallback
+// below is meant only for genuine content-word inflection (Kinder->Kind,
+// ruft->rufen); a short function word isn't "inflected," so running it
+// through that same fallback risks a coincidental, wrong collision with
+// an unrelated content word's own stem. A real, confirmed case: "ein"
+// (indefinite article) stripped of a trailing "n" leaves stem "ei", which
+// collides with the real noun "Ei" (egg) -- tapping "ein" silently
+// resolved to "egg". These words are excluded from the FALLBACK only; an
+// exact match (checked first, below) is untouched, so nothing legitimate
+// is lost.
+const GERMAN_FUNCTION_WORDS = new Set([
+  // articles/determiners
+  'der', 'die', 'das', 'dem', 'den', 'des',
+  'ein', 'eine', 'einen', 'einem', 'einer', 'eines',
+  'kein', 'keine', 'keinen', 'keinem', 'keiner', 'keines',
+  'mein', 'meine', 'meinen', 'meinem', 'meiner', 'meines',
+  'dein', 'deine', 'deinen', 'deinem', 'deiner', 'deines',
+  'sein', 'seine', 'seinen', 'seinem', 'seiner', 'seines',
+  'ihr', 'ihre', 'ihren', 'ihrem', 'ihrer', 'ihres',
+  'unser', 'unsere', 'unseren', 'unserem', 'unserer', 'unseres',
+  'euer', 'eure', 'euren', 'eurem', 'eurer', 'eures',
+  'jede', 'jeden', 'jedem', 'jeder', 'jedes',
+  'diese', 'dieser', 'diesem', 'diesen', 'dieses',
+  'alle', 'alles',
+  // personal/reflexive pronouns
+  'ich', 'du', 'er', 'sie', 'es', 'wir', 'euch', 'mich', 'dich', 'ihn',
+  'uns', 'mir', 'dir', 'ihm', 'ihnen', 'sich',
+  // common conjunctions
+  'und', 'oder', 'aber', 'denn', 'weil', 'dass', 'wenn', 'als', 'ob',
+  'während', 'bevor', 'nachdem', 'sondern', 'doch',
+  // common prepositions
+  'in', 'an', 'auf', 'mit', 'bei', 'zu', 'von', 'aus', 'für', 'um',
+  'über', 'unter', 'vor', 'nach', 'seit', 'gegen', 'ohne', 'durch', 'bis',
+]);
+
 // German capitalizes every noun in running text — the one reliable signal
 // available to break a genuine cross-level homograph tie (confirmed real
 // cases exist, e.g. "weg"/"Weg", "recht", "gut", "bar", "fett", "husten"):
@@ -3650,7 +3685,7 @@ export function findWordByGermanForm(rawToken: string): Word | undefined {
   const lower = cleaned.toLowerCase();
 
   let candidates = map.get(lower);
-  if (!candidates) {
+  if (!candidates && !GERMAN_FUNCTION_WORDS.has(lower)) {
     for (const suffix of INFLECTION_SUFFIXES) {
       if (!lower.endsWith(suffix) || lower.length - suffix.length < 2) continue;
       const stem = lower.slice(0, -suffix.length);
