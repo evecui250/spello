@@ -1409,6 +1409,18 @@ export interface ParagraphExercise {
 
 export interface DailySession {
   date: string;
+  // Stamped automatically by saveDailySession/saveDailySessionForLevel on
+  // every save — the sync merge policy for this (see lib/sync.ts) is
+  // "whichever device's session was touched most recently wins outright,"
+  // the same coarse-but-workable tradeoff already used for Settings here
+  // (see getSettingsUpdatedAtForLevel's own comment) — not a per-field
+  // merge like WordProgress gets, since a session's queues/phase are one
+  // continuous stream of activity, not independently-progressable
+  // per-word state. Optional only because a session saved before this
+  // field existed won't have it yet (normalizeDailySession leaves it
+  // undefined rather than inventing a fake time, so it always loses to
+  // literally any real timestamp on the other side).
+  updatedAt?: string;
   phase: SessionPhase;
   studyWordIds: string[];
   reviewWordIds: string[];
@@ -1549,10 +1561,10 @@ function normalizeDailySession(raw: Partial<DailySession>): DailySession {
   return normalized;
 }
 
-export function getDailySession(): DailySession | null {
+export function getDailySessionForLevel(level: Level): DailySession | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = JSON.parse(localStorage.getItem(levelKey(KEYS.dailySession)) || 'null') as Partial<DailySession> | null;
+    const raw = JSON.parse(localStorage.getItem(levelKey(KEYS.dailySession, level)) || 'null') as Partial<DailySession> | null;
     if (raw && raw.date === today()) return normalizeDailySession(raw);
     return null;
   } catch {
@@ -1560,10 +1572,19 @@ export function getDailySession(): DailySession | null {
   }
 }
 
-export function saveDailySession(s: DailySession): void {
+export function saveDailySessionForLevel(level: Level, s: DailySession): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(levelKey(KEYS.dailySession), JSON.stringify(s));
+  const withTimestamp: DailySession = { ...s, updatedAt: new Date().toISOString() };
+  localStorage.setItem(levelKey(KEYS.dailySession, level), JSON.stringify(withTimestamp));
   notifyProgressChanged();
+}
+
+export function getDailySession(): DailySession | null {
+  return getDailySessionForLevel(getActiveLevel());
+}
+
+export function saveDailySession(s: DailySession): void {
+  saveDailySessionForLevel(getActiveLevel(), s);
 }
 
 export function startDailySession(studyWordIds: string[], reviewWordIds: string[], isExtra = false): DailySession {

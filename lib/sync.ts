@@ -10,6 +10,7 @@ import {
   getPartialDaysRecordForSync, mergePartialDaysFromSync,
   getDailyWordLogForSync, mergeDailyWordLogFromSync, DailyWordLog,
   getAllCustomWordsForLevel, saveAllCustomWordsForLevel,
+  getDailySessionForLevel, saveDailySessionForLevel, DailySession,
   today,
 } from './storage';
 import { Level, LEVEL_ORDER, Word } from './words';
@@ -27,6 +28,14 @@ type SettingsByLevel = Partial<Record<Level, Settings>>;
 // Learner-added vocabulary (see lib/storage.ts's custom-words section) —
 // nested by level the same way progress/settings are, for the same reason.
 type CustomWordsByLevel = Partial<Record<Level, Record<string, Word>>>;
+// Today's in-progress study/review session (see lib/storage.ts's
+// DailySession) — nested by level like everything else above. This did
+// NOT sync at all before: a review started on one device and continued on
+// another had no way to know the first device's session existed, so it
+// silently started over (a real, confirmed report). See mergeDailySession
+// below for why this is a whole-object "freshest wins" merge rather than
+// WordProgress's per-word "furthest along" one.
+type DailySessionByLevel = Partial<Record<Level, DailySession>>;
 // Legacy shape from before streak became global — one entry per level.
 type LegacyStreakByLevel = Partial<Record<Level, Streak>>;
 
@@ -38,6 +47,7 @@ interface RemoteRow {
   partial_days: string[] | null;
   word_log: DailyWordLog | null;
   custom_words: CustomWordsByLevel | null;
+  daily_session: DailySessionByLevel | null;
   updated_at: string | null;
 }
 
@@ -105,13 +115,36 @@ function mergeProgress(
   return merged;
 }
 
+// A session's queues/phase/cached AI content are one continuous stream of
+// activity within a single day, not independently-progressable per-word
+// state — unlike mergeProgress above, there's no meaningful way to merge
+// "half of device A's queue order" with "half of device B's" without
+// risking a genuinely broken, inconsistent session. So this picks a winner
+// wholesale, by whichever side was touched most recently (updatedAt) —
+// same coarse tradeoff already accepted for Settings (see
+// getSettingsUpdatedAtForLevel's own comment): a real learner reviews on
+// one device at a time and switches, so "most recent wins outright" covers
+// the actual reported case (start on device A, resume on device B) even
+// though genuinely simultaneous review on two devices could lose one
+// side's progress. Only ever compares two sessions for the SAME date —
+// remote is ignored entirely if it's not for today, exactly like
+// getDailySessionForLevel's own same-day check for local sessions, so a
+// stale remote session from a previous day can never resurrect as if it
+// were still active.
+function mergeDailySession(local: DailySession | null, remote: DailySession | null | undefined): DailySession | null {
+  if (!remote || remote.date !== today()) return local;
+  if (!local) return remote;
+  const remoteIsNewer = (remote.updatedAt ?? '') > (local.updatedAt ?? '');
+  return remoteIsNewer ? remote : local;
+}
+
 // Pulls the signed-in user's remote data and merges it into local storage —
 // level by level, so a backup of one profile never bleeds into another.
 // Called right after sign-in so progress from other devices shows up here.
 export async function pullAndMerge(userId: string): Promise<void> {
   const { data, error } = await supabase
     .from('user_progress')
-    .select('progress, streak, settings, goal_days, partial_days, word_log, custom_words, updated_at')
+    .select('progress, streak, settings, goal_days, partial_days, word_log, custom_words, daily_session, updated_at')
     .eq('user_id', userId)
     .maybeSingle<RemoteRow>();
 
@@ -198,6 +231,22 @@ export async function pullAndMerge(userId: string): Promise<void> {
     if (!remoteWords) continue;
     saveAllCustomWordsForLevel(level, { ...remoteWords, ...getAllCustomWordsForLevel(level) });
   }
+
+  // See mergeDailySession's own comment for the whole-object "freshest
+  // wins" policy — this is what actually lets a review started on one
+  // device resume correctly on another.
+  const remoteDailySessionByLevel = (data.daily_session ?? {}) as DailySessionByLevel;
+  for (const level of LEVEL_ORDER) {
+    const remoteSession = remoteDailySessionByLevel[level];
+    if (!remoteSession) continue;
+    const localSession = getDailySessionForLevel(level);
+    const merged = mergeDailySession(localSession, remoteSession);
+    // Only actually write when remote won -- mergeDailySession returns the
+    // SAME local reference otherwise, and re-saving that would just bump
+    // its updatedAt (and fire notifyProgressChanged) for no real change,
+    // on every single pull.
+    if (merged && merged !== localSession) saveDailySessionForLevel(level, merged);
+  }
 }
 
 // Pushes every level's local state up as this user's remote snapshot —
@@ -216,12 +265,19 @@ async function pushToRemote(userId: string): Promise<void> {
   const progress: ProgressByLevel = {};
   const settings: SettingsByLevel = {};
   const customWords: CustomWordsByLevel = {};
+  const dailySessions: DailySessionByLevel = {};
   for (const level of LEVEL_ORDER) {
     const p = getAllProgressForLevel(level);
     if (Object.keys(p).length > 0) progress[level] = p;
     settings[level] = getSettingsForLevel(level);
     const cw = getAllCustomWordsForLevel(level);
     if (Object.keys(cw).length > 0) customWords[level] = cw;
+    // Only a session for TODAY specifically is ever worth pushing — a
+    // finished/stale session isn't something another device should ever
+    // resume into (getDailySessionForLevel already returns null for
+    // anything not dated today, so this is naturally already filtered).
+    const session = getDailySessionForLevel(level);
+    if (session) dailySessions[level] = session;
   }
   const streak = getStreak();
   const activeLevel = getActiveLevel();
@@ -246,6 +302,7 @@ async function pushToRemote(userId: string): Promise<void> {
     partial_days: getPartialDaysRecordForSync(),
     word_log: getDailyWordLogForSync(),
     custom_words: customWords,
+    daily_session: dailySessions,
     updated_at: new Date().toISOString(),
     level: activeLevel,
   };
