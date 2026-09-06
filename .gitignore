@@ -28,5 +28,7 @@ scripts/.exercise-audit-cache.json
 scripts/.exercise-audit-apply.json
 scripts/.exercise-audit-review.json
 scripts/.exercise-audit-report.json
+scripts/.exercise-final-review.json
+scripts/.final-review-apply.json
 scripts/__pycache__/
 lib/words.ts.bak-*
