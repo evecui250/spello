@@ -4164,6 +4164,23 @@ function resolveCleanedEnglishToken(cleaned: string, targetWord?: Word): Word | 
     && candidates.every(c => FUNCTION_WORD_TYPES.includes(c.word.type))) {
     return undefined;
   }
+  // Same idea, generalized beyond pure function words: several
+  // DIFFERENT-typed CONTENT words (not just prepositions/conjunctions) can
+  // also be tied, all "primary" (single-sense) matches for this exact
+  // key, with no target-word tiebreak and no real signal to prefer one
+  // over another — pickBestCandidate would otherwise silently pick
+  // whichever happens to sit first in the corpus array. A real, confirmed
+  // case: "offers" ("the bakery offers bread") resolved to the noun
+  // "Angebot" instead of the verb "anbieten"/"bieten" it actually was —
+  // purely because Angebot's id sorts earlier in the corpus, nothing to
+  // do with the sentence. Bailing to undefined here lets the caller's own
+  // AI-gloss fallback (already fetched for the whole sentence, not just
+  // this token) judge it correctly from real context instead of guessing.
+  if (candidates.length > 1 && !candidates.some(c => c.word.id === targetWord?.id)) {
+    const primaryCandidates = candidates.filter(c => c.primary);
+    const distinctTypes = new Set(primaryCandidates.map(c => c.word.type));
+    if (primaryCandidates.length > 1 && distinctTypes.size > 1) return undefined;
+  }
   return pickBestCandidate(candidates, targetWord);
 }
 

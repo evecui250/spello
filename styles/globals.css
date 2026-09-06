@@ -24,7 +24,22 @@
   --color-accent: #C9863F;
   --color-accent-deep: #A2672E;
   --color-good: #7FAE8E;
-  --color-good-deep: #5E8F71;
+  /* Darkened from the original #5E8F71 — measured (not assumed, same
+     standard as --color-label/--color-tile-input below) at 2.62:1 for
+     text-good-deep on bg-good/25 (the "correct answer" treatment used
+     app-wide: ArtikelBlitz, MatchingQuiz, WordMatch, TranslationChoice,
+     WordMeaningChoice, ParagraphExerciseCard, and the sentence-correction
+     box), well under WCAG's 4.5:1 — a real, confirmed "hard to read"
+     report. Every theme below got the same treatment, each darkened just
+     enough to clear 5:1 against its OWN bg-good/25 tint while keeping its
+     original hue (only lightness changed) — this is the single biggest
+     contrast gap of any token in this file, since it was carried over
+     from the approved design preview without ever being checked against
+     WCAG in light mode (the dark-card-mode override below was already
+     measured and fixed; light mode, the default 99% of the time, wasn't).
+     --color-good itself is unaffected — it's the tint/border source and a
+     speaker-icon color on plain paper, which already had headroom. */
+  --color-good-deep: #3F5F4B;
   --color-clay: #B6573A;
   --color-gold: #E8C76A;
   /* Eyebrow labels, speaker icons, badges, links — accent-colored TEXT
@@ -68,7 +83,7 @@ h1, h2, h3 { font-family: var(--font-display); }
   --color-paper: #E6DFD3; --color-paper-dim: #D9CFBE; --color-paper-line: #C4B79E;
   --color-ink: #2C2620; --color-ink-soft: #746A57;
   --color-accent: #7B6FC0; --color-accent-deep: #5B4F96;
-  --color-good: #6FA88E; --color-good-deep: #4F8A72;
+  --color-good: #6FA88E; --color-good-deep: #33594A;
   --color-clay: #A85A46; --color-gold: #E8C76A;
   --color-on-bg: #EDEBFB;
 }
@@ -76,7 +91,7 @@ h1, h2, h3 { font-family: var(--font-display); }
   --color-paper: #E2E6DE; --color-paper-dim: #D4DACB; --color-paper-line: #BFC7AC;
   --color-ink: #24291F; --color-ink-soft: #666B58;
   --color-accent: #3D7F8C; --color-accent-deep: #285A66;
-  --color-good: #5FA890; --color-good-deep: #438874;
+  --color-good: #5FA890; --color-good-deep: #2D5C4E;
   --color-clay: #B0553C; --color-gold: #E8C76A;
   --color-on-bg: #E3F6F6;
 }
@@ -84,7 +99,7 @@ h1, h2, h3 { font-family: var(--font-display); }
   --color-paper: #EEDFC9; --color-paper-dim: #E2CDAE; --color-paper-line: #CFB289;
   --color-ink: #2E2114; --color-ink-soft: #7A6449;
   --color-accent: #A35A24; --color-accent-deep: #74390F;
-  --color-good: #7FA36B; --color-good-deep: #5F864E;
+  --color-good: #7FA36B; --color-good-deep: #3F5934;
   --color-clay: #A03D26; --color-gold: #E8C76A;
   --color-on-bg: #FBEADB;
 }
@@ -92,7 +107,7 @@ h1, h2, h3 { font-family: var(--font-display); }
   --color-paper: #EAE2DA; --color-paper-dim: #DDD1C2; --color-paper-line: #C8B8A2;
   --color-ink: #2B241C; --color-ink-soft: #736556;
   --color-accent: #8A68A8; --color-accent-deep: #613F80;
-  --color-good: #7FAE96; --color-good-deep: #5E8F79;
+  --color-good: #7FAE96; --color-good-deep: #3C5B4D;
   --color-clay: #A85A46; --color-gold: #E8C76A;
   --color-on-bg: #F2E9FB;
 }
@@ -100,7 +115,7 @@ h1, h2, h3 { font-family: var(--font-display); }
   --color-paper: #EEE0CC; --color-paper-dim: #E2D0AF; --color-paper-line: #CDB587;
   --color-ink: #2E2314; --color-ink-soft: #776148;
   --color-accent: #B8542A; --color-accent-deep: #832E14;
-  --color-good: #85A87C; --color-good-deep: #648A5D;
+  --color-good: #85A87C; --color-good-deep: #415A3C;
   --color-clay: #9C3626; --color-gold: #E8C76A;
   --color-on-bg: #FCE9DA;
 }
@@ -108,7 +123,7 @@ h1, h2, h3 { font-family: var(--font-display); }
   --color-paper: #FBEFDD; --color-paper-dim: #F2DFC0; --color-paper-line: #E4C79A;
   --color-ink: #3A2412; --color-ink-soft: #8A6A48;
   --color-accent: #B8431A; --color-accent-deep: #8A2F10;
-  --color-good: #588A49; --color-good-deep: #416B37;
+  --color-good: #588A49; --color-good-deep: #395E30;
   --color-clay: #9C2E1A; --color-gold: #C9861A;
   --color-on-bg: #FFF6E8;
 }
@@ -116,7 +131,7 @@ h1, h2, h3 { font-family: var(--font-display); }
   --color-paper: #EAF7E4; --color-paper-dim: #DAEED0; --color-paper-line: #C3DFB6;
   --color-ink: #1E3320; --color-ink-soft: #5A7A5E;
   --color-accent: #2F7A45; --color-accent-deep: #1D5C30;
-  --color-good: #4F9B5A; --color-good-deep: #397A42;
+  --color-good: #4F9B5A; --color-good-deep: #2E6336;
   --color-clay: #A8402A; --color-gold: #E8C76A;
   --color-on-bg: #F3FFF0;
 }
@@ -124,7 +139,7 @@ h1, h2, h3 { font-family: var(--font-display); }
   --color-paper: #FBEAF4; --color-paper-dim: #F2D9E9; --color-paper-line: #E6BEDA;
   --color-ink: #3A1A30; --color-ink-soft: #7A5670;
   --color-accent: #B8318F; --color-accent-deep: #862368;
-  --color-good: #7FAE8E; --color-good-deep: #5E8F71;
+  --color-good: #7FAE8E; --color-good-deep: #40614D;
   --color-clay: #B6573A; --color-gold: #E8C76A;
   --color-on-bg: #FFF0FA;
 }
@@ -132,7 +147,7 @@ h1, h2, h3 { font-family: var(--font-display); }
   --color-paper: #FBF6EA; --color-paper-dim: #F3EAD4; --color-paper-line: #E3D3AE;
   --color-ink: #3A2B14; --color-ink-soft: #7A6440;
   --color-accent: #B8823A; --color-accent-deep: #8A5F22;
-  --color-good: #6E9B5E; --color-good-deep: #557A48;
+  --color-good: #6E9B5E; --color-good-deep: #44623A;
   --color-clay: #A8402A; --color-gold: #C9A227;
   /* The one theme where header text on the BACKGROUND (not on a card)
      needs to be dark, not light — its day sky is uniformly pale. Cards

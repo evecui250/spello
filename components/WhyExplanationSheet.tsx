@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom';
 import { ExplanationResult, ExplanationPoint } from '../lib/ai';
-import { diffChars, renderDiffedWord } from '../lib/textDiff';
+import { diffChars, renderDiffedWord, renderWordDiff } from '../lib/textDiff';
 
 interface Props {
   explanation: ExplanationResult;
@@ -50,16 +50,16 @@ export default function WhyExplanationSheet({ explanation, onClose }: Props) {
         {points.length > 0 && (
           <div className="flex flex-col gap-3">
             {points.map((point, i) => {
-              const { aChanged, bChanged } = diffChars(point.wrong, point.correct);
+              const { wrongNode, correctNode } = renderWordDiff(point.wrong, point.correct);
               return (
                 <div key={i} className="bg-accent/10 rounded-lg px-3 py-2.5 flex flex-col gap-1">
                   <span className="text-accent-deep text-[10px] font-semibold uppercase tracking-wide">
                     {TYPE_LABELS[point.type] ?? point.type}
                   </span>
                   <div className="text-ink text-sm">
-                    {renderDiffedWord(point.wrong, aChanged)}
+                    {wrongNode}
                     <span className="text-ink-soft mx-1.5">→</span>
-                    {renderDiffedWord(point.correct, bChanged)}
+                    {correctNode}
                   </div>
                   <p className="text-ink-soft text-sm">{point.explanation}</p>
                 </div>
