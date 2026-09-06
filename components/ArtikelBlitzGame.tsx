@@ -13,9 +13,10 @@ import {
 import { speakWord } from '../lib/speech';
 import { getOrCreateDeviceId } from '../lib/telemetry';
 import { supabase } from '../lib/supabase';
+import { willGamePlayEarnPoint } from '../lib/shop';
 import { PointsIcon } from './icons';
 
-// A 60-second der/die/das drill, sitting alongside WordMatchGame
+// A 45-second der/die/das drill, sitting alongside WordMatchGame
 // ("Wortpaare") in the post-goal bonus round -- same overall shape
 // (intro -> playing -> over, game_plays insert, onQuit/onChooseGame) so
 // the two games feel like siblings, not two unrelated features bolted
@@ -184,7 +185,7 @@ export default function ArtikelBlitzGame({
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user.id) setEarnedPoint(true);
+        if (session?.user.id) setEarnedPoint(await willGamePlayEarnPoint());
         await supabase.from('game_plays').insert({
           device_id: getOrCreateDeviceId(),
           user_id: session?.user.id ?? null,

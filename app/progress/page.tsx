@@ -331,7 +331,7 @@ export default function ProgressPage() {
               href={`/game/?source=${REVIEW_SOURCE[openStage]}`}
               className="flex items-center justify-center gap-1.5 bg-accent text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-accent-deep active:scale-95 transition-all"
             >
-              ⚡ Rapid review (1 min)
+              ⚡ Rapid review (45 sec)
             </Link>
             {scope === 'all' ? (
               <div className="flex flex-col gap-1.5">

@@ -9,6 +9,7 @@ import { speakWord } from '../lib/speech';
 import { getOrCreateDeviceId } from '../lib/telemetry';
 import { supabase } from '../lib/supabase';
 import { GAME_MIN_WORDS_REQUIRED } from '../lib/practice';
+import { willGamePlayEarnPoint } from '../lib/shop';
 import { PointsIcon } from './icons';
 
 // The actual "match the German word to its meaning" game, shared by every
@@ -251,7 +252,7 @@ export default function WordMatchGame({
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user.id) setEarnedPoint(true);
+        if (session?.user.id) setEarnedPoint(await willGamePlayEarnPoint());
         await supabase.from('game_plays').insert({
           device_id: getOrCreateDeviceId(),
           user_id: session?.user.id ?? null,

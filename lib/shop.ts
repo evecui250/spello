@@ -82,6 +82,28 @@ export const ACCESSORY_CATALOG: AccessoryOption[] = [
 // Functions (no shared module exists in this codebase to import it from).
 export const GAME_PLAY_DAILY_POINT_CAP = 5;
 
+// Whether the game about to be recorded (see WordMatchGame's/
+// ArtikelBlitzGame's own game_plays insert) will actually earn a point,
+// checked BEFORE that insert so the caller can show an honest "+1 point"
+// instead of an unconditional one. Real report: a learner saw "+1 point"
+// after a rapid-review round but their total on Settings never moved --
+// they'd simply already played enough games that day to hit
+// GAME_PLAY_DAILY_POINT_CAP, and the UI had no way to know that (it only
+// checked "am I signed in", never "am I still under today's cap"). Mirrors
+// get-my-profile's own UTC-day bucketing exactly, since that's the balance
+// this is trying to predict.
+export async function willGamePlayEarnPoint(): Promise<boolean> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return false;
+  const todayUtcStart = `${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`;
+  const { count } = await supabase
+    .from('game_plays')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', session.user.id)
+    .gte('created_at', todayUtcStart);
+  return (count ?? 0) < GAME_PLAY_DAILY_POINT_CAP;
+}
+
 export interface MyProfile {
   nickname: string | null;
   avatarId: string;
