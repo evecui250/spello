@@ -16,6 +16,34 @@ interface Props {
   onComplete: () => void;
 }
 
+// Keeps every getSentenceGlosses request comfortably under
+// sentence-glosses' own 1200-char cap. Splits on combineParagraphExercises'
+// literal `\n\n` seam first (so a stitched exercise's two halves are never
+// sent as one over-length request), then falls back to sentence boundaries
+// for the rare single paragraph that's still too long on its own.
+const MAX_GLOSS_CHUNK_CHARS = 1000;
+
+function chunkTextForGlosses(text: string): string[] {
+  const chunks: string[] = [];
+  for (const para of text.split('\n\n')) {
+    if (para.length <= MAX_GLOSS_CHUNK_CHARS) {
+      if (para) chunks.push(para);
+      continue;
+    }
+    let current = '';
+    for (const sentence of para.split(/(?<=[.!?])\s+/)) {
+      if (current && current.length + sentence.length + 1 > MAX_GLOSS_CHUNK_CHARS) {
+        chunks.push(current);
+        current = sentence;
+      } else {
+        current = current ? `${current} ${sentence}` : sentence;
+      }
+    }
+    if (current) chunks.push(current);
+  }
+  return chunks;
+}
+
 // The bonus end-of-introduction cloze paragraph: tap a word chip, then tap
 // a blank to drop it there (tap a filled blank to pull it back out) --
 // deliberately NOT real HTML5 drag-and-drop, which is unreliable on mobile
@@ -65,21 +93,21 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
   useEffect(() => {
     let cancelled = false;
     const settings = getSettings();
-    const fetchGlosses = (attempt: number) => {
-      getSentenceGlosses(words[0]?.id ?? '', fullCorrectText, settings.level, settings.nativeLanguage, 'de-to-native')
-        .then(map => { if (!cancelled) setGlosses(map); })
-        .catch(() => {
-          // One retry before giving up -- a real report ("some words
-          // still aren't clickable") is at least partly explained by this
-          // call having zero retry at all before, unlike every other AI
-          // call in the app. Still best-effort beyond that: surrounding
-          // words just aren't clickable if both attempts fail, the
-          // exercise itself (and each blank's own always-available corpus
-          // info) is unaffected either way.
-          if (attempt === 0 && !cancelled) fetchGlosses(1);
-        });
-    };
-    fetchGlosses(0);
+    const chunks = chunkTextForGlosses(fullCorrectText);
+    // One request per chunk, each retried independently -- a combined
+    // (two-paragraph) exercise's text can exceed sentence-glosses' own
+    // 1200-char cap, which used to fail the WHOLE call at once (every
+    // non-corpus word in BOTH halves going dark in one shot: a real report
+    // of "roughly half the words aren't clickable"). Chunking at
+    // combineParagraphExercises' own `\n\n` seam (falling back to sentence
+    // boundaries for a single over-length paragraph) keeps every chunk
+    // under the cap, and a failure in one chunk no longer costs the other.
+    const fetchChunk = (chunk: string, attempt: number): Promise<Record<string, WordGloss>> =>
+      getSentenceGlosses(words[0]?.id ?? '', chunk, settings.level, settings.nativeLanguage, 'de-to-native')
+        .catch(() => (attempt === 0 ? fetchChunk(chunk, 1) : Promise.resolve({} as Record<string, WordGloss>)));
+    Promise.all(chunks.map(chunk => fetchChunk(chunk, 0))).then(maps => {
+      if (!cancelled) setGlosses(Object.assign({}, ...maps));
+    });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullCorrectText]);
@@ -133,12 +161,28 @@ export default function ParagraphExerciseCard({ exercise, words, onComplete }: P
   // can never legitimately turn up split across the text -- see
   // generate-paragraph's own comment). No targetWordDe is passed for the
   // same reason.
+  // Case-insensitive fallback for the exact-token gloss lookup below --
+  // German capitalizes a word only at the start of a sentence, so the same
+  // word (e.g. "sie"/"Sie") can appear in two different castings across one
+  // paragraph. The AI response is keyed by literal on-screen casing, so if
+  // it only emits one variant, the other used to silently render
+  // non-clickable. Exact case still wins when both exist (first entry for
+  // a given lowercase form is kept).
+  const glossesLower = useMemo(() => {
+    const map: Record<string, WordGloss> = {};
+    for (const [k, v] of Object.entries(glosses)) {
+      const lower = k.toLowerCase();
+      if (!(lower in map)) map[lower] = v;
+    }
+    return map;
+  }, [glosses]);
+
   const renderSegment = (segment: string, key: string) => {
     const lemmaMap = Object.fromEntries(Object.entries(glosses).map(([k, v]) => [k, v.lemma]));
     return tokenize(segment).map((text, i) => {
       if (!isWordToken(text)) return <span key={`${key}-${i}`}>{text}</span>;
       const match = resolveClickedWord(text, lemmaMap);
-      const gloss = !match ? glosses[text] : undefined;
+      const gloss = !match ? (glosses[text] ?? glossesLower[text.toLowerCase()]) : undefined;
       if (match) {
         return (
           <button
