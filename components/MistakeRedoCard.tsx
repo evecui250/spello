@@ -96,7 +96,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
   const handleSubmit = () => {
     if (!input.trim() || status === 'loading') return;
     setStatus('loading');
-    correctSentence(word.id, word.de, level, mistake.englishPrompt ?? '', input.trim())
+    correctSentence(word.id, word.de, level, mistake.englishPrompt ?? '', input.trim(), word.thirdPerson)
       .then(correction => {
         setResult(correction);
         setStatus('idle');

@@ -648,7 +648,7 @@ function SentenceExercise({
     textareaRef.current?.blur();
     setStatus('loading');
     try {
-      const result = await correctSentence(word.id, word.de, level, promptSentence, input.trim());
+      const result = await correctSentence(word.id, word.de, level, promptSentence, input.trim(), word.thirdPerson);
       // promptSentenceZh pairs with promptSentence here the same way it's
       // displayed above (corpus exercisePromptZh, or the live generateSentence
       // call's own sentenceZh) — saving it alongside is what lets a later
@@ -1376,7 +1376,7 @@ export default function DailySessionFlow() {
           englishPrompt = generated.sentence;
           englishPromptZh = generated.sentenceZh;
         }
-        const result = await correctSentence(word.id, word.de, settings.level, englishPrompt);
+        const result = await correctSentence(word.id, word.de, settings.level, englishPrompt, undefined, word.thirdPerson);
         if (cancelled) return;
         setDirectSentence({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt, englishPromptZh, at: new Date().toISOString() });
         setDirectSentenceStatus('ready');
@@ -1420,7 +1420,7 @@ export default function DailySessionFlow() {
           englishPrompt = generated.sentence;
           englishPromptZh = generated.sentenceZh;
         }
-        const result = await correctSentence(word.id, word.de, settings.level, englishPrompt);
+        const result = await correctSentence(word.id, word.de, settings.level, englishPrompt, undefined, word.thirdPerson);
         if (cancelled) return;
         const sentence = { sentence: result.sentence, wordForm: result.wordForm, englishPrompt, englishPromptZh };
         setExampleSentence(sentence);

@@ -157,12 +157,18 @@ export async function correctSentence(
   level: string,
   englishPrompt: string,
   userTranslation?: string,
+  // The corpus's own conjugation hint (Word.thirdPerson, e.g. "ruft an" for
+  // anrufen) — a space means the verb is separable. Passed through so the
+  // server-side wordMissing check can tell a legitimate separable-verb
+  // finite form (e.g. "rufe") from a coincidentally-similar different verb
+  // (e.g. "raten" inside "beraten") without a hardcoded prefix list.
+  thirdPerson?: string,
   // Forward-compat only — no corpus field feeds this yet (see
   // correct-sentence's own RequestBody comment). Passed through as
   // CONTEXT for the model, never as the one correct answer.
   canonicalGerman?: string,
 ): Promise<SentenceCorrectionResult> {
-  const { data, error } = await invokeWithTimeout<{ sentence?: string; wordForm?: string; status?: SentenceCorrectionResult['status']; limitReached?: boolean }>('correct-sentence', { wordId, wordDe, level, englishPrompt, userTranslation, canonicalGerman });
+  const { data, error } = await invokeWithTimeout<{ sentence?: string; wordForm?: string; status?: SentenceCorrectionResult['status']; limitReached?: boolean }>('correct-sentence', { wordId, wordDe, level, englishPrompt, userTranslation, thirdPerson, canonicalGerman });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (!data?.sentence || !data?.wordForm) throw new Error('Malformed AI response');

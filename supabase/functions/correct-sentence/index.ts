@@ -65,6 +65,11 @@ interface RequestBody {
   level: string;
   englishPrompt: string;
   userTranslation?: string;
+  // The corpus's own conjugation hint (Word.thirdPerson, e.g. "ruft an"
+  // for anrufen — a space means the verb is separable). Used by
+  // formMatchesTarget below to recognize a legitimate separable-verb
+  // finite form without a hardcoded prefix list.
+  thirdPerson?: string;
   // Forward-compat only — no corpus field feeds this yet. If lib/words.ts
   // ever gains a canonical reference translation per word, this lets it
   // flow through as CONTEXT for the model, never as the one correct
@@ -103,28 +108,65 @@ function editDistance(a: string, b: string): number {
 // function, which treated ANY substring containment as a match — "rate"
 // (a real inflection of the unrelated verb "raten") is coincidentally a
 // literal substring of "beraten" ("be-RATE-n"), so the model silently
-// swapping "beraten" for "raten" went undetected. Substring containment
-// now only counts when the shorter string is a substantial fraction of
-// the longer one (a short, unrelated word is far more likely to
-// coincidentally appear inside a longer, unrelated target than a real
-// inflection is to be that much shorter than its own lemma); the edit-
-// distance fallback is scaled off the SHORTER word's length rather than
-// the longer one, for the same reason — a fixed few edits should mean
-// much more on a short word than a long one. This is deliberately still
-// not perfect (a genuinely irregular short verb like gehen/ging can still
-// trip it) — an occasional unnecessary retry costs one extra AI call,
-// which is far cheaper than silently shipping a wrong word.
-function formMatchesTarget(wordDe: string, wordForm: string): boolean {
-  const a = wordDe.toLowerCase();
-  const b = wordForm.toLowerCase();
+// swapping "beraten" for "raten" went undetected.
+//
+// isFrontTruncation below closes a broader version of that same hole:
+// German conjugation NEVER removes characters purely from the FRONT of a
+// word (endings change, strong verbs ablaut internally, but the front
+// stays) — the ONE legitimate exception is a separable verb dropping its
+// prefix (anrufen -> "rufe"), which is handled separately below via the
+// corpus's own thirdPerson field, never guessed from string shape alone.
+// So "longer ends with shorter, but doesn't start with it" (beraten/
+// raten, bekommen/kommen, verstehen/stehen — a coincidentally-real,
+// differently-prefixed word) is rejected outright rather than left to the
+// length-ratio/edit-distance heuristics, which can't tell those apart
+// from a real inflection by ratio alone (both score ~0.57-0.75 here).
+function matchesInflectionShape(a: string, b: string): boolean {
   if (!a || !b) return false;
   const shorter = a.length <= b.length ? a : b;
   const longer = a.length <= b.length ? b : a;
-  if (longer.includes(shorter) && shorter.length / longer.length >= 0.6) return true;
+  const isFrontTruncation = shorter !== longer && longer.endsWith(shorter) && !longer.startsWith(shorter);
+  if (!isFrontTruncation && longer.includes(shorter) && shorter.length / longer.length >= 0.6) return true;
   const prefixLen = Math.min(3, a.length, b.length);
   if (a.slice(0, prefixLen) === b.slice(0, prefixLen)) return true;
+  if (isFrontTruncation) return false;
   const dist = editDistance(a, b);
   return dist <= Math.ceil(Math.min(a.length, b.length) / 2);
+}
+
+// Derives a verb's separable prefix from the corpus's OWN conjugation data
+// (Word.thirdPerson, e.g. "ruft an" for anrufen) rather than a hardcoded
+// prefix list — deliberately so, since the same prefix can be separable on
+// one verb and not on another (übersetzen/umfahren-style ambiguity), so no
+// fixed list could be both short and correct. A space in thirdPerson means
+// separable; the prefix is its last word. Guards against two real corpus
+// shapes that are NOT a separable prefix: "sich" (a reflexive marker, e.g.
+// "kümmert sich"), and a prefix the lemma doesn't actually start with (a
+// sign of mismatched/erroneous corpus data, e.g. one entry's thirdPerson
+// belongs to a different verb entirely) — either way, returning null here
+// just means this verb doesn't get the separable-aware check, falling
+// back to matchesInflectionShape against the full lemma, same as before
+// this existed.
+function separablePrefix(wordDeLower: string, thirdPerson?: string): string | null {
+  if (!thirdPerson) return null;
+  const parts = thirdPerson.trim().toLowerCase().split(/\s+/);
+  if (parts.length < 2) return null;
+  const prefix = parts[parts.length - 1];
+  if (prefix === 'sich' || !prefix) return null;
+  return wordDeLower.startsWith(prefix) ? prefix : null;
+}
+
+function formMatchesTarget(wordDe: string, wordForm: string, thirdPerson?: string): boolean {
+  const a = wordDe.toLowerCase();
+  const b = wordForm.toLowerCase();
+  if (!a || !b) return false;
+  if (matchesInflectionShape(a, b)) return true;
+  const prefix = separablePrefix(a, thirdPerson);
+  if (prefix) {
+    const baseVerb = a.slice(prefix.length);
+    if (matchesInflectionShape(baseVerb, b)) return true;
+  }
+  return false;
 }
 
 Deno.serve(async (req: Request) => {
@@ -173,7 +215,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as RequestBody;
-    const { wordId, wordDe, level, englishPrompt, userTranslation, canonicalGerman } = body;
+    const { wordId, wordDe, level, englishPrompt, userTranslation, thirdPerson, canonicalGerman } = body;
     if (!wordId || !wordDe || !englishPrompt) {
       return json({ error: 'Missing wordId, wordDe, or englishPrompt' }, 400);
     }
@@ -369,7 +411,7 @@ Deno.serve(async (req: Request) => {
     // back to it tends to self-correct far more reliably than the original
     // prompt alone.
     const wordMissing = !parsed.sentence.toLowerCase().includes(parsed.wordForm.toLowerCase())
-      || !formMatchesTarget(wordDe, parsed.wordForm);
+      || !formMatchesTarget(wordDe, parsed.wordForm, thirdPerson);
 
     if (wordMissing) {
       console.error(`Target word "${wordDe}" missing from correction, retrying once:`, raw);
