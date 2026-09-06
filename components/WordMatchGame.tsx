@@ -122,7 +122,7 @@ interface Props {
   // Tags every recorded game_plays row (see that migration) so the admin
   // dashboard can split "played from Settings' preview" vs. "today's real
   // bonus round" vs. each per-stage rapid review from Progress apart.
-  source: 'settings_preview' | 'daily_flow' | 'puppy_review' | 'short_review' | 'medium_review' | 'mastered_review';
+  source: 'settings_preview' | 'daily_flow' | 'rapid_review' | 'puppy_review' | 'short_review' | 'medium_review' | 'mastered_review';
   // When provided, replaces the standalone page's own "← Home" link with
   // a quit action instead, and adds a second way out on the results
   // screen — DailySessionFlow's post-congrats round has no page chrome of
@@ -448,6 +448,9 @@ export default function WordMatchGame({
             </div>
           )}
           {onChooseGame ? (
+            // daily_flow's bonus round: choosing a different game is the
+            // natural next step, so it gets the big pill; replaying the
+            // same game is demoted to a small link right below it.
             <>
               <button
                 type="button"
@@ -464,8 +467,46 @@ export default function WordMatchGame({
               >
                 Play again
               </button>
+              {onQuit && (
+                <button
+                  type="button"
+                  onClick={onQuit}
+                  className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
+                >
+                  {quitLabel}
+                </button>
+              )}
+            </>
+          ) : onQuit ? (
+            // A rapid-review round (no onChooseGame — see app/game/page.tsx's
+            // review sources): real report, "Play again" as the one big
+            // button got accidentally tapped when the learner meant to
+            // close. A quick review round is a one-and-done action by
+            // default, so quitting gets the prominent treatment here and
+            // "Play again" is demoted to a small link, the reverse of
+            // above (not just "add a small quit link next to the big
+            // one" — that alone wouldn't have fixed the mis-tap).
+            <>
+              <button
+                type="button"
+                onClick={onQuit}
+                className="w-full max-w-[220px] text-white py-3.5 rounded-full font-bold text-lg shadow-md active:scale-95 transition-all mt-2"
+                style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
+              >
+                {quitLabel}
+              </button>
+              <button
+                type="button"
+                onClick={startGame}
+                className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
+              >
+                Play again
+              </button>
             </>
           ) : (
+            // No caller-provided way to leave at all (bare settings_preview
+            // entry) — the header's own "← Home" link already covers
+            // leaving there, so a lone big "Play again" is the right call.
             <button
               type="button"
               onClick={startGame}
@@ -473,15 +514,6 @@ export default function WordMatchGame({
               style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
             >
               Play again
-            </button>
-          )}
-          {onQuit && (
-            <button
-              type="button"
-              onClick={onQuit}
-              className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
-            >
-              {quitLabel}
             </button>
           )}
         </div>

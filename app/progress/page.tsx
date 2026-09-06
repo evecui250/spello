@@ -9,7 +9,7 @@ import {
   getSettings, MascotStageId, WordProgress,
   getTheme, Theme, THEME_CHANGED_EVENT, getAllCustomWordsAcrossLevels,
 } from '../../lib/storage';
-import { allWordsForLevel } from '../../lib/practice';
+import { allWordsForLevel, hasEnoughWordsForGame } from '../../lib/practice';
 import { SYNCED_EVENT } from '../../lib/sync';
 import DachshundMascot from '../../components/Mascot';
 import ActivityCalendar from '../../components/ActivityCalendar';
@@ -38,17 +38,6 @@ const STAGE_LABEL: Record<MascotStageId, string> = {
   short: 'Familiar',
   medium: 'Strong',
   'long-crowned': 'Mastered',
-};
-
-// Each stage's own rapid-review entry point (app/game/page.tsx's ?source=
-// query, WordMatchGame's focus prop) — one game_plays source value per
-// stage, matching this codebase's existing "plain text + check constraint"
-// convention rather than a separate `stage` column.
-const REVIEW_SOURCE: Record<MascotStageId, string> = {
-  puppy: 'puppy_review',
-  short: 'short_review',
-  medium: 'medium_review',
-  'long-crowned': 'mastered_review',
 };
 
 type Scope = 'current' | 'all';
@@ -152,6 +141,25 @@ export default function ProgressPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Progress</h1>
 
+      {/* One review round mixing everything learned (mastered + still-
+          learning), replacing the old per-stage-only rapid reviews (see
+          WordMatchGame's own pickRoundWords — it already reserves slots
+          for mastered words whenever a round draws from the full pool,
+          not just a single stage, so this needed no new sampling logic,
+          just a route that doesn't narrow to one stage). A learner found
+          reviewing just one mascot stage at a time confusing/not useful;
+          gated on the same hasEnoughWordsForGame() threshold the bonus
+          round itself uses, so this never promises a destination with too
+          little vocabulary behind it to fill even one board. */}
+      {hasEnoughWordsForGame() && (
+        <Link
+          href="/game/?source=rapid_review"
+          className="flex items-center justify-center gap-1.5 bg-accent text-white text-sm font-semibold py-3 rounded-xl hover:bg-accent-deep active:scale-95 transition-all shadow-sm"
+        >
+          ⚡ Rapid review (45 sec)
+        </Link>
+      )}
+
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
         <div className="flex items-center justify-between gap-2 mb-1">
           <h2 className="font-semibold text-ink">Words breakdown</h2>
@@ -177,11 +185,8 @@ export default function ProgressPage() {
             ? `${totalWords} words total across ${activeLevels.length} vocabulary book${activeLevels.length === 1 ? '' : 's'}.`
             : `${totalWords} words total in this vocabulary book.`}
         </p>
-        {/* Every stage's popup now offers both the word list AND a rapid-
-            review round drawn from that same stage (see the popup below) —
-            one hint covers both, rather than a separate line per purpose. */}
         {introducedCount > 0 && (
-          <p className="text-ink-soft text-xs mb-1">Tap a dog to get a quick 1-minute refresher.</p>
+          <p className="text-ink-soft text-xs mb-1">Tap a dog to see that stage's word list.</p>
         )}
         {bootstrapWords.length > 0 && (
           <p className="text-ink-soft text-sm mb-4">
@@ -314,25 +319,6 @@ export default function ProgressPage() {
                 ×
               </button>
             </div>
-            {/* Every stage gets its own rapid-review round now, not just
-                Mastered — reuses the exact same Word Match game (see
-                WordMatchGame's focus prop), just pointed at THIS stage's
-                own pool instead of "any learned word" — no separate game/
-                component needed per stage. Mastered words are the one
-                case this is the ONLY way to see them again at all (see
-                recordMilestonePass's own comment — the normal SRS
-                schedule retires them for good); the other three stages
-                still get their normal scheduled reviews too, this is just
-                extra practice in between. Shown regardless of the "This
-                book"/"All books" scope toggle below (the game itself
-                always pulls words across every book, same as the game's
-                normal pool already does). */}
-            <Link
-              href={`/game/?source=${REVIEW_SOURCE[openStage]}`}
-              className="flex items-center justify-center gap-1.5 bg-accent text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-accent-deep active:scale-95 transition-all"
-            >
-              ⚡ Rapid review (45 sec)
-            </Link>
             {scope === 'all' ? (
               <div className="flex flex-col gap-1.5">
                 {Object.entries(stageLevelCounts[openStage])
