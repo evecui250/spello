@@ -69,6 +69,17 @@ export function articleCandidateWords(): Word[] {
     .filter(w => w.type === 'noun' && w.article && !AMBIGUOUS_ARTICLE_NOUNS.has(w.de));
 }
 
+// The actual timed-mode quiz pool: articleCandidateWords() narrowed down to
+// nouns the learner has already reached mascotStage on (any level) -- same
+// "learned" predicate the intro screen's own eligibleLearnedCount check
+// already used to decide whether the game unlocks at all, now shared here
+// so the pool actually played from matches that promise instead of quizzing
+// on nouns the learner has never even studied.
+export function learnedArticleCandidateWords(): Word[] {
+  const progress = getMergedProgressAcrossLevels();
+  return articleCandidateWords().filter(w => !!progress[w.id]?.mascotStage);
+}
+
 export type ArticleFamiliarity = 'mistake' | 'learning' | 'mastered' | 'unseen';
 
 // Tracks article mastery independently of word mastery (mascotStage) --

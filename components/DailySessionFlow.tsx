@@ -2712,7 +2712,7 @@ export default function DailySessionFlow() {
 
   if (session.phase === 'play') {
     if (activeGame === 'picker') {
-      return <GamePicker onPick={setActiveGame} />;
+      return <GamePicker onPick={setActiveGame} onSkip={finishForToday} />;
     }
     const onChooseGame = () => setActiveGame('picker');
     if (activeGame === 'artikel_blitz') {

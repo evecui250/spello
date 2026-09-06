@@ -7,13 +7,12 @@ import {
   getWordProgressForLevel, saveWordProgressForLevel, getSettings, WordProgress,
 } from '../lib/storage';
 import {
-  GAME_MIN_WORDS_REQUIRED, articleCandidateWords, articleFamiliarity, ArticleFamiliarity,
-  recordArticleMistake, recordArticleRecall,
+  GAME_MIN_WORDS_REQUIRED, articleCandidateWords, learnedArticleCandidateWords,
+  articleFamiliarity, ArticleFamiliarity, recordArticleMistake, recordArticleRecall,
 } from '../lib/practice';
 import { speakWord } from '../lib/speech';
 import { getOrCreateDeviceId } from '../lib/telemetry';
 import { supabase } from '../lib/supabase';
-import { getDisplayProfile, heroImageFor } from '../lib/shop';
 import { PointsIcon } from './icons';
 
 // A 60-second der/die/das drill, sitting alongside WordMatchGame
@@ -25,7 +24,7 @@ import { PointsIcon } from './icons';
 // noun/button/feedback/speech mechanics, just a different word source
 // and end condition, rather than a whole separate component.
 
-const GAME_DURATION = 60;
+const GAME_DURATION = 45;
 const FAMILIARITY_WEIGHT: Record<ArticleFamiliarity, number> = {
   mistake: 100, learning: 40, mastered: 12, unseen: 3,
 };
@@ -67,8 +66,6 @@ export default function ArtikelBlitzGame({
   const [answered, setAnswered] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [earnedPoint, setEarnedPoint] = useState(false);
-  const [avatarId, setAvatarId] = useState('dachshund');
-  const [petReaction, setPetReaction] = useState<'happy' | 'sad' | null>(null);
   const [answerState, setAnswerState] = useState<{ chosen: Article; correct: boolean } | null>(null);
   const [feedback, setFeedback] = useState<{ article: Article; de: string; en: string; correct: boolean } | null>(null);
   const [disabled, setDisabled] = useState(false);
@@ -81,10 +78,6 @@ export default function ArtikelBlitzGame({
   const queueRef = useRef<Word[]>([]);
   const recentIdsRef = useRef<string[]>([]);
   const progressRef = useRef<Record<string, WordProgress>>({});
-
-  useEffect(() => {
-    getDisplayProfile().then(profile => setAvatarId(profile.avatarId));
-  }, []);
 
   function progressFor(w: Word): WordProgress {
     if (!progressRef.current[w.id]) {
@@ -141,7 +134,7 @@ export default function ArtikelBlitzGame({
   }
 
   function startTimed() {
-    const words = articleCandidateWords();
+    const words = learnedArticleCandidateWords();
     setPool(words);
     progressRef.current = {};
     for (const w of words) progressFor(w); // warm the cache once up front
@@ -223,31 +216,26 @@ export default function ArtikelBlitzGame({
     if (correct) {
       setCorrectCount(c => c + 1);
       setScore(s => s + 1);
-      setPetReaction('happy');
     } else {
       requeueWrong(w);
-      setPetReaction('sad');
     }
     setAnswerState({ chosen, correct });
     setFeedback({ article: w.article as Article, de: w.de, en: glossFor(w, nativeLanguage), correct });
     speakWord(w);
-    setTimeout(() => setPetReaction(null), 450);
 
     // If the countdown reaches 0 in the meantime, its own effect flips
     // phase to 'over' -- nextWord() still runs here regardless (harmless;
     // the 'over' screen doesn't read current/feedback), simpler than
     // trying to race-check the timer from inside this closure.
-    setTimeout(nextWord, correct ? 550 : 900);
+    setTimeout(nextWord, correct ? 900 : 1400);
   }
 
   // Only computed for the intro screen (mode="timed", phase="intro") --
   // no need to re-scan the whole corpus on every render once playing.
   const eligibleLearnedCount = mode === 'timed' && phase === 'intro'
-    ? articleCandidateWords().filter(w => !!getWordProgressForLevel(w.level, w.id).mascotStage).length
+    ? learnedArticleCandidateWords().length
     : 0;
   const canPlay = eligibleLearnedCount >= GAME_MIN_WORDS_REQUIRED;
-
-  const petImg = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${heroImageFor(avatarId)}`;
 
   return (
     <div className="flex flex-col gap-5">
@@ -298,19 +286,13 @@ export default function ArtikelBlitzGame({
             </div>
           )}
 
-          <img
-            src={petImg}
-            alt=""
-            className={`h-14 w-auto object-contain drop-shadow-md ${petReaction === 'happy' ? 'animate-pet-happy' : petReaction === 'sad' ? 'animate-pet-sad' : ''}`}
-          />
-
           <div className="text-center min-h-[80px] flex flex-col justify-center">
             {feedback ? (
               <>
                 <div className={`text-lg font-bold ${feedback.correct ? 'text-good-deep' : 'text-clay'}`}>
                   {feedback.article} {feedback.de}{feedback.correct ? ' ✓' : ''}
                 </div>
-                <div className="text-ink-soft text-sm mt-1">{feedback.en}</div>
+                <div className="text-ink-soft text-base mt-1">{feedback.en}</div>
               </>
             ) : (
               <div className="text-5xl font-bold text-ink" style={{ textWrap: 'balance' }}>{current.de}</div>

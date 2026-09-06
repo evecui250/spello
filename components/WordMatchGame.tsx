@@ -48,7 +48,7 @@ function getLearnedWords(focus?: MascotStageId): Word[] {
   return all.filter(w => !!progress[w.id]?.mascotStage);
 }
 
-const GAME_DURATION = 60;
+const GAME_DURATION = 45;
 const PAIRS_PER_ROUND = 5;
 // Reserved out of each round's 5 slots for "mastered" (long-crowned) words
 // specifically, whenever any exist — see pickRoundWords below for why.
