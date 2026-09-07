@@ -203,7 +203,7 @@ export default function AccountPanel({ onSync }: Props) {
               onClick={() => setShopOpen(true)}
               className="mt-1.5 bg-accent/15 text-label px-3 py-1 rounded-full text-xs font-semibold hover:bg-accent/25 transition-colors"
             >
-              My pet
+              Pet &amp; Shop
             </button>
           </div>
         </div>
