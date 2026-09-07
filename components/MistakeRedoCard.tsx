@@ -48,7 +48,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
   const [selectedPromptWord, setSelectedPromptWord] = useState<Word | null>(null);
   const [selectedPromptGlossToken, setSelectedPromptGlossToken] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<ExplanationResult | null>(null);
-  const [explanationStatus, setExplanationStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached'>('idle');
+  const [explanationStatus, setExplanationStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached' | 'unreachable'>('idle');
   // Whether the dedicated Why? sheet is open — see DailySessionFlow's own
   // identical state for why this is separate from `explanation` itself.
   const [showWhySheet, setShowWhySheet] = useState(false);
@@ -144,14 +144,21 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
     if (explanation) { setShowWhySheet(true); return; }
     if (!result) return;
     setExplanationStatus('loading');
-    try {
-      const maxPoints = diff ? Math.max(1, diff.tokens.filter(t => t.changed).length) : undefined;
-      const explained = await explainCorrection(word.id, word.de, level, input, result.sentence, nativeLanguage, maxPoints);
-      setExplanation(explained);
-      setExplanationStatus('idle');
-      setShowWhySheet(true);
-    } catch (e) {
-      setExplanationStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
+    const maxPoints = diff ? Math.max(1, diff.tokens.filter(t => t.changed).length) : undefined;
+    // One retry before surfacing a failure — see DailySessionFlow's own
+    // identical handleExplain fix for why.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const explained = await explainCorrection(word.id, word.de, level, input, result.sentence, nativeLanguage, maxPoints);
+        setExplanation(explained);
+        setExplanationStatus('idle');
+        setShowWhySheet(true);
+        return;
+      } catch (e) {
+        if (e instanceof DailyLimitReachedError) { setExplanationStatus('limit-reached'); return; }
+        if (attempt === 0) continue;
+        setExplanationStatus(e instanceof AIUnreachableError ? 'unreachable' : 'error');
+      }
     }
   }
 
@@ -336,6 +343,9 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
           )}
           {!diff.perfect && explanationStatus === 'error' && (
             <p className="text-clay text-xs -mt-1">Couldn't load an explanation — try again.</p>
+          )}
+          {!diff.perfect && explanationStatus === 'unreachable' && (
+            <p className="text-clay text-xs -mt-1">Can't reach our AI service right now.</p>
           )}
           {!diff.perfect && explanationStatus === 'limit-reached' && (
             <p className="text-label text-xs -mt-1">Used up today's practice limit — come back tomorrow.</p>

@@ -183,6 +183,21 @@ function englishLemmaCandidates(token: string): string[] {
   return [...c];
 }
 
+// Loose German-lemma comparison used to sanity-check a single-candidate
+// corpus match against the AI's own sentence-aware lemma for that same
+// token (see the prompt-sentence click handler below) — both sides are
+// meant to already be bare dictionary-form headwords (sentence-glosses'
+// own prompt asks for "singular nominative for nouns, infinitive for
+// verbs", matching Word.de's own convention of never including the
+// article), so a plain normalized comparison is enough; startsWith gives
+// a little slack for minor spelling variance without needing to be exact.
+function lemmaRoughlyMatches(aiLemma: string, corpusDe: string): boolean {
+  const norm = (s: string) => s.trim().toLowerCase().replace(/^(der|die|das)\s+/, '');
+  const a = norm(aiLemma);
+  const b = norm(corpusDe);
+  return !!a && !!b && (a === b || a.startsWith(b) || b.startsWith(a));
+}
+
 function splitOnTranslationForm(translation: string, word: Word, nativeLanguage: 'en' | 'zh'): { before: string; match: string; after: string } | null {
   if (nativeLanguage === 'zh') {
     const senses = (word.zh ?? '').split(/[／,]/).map(s => s.trim()).filter(Boolean);
@@ -520,7 +535,7 @@ function SentenceExercise({
   // and happens after a correction already landed, never blocking or
   // replacing it.
   const [explanation, setExplanation] = useState<ExplanationResult | null>(null);
-  const [explanationStatus, setExplanationStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached'>('idle');
+  const [explanationStatus, setExplanationStatus] = useState<'idle' | 'loading' | 'error' | 'limit-reached' | 'unreachable'>('idle');
   // Whether the dedicated Why? sheet is open — separate from `explanation`
   // itself so a second tap re-opens the already-fetched sheet without a
   // second API call, instead of the button disappearing once fetched once.
@@ -683,19 +698,33 @@ function SentenceExercise({
     if (explanation) { setShowWhySheet(true); return; }
     if (!correction) return;
     setExplanationStatus('loading');
-    try {
-      // Cap how many points come back at how many words actually changed
-      // (see correctionDiff, above) — a correction that only touched one
-      // or two words has at most one or two real points to make; asking
-      // for "up to 4" regardless used to pad out trivial corrections with
-      // generic filler alongside the real point.
-      const maxPoints = correctionDiff ? Math.max(1, correctionDiff.tokens.filter(t => t.changed).length) : undefined;
-      const result = await explainCorrection(word.id, word.de, level, input, correction.sentence, getSettings().nativeLanguage, maxPoints);
-      setExplanation(result);
-      setExplanationStatus('idle');
-      setShowWhySheet(true);
-    } catch (e) {
-      setExplanationStatus(e instanceof DailyLimitReachedError ? 'limit-reached' : 'error');
+    // Cap how many points come back at how many words actually changed
+    // (see correctionDiff, above) — a correction that only touched one
+    // or two words has at most one or two real points to make; asking
+    // for "up to 4" regardless used to pad out trivial corrections with
+    // generic filler alongside the real point.
+    const maxPoints = correctionDiff ? Math.max(1, correctionDiff.tokens.filter(t => t.changed).length) : undefined;
+    // One retry before surfacing a failure — every other AI call in this
+    // app already does this (see getSentenceGlosses/getMyProfile's own
+    // fixes), and this one never had it, despite a real "sometimes stuck"
+    // report that a transient failure (not just the token-truncation bug
+    // fixed server-side) plausibly explains for at least some occurrences.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const result = await explainCorrection(word.id, word.de, level, input, correction.sentence, getSettings().nativeLanguage, maxPoints);
+        setExplanation(result);
+        setExplanationStatus('idle');
+        setShowWhySheet(true);
+        return;
+      } catch (e) {
+        if (e instanceof DailyLimitReachedError) { setExplanationStatus('limit-reached'); return; }
+        if (attempt === 0) continue;
+        // Distinguished from a generic failure same as handleSubmit's own
+        // correction call above — a genuine "can't reach the AI service"
+        // case was previously shown the same generic "couldn't load" text
+        // as a malformed-response or truncated-completion failure.
+        setExplanationStatus(e instanceof AIUnreachableError ? 'unreachable' : 'error');
+      }
     }
   }
 
@@ -795,8 +824,26 @@ function SentenceExercise({
                   // "spend" -> aufwenden (should've been verbringen) case
                   // this fixes.
                   const nextWordToken = tokens.slice(i + 1).find(isWordToken);
-                  const match = /[A-Za-z]/.test(text) ? findWordByEnglishForm(text, word, nextWordToken) : undefined;
-                  const gloss = !match ? promptGlosses[text] : undefined;
+                  const rawMatch = /[A-Za-z]/.test(text) ? findWordByEnglishForm(text, word, nextWordToken) : undefined;
+                  // A single corpus candidate is trusted outright even when
+                  // it's the WRONG part of speech for this exact sentence —
+                  // there's no tie to break, so pickBestCandidate's
+                  // multi-candidate bail-outs never fire (real case: "a wave
+                  // of complaints" resolved to the verb "winken" because
+                  // that's the only corpus entry glossing to "wave" at all,
+                  // even though the AI's own sentence-aware gloss for this
+                  // exact token — already fetched into promptGlosses below —
+                  // correctly has it as a noun). Cross-check the single
+                  // corpus match's headword against the AI's lemma for this
+                  // token when both exist; a clear mismatch means the corpus
+                  // hit is very likely the wrong sense, so fall back to the
+                  // context-aware AI gloss instead of the confidently-wrong
+                  // corpus one.
+                  const aiGloss = promptGlosses[text];
+                  const corpusLikelyWrongSense = !!rawMatch && !!aiGloss
+                    && !lemmaRoughlyMatches(aiGloss.lemma, rawMatch.de);
+                  const match = corpusLikelyWrongSense ? undefined : rawMatch;
+                  const gloss = !match ? aiGloss : undefined;
                   if (match) {
                     return (
                       <button
@@ -953,6 +1000,9 @@ function SentenceExercise({
               )}
               {!correctionDiff.perfect && explanationStatus === 'error' && (
                 <p className="text-clay text-xs -mt-2">Couldn't load an explanation — try again.</p>
+              )}
+              {!correctionDiff.perfect && explanationStatus === 'unreachable' && (
+                <p className="text-clay text-xs -mt-2">Can't reach our AI service right now.</p>
               )}
               {!correctionDiff.perfect && explanationStatus === 'limit-reached' && (
                 <p className="text-label text-xs -mt-2">Used up today's practice limit — come back tomorrow.</p>

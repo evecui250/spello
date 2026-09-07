@@ -252,7 +252,21 @@ Deno.serve(async (req: Request) => {
 
       const result = await resp.json();
       const raw: string = result.choices?.[0]?.message?.content ?? '';
-      if (!raw.trim() && !escalated) {
+      // Escalating only on a fully EMPTY completion missed a real failure
+      // mode: reasoning tokens eating most of the budget still leaves
+      // max_completion_tokens too little to finish the JSON, cutting off
+      // mid-object (finish_reason "length") -- raw is non-empty but
+      // unparseable, and since the same input tends to hit the same
+      // budget wall again, this failed the SAME sentence deterministically
+      // on every retry rather than intermittently. Checking finish_reason
+      // and attempting a parse here (mirroring the real validity check
+      // below) catches that case too, not just a blank string.
+      const truncated = result.choices?.[0]?.finish_reason === 'length';
+      let parseFailed = false;
+      if (!truncated && raw.trim()) {
+        try { JSON.parse(raw); } catch { parseFailed = true; }
+      }
+      if ((!raw.trim() || truncated || parseFailed) && !escalated) {
         return callOpenAI(requestBody, reasoningEffort, 3000, true);
       }
       return { result, raw };
