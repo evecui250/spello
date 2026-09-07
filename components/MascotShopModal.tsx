@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  AVATAR_CATALOG, ACCESSORY_CATALOG, avatarImageFor, getMyProfile, buyAccessory,
-  setAvatarId as saveAvatarId, setEquippedAccessory,
+  AVATAR_CATALOG, ACCESSORY_CATALOG, AccessorySlot, EquippedAccessories, NO_ACCESSORIES,
+  avatarImageFor, getMyProfile, buyAccessory, setAvatarId as saveAvatarId, setEquippedAccessory,
 } from '../lib/shop';
 import { PointsIcon } from './icons';
 
@@ -17,9 +17,16 @@ interface Props {
   onProfileChange?: () => void;
 }
 
+const SLOT_LABEL: Record<AccessorySlot, string> = {
+  collar: 'Collar',
+  headwear: 'Head-wear',
+  sidewear: 'Side-wear',
+};
+const SLOT_ORDER: AccessorySlot[] = ['collar', 'headwear', 'sidewear'];
+
 export default function MascotShopModal({ onClose, onProfileChange }: Props) {
   const [avatarId, setAvatarIdState] = useState('dachshund');
-  const [equippedId, setEquippedIdState] = useState<string | null>(null);
+  const [equipped, setEquippedState] = useState<EquippedAccessories>(NO_ACCESSORIES);
   const [ownedIds, setOwnedIds] = useState<string[]>([]);
   const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -35,7 +42,7 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
     getMyProfile().then(profile => {
       if (profile) {
         setAvatarIdState(profile.avatarId);
-        setEquippedIdState(profile.equippedAccessoryId);
+        setEquippedState(profile.equipped);
         setOwnedIds(profile.ownedAccessoryIds);
         setBalance(profile.balance);
       }
@@ -50,9 +57,12 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
     await saveAvatarId(id);
   };
 
-  const equip = async (id: string | null) => {
-    setEquippedIdState(id);
-    await setEquippedAccessory(id);
+  // Equips (or, with id=null, unequips) one slot at a time -- setting the
+  // headwear slot never touches whatever's equipped in collar/sidewear,
+  // so a learner can mix items across slots freely.
+  const equip = async (slot: AccessorySlot, id: string | null) => {
+    setEquippedState(prev => ({ ...prev, [slot]: id }));
+    await setEquippedAccessory(slot, id);
   };
 
   const buy = async (id: string) => {
@@ -98,7 +108,7 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
               <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-paper-line">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(avatarId, equippedId)}`}
+                  src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(avatarId, equipped)}`}
                   alt="Your mascot"
                   className="w-full h-full object-cover"
                 />
@@ -142,72 +152,78 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
               </div>
             </div>
 
-            {ACCESSORY_CATALOG.length > 0 && (
-            <div>
-              <div className="text-ink-soft text-xs font-semibold uppercase tracking-wide mb-2">Accessories</div>
-              <div className="grid grid-cols-3 gap-2">
-                {ACCESSORY_CATALOG.map(acc => {
-                  const owned = ownedIds.includes(acc.id);
-                  const equipped = equippedId === acc.id;
-                  if (!owned && confirmingId === acc.id) {
-                    return (
-                      <div key={acc.id} className="col-span-3 flex flex-col items-center gap-2 rounded-xl border border-accent bg-accent/10 px-3 py-3 text-center">
-                        <span className="flex items-center gap-1 text-sm font-semibold text-ink">
-                          Spend <PointsIcon className="w-4 h-4" /> {acc.cost} on {acc.name}? This can&apos;t be undone.
-                        </span>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            disabled={buyingId === acc.id}
-                            onClick={() => buy(acc.id)}
-                            className="bg-accent text-white px-4 py-1.5 rounded-full text-sm font-semibold hover:bg-accent-deep transition-colors disabled:opacity-50"
-                          >
-                            {buyingId === acc.id ? 'Buying…' : 'Confirm'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmingId(null)}
-                            className="text-ink-soft hover:text-ink px-4 py-1.5 rounded-full text-sm font-semibold transition-colors"
-                          >
-                            Cancel
-                          </button>
+            {/* One section per slot that actually has items -- each slot's
+                items only ever compete with EACH OTHER (equipping a second
+                hat replaces the first), never with items in a different
+                slot, so grouping by slot is what makes that mixable-across-
+                slots model legible rather than one flat grid where it'd be
+                unclear which items are mutually exclusive. */}
+            {SLOT_ORDER.filter(slot => ACCESSORY_CATALOG.some(acc => acc.slot === slot)).map(slot => (
+              <div key={slot}>
+                <div className="text-ink-soft text-xs font-semibold uppercase tracking-wide mb-2">{SLOT_LABEL[slot]}</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {ACCESSORY_CATALOG.filter(acc => acc.slot === slot).map(acc => {
+                    const owned = ownedIds.includes(acc.id);
+                    const isEquipped = equipped[acc.slot] === acc.id;
+                    if (!owned && confirmingId === acc.id) {
+                      return (
+                        <div key={acc.id} className="col-span-3 flex flex-col items-center gap-2 rounded-xl border border-accent bg-accent/10 px-3 py-3 text-center">
+                          <span className="flex items-center gap-1 text-sm font-semibold text-ink">
+                            Spend <PointsIcon className="w-4 h-4" /> {acc.cost} on {acc.name}? This can&apos;t be undone.
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={buyingId === acc.id}
+                              onClick={() => buy(acc.id)}
+                              className="bg-accent text-white px-4 py-1.5 rounded-full text-sm font-semibold hover:bg-accent-deep transition-colors disabled:opacity-50"
+                            >
+                              {buyingId === acc.id ? 'Buying…' : 'Confirm'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmingId(null)}
+                              className="text-ink-soft hover:text-ink px-4 py-1.5 rounded-full text-sm font-semibold transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      );
+                    }
+                    return (
+                      <button
+                        key={acc.id}
+                        type="button"
+                        onClick={() => {
+                          if (isEquipped) equip(acc.slot, null);
+                          else if (owned) equip(acc.slot, acc.id);
+                          else if (balance < acc.cost) { setBuyError(`Not enough points — need ${acc.cost - balance} more.`); setConfirmingId(null); }
+                          else { setBuyError(null); setConfirmingId(acc.id); }
+                        }}
+                        className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-center transition-colors ${
+                          isEquipped ? 'border-accent bg-accent/10' : owned ? 'border-good bg-good/10' : 'border-paper-line bg-paper-dim'
+                        }`}
+                      >
+                        <div className="w-10 h-10 rounded-full overflow-hidden border border-paper-line bg-paper flex items-center justify-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${acc.icon}`}
+                            alt=""
+                            className="w-[85%] h-[85%] object-contain"
+                          />
+                        </div>
+                        <span className="text-sm font-semibold text-ink">{acc.name}</span>
+                        <span className={`flex items-center gap-1 text-xs font-mono ${isEquipped ? 'text-accent-deep' : owned ? 'text-good-deep' : 'text-label'}`}>
+                          {isEquipped ? 'Equipped' : owned ? 'Tap to equip' : <><PointsIcon className="w-3.5 h-3.5" /> {acc.cost}</>}
+                        </span>
+                      </button>
                     );
-                  }
-                  return (
-                    <button
-                      key={acc.id}
-                      type="button"
-                      onClick={() => {
-                        if (equipped) equip(null);
-                        else if (owned) equip(acc.id);
-                        else if (balance < acc.cost) { setBuyError(`Not enough points — need ${acc.cost - balance} more.`); setConfirmingId(null); }
-                        else { setBuyError(null); setConfirmingId(acc.id); }
-                      }}
-                      className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-center transition-colors ${
-                        equipped ? 'border-accent bg-accent/10' : owned ? 'border-good bg-good/10' : 'border-paper-line bg-paper-dim'
-                      }`}
-                    >
-                      <div className="w-10 h-10 rounded-full overflow-hidden border border-paper-line bg-paper flex items-center justify-center">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${acc.icon}`}
-                          alt=""
-                          className="w-[85%] h-[85%] object-contain"
-                        />
-                      </div>
-                      <span className="text-sm font-semibold text-ink">{acc.name}</span>
-                      <span className={`flex items-center gap-1 text-xs font-mono ${equipped ? 'text-accent-deep' : owned ? 'text-good-deep' : 'text-label'}`}>
-                        {equipped ? 'Equipped' : owned ? 'Tap to equip' : <><PointsIcon className="w-3.5 h-3.5" /> {acc.cost}</>}
-                      </span>
-                    </button>
-                  );
-                })}
+                  })}
+                </div>
               </div>
-              {buyError && <p className="text-clay text-xs mt-2">{buyError}</p>}
-            </div>
-            )}
+            ))}
+            {buyError && <p className="text-clay text-xs -mt-2">{buyError}</p>}
           </>
         )}
       </div>

@@ -21,6 +21,7 @@ const CORS_HEADERS = {
 
 const ACCESSORY_CATALOG: Record<string, number> = {
   'leather-collar': 200,
+  'straw-hat': 1000,
 };
 
 interface RequestBody {

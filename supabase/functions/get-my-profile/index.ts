@@ -1,7 +1,8 @@
 // Powers the Settings-page mascot/shop picker (see components/
 // MascotShopModal.tsx) — a signed-in-only read of the caller's own
-// nickname/avatar/equipped accessory/owned accessories and their real
-// points balance. Kept as a real server function (not computed
+// nickname/avatar/equipped accessories (one per slot: collar, headwear,
+// sidewear)/owned accessories and their real points balance. Kept as a
+// real server function (not computed
 // client-side, even though nothing technically blocks that once
 // game_plays gets a select policy) specifically so the DISPLAYED balance
 // here and the GATING balance in buy-accessory can never subtly disagree
@@ -40,7 +41,7 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const [{ data: profileRow }, { data: activityRows }, { count: gameCount }, { data: ownedRows }] = await Promise.all([
-      admin.from('profiles').select('nickname, avatar_id, equipped_accessory_id, leaderboard_opt_out').eq('user_id', userId).maybeSingle(),
+      admin.from('profiles').select('nickname, avatar_id, equipped_collar_id, equipped_headwear_id, equipped_sidewear_id, leaderboard_opt_out').eq('user_id', userId).maybeSingle(),
       admin.from('daily_activity').select('words_studied').eq('user_id', userId),
       admin.from('game_plays').select('id', { count: 'exact', head: true }).eq('user_id', userId),
       admin.from('owned_accessories').select('accessory_id, cost_paid').eq('user_id', userId),
@@ -58,7 +59,11 @@ Deno.serve(async (req: Request) => {
     return json({
       nickname: profileRow?.nickname ?? null,
       avatarId: profileRow?.avatar_id ?? 'dachshund',
-      equippedAccessoryId: profileRow?.equipped_accessory_id ?? null,
+      equipped: {
+        collar: profileRow?.equipped_collar_id ?? null,
+        headwear: profileRow?.equipped_headwear_id ?? null,
+        sidewear: profileRow?.equipped_sidewear_id ?? null,
+      },
       leaderboardOptOut: profileRow?.leaderboard_opt_out ?? false,
       ownedAccessoryIds: (ownedRows ?? []).map(r => r.accessory_id),
       balance,

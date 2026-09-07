@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 import { SYNCED_EVENT } from '../lib/sync';
-import { avatarImageFor } from '../lib/shop';
+import { avatarImageFor, EquippedAccessories } from '../lib/shop';
 import { PointsIcon } from './icons';
 
 interface LeaderboardEntry {
@@ -12,7 +12,7 @@ interface LeaderboardEntry {
   rank: number;
   displayName: string;
   avatarId: string;
-  equippedAccessoryId: string | null;
+  equipped: EquippedAccessories;
   points: number;
 }
 
@@ -60,7 +60,7 @@ function LeaderboardRow({ entry, isMe, onAvatarClick }: { entry: LeaderboardEntr
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(entry.avatarId, entry.equippedAccessoryId)}`}
+          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(entry.avatarId, entry.equipped)}`}
           alt=""
           className="w-full h-full object-cover"
         />
@@ -263,7 +263,7 @@ export default function Leaderboard() {
             <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-paper-line">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(enlarged.avatarId, enlarged.equippedAccessoryId)}`}
+                src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(enlarged.avatarId, enlarged.equipped)}`}
                 alt=""
                 className="w-full h-full object-cover"
               />

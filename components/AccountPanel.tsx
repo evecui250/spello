@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { SYNCED_EVENT } from '../lib/sync';
 import { getAiUsageStats, AiUsageStats } from '../lib/ai';
-import { avatarImageFor, getMyProfile, setNickname as saveNickname, setLeaderboardOptOut } from '../lib/shop';
+import { avatarImageFor, getMyProfile, setNickname as saveNickname, setLeaderboardOptOut, EquippedAccessories, NO_ACCESSORIES } from '../lib/shop';
 import MascotShopModal from './MascotShopModal';
 import { PointsIcon, PencilIcon } from './icons';
 
@@ -37,7 +37,7 @@ export default function AccountPanel({ onSync }: Props) {
   const [aiStats, setAiStats] = useState<AiUsageStats | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [avatarId, setAvatarId] = useState('dachshund');
-  const [equippedAccessoryId, setEquippedAccessoryId] = useState<string | null>(null);
+  const [equipped, setEquipped] = useState<EquippedAccessories>(NO_ACCESSORIES);
   const [nickname, setNicknameState] = useState('');
   const [editingNickname, setEditingNickname] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
@@ -69,7 +69,7 @@ export default function AccountPanel({ onSync }: Props) {
     getMyProfile().then(profile => {
       if (!profile) return;
       setAvatarId(profile.avatarId);
-      setEquippedAccessoryId(profile.equippedAccessoryId);
+      setEquipped(profile.equipped);
       setNicknameState(profile.nickname ?? '');
       setBalance(profile.balance);
       setOptOut(profile.leaderboardOptOut);
@@ -158,7 +158,7 @@ export default function AccountPanel({ onSync }: Props) {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(avatarId, equippedAccessoryId)}`}
+              src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/${avatarImageFor(avatarId, equipped)}`}
               alt="Your mascot"
               className="w-full h-full object-cover"
             />

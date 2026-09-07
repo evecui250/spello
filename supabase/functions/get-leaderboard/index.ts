@@ -76,7 +76,7 @@ interface LeaderboardEntry {
   rank: number;
   displayName: string;
   avatarId: string;
-  equippedAccessoryId: string | null;
+  equipped: { collar: string | null; headwear: string | null; sidewear: string | null };
   points: number;
 }
 
@@ -98,7 +98,7 @@ Deno.serve(async (req: Request) => {
     const [{ data: activityRows }, { data: gameRows }, { data: profileRows }, { data: usersData }] = await Promise.all([
       admin.from('daily_activity').select('user_id, activity_date, words_studied').gte('activity_date', fetchStart),
       admin.from('game_plays').select('user_id, created_at').not('user_id', 'is', null).gte('created_at', new Date(now.getTime() - FETCH_WINDOW_DAYS * DAY_MS).toISOString()),
-      admin.from('profiles').select('user_id, nickname, avatar_id, equipped_accessory_id, leaderboard_opt_out'),
+      admin.from('profiles').select('user_id, nickname, avatar_id, equipped_collar_id, equipped_headwear_id, equipped_sidewear_id, leaderboard_opt_out'),
       admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
     ]);
 
@@ -191,7 +191,12 @@ Deno.serve(async (req: Request) => {
         const displayName = profile?.nickname || (email ? maskEmail(email) : 'Anonymous');
         return {
           userId: t.userId, rank: i + 1, displayName, avatarId: profile?.avatar_id || 'dachshund',
-          equippedAccessoryId: profile?.equipped_accessory_id ?? null, points: t.points,
+          equipped: {
+            collar: profile?.equipped_collar_id ?? null,
+            headwear: profile?.equipped_headwear_id ?? null,
+            sidewear: profile?.equipped_sidewear_id ?? null,
+          },
+          points: t.points,
         };
       });
     }
