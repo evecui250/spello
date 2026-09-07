@@ -684,6 +684,15 @@ async function generateOnce(
           'synonyms or share a category (e.g. two beverages, two modes of transport) -- each one\'s own context ' +
           'must clearly favor that specific word over the other target, never read as interchangeable between ' +
           'them.\n' +
+          '- This same "clearly the best fit, not just A fit" requirement applies just as strictly to a plain ' +
+          'DESCRIPTIVE ADJECTIVE target (size, color, age, condition, etc.) as it does to a noun -- a generic ' +
+          'object with no other detail can almost always take several unrelated adjectives equally well (e.g. ' +
+          '"a ___ cabinet" fits old/big/white/heavy interchangeably, with nothing pointing at any one of them), ' +
+          'which is a real confirmed failure mode, not just a hypothetical one. Give the sentence a concrete ' +
+          'reason tied to the SPECIFIC quality the target describes -- for age, something about how long it\'s ' +
+          'been there or who it belonged to; for size, an explicit comparison or what does/doesn\'t fit; for ' +
+          'color, something that depends on seeing or matching it; and so on -- so that specific dimension, and ' +
+          'not some other equally-plausible adjective, is what the sentence is actually about.\n' +
           '- Use standard German orthography throughout, including "ß" wherever it is standard (e.g. "groß", ' +
           '"weiß", "Straße") -- never substitute "ss" for it (Swiss-style spelling), even in an inflected or ' +
           'capitalized form (e.g. "großen", not "grossen").\n' +
