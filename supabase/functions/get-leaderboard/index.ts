@@ -133,6 +133,32 @@ Deno.serve(async (req: Request) => {
       pointsByUserDay.set(uid, merged);
     }
 
+    // Per-user, per-day LATEST contributing timestamp -- real report: two
+    // learners tied on points, both from earlier today, and the one who
+    // actually reached it later ended up ranked ABOVE the one who got there
+    // first. Root cause was tie-breaking on the CALENDAR DAY string alone
+    // (see the old lastDay logic below) -- fine across different days, but
+    // two ties on the SAME day fell through to comparing raw userId, which
+    // has nothing to do with who actually got there first. game_plays has a
+    // real timestamp; daily_activity only has a date, so that side is
+    // stamped at a neutral midday placeholder (neither systematically
+    // favors nor penalizes either point source) rather than left at
+    // day-only precision.
+    const timestampsByUserDay = new Map<string, Map<string, string>>();
+    function noteTimestamp(uid: string, day: string, iso: string) {
+      const byDay = timestampsByUserDay.get(uid) ?? new Map<string, string>();
+      const prev = byDay.get(day);
+      if (!prev || iso > prev) byDay.set(day, iso);
+      timestampsByUserDay.set(uid, byDay);
+    }
+    for (const row of activityRows ?? []) {
+      noteTimestamp(row.user_id, row.activity_date, `${row.activity_date}T12:00:00.000Z`);
+    }
+    for (const row of gameRows ?? []) {
+      const uid = row.user_id as string;
+      noteTimestamp(uid, dateStr(new Date(row.created_at)), row.created_at);
+    }
+
     // Returns EVERY opted-in ranked learner this window, not just the top
     // 3 — the Progress page's own compact view still only ever shows the
     // top 3 plus (when signed in and outside them) the caller's own row,
@@ -140,19 +166,25 @@ Deno.serve(async (req: Request) => {
     // and the "see everyone" expanded view, so it's computed once here
     // rather than needing a second request.
     function buildWindow(windowStart: string): LeaderboardEntry[] {
-      const totals: { userId: string; points: number; lastDay: string }[] = [];
+      const totals: { userId: string; points: number; lastTimestamp: string }[] = [];
       for (const [uid, byDay] of pointsByUserDay) {
         if (profileByUserId.get(uid)?.leaderboard_opt_out) continue;
         let points = 0;
-        let lastDay = '';
+        let lastTimestamp = '';
         for (const [day, dayPoints] of byDay) {
           if (day < windowStart || day > todayStr) continue;
           points += dayPoints;
-          if (dayPoints > 0 && day > lastDay) lastDay = day;
+          if (dayPoints > 0) {
+            const ts = timestampsByUserDay.get(uid)?.get(day) ?? `${day}T12:00:00.000Z`;
+            if (ts > lastTimestamp) lastTimestamp = ts;
+          }
         }
-        if (points > 0) totals.push({ userId: uid, points, lastDay });
+        if (points > 0) totals.push({ userId: uid, points, lastTimestamp });
       }
-      totals.sort((a, b) => b.points - a.points || (a.lastDay < b.lastDay ? -1 : a.lastDay > b.lastDay ? 1 : (a.userId < b.userId ? -1 : 1)));
+      // Ties go to whoever reached this point total FIRST -- ascending
+      // timestamp, earlier wins -- with userId as the very last resort
+      // (only when timestamps are genuinely identical).
+      totals.sort((a, b) => b.points - a.points || (a.lastTimestamp < b.lastTimestamp ? -1 : a.lastTimestamp > b.lastTimestamp ? 1 : (a.userId < b.userId ? -1 : 1)));
       return totals.map((t, i) => {
         const profile = profileByUserId.get(t.userId);
         const email = emailByUserId.get(t.userId);
