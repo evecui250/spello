@@ -67,12 +67,20 @@ function mostRecentDate(p?: WordProgress): string {
 }
 
 // Which words fill a round's board, in priority order:
-//   1. Up to MASTERED_SLOTS words already at the final (long-crowned)
-//      stage — the SRS schedule never brings these back for review once
-//      mastered, so this game is genuinely the only remaining chance to
-//      see them again. Reserved unconditionally (not just a fallback), so
-//      a learner who touched >= PAIRS_PER_ROUND words today doesn't
-//      accidentally crowd mastered words out of every single round.
+//   1. A share of mastered (long-crowned) words, scaled to how much of the
+//      pool is actually mastered, floored at 1 (whenever any exist) and
+//      capped at MASTERED_SLOTS — the SRS schedule never brings these back
+//      for review once mastered, so this game is genuinely the only
+//      remaining chance to see them again, but a FIXED count regardless of
+//      population badly over-represented a small mastered pool: a learner
+//      with, say, 5 mastered words and 50 still-learning ones would always
+//      get 2 of 5 slots (40%) from that tiny pool of 5 -- the same handful
+//      recurring constantly -- while their 50 learning words split the
+//      rest, a real report ("feels like it's mainly mastered words").
+//      Scaling to share (still floored at 1, never zero, so mastered words
+//      are never dropped entirely -- that's still the whole point of this
+//      reservation) fixes that without losing the original guarantee for a
+//      learner who HAS mastered a large share of their vocabulary.
 //   2. Words touched (learned or reviewed) TODAY specifically — the
 //      game's actual purpose is reinforcing what's fresh, so these fill
 //      the rest of the board first.
@@ -93,7 +101,11 @@ function pickRoundWords(
 ): Word[] {
   const source = pool.filter(w => !usedIds.has(w.id));
   const masteredPool = shuffled(source.filter(w => masteredIds.has(w.id)));
-  const picked: Word[] = masteredPool.slice(0, Math.min(MASTERED_SLOTS, PAIRS_PER_ROUND));
+  const masteredShare = source.length > 0 ? masteredPool.length / source.length : 0;
+  const masteredSlotsThisRound = masteredPool.length === 0
+    ? 0
+    : Math.max(1, Math.min(MASTERED_SLOTS, Math.round(PAIRS_PER_ROUND * masteredShare)));
+  const picked: Word[] = masteredPool.slice(0, masteredSlotsThisRound);
   const pickedIds = new Set(picked.map(w => w.id));
 
   const todayPool = shuffled(source.filter(w => todayIds.has(w.id) && !pickedIds.has(w.id)));
