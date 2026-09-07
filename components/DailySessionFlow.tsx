@@ -14,7 +14,7 @@ import {
 import {
   wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint, demoteReviewRound,
   buildMcqChoices, buildReverseMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
-  hasEnoughWordsForGame, buildWordsInContextBatches, sharedCategoryHint, parseParagraphResponse,
+  hasEnoughWordsForGame, hasEnoughWordsForParagraph, buildWordsInContextBatches, sharedCategoryHint, parseParagraphResponse,
   addDistractors, combineParagraphExercises,
 } from '../lib/practice';
 import { REVIEW_PLAN, recordMilestonePass } from '../lib/srs';
@@ -2212,12 +2212,18 @@ export default function DailySessionFlow() {
 
   // The "N words learned" summary's own "Continue" button — routes to the
   // bonus Words in Context offer when today's batch has enough words for
-  // at least one exercise (see buildWordsInContextBatches), otherwise
-  // straight to congrats same as before this existed.
+  // at least one exercise (see buildWordsInContextBatches) AND the learner
+  // has enough real vocabulary overall to make reading a whole generated
+  // paragraph reasonable (see hasEnoughWordsForParagraph — batches.length
+  // only looks at TODAY's handful of new words, so without this a day-one
+  // A1 learner could be offered a paragraph built almost entirely from
+  // words they'd never seen before today). Otherwise straight to congrats,
+  // same as before this existed.
   function handleFinishStudy() {
     if (!session) return;
     const batches = buildWordsInContextBatches(wordsById(session.studyWordIds), getSettings().level);
-    persistSession({ ...session, phase: batches.length > 0 ? 'study-paragraph-offer' : 'congrats' });
+    const offerParagraph = batches.length > 0 && hasEnoughWordsForParagraph();
+    persistSession({ ...session, phase: offerParagraph ? 'study-paragraph-offer' : 'congrats' });
   }
 
   function handleSkipParagraph() {

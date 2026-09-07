@@ -270,6 +270,26 @@ Deno.serve(async (req: Request) => {
       return seen.size === count;
     }
 
+    // New, confirmed real via a learner report: the model can glue a bare
+    // inflection-ending FRAGMENT directly onto a placeholder instead of
+    // putting the whole inflected word inside answers[i] -- e.g.
+    // "...einen [[0]]en Schrank..." with answers[0] = "alten" resolves to
+    // "alten" + "en" = "altenen" once the chip is placed. The prompt's own
+    // instructions are unambiguous that a placeholder always replaces the
+    // ENTIRE inflected word (see the target-handling rules above) with
+    // nothing bolted on beside it except a noun's own article/possessive/
+    // quantifier BEFORE it -- so a placeholder immediately followed, with
+    // zero characters in between, by a lowercase letter has no legitimate
+    // case in natural German sentence text (a real word boundary always
+    // has whitespace or punctuation there). Checking for adjacency rather
+    // than comparing letters against the answer's own ending deliberately
+    // avoids a fragile, coincidence-prone heuristic -- German endings are
+    // common enough that the answer's tail could coincidentally match the
+    // START of the genuinely separate NEXT word too.
+    function hasNoGluedSuffix(paragraph: string): boolean {
+      return !/\]\]\p{Ll}/u.test(paragraph);
+    }
+
     // New: every answer must actually say something -- Structured Outputs
     // guarantees the answers array exists and is the right JSON shape, but
     // not that every entry is non-blank content.
@@ -356,6 +376,14 @@ Deno.serve(async (req: Request) => {
       const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
       if (retry && hasValidPlaceholders(retry.paragraph, retry.answers, words.length)) genResult = retry;
     }
+    // Same severity tier as hasValidPlaceholders above -- a placeholder
+    // with a fragment glued directly onto it makes the rendered answer
+    // wrong the moment a learner places the correct chip, every bit as
+    // unusable as a malformed placeholder set.
+    if (!hasNoGluedSuffix(genResult.paragraph)) {
+      const retry = await generateOnce(wordList, words.length, level, range, themeHint, wantsZh);
+      if (retry && hasNoGluedSuffix(retry.paragraph)) genResult = retry;
+    }
     // Same severity tier as hasValidPlaceholders above -- a scrambled
     // answer-to-word mapping is as unusable as a malformed placeholder
     // set, just a subtler way to get there.
@@ -433,6 +461,10 @@ Deno.serve(async (req: Request) => {
     // branches here.
     if (!hasValidPlaceholders(paragraph, answers, words.length)) {
       console.error('generate-paragraph: invalid placeholder structure after retry', { paragraph, answers });
+      return json({ error: 'AI returned an unusable paragraph structure' }, 502);
+    }
+    if (!hasNoGluedSuffix(paragraph)) {
+      console.error('generate-paragraph: fragment glued onto a placeholder after retry', { paragraph, answers });
       return json({ error: 'AI returned an unusable paragraph structure' }, 502);
     }
     if (!answersMatchWords(answers)) {
@@ -612,9 +644,12 @@ async function generateOnce(
           '- Use every target word with exactly the supplied meaning.\n' +
           '- Use each target exactly once, in the grammatically correct inflected or conjugated form.\n' +
           '- Replace that form with its corresponding [[i]] placeholder (i = the number before that word above) -- ' +
-          'the placeholder REPLACES the word. Placeholders may appear in the text in ANY order that reads ' +
-          "naturally -- they do NOT need to go [[0]], [[1]], [[2]]... in sequence; write whatever order the " +
-          'scene actually calls for, as long as each index 0 through ' + (count - 1) +
+          'the placeholder REPLACES the word ENTIRELY, ending included -- e.g. for the adjective "alt" needing ' +
+          'the ending "-en" in context, write the WHOLE form "alten" as answers[i] and put ONLY "[[i]]" in the ' +
+          'text, never "[[i]]en" with the ending left sitting in the surrounding text (that produces the ' +
+          'nonsense "altenen" once the answer is substituted in). Placeholders may appear in the text in ANY ' +
+          'order that reads naturally -- they do NOT need to go [[0]], [[1]], [[2]]... in sequence; write ' +
+          'whatever order the scene actually calls for, as long as each index 0 through ' + (count - 1) +
           ' appears exactly once, wherever it belongs.\n' +
           '- In the "answers" array, tag every answer with the SAME index i as its placeholder -- ' +
           '{"index": i, "answer": "the exact form you wrote at [[i]]"} -- one entry per target, in any order. ' +
@@ -649,6 +684,9 @@ async function generateOnce(
           'synonyms or share a category (e.g. two beverages, two modes of transport) -- each one\'s own context ' +
           'must clearly favor that specific word over the other target, never read as interchangeable between ' +
           'them.\n' +
+          '- Use standard German orthography throughout, including "ß" wherever it is standard (e.g. "groß", ' +
+          '"weiß", "Straße") -- never substitute "ss" for it (Swiss-style spelling), even in an inflected or ' +
+          'capitalized form (e.g. "großen", not "grossen").\n' +
           '- Prefer simple, idiomatic German over creative or complicated writing.\n' +
           '- Use only fictional, ordinary, all-ages everyday situations -- a family, friends, a normal day, a ' +
           'hobby, a trip -- never tied to a real event.\n' +

@@ -51,6 +51,31 @@ export function hasEnoughWordsForGame(): boolean {
   return false;
 }
 
+// Words in Context (the AI-generated fill-in-the-blank paragraph bonus)
+// unlock threshold -- an A1 learner in their first week or two doesn't yet
+// have enough real vocabulary to read a whole generated paragraph, only
+// today's handful of brand-new words (buildWordsInContextBatches' own
+// batches.length > 0 check only looks at TODAY's words, not the learner's
+// real total, so it was offering this to day-one learners who'd only ever
+// seen a handful of words). Same shape as hasEnoughWordsForGame, just a
+// higher bar -- reading a paragraph needs more surrounding vocabulary than
+// filling a 5-word match board does. Mirrors round-1's own precedent of
+// gating a whole exercise mode behind a word count (the ~220
+// highFrequency A1 words that skip sentence-writing entirely) -- a
+// different mechanism (that's a per-word corpus flag, this counts real
+// learner progress), same underlying idea: don't offer an exercise before
+// there's enough foundation under it.
+export const WORDS_IN_CONTEXT_MIN_WORDS_REQUIRED = 100;
+
+export function hasEnoughWordsForParagraph(): boolean {
+  const progress = getMergedProgressAcrossLevels();
+  let count = 0;
+  for (const w of [...WORDS, ...getAllCustomWordsAcrossLevels()]) {
+    if (progress[w.id]?.mascotStage && ++count >= WORDS_IN_CONTEXT_MIN_WORDS_REQUIRED) return true;
+  }
+  return false;
+}
+
 // --- Artikel Blitz / Mistake Notebook Articles tab -------------------
 
 // A short, curated exclusion list -- the corpus itself has no "this noun
@@ -1350,9 +1375,15 @@ export function addDistractors(
     && !blankAnswers.has(w.de)
     && !(w.category && batchCategories.has(w.category))
   ));
+  // Real request: with more than one blank already in play, extra decoy
+  // chips just pile onto a puzzle that's already got real choices to make
+  // -- distractors only add useful difficulty when there's a single blank
+  // (otherwise it'd be solvable by pure elimination with zero decoys at
+  // all, per this function's own header comment).
+  const distractorCount = exercise.blanks.length > 1 ? 0 : DISTRACTOR_COUNT;
   const preferred = shuffled(candidates.filter(w => batchTypes.has(w.type)));
   const rest = shuffled(candidates.filter(w => !batchTypes.has(w.type)));
-  const picked = [...preferred, ...rest].slice(0, DISTRACTOR_COUNT);
+  const picked = [...preferred, ...rest].slice(0, distractorCount);
   if (picked.length === 0) return exercise;
   return {
     ...exercise,
