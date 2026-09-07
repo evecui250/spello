@@ -302,13 +302,23 @@ def main():
     if not targets:
         return
 
+    # Self-referential by design (keeps a newly-added word's loudness
+    # consistent with its neighbors) -- this is exactly what made the whole
+    # corpus quietly self-perpetuate the original tts-1-hd batch's ~-32dB
+    # level for every regeneration since, since nothing ever pushed the
+    # SAMPLE itself louder. Fixed once via a real corpus-wide re-normalize
+    # pass (see scratchpad/renormalize_audio.py in that session) rather
+    # than here -- the existing files this now samples from are already at
+    # the new, louder ~-18dB target, so this naturally keeps targeting that
+    # going forward with no further change needed. -18.0 (not the old
+    # -31.0) is only the fallback for a level with zero existing files yet.
     if args.target_db is not None:
         target_db = args.target_db
     else:
         sample_ids = [w['id'] for w in all_words if os.path.exists(os.path.join(AUDIO_DIR, f"{w['id']}.mp3"))][:25]
         dbs = [mean_volume_db(os.path.join(AUDIO_DIR, f'{i}.mp3')) for i in sample_ids]
         dbs = [d for d in dbs if d is not None]
-        target_db = sum(dbs) / len(dbs) if dbs else -31.0
+        target_db = sum(dbs) / len(dbs) if dbs else -18.0
     print(f'Target mean_volume: {target_db:.1f} dB (from {"override" if args.target_db is not None else "existing corpus sample"})', file=sys.stderr)
 
     start = time.time()
