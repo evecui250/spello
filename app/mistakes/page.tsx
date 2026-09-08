@@ -8,9 +8,75 @@ import {
   getAllCustomWordsForLevel, PROGRESS_CHANGED_EVENT,
 } from '../../lib/storage';
 import { articleCandidateWords } from '../../lib/practice';
+import { listSavedPetChatReports, SavedPetChatReport } from '../../lib/ai';
+import { getOrCreateDeviceId } from '../../lib/telemetry';
 import SpeakerButton from '../../components/SpeakerButton';
 import MistakeRedoCard from '../../components/MistakeRedoCard';
 import ArtikelBlitzGame from '../../components/ArtikelBlitzGame';
+
+// One card per saved report, grouped visually by day via a date header
+// whenever the day changes going down the (already newest-first) list —
+// same "group by day boundary in a flat sorted list" idea as a chat app's
+// date dividers, not a nested data structure.
+function reportDateLabel(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+  if (sameDay(d, today)) return 'Today';
+  if (sameDay(d, yesterday)) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined });
+}
+
+function ReportPairList({ pairs }: { pairs: { wrong: string; correct: string }[] }) {
+  return (
+    <div className="flex flex-col gap-1">
+      {pairs.map((p, i) => (
+        <div key={i} className="text-xs text-ink flex items-center gap-1.5">
+          <span className="text-clay line-through">{p.wrong}</span>
+          <span className="text-ink-soft">→</span>
+          <span className="text-good-deep font-semibold">{p.correct}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ConversationReportCard({ report }: { report: SavedPetChatReport }) {
+  return (
+    <div className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold text-ink">{report.topic}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-soft bg-paper-dim rounded-full px-2 py-0.5">{report.level}</span>
+      </div>
+      <p className="text-ink-soft text-sm">{report.positiveSummary}</p>
+      {report.newWords.length > 0 && (
+        <div className="text-xs text-ink-soft"><span className="font-semibold text-ink-soft">New words: </span>{report.newWords.map(w => w.de).join(', ')}</div>
+      )}
+      {report.grammarMistakes.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-soft font-semibold mb-0.5">Grammar</div>
+          <ReportPairList pairs={report.grammarMistakes} />
+        </div>
+      )}
+      {report.spellingMistakes.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-soft font-semibold mb-0.5">Spelling</div>
+          <ReportPairList pairs={report.spellingMistakes} />
+        </div>
+      )}
+      {report.wordsNeededHelp.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-ink-soft font-semibold mb-0.5">Needed help with</div>
+          <ReportPairList pairs={report.wordsNeededHelp} />
+        </div>
+      )}
+      {report.recentWordsUsedWell.length > 0 && (
+        <div className="text-xs text-ink-soft"><span className="font-semibold text-ink-soft">Used well: </span>{report.recentWordsUsedWell.join(', ')}</div>
+      )}
+    </div>
+  );
+}
 
 // Falls back to lastPracticed (date-only) for a record saved before the
 // `at` timestamp existed, so an old entry still sorts sensibly (as
@@ -32,9 +98,11 @@ export default function MistakesPage() {
   const [mergedProgress, setMergedProgress] = useState<Record<string, WordProgress>>({});
   const [customWords, setCustomWords] = useState<Word[]>([]);
   const [nativeLanguage, setNativeLanguage] = useState<'en' | 'zh'>('en');
-  const [topTab, setTopTab] = useState<'sentences' | 'articles'>('sentences');
+  const [topTab, setTopTab] = useState<'sentences' | 'articles' | 'conversations'>('sentences');
   const [tab, setTab] = useState<'mistakes' | 'correct'>('mistakes');
   const [practiceOpen, setPracticeOpen] = useState(false);
+  const [savedReports, setSavedReports] = useState<SavedPetChatReport[] | null>(null);
+  const [reportsError, setReportsError] = useState(false);
   // Snapshotted once, at the moment "Redo" is tapped — see Word List's own
   // identical redoTarget for why (a successful redo clears lastMistake the
   // instant it saves, which would otherwise unmount the modal showing the
@@ -58,6 +126,17 @@ export default function MistakesPage() {
     return () => window.removeEventListener(PROGRESS_CHANGED_EVENT, load);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Lazy — only fetched the first time the Conversations tab is actually
+  // opened, same as this page's other tabs never eagerly loading data the
+  // learner might not look at.
+  useEffect(() => {
+    if (topTab !== 'conversations' || savedReports !== null) return;
+    setReportsError(false);
+    listSavedPetChatReports(getOrCreateDeviceId())
+      .then(setSavedReports)
+      .catch(() => setReportsError(true));
+  }, [topTab, savedReports]);
 
   const articleMistakeWords = useMemo(
     () => articleCandidateWords()
@@ -124,7 +203,7 @@ export default function MistakesPage() {
   return (
     <div className="flex flex-col gap-4 pb-4">
       <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
-        Mistake Notebook
+        My Notebook
       </h1>
 
       {/* Sentences (today's exact Mistakes/Correct system, untouched) vs.
@@ -142,6 +221,12 @@ export default function MistakesPage() {
           className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${topTab === 'articles' ? 'bg-paper text-ink' : 'text-on-bg/70 hover:text-on-bg'}`}
         >
           Articles{articleMistakeWords.length > 0 && ` (${articleMistakeWords.length})`}
+        </button>
+        <button
+          onClick={() => setTopTab('conversations')}
+          className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${topTab === 'conversations' ? 'bg-paper text-ink' : 'text-on-bg/70 hover:text-on-bg'}`}
+        >
+          Conversations
         </button>
       </div>
 
@@ -213,6 +298,38 @@ export default function MistakesPage() {
                     </div>
                     <div className="text-ink-soft text-sm mt-1">{glossFor(w, nativeLanguage)}</div>
                     <div className="text-ink-soft text-xs mt-1">{streak} of 2 correct recalls to clear</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {topTab === 'conversations' && (
+        <>
+          {reportsError && (
+            <p className="text-on-bg/70 text-sm">Couldn't load your saved conversations right now.</p>
+          )}
+          {!reportsError && savedReports === null && (
+            <p className="text-on-bg/70 text-sm">Loading…</p>
+          )}
+          {savedReports !== null && savedReports.length === 0 && (
+            <p className="text-on-bg/70 text-sm">
+              Nothing here yet — chat with your pet from Home, then tap "Save the report" on the recap to see it here.
+            </p>
+          )}
+          {savedReports !== null && savedReports.length > 0 && (
+            <div className="flex flex-col gap-3">
+              {savedReports.map((r, i) => {
+                const label = reportDateLabel(r.createdAt);
+                const prevLabel = i > 0 ? reportDateLabel(savedReports[i - 1].createdAt) : null;
+                return (
+                  <div key={r.sessionId} className="flex flex-col gap-2">
+                    {label !== prevLabel && (
+                      <div className="text-xs uppercase tracking-wide text-on-bg/60 font-semibold">{label}</div>
+                    )}
+                    <ConversationReportCard report={r} />
                   </div>
                 );
               })}

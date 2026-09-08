@@ -105,6 +105,9 @@ const TURN_SCHEMA = {
 // spec asks for (turns 1-2 concrete, 3-4 experiences, 5-6 reasons/
 // hypotheticals, 7+ reflection) actually holds turn over turn rather than
 // drifting.
+// Turn NORMAL_SESSION_LENGTH (7) is handled separately, below, as a
+// mandatory close rather than another stage of question — see this
+// function's own caller.
 function turnStageGuidance(turnNumber: number): string {
   if (turnNumber <= 2) {
     return 'Ask a simple, concrete question — a preference or a plain fact (e.g. "what," "when," "how many").';
@@ -112,10 +115,7 @@ function turnStageGuidance(turnNumber: number): string {
   if (turnNumber <= 4) {
     return 'Ask about an experience, a description, or a natural follow-up to what they just said.';
   }
-  if (turnNumber <= 6) {
-    return 'Ask for a reason, a comparison, use "Warum?", or pose a simple hypothetical situation.';
-  }
-  return "Ask a slightly deeper opinion or reflection question, appropriate to the learner's level.";
+  return 'Ask for a reason, a comparison, use "Warum?", or pose a simple hypothetical situation.';
 }
 
 function levelCalibration(level: string): string {
@@ -164,16 +164,22 @@ function buildSystemPrompt(opts: {
     return prompt;
   }
 
-  prompt +=
-    `This is turn ${turnNumber} of a normal ${NORMAL_SESSION_LENGTH}-turn session. ${turnStageGuidance(turnNumber)}\n\n`;
-
   if (turnNumber >= NORMAL_SESSION_LENGTH) {
+    // A normal session is exactly NORMAL_SESSION_LENGTH user messages (see
+    // PetChatFlow's own comment) -- real report: leaving this as "if it
+    // feels natural, wrap up, otherwise continue" let the model keep
+    // asking questions past turn 7 almost every time, since a genuinely
+    // engaging conversation always "has more to say." This turn is a hard
+    // close, not model discretion — petReply must NOT contain a question
+    // at all.
     prompt +=
-      `This is turn ${turnNumber} — a natural session length. If it feels like a natural point to wrap up, ` +
-      'let petReply close warmly (e.g. thank them, say goodbye) and set shouldConclude to true; otherwise ' +
-      'you may continue if the conversation clearly has more to say, and set shouldConclude to false.\n\n';
+      `This is turn ${turnNumber} — the LAST turn of this session. petReply must be a warm CLOSING remark ` +
+      '(e.g. thank them for the chat, wish them well) with NO question in it at all — do not ask anything ' +
+      'else, no matter how naturally a follow-up question would occur to you. Set shouldConclude to true.\n\n';
   } else {
-    prompt += 'Set shouldConclude to true only if the learner themselves clearly signals they want to stop ' +
+    prompt +=
+      `This is turn ${turnNumber} of a normal ${NORMAL_SESSION_LENGTH}-turn session. ${turnStageGuidance(turnNumber)}\n\n` +
+      'Set shouldConclude to true only if the learner themselves clearly signals they want to stop ' +
       '(e.g. says goodbye) — otherwise false.\n\n';
   }
 
@@ -265,10 +271,19 @@ Deno.serve(async (req: Request) => {
     // max_tokens, reasoning_effort with a fallback, an escalation if a
     // completion comes back empty since reasoning tokens can eat the whole
     // budget). Same shape, copied deliberately rather than shared (no
-    // _shared/ module in this codebase).
+    // _shared/ module in this codebase). Defaults to 'low' (not 'medium',
+    // unlike correct-sentence) -- real report: this call already does FOUR
+    // things at once (conversational reply, correction, event
+    // classification, conclude decision), and a chat feels sluggish at
+    // conversational speed in a way a one-off exercise correction doesn't
+    // (a learner waits for every reply, not just occasionally). 'low'
+    // still produced correct grammar/vocab-gap classification in this
+    // session's own live testing -- worth revisiting if quality issues
+    // show up at scale, but latency is the more pressing problem for a
+    // real-time conversation right now.
     async function callOpenAI(
       messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
-      reasoningEffort: 'medium' | 'low' = 'medium',
+      reasoningEffort: 'medium' | 'low' = 'low',
       maxTokens = 900,
       escalated = false,
     ): Promise<{ result: Record<string, unknown>; raw: string }> {

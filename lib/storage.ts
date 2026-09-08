@@ -1167,6 +1167,23 @@ export function savePetChatRecentTopics(topics: string[]): void {
   localStorage.setItem(PET_CHAT_RECENT_TOPICS_KEY, JSON.stringify(merged));
 }
 
+// Home's "Talk to me!" speech bubble nudge toward Text to Pet — shown once
+// per calendar day (marked seen the moment it renders, whether the learner
+// taps in or dismisses it with ×, not just on an explicit close) and never
+// again that same day. Purely local — a per-device nudge, not something
+// that needs to sync or follow the learner across devices.
+const PET_BUBBLE_LAST_SHOWN_KEY = 'wb2_pet_bubble_last_shown';
+
+export function hasSeenPetBubbleToday(): boolean {
+  if (typeof window === 'undefined') return true;
+  return localStorage.getItem(PET_BUBBLE_LAST_SHOWN_KEY) === today();
+}
+
+export function markPetBubbleSeenToday(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(PET_BUBBLE_LAST_SHOWN_KEY, today());
+}
+
 // --- Settings ---
 
 export function getSettings(): Settings {

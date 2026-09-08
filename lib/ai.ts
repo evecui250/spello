@@ -508,3 +508,26 @@ export async function decidePetMemory(id: number, deviceId: string, decision: 'c
   const { error } = await invokeWithTimeout<{ ok?: boolean }>('pet-memory-decide', { id, deviceId, decision });
   if (error) rethrow(error);
 }
+
+// "Save the report" on the summary screen — makes this session's recap
+// show up in My Notebook's Conversations tab (see listSavedPetChatReports).
+// No AI call, no daily-cap/limitReached path.
+export async function saveChatReport(sessionId: number, deviceId: string): Promise<void> {
+  const { error } = await invokeWithTimeout<{ ok?: boolean }>('pet-chat-save-report', { sessionId, deviceId });
+  if (error) rethrow(error);
+}
+
+export interface SavedPetChatReport extends PetChatSummary {
+  sessionId: number;
+  level: string;
+  createdAt: string;
+}
+
+// My Notebook's Conversations tab — every report the learner has
+// explicitly saved, newest first. No AI call; these are read straight back
+// from what pet-chat-summary already computed and persisted once.
+export async function listSavedPetChatReports(deviceId: string): Promise<SavedPetChatReport[]> {
+  const { data, error } = await invokeWithTimeout<{ reports?: SavedPetChatReport[] }>('pet-chat-list-reports', { deviceId });
+  if (error) rethrow(error);
+  return Array.isArray(data?.reports) ? data.reports : [];
+}

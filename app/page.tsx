@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   getAllProgress, getSettings, today, PROGRESS_CHANGED_EVENT,
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
+  hasSeenPetBubbleToday, markPetBubbleSeenToday,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
 import { SYNCED_EVENT } from '../lib/sync';
@@ -59,6 +60,18 @@ export default function HomePage() {
   // imperceptible.
   const [petLoaded, setPetLoaded] = useState(false);
   const petImgRef = useRef<HTMLImageElement>(null);
+
+  // "Talk to me!" nudge toward Text to Pet — once per calendar day (see
+  // hasSeenPetBubbleToday's own comment). Marked seen immediately, not
+  // just on an explicit ×, so it doesn't reappear on every Home revisit
+  // the same day.
+  const [petBubbleVisible, setPetBubbleVisible] = useState(false);
+  useEffect(() => {
+    if (!hasSeenPetBubbleToday()) {
+      setPetBubbleVisible(true);
+      markPetBubbleSeenToday();
+    }
+  }, []);
 
   const loadProfile = () => {
     getDisplayProfile().then(profile => {
@@ -224,22 +237,51 @@ export default function HomePage() {
           conversation (see app/pet-chat/page.tsx). The gear icon above
           still owns pet/nickname customization; this is a wholly separate
           affordance on the pet image itself, which had no interaction at
-          all before this. */}
-      <button
-        type="button"
-        onClick={() => router.push('/pet-chat/')}
-        aria-label="Chat with your pet in German"
-        className="active:scale-95 transition-transform"
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          ref={petImgRef}
-          src={`${BASE}/${heroImageFor(avatarId)}`}
-          alt="Your pet"
-          onLoad={() => setPetLoaded(true)}
-          className={`h-32 w-32 object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
-        />
-      </button>
+          all before this. The speech bubble above it is a once-a-day nudge
+          toward the same feature (see hasSeenPetBubbleToday) — closeable
+          on its own, but tapping the pet itself still always works,
+          bubble or not. */}
+      <div className="relative">
+        {petBubbleVisible && (
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-full flex flex-col items-center z-10">
+            <div className="relative bg-paper text-ink text-sm font-semibold rounded-2xl shadow-lg px-4 py-2.5 flex items-center gap-2 whitespace-nowrap">
+              <button
+                type="button"
+                onClick={() => setPetBubbleVisible(false)}
+                aria-label="Dismiss"
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-ink-soft/80 text-paper text-xs leading-none flex items-center justify-center hover:bg-ink-soft transition-colors"
+              >
+                ×
+              </button>
+              <span>Sprich mit mir!</span>
+              <button
+                type="button"
+                onClick={() => router.push('/pet-chat/')}
+                aria-label="Chat with your pet"
+                className="shrink-0 w-6 h-6 rounded-full bg-accent text-white flex items-center justify-center text-sm hover:bg-accent-deep transition-colors"
+              >
+                →
+              </button>
+            </div>
+            <div className="w-3 h-3 bg-paper rotate-45 -mt-1.5" />
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => router.push('/pet-chat/')}
+          aria-label="Chat with your pet in German"
+          className="active:scale-95 transition-transform"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            ref={petImgRef}
+            src={`${BASE}/${heroImageFor(avatarId)}`}
+            alt="Your pet"
+            onLoad={() => setPetLoaded(true)}
+            className={`h-32 w-32 object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
+          />
+        </button>
+      </div>
 
       <div className="w-full flex flex-col items-center gap-3">
         {nothingLeftAtAll ? (
@@ -302,7 +344,7 @@ export default function HomePage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={`${BASE}/icon_mistake_notebook.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="font-semibold text-on-bg text-base">Mistake Notebook</div>
+              <div className="font-semibold text-on-bg text-base">My Notebook</div>
               <div className="text-sm text-on-bg/65">{mistakeCount > 0 ? `${mistakeCount} to redo` : 'All caught up'}</div>
             </div>
           </Link>

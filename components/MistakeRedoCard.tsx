@@ -355,7 +355,7 @@ export default function MistakeRedoCard({ word, mistake, level, onDone }: Props)
             <GlossPopup surfaceForm={selectedGlossToken} gloss={glosses[selectedGlossToken]} />
           )}
           {diff.perfect ? (
-            <p className="text-good-deep text-sm text-center">Cleared from your mistake notebook</p>
+            <p className="text-good-deep text-sm text-center">Cleared from your notebook</p>
           ) : (
             <p className="text-ink-soft text-sm text-center">Still not quite — want to try again?</p>
           )}
