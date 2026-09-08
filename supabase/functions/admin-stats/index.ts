@@ -92,6 +92,33 @@ function summarizeAiUsage(rows: { user_id: string | null; ip_address: string | n
   return { calls: rows.length, distinctCallers: callers.size, estimatedCostUsd: costUsd(rows) };
 }
 
+// A single .select() without an explicit range caps out at PostgREST's
+// default 1000-row limit -- every OTHER table this file reads stays well
+// under that (usage_pings, the next-largest, sits at a few hundred rows),
+// but ai_usage logs its OWN row per AI call, not once per day/session/
+// play, and genuinely outgrew it: a real, confirmed bug where a 30-day
+// window (1684 rows) and the whole table (1759 rows) both silently
+// truncated to ~1000, hiding "today" entirely (today's rows sorted past
+// the cutoff) and undercounting every cost figure on this page. Paging in
+// 1000-row batches instead of just raising the limit, since this table
+// keeps growing fastest of anything here and a single higher cap would
+// only postpone the same bug, not fix it.
+async function fetchAllRows<T>(
+  query: (from: number, to: number) => Promise<{ data: T[] | null }>,
+): Promise<T[]> {
+  const PAGE_SIZE = 1000;
+  const all: T[] = [];
+  let from = 0;
+  for (;;) {
+    const { data } = await query(from, from + PAGE_SIZE - 1);
+    const page = data ?? [];
+    all.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return all;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: CORS_HEADERS });
@@ -352,23 +379,32 @@ Deno.serve(async (req: Request) => {
       .map(([theme, count]) => ({ theme, count }))
       .sort((a, b) => themeRank(a.theme) - themeRank(b.theme));
 
-    // Word Match game plays (see the game_plays migration) -- split by
-    // entry point so "how many played from Settings' preview link" vs.
-    // "how many played from the real end-of-learning slot" vs. "how many
-    // used one of the Progress page's four per-stage rapid reviews" is
-    // visible separately. The four stage_review sources (puppy/short/
-    // medium/mastered) are combined into one stageReview count here --
-    // the admin dashboard cares about "is this feature getting used at
-    // all," not a per-stage breakdown. dailyFlow reads 0 until that real
-    // slot actually exists (see app/game/page.tsx's own top comment) --
-    // expected, not a bug.
-    const { data: gamePlayRows } = await admin.from('game_plays').select('source');
-    const gamePlaysBySource = { settingsPreview: 0, dailyFlow: 0, stageReview: 0 };
+    // Bonus games (see the game_plays migrations) -- the "preview" entry
+    // point this used to break out (Settings' old standalone preview link)
+    // no longer exists as a distinct thing worth reporting on its own now
+    // that both games are reachable straight from the daily flow/Progress
+    // page, so this now answers the three questions actually asked of it:
+    // how many distinct people have ever played each game, and how many
+    // Rapid Reviews (a specific `source`, not a `game`) have been done in
+    // total. "People" = user_id when signed in, else device_id -- the same
+    // unification getOrCreateDeviceId enables elsewhere, so a learner who
+    // played both signed out and signed in isn't double-counted once
+    // they've synced, and an anonymous learner is still counted at all.
+    const { data: gamePlayRows } = await admin.from('game_plays').select('source, game, device_id, user_id');
+    const wortpaarePlayers = new Set<string>();
+    const artikelBlitzPlayers = new Set<string>();
+    let rapidReviewCount = 0;
     for (const r of gamePlayRows ?? []) {
-      if (r.source === 'settings_preview') gamePlaysBySource.settingsPreview += 1;
-      else if (r.source === 'daily_flow') gamePlaysBySource.dailyFlow += 1;
-      else if (r.source?.endsWith('_review')) gamePlaysBySource.stageReview += 1;
+      const person = r.user_id ?? r.device_id;
+      if (r.game === 'artikel_blitz') artikelBlitzPlayers.add(person);
+      else wortpaarePlayers.add(person);
+      if (r.source === 'rapid_review') rapidReviewCount += 1;
     }
+    const bonusGames = {
+      wortpaarePlayers: wortpaarePlayers.size,
+      artikelBlitzPlayers: artikelBlitzPlayers.size,
+      rapidReviewCount,
+    };
 
     // Every registered account, most-recently-active first — "who's
     // actually signed up and who's actually using it" at a glance,
@@ -445,11 +481,13 @@ Deno.serve(async (req: Request) => {
     // for the "Today" card — one query covers both, split by whether
     // user_id is set (anonymous calls are rate-limited/logged by
     // ip_address instead; see correct-sentence/generate-sentence).
-    const { data: aiRowsWindow } = await admin
-      .from('ai_usage')
-      .select('user_id, ip_address, model, input_tokens, output_tokens, created_at, kind')
-      .gte('created_at', windowStartIso);
-    const aiRows = (aiRowsWindow ?? []) as { user_id: string | null; ip_address: string | null; model: string | null; input_tokens: number; output_tokens: number; created_at: string; kind: string | null }[];
+    const aiRows = await fetchAllRows<{ user_id: string | null; ip_address: string | null; model: string | null; input_tokens: number; output_tokens: number; created_at: string; kind: string | null }>(
+      (from, to) => admin
+        .from('ai_usage')
+        .select('user_id, ip_address, model, input_tokens, output_tokens, created_at, kind')
+        .gte('created_at', windowStartIso)
+        .range(from, to),
+    );
     // kind is null for any row inserted before the column existed —
     // treated as 'correction' (its only meaning back then), same as the
     // column's own DB default for new rows. generate-paragraph's rows are
@@ -520,10 +558,10 @@ Deno.serve(async (req: Request) => {
     // comment); only the 3 pricing-relevant columns are selected to keep
     // the payload small regardless of how many rows exist.
     const aiSpendLast30DaysUsd = costUsd(aiRows);
-    const { data: aiRowsAllTime } = await admin
-      .from('ai_usage')
-      .select('model, input_tokens, output_tokens');
-    const aiSpendAllTimeUsd = costUsd(aiRowsAllTime ?? []);
+    const aiRowsAllTime = await fetchAllRows<{ model: string | null; input_tokens: number; output_tokens: number }>(
+      (from, to) => admin.from('ai_usage').select('model, input_tokens, output_tokens').range(from, to),
+    );
+    const aiSpendAllTimeUsd = costUsd(aiRowsAllTime);
 
     // Words studied — signed-in/synced accounts via daily_activity (full
     // per-word detail never leaves an anonymous learner's device, so that
@@ -658,7 +696,7 @@ Deno.serve(async (req: Request) => {
       levelBreakdown,
       geoBreakdown,
       themeBreakdown,
-      gamePlaysBySource,
+      bonusGames,
       registeredLearners,
       leaderboardToday,
       // Signed-in/synced learners only — see the comment on the query

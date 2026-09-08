@@ -688,11 +688,10 @@ function SentenceExercise({
   // effect above (sequenced ahead of the spoken sentence), not a separate
   // effect here.
 
-  // Not folded into onUnreachable/the parent's session-wide AI-unreachable
-  // handling — this is a small optional extra on top of a correction that
-  // already succeeded, so losing just this call shouldn't turn off
-  // sentence-writing mode for the rest of the session the way losing an
-  // actual correction does. A plain inline error is enough here.
+  // Not folded into onUnreachable — that's for the two calls this exercise
+  // can't function without (the prompt itself, the correction); this is a
+  // small optional extra on top of a correction that already succeeded,
+  // so a plain inline error is enough here.
   async function handleExplain() {
     // Already fetched — just re-open the sheet, no need to call again.
     if (explanation) { setShowWhySheet(true); return; }
@@ -1202,16 +1201,6 @@ export default function DailySessionFlow() {
   // saved for this word today (same as any other bootstrap-style word).
   const [directSentence, setDirectSentence] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; at?: string } | null>(null);
   const [directSentenceStatus, setDirectSentenceStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'unreachable'>('idle');
-  // Set the first time any AI call fails with AIUnreachableError (a real
-  // network-level failure to reach the Edge Function — see lib/ai.ts) —
-  // once true, both useDirectSentence and the round-1 sentence-exercise
-  // branch below stop attempting further AI calls for the rest of this
-  // session (there's no reason to expect the very next one to succeed
-  // when the underlying cause is "can't reach Supabase from here" — that
-  // won't have changed a few seconds later), falling back to the plain
-  // copy-the-word tiles instead. Reset on a fresh page load, since that's
-  // a reasonable point to let it try again.
-  const [aiUnreachable, setAiUnreachable] = useState(false);
   // The bonus paragraph exercise's own generation status -- separate from
   // `status`/`directSentenceStatus` above since it's a wholly different
   // phase (study-paragraph) that can't overlap with either of those. Reset
@@ -1308,7 +1297,7 @@ export default function DailySessionFlow() {
   // that's already bootstrap/demoted doesn't need a fetched reference
   // sentence layered on top of its own handling.
   const useDirectSentence = !!word && currentRound === 1 && roundMode === 'study'
-    && !isBootstrapCopyWord(word) && !exampleSentence && settings?.sentenceWritingMode === false && !aiUnreachable;
+    && !isBootstrapCopyWord(word) && !exampleSentence && settings?.sentenceWritingMode === false;
   // Same gating as useDirectSentence, minus the sentenceWritingMode check
   // itself — this is the corner toggle that flips that very setting, so it
   // needs to show on round 1 of a genuine new-word study card regardless of
@@ -1349,37 +1338,29 @@ export default function DailySessionFlow() {
   }
 
   // Fired the first time any AI call this session fails with
-  // AIUnreachableError. Two things, both best-effort: turns off sentence-
-  // writing mode going forward (persisted, not just for this session — no
-  // reason to keep hitting the same wall on every future word too) and
-  // auto-files a bug report through the same pipeline the manual "Report a
-  // problem" button uses, so this gets flagged without the learner having
-  // to notice and report it themselves. The bug-report insert has an
-  // honest limitation worth naming: if the real cause is "this device
-  // can't reach Supabase at all" (rather than, say, just this one Edge
-  // Function route having an issue), the report itself — also a Supabase
-  // call — may fail silently too. It's still worth attempting, since it
-  // catches every failure mode short of a full domain-level block.
+  // AIUnreachableError. Purely telemetry now: auto-files a bug report
+  // through the same pipeline the manual "Report a problem" button uses,
+  // so a real outage gets flagged without the learner having to notice
+  // and report it themselves. This used to ALSO disable AI-powered
+  // sentence writing for the rest of the session (and, before that, an
+  // even earlier bug had it persist that override into Settings — see
+  // git history) — dropped both after checking real production data on a
+  // reported case: the very next several AI calls right after a single
+  // dropped request all succeeded within about a second. One transient
+  // failure (a flaky connection, a request interrupted by
+  // navigation/refresh) isn't evidence AI is durably unreachable, so it
+  // shouldn't degrade every following word in the session — each call is
+  // now free to just succeed or fail on its own. The bug-report insert
+  // has an honest limitation worth naming: if the real cause is "this
+  // device can't reach Supabase at all" (rather than, say, just this one
+  // Edge Function route having an issue), the report itself — also a
+  // Supabase call — may fail silently too. It's still worth attempting,
+  // since it catches every failure mode short of a full domain-level
+  // block.
   const aiUnreachableReportedRef = useRef(false);
-  // Real bug caught live: this used to ALSO permanently write
-  // sentenceWritingMode: false into Settings the very first time a SINGLE
-  // AI call failed at the network level — not just falling back for the
-  // rest of THIS session (which the local aiUnreachable state below
-  // already does correctly on its own), but durably overriding the
-  // learner's own preference from then on, surviving every future
-  // session/refresh until they noticed and manually turned it back on in
-  // Settings. One failed request is nowhere near enough evidence that AI
-  // is durably unreachable for this device — a refresh/navigation that
-  // simply interrupts an in-flight request surfaces as exactly this same
-  // error, and refreshing mid-exercise must never have a persistent,
-  // surprising side effect like silently changing a saved preference.
-  // The local, per-session fallback below is sufficient: if AI truly
-  // stays unreachable, every future session just gracefully degrades the
-  // same way again, without ever touching the learner's actual settings.
   function handleAiUnreachable() {
     if (aiUnreachableReportedRef.current) return;
     aiUnreachableReportedRef.current = true;
-    setAiUnreachable(true);
     // Real gap a report caught (see lib/speech.ts's reportTtsError, which
     // had the identical mistake): this always filed as "(signed out)" even
     // for a genuinely signed-in learner, because it hardcoded user_id/email
@@ -1389,7 +1370,7 @@ export default function DailySessionFlow() {
       supabase.from('bug_reports').insert({
         user_id: data.session?.user.id ?? null,
         email: data.session?.user.email ?? null,
-        message: 'Auto-detected: could not reach the AI service (correct-sentence/generate-sentence timed out or failed at the network level, not just an API error). Falling back to copy-the-word for the rest of this session.',
+        message: 'Auto-detected: could not reach the AI service (correct-sentence/generate-sentence timed out or failed at the network level, not just an API error).',
         page_path: window.location.pathname,
         user_agent: navigator.userAgent,
       }).then(() => {}, () => {});
@@ -1448,16 +1429,14 @@ export default function DailySessionFlow() {
   // and keep auto-advancing on a correct answer unlike every other round
   // 2+ card. Same two exceptions as everywhere else this session:
   // isBootstrapCopyWord's ~220 A1 words never get an AI sentence at any
-  // round, and a session where aiUnreachable already fired doesn't get a
-  // second AI call to fail the same way. Same generateSentence ->
-  // correctSentence (no user translation) pipeline as useDirectSentence,
-  // just triggered later in a word's life instead of only at round 1, and
-  // persisted onto the word's progress so it sticks for every future
-  // review too, not just this card.
+  // round. Same generateSentence -> correctSentence (no user translation)
+  // pipeline as useDirectSentence, just triggered later in a word's life
+  // instead of only at round 1, and persisted onto the word's progress so
+  // it sticks for every future review too, not just this card.
   const backfillingForRef = useRef<string | null>(null);
   useEffect(() => {
     if (!word || !settings || currentRound <= 1) return;
-    if (exampleSentence || isBootstrapCopyWord(word) || aiUnreachable) return;
+    if (exampleSentence || isBootstrapCopyWord(word)) return;
     if (backfillingForRef.current === word.id) return;
     backfillingForRef.current = word.id;
     let cancelled = false;
@@ -1486,7 +1465,7 @@ export default function DailySessionFlow() {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [word, currentRound, exampleSentence, settings, aiUnreachable]);
+  }, [word, currentRound, exampleSentence, settings]);
 
   const loadCurrent = (w: Word, mode: RoundMode) => {
     // A still-pending "speak the word 550ms after the chime" call from the
@@ -3023,16 +3002,13 @@ export default function DailySessionFlow() {
             === false is a deliberate opt-out (Settings) — same copy-the-
             word fallback, but with a fetched reference sentence layered
             on top (see useDirectSentence/directSentence above).
-            !aiUnreachable excludes a session where an AI call has already
-            failed at the network level once (see handleAiUnreachable) —
-            no reason to let the very next word try and fail the same way.
             Available whether signed in or not (see this file's earlier
-            comment on SentenceWordHeader) — all four still fall through to
+            comment on SentenceWordHeader) — both still fall through to
             the else branch's round-1 handling (copy-the-word tiles — a
             word demoted back here from round 2 doesn't get its saved
             sentence shown again either, same reasoning as
             ReferenceSentence's own comment). */}
-        {currentRound === 1 && roundMode === 'study' && !isBootstrapCopyWord(word) && !exampleSentence && settings.sentenceWritingMode && !aiUnreachable ? (
+        {currentRound === 1 && roundMode === 'study' && !isBootstrapCopyWord(word) && !exampleSentence && settings.sentenceWritingMode ? (
           <SentenceExercise
             key={word.id}
             word={word}
@@ -3093,17 +3069,6 @@ export default function DailySessionFlow() {
             )}
             {useDirectSentence && directSentenceStatus === 'ready' && directSentence && (
               <ReferenceSentence example={directSentence} word={word} />
-            )}
-            {/* aiUnreachable, not directSentenceStatus — this needs to show
-                regardless of which of the three AI call sites tripped it
-                (including SentenceExercise's own, which unmounts the
-                instant aiUnreachable flips, before its own local status
-                message ever gets a chance to render). */}
-            {aiUnreachable && (
-              <p className="text-label text-xs text-center px-2">
-                Can't reach our AI service right now (this can happen depending on your network) —
-                switched off sentence-writing mode. You can turn it back on anytime in Settings.
-              </p>
             )}
 
             {word.type === 'noun' && word.article && (

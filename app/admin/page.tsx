@@ -91,10 +91,10 @@ interface AdminStats {
   // Each device's current theme (most recent ping wins) -- see admin-
   // stats' own comment for the dark -> bright ordering.
   themeBreakdown: { theme: string; count: number }[];
-  // Word Match game plays split by entry point -- see the game_plays
-  // migration. dailyFlow reads 0 until a real end-of-learning entry point
-  // exists, not a bug.
-  gamePlaysBySource: { settingsPreview: number; dailyFlow: number; stageReview: number };
+  // Bonus games -- see the game_plays migrations and admin-stats' own
+  // comment. Distinct-people counts for each game, plus a plain total for
+  // Rapid Review (a `source`, not a `game`).
+  bonusGames: { wortpaarePlayers: number; artikelBlitzPlayers: number; rapidReviewCount: number };
   // Every registered account, most-recently-active first — see
   // admin-stats' own comment for what "active" means here and why.
   registeredLearners: { email: string; country: string; lastActive: string; everActive: boolean; createdAt: string }[];
@@ -148,7 +148,7 @@ export default function AdminPage() {
         debugErrors: data.debugErrors ?? [],
         geoBreakdown: data.geoBreakdown ?? { byIp: [], byUser: [] },
         themeBreakdown: data.themeBreakdown ?? [],
-        gamePlaysBySource: data.gamePlaysBySource ?? { settingsPreview: 0, dailyFlow: 0, stageReview: 0 },
+        bonusGames: data.bonusGames ?? { wortpaarePlayers: 0, artikelBlitzPlayers: 0, rapidReviewCount: 0 },
         today: {
           ...data.today,
           explanationClicks: data.today?.explanationClicks ?? 0,
@@ -338,30 +338,31 @@ export default function AdminPage() {
         />
       </div>
 
-      {/* Bonus games (Wortpaare + Artikel Blitz) -- this split is still by
-          source only, not by which of the two games was played (see the
-          game_plays migration's new `game` column) -- a real gap now that
-          there are two, worth splitting properly if this dashboard needs
-          to answer "which game" rather than just "how many total". */}
+      {/* Bonus games -- the old "settings preview" entry point is gone
+          (both games are reached straight from the daily flow/Progress
+          page now), so this answers "is anyone actually using this" per
+          game via distinct-player counts, plus a plain total for Rapid
+          Review specifically (a `source`, not a `game` — see
+          admin-stats' own comment). */}
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-3">
         <div>
           <h2 className="font-semibold text-stone-800">Bonus games</h2>
           <p className="text-stone-400 text-xs -mt-0.5">
-            Completed games (Wortpaare + Artikel Blitz combined), split by where the learner started it from.
+            Distinct people who have ever played each game, plus total Rapid Reviews done.
           </p>
         </div>
         <div className="flex gap-6">
           <div>
-            <div className="text-2xl font-bold text-stone-800">{stats.gamePlaysBySource.settingsPreview}</div>
-            <div className="text-xs text-stone-500">Settings preview</div>
+            <div className="text-2xl font-bold text-stone-800">{stats.bonusGames.wortpaarePlayers}</div>
+            <div className="text-xs text-stone-500">Wortpaare players</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-stone-800">{stats.gamePlaysBySource.dailyFlow}</div>
-            <div className="text-xs text-stone-500">End of learning</div>
+            <div className="text-2xl font-bold text-stone-800">{stats.bonusGames.artikelBlitzPlayers}</div>
+            <div className="text-xs text-stone-500">Artikel Blitz players</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-stone-800">{stats.gamePlaysBySource.stageReview}</div>
-            <div className="text-xs text-stone-500">Progress rapid review (any stage)</div>
+            <div className="text-2xl font-bold text-stone-800">{stats.bonusGames.rapidReviewCount}</div>
+            <div className="text-xs text-stone-500">Rapid Reviews done</div>
           </div>
         </div>
       </div>
