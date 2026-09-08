@@ -127,6 +127,68 @@ function pickRoundWords(
   return shuffled(picked.slice(0, Math.min(PAIRS_PER_ROUND, pool.length)));
 }
 
+const STAGE_ORDER: MascotStageId[] = ['puppy', 'short', 'medium', 'long-crowned'];
+
+// Largest-remainder apportionment: splits `totalSlots` across `sizes`
+// (parallel arrays) proportional to each size, floored at 1 for any
+// nonzero size (so a small phase is never silently shut out entirely),
+// and never above that phase's own size. Shared plumbing for
+// pickMixedRoundWords below -- the exact same "proportional, not a fixed
+// count" idea pickRoundWords' own MASTERED_SLOTS fix already applies to
+// mastered specifically, just generalized to every stage at once.
+function apportion(sizes: number[], totalSlots: number): number[] {
+  const total = sizes.reduce((a, b) => a + b, 0);
+  if (total === 0) return sizes.map(() => 0);
+  const raw = sizes.map(s => Math.min(s, (totalSlots * s) / total));
+  const alloc = raw.map(Math.floor);
+  for (let i = 0; i < sizes.length; i++) {
+    if (sizes[i] > 0 && alloc[i] === 0) alloc[i] = Math.min(1, sizes[i]);
+  }
+  let remaining = totalSlots - alloc.reduce((a, b) => a + b, 0);
+  const byRemainderDesc = raw
+    .map((r, i) => ({ i, frac: r - Math.floor(r) }))
+    .sort((a, b) => b.frac - a.frac);
+  for (const { i } of byRemainderDesc) {
+    if (remaining <= 0) break;
+    if (alloc[i] < sizes[i]) { alloc[i]++; remaining--; }
+  }
+  return alloc;
+}
+
+// Rapid Review's own round-builder ("a quick MIXED refresher across
+// everything you've learned so far" -- see app/game/page.tsx's own
+// subtitle) -- real report: pickRoundWords above fills most of its slots
+// by recency (today's words, then most-recently-active), which in
+// practice meant whichever stage the learner happens to be actively
+// drilling right now (almost always "puppy", the freshest/most numerous
+// stage in a normal learning rhythm) crowded out the other three —
+// "familiar"/"strong" words with no reason to have been touched TODAY
+// specifically could go entire sessions without appearing at all. This
+// instead reserves a proportional, genuinely random slice of EVERY
+// mascot stage present (via apportion above), so all four phases are
+// represented most rounds rather than however recency happened to line
+// up. Only used for source='rapid_review' -- daily_flow's bonus round
+// keeps pickRoundWords' original "reinforce what's fresh today" behavior,
+// which is a deliberate, different goal for that entry point.
+function pickMixedRoundWords(
+  pool: Word[],
+  usedIds: Set<string>,
+  progress: Record<string, WordProgress>,
+): Word[] {
+  const source = pool.filter(w => !usedIds.has(w.id));
+  const byStage: Record<MascotStageId, Word[]> = { puppy: [], short: [], medium: [], 'long-crowned': [] };
+  for (const w of source) {
+    const stage = progress[w.id]?.mascotStage;
+    if (stage) byStage[stage].push(w);
+  }
+  const stages = STAGE_ORDER.filter(s => byStage[s].length > 0);
+  if (stages.length === 0) return [];
+  const slots = apportion(stages.map(s => byStage[s].length), PAIRS_PER_ROUND);
+  const picked: Word[] = [];
+  stages.forEach((s, i) => picked.push(...shuffled(byStage[s]).slice(0, slots[i])));
+  return shuffled(picked);
+}
+
 type Phase = 'intro' | 'playing' | 'over';
 
 interface Props {
@@ -226,7 +288,9 @@ export default function WordMatchGame({
       usedIdsRef.current = new Set();
     }
 
-    const pool = pickRoundWords(learnedWords, todayIds, masteredIds, usedIdsRef.current, progress);
+    const pool = source === 'rapid_review'
+      ? pickMixedRoundWords(learnedWords, usedIdsRef.current, progress)
+      : pickRoundWords(learnedWords, todayIds, masteredIds, usedIdsRef.current, progress);
     pool.forEach(w => usedIdsRef.current.add(w.id));
     setRoundWords(pool);
     setShuffledEn(shuffled(pool.map(w => glossFor(w, nativeLanguage))));

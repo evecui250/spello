@@ -385,25 +385,39 @@ Deno.serve(async (req: Request) => {
     // that both games are reachable straight from the daily flow/Progress
     // page, so this now answers the three questions actually asked of it:
     // how many distinct people have ever played each game, and how many
-    // Rapid Reviews (a specific `source`, not a `game`) have been done in
-    // total. "People" = user_id when signed in, else device_id -- the same
-    // unification getOrCreateDeviceId enables elsewhere, so a learner who
-    // played both signed out and signed in isn't double-counted once
-    // they've synced, and an anonymous learner is still counted at all.
-    const { data: gamePlayRows } = await admin.from('game_plays').select('source, game, device_id, user_id');
-    const wortpaarePlayers = new Set<string>();
-    const artikelBlitzPlayers = new Set<string>();
-    let rapidReviewCount = 0;
+    // Rapid Reviews (a specific `source`, not a `game`) have been done --
+    // each as three windows (today, last 7 days, all time), same "today
+    // alone hides the trend, all-time alone hides whether it's still
+    // active" reasoning as the AI-usage cards above. "People" = user_id
+    // when signed in, else device_id -- the same unification
+    // getOrCreateDeviceId enables elsewhere, so a learner who played both
+    // signed out and signed in isn't double-counted once they've synced,
+    // and an anonymous learner is still counted at all.
+    const { data: gamePlayRows } = await admin.from('game_plays').select('source, game, device_id, user_id, created_at');
+    const last7DaysStart = dateStr(new Date(Date.now() - 6 * DAY_MS));
+    function emptyGameWindow() {
+      return { today: new Set<string>(), last7Days: new Set<string>(), allTime: new Set<string>() };
+    }
+    const wortpaarePlayers = emptyGameWindow();
+    const artikelBlitzPlayers = emptyGameWindow();
+    const rapidReviewCounts = { today: 0, last7Days: 0, allTime: 0 };
     for (const r of gamePlayRows ?? []) {
       const person = r.user_id ?? r.device_id;
-      if (r.game === 'artikel_blitz') artikelBlitzPlayers.add(person);
-      else wortpaarePlayers.add(person);
-      if (r.source === 'rapid_review') rapidReviewCount += 1;
+      const players = r.game === 'artikel_blitz' ? artikelBlitzPlayers : wortpaarePlayers;
+      const day = dateStr(new Date(r.created_at));
+      players.allTime.add(person);
+      if (day >= last7DaysStart) players.last7Days.add(person);
+      if (day === todayStr) players.today.add(person);
+      if (r.source === 'rapid_review') {
+        rapidReviewCounts.allTime += 1;
+        if (day >= last7DaysStart) rapidReviewCounts.last7Days += 1;
+        if (day === todayStr) rapidReviewCounts.today += 1;
+      }
     }
     const bonusGames = {
-      wortpaarePlayers: wortpaarePlayers.size,
-      artikelBlitzPlayers: artikelBlitzPlayers.size,
-      rapidReviewCount,
+      wortpaarePlayers: { today: wortpaarePlayers.today.size, last7Days: wortpaarePlayers.last7Days.size, allTime: wortpaarePlayers.allTime.size },
+      artikelBlitzPlayers: { today: artikelBlitzPlayers.today.size, last7Days: artikelBlitzPlayers.last7Days.size, allTime: artikelBlitzPlayers.allTime.size },
+      rapidReviewCount: rapidReviewCounts,
     };
 
     // Every registered account, most-recently-active first — "who's

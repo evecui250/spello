@@ -89,7 +89,7 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-ink">Mascot &amp; Shop</h2>
+          <h2 className="font-bold text-ink">Pet &amp; Shop</h2>
           <button
             type="button"
             onClick={close}

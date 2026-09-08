@@ -217,7 +217,12 @@ export default function WordsPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress>>({});
   const [search, setSearch] = useState('');
   const [view, setView] = useState<View>('search');
-  const [filterFamiliarity, setFilterFamiliarity] = useState<Familiarity>('all');
+  // 'learning' (not 'all') is the default now that My Words pulls in the
+  // whole current book -- see myWordsPool's own comment. 'all'/'new' are no
+  // longer offered as options at all (an untouched book word cluttering a
+  // "my words" list defeats its own point), but the type/matchesFamiliarity
+  // still support them harmlessly if an old bookmarked URL still names one.
+  const [filterFamiliarity, setFilterFamiliarity] = useState<Familiarity>('learning');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   // nativeLanguage starts at DEFAULT_SETTINGS' own value (not a lazy
   // getSettings() read) and gets corrected in the effect below instead —
@@ -272,7 +277,7 @@ export default function WordsPage() {
   useEffect(() => {
     setNativeLanguage(getSettings().nativeLanguage);
     setActiveLevel(getSettings().level);
-    applyParam('familiarity', ['all', 'new', 'learning', 'mastered'], setFilterFamiliarity);
+    applyParam('familiarity', ['learning', 'mastered'], setFilterFamiliarity);
     applyParam('date', ['all', 'today', '7days', '30days'], setDateFilter);
   }, []);
 
@@ -310,9 +315,23 @@ export default function WordsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, search, searchPool]);
 
+  // My Words used to mean "only what you explicitly added" -- but a freshly
+  // added word is stamped straight to Introduced (see addCustomWordIntroduced's
+  // own comment) and reviewed in the exact same rotation as every other word
+  // from the current book, so a book word the learner has actually been
+  // studying belongs here just as much. Scoped to the CURRENT book only
+  // (not every book the way Search's pool is) -- "my words" means what
+  // you're actually working through right now, not the other three books'
+  // worth of untouched vocabulary. Custom words show regardless of which
+  // book they were added under, same as before.
+  const myWordsPool = useMemo(
+    () => [...WORDS.filter(w => w.level === activeLevel), ...customWords],
+    [activeLevel, customWords],
+  );
+
   const myWordsList = useMemo(() => {
     if (view !== 'myWords') return [];
-    return customWords
+    return myWordsPool
       .filter(w => {
         const p = progress[w.id];
         if (!matchesFamiliarity(p, filterFamiliarity)) return false;
@@ -321,7 +340,7 @@ export default function WordsPage() {
       })
       .sort((a, b) => a.de.localeCompare(b.de, 'de'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, customWords, progress, filterFamiliarity, dateFilter]);
+  }, [view, myWordsPool, progress, filterFamiliarity, dateFilter]);
 
   // Whether the search itself (ignoring the familiarity/date filters,
   // which are orthogonal display narrowing, not "does this word exist at
@@ -466,21 +485,26 @@ export default function WordsPage() {
     );
   }
 
-  // My Words tab — unchanged from before: a plain browsable/manageable
-  // list of everything the learner has added, across every book.
+  // My Words tab — now a mix of book words (current book, actually being
+  // studied) and custom words (any book). Only a custom word can be
+  // removed at all (removeCustomWord only ever knows about those) — a
+  // book word has nowhere to be "removed" to, so the × is simply absent
+  // for it rather than showing a control that would silently no-op.
   function MyWordsRow({ w }: { w: Word }) {
     return (
       <div className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3 flex items-center gap-3">
         <WordMeta w={w} showBook />
         <WordThumbnail word={w} />
         <ProgressBadge w={w} />
-        <button
-          onClick={() => handleRemoveWord(w)}
-          aria-label={`Remove ${w.de} from your words`}
-          className="shrink-0 self-start text-ink-soft hover:text-clay transition-colors text-lg leading-none px-1"
-        >
-          ×
-        </button>
+        {isCustomWordId(w.id) && (
+          <button
+            onClick={() => handleRemoveWord(w)}
+            aria-label={`Remove ${w.de} from your words`}
+            className="shrink-0 self-start text-ink-soft hover:text-clay transition-colors text-lg leading-none px-1"
+          >
+            ×
+          </button>
+        )}
       </div>
     );
   }
@@ -539,7 +563,7 @@ export default function WordsPage() {
               view === v ? 'bg-accent-deep text-white' : 'text-on-bg/70 hover:text-on-bg'
             }`}
           >
-            {v === 'search' ? 'Search' : 'My Words'}
+            {v === 'search' ? 'Dictionary' : 'My Words'}
           </button>
         ))}
       </div>
@@ -571,8 +595,6 @@ export default function WordsPage() {
             onChange={e => setFilterFamiliarity(e.target.value as Familiarity)}
             className="min-w-0 bg-paper/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
           >
-            <option value="all">All words</option>
-            <option value="new">New</option>
             <option value="learning">Learning</option>
             <option value="mastered">Mastered</option>
           </select>
@@ -671,7 +693,9 @@ export default function WordsPage() {
           <p className="text-on-bg/70 text-sm">{myWordsList.length} word{myWordsList.length === 1 ? '' : 's'}</p>
           {myWordsList.length === 0 ? (
             <p className="text-on-bg/70 text-sm text-center py-8">
-              Nothing here yet — search for a word and add it to see it in this list.
+              {filterFamiliarity === 'mastered'
+                ? "Nothing mastered yet — keep studying and words will show up here."
+                : 'Nothing here yet — study a word from your daily session, or search and add one, to see it in this list.'}
             </p>
           ) : (
             <div className="flex flex-col gap-2">

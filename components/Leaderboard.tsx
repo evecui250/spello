@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 import { SYNCED_EVENT } from '../lib/sync';
-import { avatarImageFor, EquippedAccessories } from '../lib/shop';
+import { avatarImageFor, EquippedAccessories, PROFILE_UPDATED_EVENT } from '../lib/shop';
 import { PointsIcon } from './icons';
 
 interface LeaderboardEntry {
@@ -123,7 +123,14 @@ export default function Leaderboard() {
     };
     load();
     window.addEventListener(SYNCED_EVENT, load);
-    return () => window.removeEventListener(SYNCED_EVENT, load);
+    // See lib/shop.ts's own comment on PROFILE_UPDATED_EVENT -- an equip/
+    // nickname/avatar change is otherwise invisible to an already-mounted
+    // Leaderboard.
+    window.addEventListener(PROFILE_UPDATED_EVENT, load);
+    return () => {
+      window.removeEventListener(SYNCED_EVENT, load);
+      window.removeEventListener(PROFILE_UPDATED_EVENT, load);
+    };
   }, []);
 
   useEffect(() => {

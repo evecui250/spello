@@ -93,8 +93,13 @@ interface AdminStats {
   themeBreakdown: { theme: string; count: number }[];
   // Bonus games -- see the game_plays migrations and admin-stats' own
   // comment. Distinct-people counts for each game, plus a plain total for
-  // Rapid Review (a `source`, not a `game`).
-  bonusGames: { wortpaarePlayers: number; artikelBlitzPlayers: number; rapidReviewCount: number };
+  // Rapid Review (a `source`, not a `game`), each broken into three
+  // windows (today/last7Days/allTime).
+  bonusGames: {
+    wortpaarePlayers: { today: number; last7Days: number; allTime: number };
+    artikelBlitzPlayers: { today: number; last7Days: number; allTime: number };
+    rapidReviewCount: { today: number; last7Days: number; allTime: number };
+  };
   // Every registered account, most-recently-active first — see
   // admin-stats' own comment for what "active" means here and why.
   registeredLearners: { email: string; country: string; lastActive: string; everActive: boolean; createdAt: string }[];
@@ -148,7 +153,11 @@ export default function AdminPage() {
         debugErrors: data.debugErrors ?? [],
         geoBreakdown: data.geoBreakdown ?? { byIp: [], byUser: [] },
         themeBreakdown: data.themeBreakdown ?? [],
-        bonusGames: data.bonusGames ?? { wortpaarePlayers: 0, artikelBlitzPlayers: 0, rapidReviewCount: 0 },
+        bonusGames: data.bonusGames ?? {
+          wortpaarePlayers: { today: 0, last7Days: 0, allTime: 0 },
+          artikelBlitzPlayers: { today: 0, last7Days: 0, allTime: 0 },
+          rapidReviewCount: { today: 0, last7Days: 0, allTime: 0 },
+        },
         today: {
           ...data.today,
           explanationClicks: data.today?.explanationClicks ?? 0,
@@ -343,27 +352,36 @@ export default function AdminPage() {
           page now), so this answers "is anyone actually using this" per
           game via distinct-player counts, plus a plain total for Rapid
           Review specifically (a `source`, not a `game` — see
-          admin-stats' own comment). */}
+          admin-stats' own comment). Three windows per row, same "today
+          alone hides the trend, all-time alone hides whether it's still
+          active" reasoning as the AI-usage cards above. */}
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-3">
         <div>
           <h2 className="font-semibold text-stone-800">Bonus games</h2>
           <p className="text-stone-400 text-xs -mt-0.5">
-            Distinct people who have ever played each game, plus total Rapid Reviews done.
+            Distinct people who have played each game, plus total Rapid Reviews done.
           </p>
         </div>
-        <div className="flex gap-6">
-          <div>
-            <div className="text-2xl font-bold text-stone-800">{stats.bonusGames.wortpaarePlayers}</div>
-            <div className="text-xs text-stone-500">Wortpaare players</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-stone-800">{stats.bonusGames.artikelBlitzPlayers}</div>
-            <div className="text-xs text-stone-500">Artikel Blitz players</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-stone-800">{stats.bonusGames.rapidReviewCount}</div>
-            <div className="text-xs text-stone-500">Rapid Reviews done</div>
-          </div>
+        <div className="grid grid-cols-[1fr_repeat(3,4rem)] gap-x-2 gap-y-2 text-sm">
+          <div />
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-stone-400 text-right">Today</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-stone-400 text-right">7 days</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-stone-400 text-right">All time</div>
+
+          <div className="text-stone-600">Wortpaare players</div>
+          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.wortpaarePlayers.today}</div>
+          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.wortpaarePlayers.last7Days}</div>
+          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.wortpaarePlayers.allTime}</div>
+
+          <div className="text-stone-600">Artikel Blitz players</div>
+          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.artikelBlitzPlayers.today}</div>
+          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.artikelBlitzPlayers.last7Days}</div>
+          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.artikelBlitzPlayers.allTime}</div>
+
+          <div className="text-stone-600">Rapid Reviews done</div>
+          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.rapidReviewCount.today}</div>
+          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.rapidReviewCount.last7Days}</div>
+          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.rapidReviewCount.allTime}</div>
         </div>
       </div>
 

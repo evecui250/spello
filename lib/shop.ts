@@ -185,6 +185,19 @@ export async function buyAccessory(accessoryId: string): Promise<BuyAccessoryRes
   return data;
 }
 
+// Real bug caught live: equipping a new accessory (or changing nickname/
+// avatar) persisted fine, but the Leaderboard -- if already mounted
+// showing an earlier fetch, e.g. reached via a modal opened over it, or
+// still alive across a route change -- had no way to know anything had
+// changed, and only ever refetches on SYNCED_EVENT (a progress sync) or
+// its own mount. That left a learner's own row showing yesterday's
+// accessory (the plain default look) until something unrelated happened
+// to trigger a resync or a fresh mount. Not SYNCED_EVENT itself (defined
+// in lib/sync.ts, which already imports from this file -- reusing it here
+// would be a circular import) -- a separate, narrower event for exactly
+// this.
+export const PROFILE_UPDATED_EVENT = 'spello:profile-updated';
+
 // Nickname/avatar/equip/opt-out are pure preference with no economic
 // stakes, so these write directly to the client-writable `profiles`
 // table under RLS (auth.uid() = user_id) rather than going through an
@@ -196,6 +209,7 @@ async function upsertProfile(fields: Record<string, unknown>): Promise<boolean> 
   const { error } = await supabase
     .from('profiles')
     .upsert({ user_id: session.user.id, updated_at: new Date().toISOString(), ...fields }, { onConflict: 'user_id' });
+  if (!error) window.dispatchEvent(new Event(PROFILE_UPDATED_EVENT));
   return !error;
 }
 
