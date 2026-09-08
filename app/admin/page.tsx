@@ -60,6 +60,20 @@ interface AdminStats {
     // today — tracked separately from the correction calls above so we
     // can see whether the button is actually getting used.
     explanationClicks: number;
+    // sentence-glosses calls (word-click lookups in a prompt sentence or
+    // a Words-in-Context paragraph) — a real, frequent AI feature that
+    // used to be completely invisible here (see aiSpend below).
+    glossCalls: number;
+  };
+  // Headline total cost across EVERY AI feature combined (correction,
+  // explanation, words_in_context, gloss, and any future kind) — computed
+  // server-side from the raw ai_usage rows directly, not by adding up the
+  // per-feature figures above, specifically so a feature this page hasn't
+  // been taught to break out yet still counts here (see admin-stats' own
+  // comment on the real gloss-kind bug this closes).
+  aiSpend: {
+    last30DaysUsd: number;
+    allTimeUsd: number;
   };
   trends: {
     signups: { date: string; count: number }[];
@@ -200,6 +214,15 @@ export default function AdminPage() {
         <StatCard label="Active IPs, past 7 days" value={stats.totals.activeIps7d} />
       </div>
 
+      {/* AI spend — every feature combined (correction, explanation,
+          words_in_context, gloss), not just whichever ones this page
+          happens to break out into their own cards below. See aiSpend's
+          own comment for why this can't miss a future new kind. */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard label="AI spend, past 30 days" value={`$${stats.aiSpend.last30DaysUsd.toFixed(2)}`} />
+        <StatCard label="AI spend, all-time" value={`$${stats.aiSpend.allTimeUsd.toFixed(2)}`} />
+      </div>
+
       {/* Today */}
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-3">
         <h2 className="font-semibold text-stone-800">Today</h2>
@@ -212,6 +235,7 @@ export default function AdminPage() {
           <StatCard label="New IPs" value={stats.today.newIpsTotal} />
           <StatCard label="...of which signed in" value={stats.today.newIpsSignedIn} />
           <StatCard label="'Why?' button clicks" value={stats.today.explanationClicks} />
+          <StatCard label="Word-click gloss lookups" value={stats.today.glossCalls} />
         </div>
         <div className="flex flex-col gap-2">
           <AiUsageRow label="AI calls — signed in" summary={stats.today.aiUsage.signedIn} />
@@ -491,7 +515,7 @@ export default function AdminPage() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-4 flex flex-col gap-0.5">
       <span className="text-2xl font-bold text-stone-800">{value}</span>

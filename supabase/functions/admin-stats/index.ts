@@ -459,6 +459,16 @@ Deno.serve(async (req: Request) => {
     const correctionRows = aiRows.filter(r => (r.kind ?? 'correction') === 'correction');
     const explanationRows = aiRows.filter(r => r.kind === 'explanation');
     const wordsInContextRows = aiRows.filter(r => r.kind === 'words_in_context');
+    // Real bug found and fixed: sentence-glosses tags its own rows 'gloss'
+    // (a real, frequent source of cost -- every prompt-sentence and
+    // Words-in-Context word-click lookup), but nothing here ever selected
+    // them into any bucket, so they were silently excluded from every
+    // total/cost figure this function has ever returned, not just missing
+    // their own card. aiSpend below sums straight from `aiRows`/the
+    // unwindowed all-time query specifically so a future new `kind` can
+    // never repeat this -- it can't miss a bucket it was never filtered
+    // into in the first place.
+    const glossRows = aiRows.filter(r => r.kind === 'gloss');
     const aiUsageTrend = windowDays.map(date => {
       const rows = correctionRows.filter(r => dateStr(new Date(r.created_at)) === date);
       const signedIn = rows.filter(r => r.user_id !== null);
@@ -493,6 +503,27 @@ Deno.serve(async (req: Request) => {
       date,
       count: explanationRows.filter(r => dateStr(new Date(r.created_at)) === date).length,
     }));
+    // Gloss (sentence-glosses) calls -- see the comment where glossRows is
+    // built. Just a visibility count, same reasoning as explanationClicks
+    // above: confirms this feature is actually being used, on its own,
+    // rather than being invisible inside a bucket it was never part of.
+    const glossCallsToday = glossRows.filter(r => dateStr(new Date(r.created_at)) === todayStr).length;
+
+    // Total AI spend -- ALL kinds combined (correction, explanation,
+    // words_in_context, gloss, and anything future), both for the trend
+    // window and for the app's entire history. Computed from the raw,
+    // unfiltered row sets specifically so a new `kind` added later is
+    // automatically included here even if nobody remembers to add it to
+    // the per-feature buckets above (see the real gloss-kind bug this
+    // fixes). The all-time query is unbounded by date -- fine at the row
+    // counts this app actually has today (see this file's own header
+    // comment); only the 3 pricing-relevant columns are selected to keep
+    // the payload small regardless of how many rows exist.
+    const aiSpendLast30DaysUsd = costUsd(aiRows);
+    const { data: aiRowsAllTime } = await admin
+      .from('ai_usage')
+      .select('model, input_tokens, output_tokens');
+    const aiSpendAllTimeUsd = costUsd(aiRowsAllTime ?? []);
 
     // Words studied — signed-in/synced accounts via daily_activity (full
     // per-word detail never leaves an anonymous learner's device, so that
@@ -607,6 +638,14 @@ Deno.serve(async (req: Request) => {
         aiUsage: aiUsageToday,
         wordsInContext: wordsInContextToday,
         explanationClicks: explanationClicksToday,
+        glossCalls: glossCallsToday,
+      },
+      // Headline total cost across every AI feature combined -- see the
+      // comment where these are computed for why this is safe against a
+      // future new `kind` silently going uncounted.
+      aiSpend: {
+        last30DaysUsd: aiSpendLast30DaysUsd,
+        allTimeUsd: aiSpendAllTimeUsd,
       },
       trends: {
         signups: signupTrend,
