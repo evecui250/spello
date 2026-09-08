@@ -390,3 +390,121 @@ export async function getSentenceGlosses(
   const words = data?.words && typeof data.words === 'object' ? data.words : {};
   return words as Record<string, WordGloss>;
 }
+
+// "Text to Pet" free-form conversation feature (see pet-chat-turn,
+// components/PetChatFlow.tsx). Kept distinct from PetChatEvent's own
+// unknownVocabulary/hintUsed/etc. — see that type's own comment for why
+// these are never lumped into a single generic "mistake".
+export interface PetChatEvent {
+  type: 'grammarMistake' | 'spellingMistake' | 'unknownVocabulary' | 'hintUsed' | 'successfulRecentWordUse';
+  wrong: string;
+  correct: string;
+  detail: string;
+}
+
+// sessionId is always present, including on a fresh start, so the client
+// never has to special-case "do I have a session yet" across the two call
+// sites below.
+export interface PetChatTurnResult {
+  sessionId: number;
+  petReply: string;
+  petReplyTranslation: string;
+  // '' = the learner's message needed no grammar/spelling fix — the
+  // client should show no correction UI at all for this turn (see
+  // PetChatFlow, which also double-checks via diffAgainstAttempt before
+  // rendering anything, same defensive "instruction + code" pattern used
+  // everywhere else in this codebase).
+  correctedSentence: string;
+  events: PetChatEvent[];
+  shouldConclude: boolean;
+}
+
+const PET_CHAT_EVENT_TYPES = new Set(['grammarMistake', 'spellingMistake', 'unknownVocabulary', 'hintUsed', 'successfulRecentWordUse']);
+
+function parsePetChatTurn(data: Partial<PetChatTurnResult> & { limitReached?: boolean } | null, error: unknown): PetChatTurnResult {
+  if (error) rethrow(error);
+  if (data?.limitReached) throw new DailyLimitReachedError();
+  if (!data?.sessionId || !data.petReply || !data.petReplyTranslation || typeof data.correctedSentence !== 'string') {
+    throw new Error('Malformed AI response');
+  }
+  const events = Array.isArray(data.events)
+    ? data.events.filter((e): e is PetChatEvent =>
+        !!e && typeof e.type === 'string' && PET_CHAT_EVENT_TYPES.has(e.type)
+        && typeof e.wrong === 'string' && typeof e.correct === 'string' && typeof e.detail === 'string')
+    : [];
+  return {
+    sessionId: data.sessionId,
+    petReply: data.petReply,
+    petReplyTranslation: data.petReplyTranslation,
+    correctedSentence: data.correctedSentence,
+    events,
+    shouldConclude: !!data.shouldConclude,
+  };
+}
+
+// Starts a new conversation on the chosen topic — the pet opens with a
+// greeting and a simple question; there is nothing to correct yet.
+export async function startPetChat(
+  topic: string,
+  level: string,
+  deviceId: string,
+  nativeLanguage: 'en' | 'zh' = 'en',
+): Promise<PetChatTurnResult> {
+  const { data, error } = await invokeWithTimeout<Partial<PetChatTurnResult> & { limitReached?: boolean }>('pet-chat-turn', { deviceId, topic, level, nativeLanguage });
+  return parsePetChatTurn(data, error);
+}
+
+// Sends the learner's next message and gets back the pet's reply plus
+// Spello's own correction/classification of what they just wrote.
+// recentWords is client-computed (see lib/practice.ts's buildReviewWords)
+// — no SRS logic is duplicated server-side, same reasoning as
+// generateSentence's own knownVocabulary parameter.
+export async function sendPetChatMessage(
+  sessionId: number,
+  userMessage: string,
+  deviceId: string,
+  recentWords: { de: string; en: string }[] = [],
+): Promise<PetChatTurnResult> {
+  const { data, error } = await invokeWithTimeout<Partial<PetChatTurnResult> & { limitReached?: boolean }>('pet-chat-turn', { sessionId, userMessage, deviceId, recentWords });
+  return parsePetChatTurn(data, error);
+}
+
+export interface PetChatSummary {
+  topic: string;
+  positiveSummary: string;
+  newWords: { de: string; gloss: string }[];
+  grammarMistakes: { wrong: string; correct: string }[];
+  spellingMistakes: { wrong: string; correct: string }[];
+  wordsNeededHelp: { wrong: string; correct: string }[];
+  recentWordsUsedWell: string[];
+  // Candidate "pet memory" facts, pending confirmation — see
+  // decidePetMemory. Never silently permanent (product requirement: the
+  // learner must see/confirm/dismiss each one first).
+  memoryCandidates: { id: number; fact: string }[];
+}
+
+// Called once the learner picks "See summary" (turn 7, or earlier if they
+// choose to end early). Marks the session concluded server-side.
+export async function getPetChatSummary(sessionId: number, deviceId: string): Promise<PetChatSummary> {
+  const { data, error } = await invokeWithTimeout<Partial<PetChatSummary> & { limitReached?: boolean }>('pet-chat-summary', { sessionId, deviceId });
+  if (error) rethrow(error);
+  if (data?.limitReached) throw new DailyLimitReachedError();
+  if (!data?.topic || !data.positiveSummary) throw new Error('Malformed AI response');
+  return {
+    topic: data.topic,
+    positiveSummary: data.positiveSummary,
+    newWords: Array.isArray(data.newWords) ? data.newWords : [],
+    grammarMistakes: Array.isArray(data.grammarMistakes) ? data.grammarMistakes : [],
+    spellingMistakes: Array.isArray(data.spellingMistakes) ? data.spellingMistakes : [],
+    wordsNeededHelp: Array.isArray(data.wordsNeededHelp) ? data.wordsNeededHelp : [],
+    recentWordsUsedWell: Array.isArray(data.recentWordsUsedWell) ? data.recentWordsUsedWell : [],
+    memoryCandidates: Array.isArray(data.memoryCandidates) ? data.memoryCandidates : [],
+  };
+}
+
+// Confirms or dismisses one pet-memory candidate from the summary screen.
+// No AI call, no daily-cap/limitReached path — a plain status update.
+export async function decidePetMemory(id: number, deviceId: string, decision: 'confirmed' | 'dismissed'): Promise<void> {
+  const { error } = await invokeWithTimeout<{ ok?: boolean }>('pet-memory-decide', { id, deviceId, decision });
+  if (error) rethrow(error);
+}

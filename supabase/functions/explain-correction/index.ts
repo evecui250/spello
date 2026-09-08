@@ -137,9 +137,20 @@ Deno.serve(async (req: Request) => {
       additionalProperties: false,
     };
 
+    // wordDe is optional -- this function has never actually required it
+    // (see the validation above, `if (!wordId || !correctedSentence)`).
+    // Real reuse case: the "Text to Pet" conversation feature (see
+    // pet-chat-turn) has no single target word for a free-form sentence,
+    // so it passes wordDe as '' rather than inventing one — this falls
+    // back to a generic framing instead of the odd `practicing the target
+    // word ""`, with zero behavior change for every existing call site,
+    // which always pass a real wordDe.
+    const targetWordFraming = wordDe
+      ? `, practicing the target word "${wordDe}"`
+      : ' in a free-form conversation';
     const systemPrompt =
-      `You are a German tutor explaining a correction to a CEFR ${level || 'A1'} learner, ` +
-      `practicing the target word "${wordDe}".\n\n` +
+      `You are a German tutor explaining a correction to a CEFR ${level || 'A1'} learner` +
+      `${targetWordFraming}.\n\n` +
       `Learner wrote:\n${originalAttempt || '(nothing — they left it blank)'}\n\n` +
       `Corrected sentence:\n${correctedSentence}\n\n` +
       "Explain the meaningful differences between the learner's sentence and the corrected " +

@@ -220,14 +220,26 @@ export default function HomePage() {
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center gap-5">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        ref={petImgRef}
-        src={`${BASE}/${heroImageFor(avatarId)}`}
-        alt="Your pet"
-        onLoad={() => setPetLoaded(true)}
-        className={`h-32 w-32 object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
-      />
+      {/* Tapping the pet opens "Text to Pet" — a free-form AI-led German
+          conversation (see app/pet-chat/page.tsx). The gear icon above
+          still owns pet/nickname customization; this is a wholly separate
+          affordance on the pet image itself, which had no interaction at
+          all before this. */}
+      <button
+        type="button"
+        onClick={() => router.push('/pet-chat/')}
+        aria-label="Chat with your pet in German"
+        className="active:scale-95 transition-transform"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          ref={petImgRef}
+          src={`${BASE}/${heroImageFor(avatarId)}`}
+          alt="Your pet"
+          onLoad={() => setPetLoaded(true)}
+          className={`h-32 w-32 object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
+        />
+      </button>
 
       <div className="w-full flex flex-col items-center gap-3">
         {nothingLeftAtAll ? (

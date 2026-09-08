@@ -1142,6 +1142,31 @@ export function saveLocalNickname(nickname: string): void {
   else localStorage.removeItem(LOCAL_NICKNAME_KEY);
 }
 
+// --- Text to Pet: recently-shown topics ---
+// Purely local, no sync — cross-device topic variety is a reasonable
+// future enhancement, not required for V1 (see the feature's own plan).
+// Caps at the last 6 non-"Daily life" topics shown (2 draws' worth of 3),
+// which PetChatFlow's own picker excludes from its next random draw so
+// the same handful of topics don't keep resurfacing back to back.
+const PET_CHAT_RECENT_TOPICS_KEY = 'wb2_pet_chat_recent_topics';
+const PET_CHAT_RECENT_TOPICS_MAX = 6;
+
+export function getPetChatRecentTopics(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(PET_CHAT_RECENT_TOPICS_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((t): t is string => typeof t === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function savePetChatRecentTopics(topics: string[]): void {
+  if (typeof window === 'undefined') return;
+  const merged = [...topics, ...getPetChatRecentTopics()].slice(0, PET_CHAT_RECENT_TOPICS_MAX);
+  localStorage.setItem(PET_CHAT_RECENT_TOPICS_KEY, JSON.stringify(merged));
+}
+
 // --- Settings ---
 
 export function getSettings(): Settings {
