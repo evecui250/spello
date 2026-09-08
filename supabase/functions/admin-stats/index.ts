@@ -640,7 +640,7 @@ Deno.serve(async (req: Request) => {
     // spending; "points left" is earned minus spent.
     const { data: allActivityRows } = await admin.from('daily_activity').select('user_id, words_studied');
     const { data: allGameRows } = await admin.from('game_plays').select('user_id').not('user_id', 'is', null);
-    const { data: allOwnedRows } = await admin.from('owned_accessories').select('user_id, cost_paid');
+    const { data: allOwnedRows } = await admin.from('owned_accessories').select('user_id, accessory_id, cost_paid, purchased_at');
     const { data: profileRows } = await admin.from('profiles').select('user_id, nickname');
 
     const earnedFromWordsByUser = new Map<string, number>();
@@ -672,6 +672,24 @@ Deno.serve(async (req: Request) => {
         pointsLeft: earned - spent,
       };
     }).sort((a, b) => b.totalAccumulated - a.totalAccumulated);
+
+    // Every accessory purchase ever made, newest first -- who bought what,
+    // for how much, and when. Duplicated name map (same convention as
+    // buy-accessory's own duplicated cost map -- see lib/shop.ts's own
+    // header comment on why there's no shared module) rather than the
+    // bare accessory_id, so this reads without cross-referencing the
+    // catalog by hand.
+    const ACCESSORY_NAME: Record<string, string> = { 'leather-collar': 'Leather Collar', 'straw-hat': 'Straw Hat' };
+    const purchaseHistory = [...(allOwnedRows ?? [])]
+      .sort((a, b) => (b.purchased_at as string).localeCompare(a.purchased_at as string))
+      .map(r => ({
+        email: emailByUserId.get(r.user_id) ?? '(unknown)',
+        nickname: nicknameByUserId.get(r.user_id) ?? null,
+        accessoryId: r.accessory_id as string,
+        accessoryName: ACCESSORY_NAME[r.accessory_id as string] ?? (r.accessory_id as string),
+        costPaid: r.cost_paid as number,
+        purchasedAt: r.purchased_at as string,
+      }));
 
     return json({
       totals: {
@@ -723,6 +741,7 @@ Deno.serve(async (req: Request) => {
       bugReportCount: bugReportCount ?? 0,
       recentBugReports: recentBugReports ?? [],
       userPoints,
+      purchaseHistory,
       // Temporary/diagnostic — see the comment where this is built. Empty
       // array in the normal case; /admin only renders anything for this
       // when it's actually non-empty.

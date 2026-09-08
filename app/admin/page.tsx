@@ -107,6 +107,9 @@ interface AdminStats {
   // All-time, unwindowed -- see admin-stats' own comment on the balance
   // formula. Sorted by totalAccumulated descending server-side.
   userPoints: { email: string; nickname: string | null; totalAccumulated: number; pointsLeft: number }[];
+  // Every shop purchase ever made, newest first -- see admin-stats' own
+  // comment on the duplicated accessory name map.
+  purchaseHistory: { email: string; nickname: string | null; accessoryId: string; accessoryName: string; costPaid: number; purchasedAt: string }[];
   wordStages: {
     totals: StageCounts;
     byLearner: { email: string; level: string | null; stages: StageCounts }[];
@@ -170,6 +173,7 @@ export default function AdminPage() {
         },
         registeredLearners: data.registeredLearners ?? [],
         userPoints: data.userPoints ?? [],
+        purchaseHistory: data.purchaseHistory ?? [],
       });
       setStatus('ready');
     })();
@@ -504,6 +508,38 @@ export default function AdminPage() {
                     <td className="py-1.5 px-2 text-stone-700 truncate max-w-[180px]">{row.nickname ?? row.email}</td>
                     <td className="py-1.5 px-2 text-stone-600 text-right">{row.pointsLeft.toLocaleString()}</td>
                     <td className="py-1.5 px-2 text-stone-600 text-right">{row.totalAccumulated.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Purchase history */}
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-3">
+        <h2 className="font-semibold text-stone-800">Purchase history ({stats.purchaseHistory.length} total)</h2>
+        <p className="text-stone-400 text-xs -mt-1">Every shop purchase, newest first.</p>
+        {stats.purchaseHistory.length === 0 ? (
+          <p className="text-stone-500 text-sm">No purchases yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-stone-400 text-xs text-left">
+                  <th className="py-1.5 px-2 font-medium">User</th>
+                  <th className="py-1.5 px-2 font-medium">Item</th>
+                  <th className="py-1.5 px-2 font-medium text-right">Coins paid</th>
+                  <th className="py-1.5 px-2 font-medium text-right">When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.purchaseHistory.map((row, i) => (
+                  <tr key={row.email + row.accessoryId + row.purchasedAt + i} className="border-t border-amber-100/60">
+                    <td className="py-1.5 px-2 text-stone-700 truncate max-w-[180px]">{row.nickname ?? row.email}</td>
+                    <td className="py-1.5 px-2 text-stone-700">{row.accessoryName}</td>
+                    <td className="py-1.5 px-2 text-stone-600 text-right">{row.costPaid.toLocaleString()}</td>
+                    <td className="py-1.5 px-2 text-stone-500 text-right whitespace-nowrap">{new Date(row.purchasedAt).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>

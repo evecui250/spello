@@ -224,6 +224,20 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
               </div>
             ))}
             {buyError && <p className="text-clay text-xs -mt-2">{buyError}</p>}
+
+            {/* Every pick/equip/purchase above already saves the instant
+                you tap it (see equip/pickAvatar/buy) — there was nothing
+                left to lose by closing via × or tapping outside. This
+                button doesn't save anything new; it exists because a
+                modal with no bottom action reads as unfinished, leaving a
+                learner unsure whether their choice actually stuck. */}
+            <button
+              type="button"
+              onClick={close}
+              className="bg-accent text-white text-sm px-4 py-2.5 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
+            >
+              Save
+            </button>
           </>
         )}
       </div>
