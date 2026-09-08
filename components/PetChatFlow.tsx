@@ -4,14 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   startPetChat, sendPetChatMessage, getPetChatSummary, decidePetMemory, explainCorrection,
-  saveChatReport, PetChatEvent, PetChatSummary, ExplanationResult, AIUnreachableError, DailyLimitReachedError,
+  saveChatReport, PetChatEvent, PetChatSummary, PetChatTranscriptMessage, ExplanationResult, AIUnreachableError, DailyLimitReachedError,
 } from '../lib/ai';
 import { getSettings, getPetChatRecentTopics, savePetChatRecentTopics } from '../lib/storage';
 import { buildReviewWords } from '../lib/practice';
 import { diffAgainstAttempt } from '../lib/words';
 import { getOrCreateDeviceId } from '../lib/telemetry';
 import { getDisplayProfile, avatarImageFor, EquippedAccessories } from '../lib/shop';
-import SpecialCharButtons from './SpecialCharButtons';
 import TextSpeakerButton from './TextSpeakerButton';
 import WhyExplanationSheet from './WhyExplanationSheet';
 
@@ -42,13 +41,9 @@ function pickTopics(exclude: string[]): string[] {
   return shuffled(pool).slice(0, 3);
 }
 
-interface DisplayMessage {
-  role: 'user' | 'pet';
-  text: string;
-  translation?: string;        // pet only
-  correctedSentence?: string;  // user only — '' or absent = no correction needed
-  events?: PetChatEvent[];     // user only
-}
+// Shared with My Notebook's Conversations tab (see lib/ai.ts) so a saved
+// report reads exactly like the live chat did, corrections included.
+type DisplayMessage = PetChatTranscriptMessage;
 
 type Phase = 'topics' | 'chat' | 'summary';
 
@@ -420,7 +415,13 @@ export default function PetChatFlow() {
         </div>
       )}
 
-      <div className="shrink-0 flex flex-col gap-2">
+      <div className="shrink-0 flex flex-col gap-1.5">
+        {/* How many of the normal 7-turn session are left — capped at 0,
+            since a session that ran past 7 (the pet chose to keep going)
+            shouldn't show a confusing negative count. */}
+        <div className="text-center text-[11px] font-semibold uppercase tracking-wide text-ink-soft">
+          {Math.min(turnCount + 1, NORMAL_SESSION_LENGTH)}/{NORMAL_SESSION_LENGTH} messages
+        </div>
         <textarea
           ref={textareaRef}
           value={input}
@@ -431,7 +432,6 @@ export default function PetChatFlow() {
           placeholder="Type in German — mix in English/Chinese for any word you don't know"
           className="w-full bg-paper/90 backdrop-blur-sm border-2 border-paper-line rounded-xl px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent/50 resize-none disabled:opacity-60"
         />
-        <SpecialCharButtons inputRef={textareaRef} onInsert={val => setInput(prev => prev + val)} />
         {chatError && (
           <p className="text-clay text-sm text-center">
             {chatError === 'unreachable' ? "Can't reach our AI service right now." :
@@ -515,17 +515,25 @@ function PetAvatarImg({ petAvatar }: { petAvatar: { avatarId: string; equipped: 
 // vocabulary gap (no real grammar mistake) still gets its own distinctly-
 // colored box — real report: showing NOTHING beyond a small chip read as
 // "this one didn't get checked" even though it was, just differently.
-function ChatBubble({
-  msg, petAvatar, revealed, onToggleReveal, onExplain, explanationLoading,
+// onToggleReveal/onExplain are optional so this same component can render
+// a read-only "screenshot" of a saved conversation in My Notebook's
+// Conversations tab (see app/mistakes/page.tsx) — no live AI calls or
+// reveal-state there, just the exact same visual record.
+export function ChatBubble({
+  msg, petAvatar, revealed = false, onToggleReveal, onExplain, explanationLoading = false,
 }: {
   msg: DisplayMessage;
   petAvatar: { avatarId: string; equipped: EquippedAccessories } | null;
-  revealed: boolean;
-  onToggleReveal: () => void;
-  onExplain: () => void;
-  explanationLoading: boolean;
+  revealed?: boolean;
+  onToggleReveal?: () => void;
+  onExplain?: () => void;
+  explanationLoading?: boolean;
 }) {
   const isPet = msg.role === 'pet';
+  // No onToggleReveal at all (the read-only Notebook view) just shows the
+  // translation outright — there's no live tap-state to manage there, and
+  // "a screenshot of the chatting history" reads better fully expanded.
+  const showTranslation = isPet && (revealed || !onToggleReveal) && !!msg.translation;
   const diff = !isPet && msg.correctedSentence ? diffAgainstAttempt(msg.text, msg.correctedSentence) : null;
   const showCorrection = !!diff && !diff.perfect;
   // Shown independently of the grammar correction above -- a turn can
@@ -544,12 +552,13 @@ function ChatBubble({
         <button
           type="button"
           onClick={isPet ? onToggleReveal : undefined}
+          disabled={isPet && !onToggleReveal}
           className={`rounded-2xl px-4 py-2.5 text-sm text-left ${
             isPet ? 'bg-paper text-ink rounded-tl-sm' : 'bg-accent text-white rounded-tr-sm'
           }`}
         >
           {msg.text}
-          {isPet && revealed && msg.translation && (
+          {showTranslation && (
             <div className="mt-1.5 pt-1.5 border-t border-paper-line/60 text-ink-soft text-xs">{msg.translation}</div>
           )}
         </button>
@@ -568,15 +577,17 @@ function ChatBubble({
 
       {showCorrection && diff && (
         <div className="relative max-w-[85%] w-full text-left py-2.5 px-4 rounded-xl font-semibold bg-good/25 border border-good">
-          <button
-            type="button"
-            onClick={onExplain}
-            disabled={explanationLoading}
-            aria-label="Explain the grammar"
-            className="absolute top-2 right-2 text-label text-xs font-semibold bg-paper/70 hover:bg-paper hover:text-label rounded-full px-2 py-0.5 transition-colors disabled:opacity-50"
-          >
-            {explanationLoading ? '…' : 'Why?'}
-          </button>
+          {onExplain && (
+            <button
+              type="button"
+              onClick={onExplain}
+              disabled={explanationLoading}
+              aria-label="Explain the grammar"
+              className="absolute top-2 right-2 text-label text-xs font-semibold bg-paper/70 hover:bg-paper hover:text-label rounded-full px-2 py-0.5 transition-colors disabled:opacity-50"
+            >
+              {explanationLoading ? '…' : 'Why?'}
+            </button>
+          )}
           <div className="text-[10px] uppercase tracking-wide text-good-deep mb-1 font-medium flex items-center gap-1.5">
             Correction
             <TextSpeakerButton text={msg.correctedSentence!} className="text-good hover:text-good-deep transition-colors normal-case" />

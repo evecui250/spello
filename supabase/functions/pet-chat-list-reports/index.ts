@@ -46,12 +46,39 @@ Deno.serve(async (req: Request) => {
       .order('created_at', { ascending: false });
     query = userId ? query.or(`device_id.eq.${deviceId},user_id.eq.${userId}`) : query.eq('device_id', deviceId);
     const { data: sessions } = await query;
+    const sessionIds = (sessions ?? []).map(s => s.id);
+
+    // Full transcript per session — "a screenshot of our chatting history,"
+    // per the product request, not just the aggregate stats. One query for
+    // ALL saved sessions' messages/events (not one per session) — a
+    // learner with many saved reports shouldn't mean N+1 round trips.
+    const [{ data: allMessages }, { data: allEvents }] = sessionIds.length === 0 ? [{ data: [] }, { data: [] }] : await Promise.all([
+      admin.from('pet_chat_messages').select('session_id, turn_number, role, text, corrected_text, translation').in('session_id', sessionIds).order('id', { ascending: true }),
+      admin.from('pet_chat_events').select('session_id, turn_number, event_type, wrong, correct, detail').in('session_id', sessionIds).order('id', { ascending: true }),
+    ]);
+
+    const eventsBySessionTurn = new Map<string, { type: string; wrong: string; correct: string; detail: string }[]>();
+    for (const e of allEvents ?? []) {
+      const key = `${e.session_id}:${e.turn_number}`;
+      const list = eventsBySessionTurn.get(key) ?? [];
+      list.push({ type: e.event_type, wrong: e.wrong, correct: e.correct, detail: e.detail });
+      eventsBySessionTurn.set(key, list);
+    }
+    const messagesBySession = new Map<number, unknown[]>();
+    for (const m of allMessages ?? []) {
+      const list = messagesBySession.get(m.session_id as number) ?? [];
+      list.push(m.role === 'user'
+        ? { role: 'user', text: m.text, correctedSentence: m.corrected_text ?? '', events: eventsBySessionTurn.get(`${m.session_id}:${m.turn_number}`) ?? [] }
+        : { role: 'pet', text: m.text, translation: m.translation ?? '' });
+      messagesBySession.set(m.session_id as number, list);
+    }
 
     const reports = (sessions ?? []).map(s => ({
       sessionId: s.id,
       topic: s.topic,
       level: s.level,
       createdAt: s.created_at,
+      transcript: messagesBySession.get(s.id) ?? [],
       ...(s.summary as Record<string, unknown>),
     }));
 

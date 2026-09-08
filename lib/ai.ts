@@ -469,6 +469,18 @@ export async function sendPetChatMessage(
   return parsePetChatTurn(data, error);
 }
 
+// One message as shown in a chat bubble — shared between PetChatFlow's
+// live view and My Notebook's saved-report view (see SavedPetChatReport),
+// so a saved report reads exactly like "a screenshot of the chatting
+// history," corrections and all, not just the aggregate stats below.
+export interface PetChatTranscriptMessage {
+  role: 'user' | 'pet';
+  text: string;
+  correctedSentence?: string; // user only — '' = no correction needed
+  events?: PetChatEvent[];    // user only
+  translation?: string;       // pet only
+}
+
 export interface PetChatSummary {
   topic: string;
   positiveSummary: string;
@@ -521,6 +533,7 @@ export interface SavedPetChatReport extends PetChatSummary {
   sessionId: number;
   level: string;
   createdAt: string;
+  transcript: PetChatTranscriptMessage[];
 }
 
 // My Notebook's Conversations tab — every report the learner has

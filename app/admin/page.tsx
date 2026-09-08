@@ -74,6 +74,10 @@ interface AdminStats {
   aiSpend: {
     last30DaysUsd: number;
     allTimeUsd: number;
+    // Text to Pet's own two ai_usage kinds, broken out of the combined
+    // total above -- several calls per session (not one), worth watching
+    // on its own as the feature sees real usage.
+    petChat: { last30DaysUsd: number; allTimeUsd: number };
   };
   trends: {
     signups: { date: string; count: number }[];
@@ -110,6 +114,9 @@ interface AdminStats {
   // Every shop purchase ever made, newest first -- see admin-stats' own
   // comment on the duplicated accessory name map.
   purchaseHistory: { email: string; nickname: string | null; accessoryId: string; accessoryName: string; costPaid: number; purchasedAt: string }[];
+  // Text to Pet sessions per person -- a session count, not a message
+  // count. "(anonymous)" rows are keyed by device_id, not a real account.
+  petChatUsage: { email: string; nickname: string | null; today: number; last7Days: number; allTime: number }[];
   wordStages: {
     totals: StageCounts;
     byLearner: { email: string; level: string | null; stages: StageCounts }[];
@@ -161,6 +168,11 @@ export default function AdminPage() {
           artikelBlitzPlayers: { today: 0, last7Days: 0, allTime: 0 },
           rapidReviewCount: { today: 0, last7Days: 0, allTime: 0 },
         },
+        aiSpend: {
+          ...data.aiSpend,
+          petChat: data.aiSpend?.petChat ?? { last30DaysUsd: 0, allTimeUsd: 0 },
+        },
+        petChatUsage: data.petChatUsage ?? [],
         today: {
           ...data.today,
           explanationClicks: data.today?.explanationClicks ?? 0,
@@ -234,6 +246,8 @@ export default function AdminPage() {
       <div className="grid grid-cols-2 gap-3">
         <StatCard label="AI spend, past 30 days" value={`$${stats.aiSpend.last30DaysUsd.toFixed(2)}`} />
         <StatCard label="AI spend, all-time" value={`$${stats.aiSpend.allTimeUsd.toFixed(2)}`} />
+        <StatCard label="...of which, Text to Pet (30 days)" value={`$${stats.aiSpend.petChat.last30DaysUsd.toFixed(2)}`} />
+        <StatCard label="...of which, Text to Pet (all-time)" value={`$${stats.aiSpend.petChat.allTimeUsd.toFixed(2)}`} />
       </div>
 
       {/* Today */}
@@ -540,6 +554,38 @@ export default function AdminPage() {
                     <td className="py-1.5 px-2 text-stone-700">{row.accessoryName}</td>
                     <td className="py-1.5 px-2 text-stone-600 text-right">{row.costPaid.toLocaleString()}</td>
                     <td className="py-1.5 px-2 text-stone-500 text-right whitespace-nowrap">{new Date(row.purchasedAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Text to Pet usage */}
+      <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-5 flex flex-col gap-3">
+        <h2 className="font-semibold text-stone-800">Text to Pet usage ({stats.petChatUsage.length} people)</h2>
+        <p className="text-stone-400 text-xs -mt-1">Conversations started per person. "(anonymous)" rows are one signed-out device, not a real account.</p>
+        {stats.petChatUsage.length === 0 ? (
+          <p className="text-stone-500 text-sm">No conversations yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-stone-400 text-xs text-left">
+                  <th className="py-1.5 px-2 font-medium">Person</th>
+                  <th className="py-1.5 px-2 font-medium text-right">Today</th>
+                  <th className="py-1.5 px-2 font-medium text-right">7 days</th>
+                  <th className="py-1.5 px-2 font-medium text-right">All time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.petChatUsage.map((row, i) => (
+                  <tr key={row.email + i} className="border-t border-amber-100/60">
+                    <td className="py-1.5 px-2 text-stone-700 truncate max-w-[180px]">{row.nickname ?? row.email}</td>
+                    <td className="py-1.5 px-2 text-stone-600 text-right">{row.today}</td>
+                    <td className="py-1.5 px-2 text-stone-600 text-right">{row.last7Days}</td>
+                    <td className="py-1.5 px-2 text-stone-600 text-right">{row.allTime}</td>
                   </tr>
                 ))}
               </tbody>

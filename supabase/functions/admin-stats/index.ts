@@ -572,10 +572,18 @@ Deno.serve(async (req: Request) => {
     // comment); only the 3 pricing-relevant columns are selected to keep
     // the payload small regardless of how many rows exist.
     const aiSpendLast30DaysUsd = costUsd(aiRows);
-    const aiRowsAllTime = await fetchAllRows<{ model: string | null; input_tokens: number; output_tokens: number }>(
-      (from, to) => admin.from('ai_usage').select('model, input_tokens, output_tokens').range(from, to),
+    const aiRowsAllTime = await fetchAllRows<{ model: string | null; input_tokens: number; output_tokens: number; kind: string | null }>(
+      (from, to) => admin.from('ai_usage').select('model, input_tokens, output_tokens, kind').range(from, to),
     );
     const aiSpendAllTimeUsd = costUsd(aiRowsAllTime);
+    // "Texting" = Text to Pet's own two kinds (the per-turn conversation
+    // call and the end-of-session summary call) -- broken out of the
+    // headline total above since it's a meaningfully different cost
+    // profile (several calls per session, not one) worth watching on its
+    // own as the feature sees real usage.
+    const isPetChatKind = (k: string | null) => k === 'pet_chat' || k === 'pet_chat_summary';
+    const petChatSpendLast30DaysUsd = costUsd(aiRows.filter(r => isPetChatKind(r.kind)));
+    const petChatSpendAllTimeUsd = costUsd(aiRowsAllTime.filter(r => isPetChatKind(r.kind)));
 
     // Words studied — signed-in/synced accounts via daily_activity (full
     // per-word detail never leaves an anonymous learner's device, so that
@@ -661,6 +669,35 @@ Deno.serve(async (req: Request) => {
     }
     const nicknameByUserId = new Map((profileRows ?? []).map(p => [p.user_id, p.nickname as string | null]));
 
+    // Text to Pet usage per person -- one row per session (see
+    // pet-chat-turn's own "start" branch), so this is a straight session
+    // count, not messages. Identity is user_id when signed in, else the
+    // device_id itself (shown as "(anonymous)" rather than a real name,
+    // same masking reasoning as everywhere else anonymous callers show up
+    // in this file) -- an anonymous learner who clears local storage shows
+    // up as a second row, an accepted limitation of device_id as identity
+    // this codebase already lives with elsewhere (game_plays, bug_reports).
+    const petChatSessionRows = await fetchAllRows<{ user_id: string | null; device_id: string; created_at: string }>(
+      (from, to) => admin.from('pet_chat_sessions').select('user_id, device_id, created_at').range(from, to),
+    );
+    const petChatLast7DaysStart = dateStr(new Date(Date.now() - 6 * DAY_MS));
+    const petChatByIdentity = new Map<string, { today: number; last7Days: number; allTime: number; email: string; nickname: string | null }>();
+    for (const row of petChatSessionRows) {
+      const identity = row.user_id ?? `device:${row.device_id}`;
+      const day = dateStr(new Date(row.created_at));
+      const entry = petChatByIdentity.get(identity) ?? {
+        today: 0, last7Days: 0, allTime: 0,
+        email: row.user_id ? (emailByUserId.get(row.user_id) ?? '(unknown)') : '(anonymous)',
+        nickname: row.user_id ? (nicknameByUserId.get(row.user_id) ?? null) : null,
+      };
+      entry.allTime += 1;
+      if (day >= petChatLast7DaysStart) entry.last7Days += 1;
+      if (day === todayStr) entry.today += 1;
+      petChatByIdentity.set(identity, entry);
+    }
+    const petChatUsage = [...petChatByIdentity.values()]
+      .sort((a, b) => b.last7Days - a.last7Days || b.allTime - a.allTime);
+
     const pointsUserIds = new Set([...earnedFromWordsByUser.keys(), ...earnedFromGamesByUser.keys(), ...spentByUser.keys()]);
     const userPoints = [...pointsUserIds].map(uid => {
       const earned = (earnedFromWordsByUser.get(uid) ?? 0) + (earnedFromGamesByUser.get(uid) ?? 0);
@@ -716,6 +753,10 @@ Deno.serve(async (req: Request) => {
       aiSpend: {
         last30DaysUsd: aiSpendLast30DaysUsd,
         allTimeUsd: aiSpendAllTimeUsd,
+        petChat: {
+          last30DaysUsd: petChatSpendLast30DaysUsd,
+          allTimeUsd: petChatSpendAllTimeUsd,
+        },
       },
       trends: {
         signups: signupTrend,
@@ -742,6 +783,7 @@ Deno.serve(async (req: Request) => {
       recentBugReports: recentBugReports ?? [],
       userPoints,
       purchaseHistory,
+      petChatUsage,
       // Temporary/diagnostic — see the comment where this is built. Empty
       // array in the normal case; /admin only renders anything for this
       // when it's actually non-empty.

@@ -10,9 +10,11 @@ import {
 import { articleCandidateWords } from '../../lib/practice';
 import { listSavedPetChatReports, SavedPetChatReport } from '../../lib/ai';
 import { getOrCreateDeviceId } from '../../lib/telemetry';
+import { getDisplayProfile, EquippedAccessories } from '../../lib/shop';
 import SpeakerButton from '../../components/SpeakerButton';
 import MistakeRedoCard from '../../components/MistakeRedoCard';
 import ArtikelBlitzGame from '../../components/ArtikelBlitzGame';
+import { ChatBubble } from '../../components/PetChatFlow';
 
 // One card per saved report, grouped visually by day via a date header
 // whenever the day changes going down the (already newest-first) list —
@@ -42,7 +44,13 @@ function ReportPairList({ pairs }: { pairs: { wrong: string; correct: string }[]
   );
 }
 
-function ConversationReportCard({ report }: { report: SavedPetChatReport }) {
+function ConversationReportCard({ report, petAvatar }: { report: SavedPetChatReport; petAvatar: { avatarId: string; equipped: EquippedAccessories } | null }) {
+  // Collapsed to the stats by default (a full transcript is long) --
+  // "Show full conversation" reveals the exact same bubble UI the live
+  // chat used, corrections and all, per the product request for this to
+  // read like "a screenshot of the chatting history," not just a stats
+  // summary.
+  const [showTranscript, setShowTranscript] = useState(false);
   return (
     <div className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3 flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
@@ -74,6 +82,21 @@ function ConversationReportCard({ report }: { report: SavedPetChatReport }) {
       {report.recentWordsUsedWell.length > 0 && (
         <div className="text-xs text-ink-soft"><span className="font-semibold text-ink-soft">Used well: </span>{report.recentWordsUsedWell.join(', ')}</div>
       )}
+
+      <button
+        type="button"
+        onClick={() => setShowTranscript(v => !v)}
+        className="self-start text-xs font-semibold text-label hover:text-label/80 transition-colors mt-1"
+      >
+        {showTranscript ? 'Hide full conversation' : 'Show full conversation'}
+      </button>
+      {showTranscript && (
+        <div className="flex flex-col gap-3 bg-paper-dim/60 rounded-xl p-3 mt-1">
+          {report.transcript.map((m, i) => (
+            <ChatBubble key={i} msg={m} petAvatar={petAvatar} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -102,6 +125,7 @@ export default function MistakesPage() {
   const [tab, setTab] = useState<'mistakes' | 'correct'>('mistakes');
   const [practiceOpen, setPracticeOpen] = useState(false);
   const [savedReports, setSavedReports] = useState<SavedPetChatReport[] | null>(null);
+  const [petAvatar, setPetAvatar] = useState<{ avatarId: string; equipped: EquippedAccessories } | null>(null);
   const [reportsError, setReportsError] = useState(false);
   // Snapshotted once, at the moment "Redo" is tapped — see Word List's own
   // identical redoTarget for why (a successful redo clears lastMistake the
@@ -133,6 +157,7 @@ export default function MistakesPage() {
   useEffect(() => {
     if (topTab !== 'conversations' || savedReports !== null) return;
     setReportsError(false);
+    getDisplayProfile().then(p => setPetAvatar({ avatarId: p.avatarId, equipped: p.equipped }));
     listSavedPetChatReports(getOrCreateDeviceId())
       .then(setSavedReports)
       .catch(() => setReportsError(true));
@@ -329,7 +354,7 @@ export default function MistakesPage() {
                     {label !== prevLabel && (
                       <div className="text-xs uppercase tracking-wide text-on-bg/60 font-semibold">{label}</div>
                     )}
-                    <ConversationReportCard report={r} />
+                    <ConversationReportCard report={r} petAvatar={petAvatar} />
                   </div>
                 );
               })}
