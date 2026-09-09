@@ -5,18 +5,24 @@ import { useRouter } from 'next/navigation';
 import {
   getAllProgress, getSettings, today, PROGRESS_CHANGED_EVENT,
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
-  hasSeenPetBubbleToday, markPetBubbleSeenToday,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
 import { SYNCED_EVENT } from '../lib/sync';
-import { getDisplayProfile, heroImageFor } from '../lib/shop';
+import { getDisplayProfile, heroImageFor, avatarImageFor, EquippedAccessories, NO_ACCESSORIES } from '../lib/shop';
 import { CheckCircleIcon, SettingsGearIcon } from '../components/icons';
 import PetNicknameModal from '../components/PetNicknameModal';
 import Link from 'next/link';
 
 // Once today's main goal is done, "Study more" pulls a smaller bonus round
 // instead of the user's full daily pace — repeatable as many times as there
-// are still words available.
+// are still words available. Real, confirmed report: these are meant to be
+// SMALLER than the learner's own pace, but as flat constants they weren't
+// smaller than anything for a learner who'd set their own dailyReview
+// (Settings allows as low as 1) below 10 — "study more"/"review more"
+// could then hand them MORE words than their own configured setting,
+// exactly backwards from the intent. Capping each at the learner's own
+// setting (extraStudySize/extraReviewSize below) guarantees "more" always
+// means "a bonus round of at most your own normal pace," never more.
 const EXTRA_STUDY_SIZE = 5;
 const EXTRA_REVIEW_SIZE = 10;
 
@@ -49,6 +55,7 @@ export default function HomePage() {
   // The learner's chosen pet + nickname — works whether or not they're
   // signed in (see lib/shop.ts's getDisplayProfile).
   const [avatarId, setAvatarId] = useState('dachshund');
+  const [equipped, setEquipped] = useState<EquippedAccessories>(NO_ACCESSORIES);
   const [nickname, setNickname] = useState<string | null>(null);
   const [petModalOpen, setPetModalOpen] = useState(false);
   // These portraits are large (~1-1.5MB), uncached PNGs on a first visit —
@@ -61,21 +68,10 @@ export default function HomePage() {
   const [petLoaded, setPetLoaded] = useState(false);
   const petImgRef = useRef<HTMLImageElement>(null);
 
-  // "Talk to me!" nudge toward Text to Pet — once per calendar day (see
-  // hasSeenPetBubbleToday's own comment). Marked seen immediately, not
-  // just on an explicit ×, so it doesn't reappear on every Home revisit
-  // the same day.
-  const [petBubbleVisible, setPetBubbleVisible] = useState(false);
-  useEffect(() => {
-    if (!hasSeenPetBubbleToday()) {
-      setPetBubbleVisible(true);
-      markPetBubbleSeenToday();
-    }
-  }, []);
-
   const loadProfile = () => {
     getDisplayProfile().then(profile => {
       setAvatarId(profile.avatarId);
+      setEquipped(profile.equipped);
       setNickname(profile.nickname);
     });
   };
@@ -125,8 +121,11 @@ export default function HomePage() {
         setTotalReviewCount(reviewCount);
       } else if (ds.phase === 'done') {
         // Today's goal is met — preview the smaller bonus round instead.
-        const studyCount = buildStudyWords(EXTRA_STUDY_SIZE).length;
-        const reviewCount = buildReviewWords(EXTRA_REVIEW_SIZE).length;
+        // See EXTRA_STUDY_SIZE/EXTRA_REVIEW_SIZE's own comment for why
+        // this is capped at the learner's own setting, not just the flat
+        // constant.
+        const studyCount = buildStudyWords(Math.min(EXTRA_STUDY_SIZE, settings.studyBatchSize)).length;
+        const reviewCount = buildReviewWords(Math.min(EXTRA_REVIEW_SIZE, settings.dailyReview)).length;
         setPreviewStudyCount(studyCount);
         setPreviewReviewCount(reviewCount);
         setTotalStudyCount(studyCount);
@@ -175,8 +174,9 @@ export default function HomePage() {
   // earns its own congrats card (with the day's running total, not just
   // this round's).
   const startExtraRound = () => {
-    const studyIds = buildStudyWords(EXTRA_STUDY_SIZE).map(w => w.id);
-    const reviewIds = buildReviewWords(EXTRA_REVIEW_SIZE).map(w => w.id);
+    const settings = getSettings();
+    const studyIds = buildStudyWords(Math.min(EXTRA_STUDY_SIZE, settings.studyBatchSize)).map(w => w.id);
+    const reviewIds = buildReviewWords(Math.min(EXTRA_REVIEW_SIZE, settings.dailyReview)).map(w => w.id);
     resetDailyGoalsForExtraRound();
     startDailySession(studyIds, reviewIds, true);
     router.push('/practice');
@@ -233,55 +233,18 @@ export default function HomePage() {
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center gap-5">
-      {/* Tapping the pet opens "Text to Pet" — a free-form AI-led German
-          conversation (see app/pet-chat/page.tsx). The gear icon above
-          still owns pet/nickname customization; this is a wholly separate
-          affordance on the pet image itself, which had no interaction at
-          all before this. The speech bubble above it is a once-a-day nudge
-          toward the same feature (see hasSeenPetBubbleToday) — closeable
-          on its own, but tapping the pet itself still always works,
-          bubble or not. */}
-      <div className="relative">
-        {petBubbleVisible && (
-          <div className="absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-full flex flex-col items-center z-10">
-            <div className="relative bg-paper text-ink text-sm font-semibold rounded-2xl shadow-lg px-4 py-2.5 flex items-center gap-2 whitespace-nowrap">
-              <button
-                type="button"
-                onClick={() => setPetBubbleVisible(false)}
-                aria-label="Dismiss"
-                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-ink-soft/80 text-paper text-xs leading-none flex items-center justify-center hover:bg-ink-soft transition-colors"
-              >
-                ×
-              </button>
-              <span>Sprich mit mir!</span>
-              <button
-                type="button"
-                onClick={() => router.push('/pet-chat/')}
-                aria-label="Chat with your pet"
-                className="shrink-0 w-6 h-6 rounded-full bg-accent text-white flex items-center justify-center text-sm hover:bg-accent-deep transition-colors"
-              >
-                →
-              </button>
-            </div>
-            <div className="w-3 h-3 bg-paper rotate-45 -mt-1.5" />
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={() => router.push('/pet-chat/')}
-          aria-label="Chat with your pet in German"
-          className="active:scale-95 transition-transform"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            ref={petImgRef}
-            src={`${BASE}/${heroImageFor(avatarId)}`}
-            alt="Your pet"
-            onLoad={() => setPetLoaded(true)}
-            className={`h-32 w-32 object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
-          />
-        </button>
-      </div>
+      {/* Real report: the pet's own tap-to-chat and its "Sprich mit mir!"
+          nudge bubble were confusing as a SECOND entrance to Text to Pet
+          alongside the new Chat button below (see that button's own
+          comment) — the pet image is decorative again, matching how it
+          worked before this feature existed. */}
+      <img
+        ref={petImgRef}
+        src={`${BASE}/${heroImageFor(avatarId)}`}
+        alt="Your pet"
+        onLoad={() => setPetLoaded(true)}
+        className={`h-32 w-32 object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
+      />
 
       <div className="w-full flex flex-col items-center gap-3">
         {nothingLeftAtAll ? (
@@ -349,6 +312,25 @@ export default function HomePage() {
             </div>
           </Link>
         )}
+
+        {/* The sole entrance to Text to Pet now — real report: having
+            BOTH a tap on the pet image itself AND a nudge bubble AND
+            this button read as confusing/redundant. Same row treatment
+            as My Notebook above; the pet's own small avatar (not the big
+            hero portrait above) doubles as this row's icon, same image
+            used for it everywhere else (Leaderboard, Pet & Shop). */}
+        <button
+          type="button"
+          onClick={() => router.push('/pet-chat/')}
+          className="w-full max-w-[320px] flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-xl border border-white/15 px-4 py-3.5 hover:bg-white/15 transition-colors"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`${BASE}/${avatarImageFor(avatarId, equipped)}`} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
+          <div className="flex-1 min-w-0 text-left">
+            <div className="font-semibold text-on-bg text-base">Chat</div>
+            <div className="text-sm text-on-bg/65">Practice German with your pet</div>
+          </div>
+        </button>
       </div>
       </div>
 

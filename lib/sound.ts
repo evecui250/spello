@@ -59,6 +59,43 @@ function getCtx(): AudioContext | null {
   return sharedCtx;
 }
 
+// Real, confirmed report: chime totally silent on an iPhone with the
+// hardware mute (ring/silent) switch on, while this app's OWN spoken
+// audio on the exact same device -- speakText's SpeechSynthesisUtterance
+// and lib/speech.ts's word-pronunciation <audio> elements, both used all
+// over this app -- plays completely normally. That split is the textbook
+// signature of a long-documented Safari/iOS quirk: a raw Web Audio API
+// oscillator graph connected straight to ctx.destination respects the
+// mute switch, while SpeechSynthesis and <audio>/<video> elements don't.
+// The fix (also long-documented) is to never let the oscillators reach
+// ctx.destination directly -- route them into a MediaStreamAudioDestin-
+// ationNode and play THAT stream through a real <audio> element instead,
+// which puts the chime on the exact same audio-session category as this
+// app's already-working speech/word audio, so muting behavior matches
+// what a learner already sees everywhere else in the app. Falls back to
+// ctx.destination directly if this trick isn't available for some reason
+// (older/unusual browser) -- still respects the mute switch there, but
+// that's the pre-existing behavior, not a new regression.
+let sharedDestination: AudioNode | null = null;
+function getDestination(ctx: AudioContext): AudioNode {
+  if (sharedDestination) return sharedDestination;
+  try {
+    const streamDest = ctx.createMediaStreamDestination();
+    const audioEl = new Audio();
+    audioEl.srcObject = streamDest.stream;
+    // Fire-and-forget, same as every other best-effort audio.play() in
+    // this app (see lib/speech.ts) -- a rejected play() here just means
+    // this falls back to ctx.destination's own (mute-switch-respecting)
+    // behavior below, not a broken chime.
+    audioEl.play().catch(() => {});
+    sharedDestination = streamDest;
+  } catch (e) {
+    reportChimeError(`MediaStreamAudioDestinationNode setup threw: ${e}`);
+    sharedDestination = ctx.destination;
+  }
+  return sharedDestination;
+}
+
 // A freshly-created (or long-idle) AudioContext starts/settles back into
 // 'suspended' until resumed — resume() is async, and scheduling tones
 // against ctx.currentTime before it actually finishes resuming was the
@@ -101,7 +138,7 @@ function warmDestination(ctx: AudioContext, freq = 5000): AudioNode {
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';
   filter.frequency.value = freq;
-  filter.connect(ctx.destination);
+  filter.connect(getDestination(ctx));
   return filter;
 }
 

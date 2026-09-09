@@ -39,7 +39,7 @@ import GlossPopup from './GlossPopup';
 import { speakWord, speakText, stopSpeech } from '../lib/speech';
 import { imageUrlForWord } from '../lib/wordImage';
 import { WORDS_WITH_IMAGES } from '../lib/wordImageManifest';
-import { scheduleSync } from '../lib/sync';
+import { scheduleSync, syncNow } from '../lib/sync';
 import { playCorrectChime } from '../lib/sound';
 import { correctSentence, generateSentence, generateParagraphExercise, explainCorrection, getSentenceGlosses, WordGloss, ExplanationResult, DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
 import ParagraphExerciseCard from './ParagraphExerciseCard';
@@ -1721,6 +1721,23 @@ export default function DailySessionFlow() {
     if (!session || session.phase !== 'report') return;
     const total = Object.values(session.earnedUpgrades).reduce((a, b) => a + (b ?? 0), 0);
     if (total === 0) handleContinueFromReport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.phase]);
+
+  // Real, confirmed report: a learner reviewed 17 words, reached this
+  // report screen, then left shortly after (tapping Continue first, but
+  // still gone within the debounce/flush window in some cases) and later
+  // found only 1 of those 17 reflected in their synced points. The
+  // regular debounced scheduleSync + visibilitychange/pagehide flush
+  // (see lib/sync.ts) should already cover this, but reaching this report
+  // screen is exactly the moment a whole batch of review progress is
+  // freshest and about to matter most (it's what the Leaderboard/points
+  // this learner is about to go look at will reflect) — an immediate,
+  // awaited push right here closes whatever gap let that debounced path
+  // miss most of a batch, without waiting on a timer or a page-hide event
+  // that may fire later than the learner actually leaves.
+  useEffect(() => {
+    if (session?.phase === 'report' || session?.phase === 'congrats') syncNow();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.phase]);
 
