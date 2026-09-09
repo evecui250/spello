@@ -294,7 +294,15 @@ Deno.serve(async (req: Request) => {
           },
           messages: [{ role: 'system', content: systemPrompt }],
         },
-        'medium',
+        // Real report: "Why?" felt slow. Lowered from 'medium' -- same
+        // tradeoff already made for pet-chat-turn's own reasoning_effort
+        // (see that function's comment): correction/classification work
+        // still came back correct at 'low' in this session's own live
+        // testing, and a tap-triggered explanation is exactly the kind of
+        // wait a learner notices and resents. Worth raising back if
+        // explanation quality turns out to suffer at scale, but latency
+        // is the more pressing, already-confirmed complaint right now.
+        'low',
         1500,
       );
     } catch (err) {

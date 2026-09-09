@@ -110,7 +110,21 @@ function mergeProgress(
         ? r.successfulReviews > l.successfulReviews
         : (r.lastPracticed ?? '') > (l.lastPracticed ?? '');
     const winner = remoteIsFurther ? r : l;
-    merged[id] = { ...winner, ...mergeArticleFields(l, r) };
+    // Real, confirmed report: a learner reviewed 17 words, and the very
+    // next sync only reflected 1 of them as today's activity. Root cause
+    // is the exact same class of bug mergeArticleFields already exists to
+    // avoid, just never applied here: `winner` above is chosen by stage/
+    // successfulReviews, but a stale row can still "win" that comparison
+    // (e.g. a remote row from before this device's local storage was last
+    // reset, carrying a higher historical successfulReviews count) while
+    // carrying an OLDER lastPracticed than a review that just happened
+    // locally moments ago -- silently discarding today's credit for that
+    // word even though the review genuinely happened. Reconciled
+    // independently so whichever side's lastPracticed is actually more
+    // recent always wins THAT field specifically, regardless of which
+    // side won the stage/round comparison above.
+    const lastPracticed = (r.lastPracticed ?? '') > (l.lastPracticed ?? '') ? r.lastPracticed : l.lastPracticed;
+    merged[id] = { ...winner, ...mergeArticleFields(l, r), lastPracticed };
   }
   return merged;
 }
