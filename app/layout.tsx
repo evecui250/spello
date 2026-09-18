@@ -29,7 +29,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="de" className={`${fraunces.variable} ${karla.variable} ${plexMono.variable}`}>
       <head>
         <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* viewport-fit=cover + the safe-area-inset-top padding below is
+            what apple-mobile-web-app-status-bar-style="black-translucent"
+            further down actually implies -- that meta tag already asks iOS
+            to draw this page's content UNDER a translucent status bar in
+            standalone/PWA mode, but without cover + a matching top inset
+            nothing ever pushed content clear of it. Caught live wrapping
+            this app for TestFlight (Capacitor's native shell has no
+            browser chrome to hide the gap the way a normal Safari tab
+            does), but the same gap already existed for anyone who'd
+            "Add to Home Screen"-installed this as a PWA. */}
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <title>Spello</title>
         <meta name="description" content="Spello — a German vocabulary trainer for B2 learners" />
         <link rel="icon" href={`${base}/favicon-32.png`} sizes="32x32" />
@@ -74,8 +84,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             extra allowance it adds on top for StudyRoadmap) so the last
             bit of every page's content is never rendered underneath it. */}
         <main
-          className="max-w-2xl mx-auto px-4 py-6"
-          style={{ paddingBottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }}
+          className="max-w-2xl mx-auto px-4"
+          style={{
+            paddingBottom: 'calc(5.5rem + env(safe-area-inset-bottom))',
+            paddingTop: 'calc(1.5rem + env(safe-area-inset-top))',
+          }}
         >
           {children}
         </main>
