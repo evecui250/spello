@@ -17,19 +17,21 @@ const config: CapacitorConfig = {
     url: 'https://evecui250.github.io/spello/',
     cleartext: false,
   },
-  // Deliberately NOT setting ios.contentInset here -- checked first: the
-  // site's own CSS only reserves safe-area space at the BOTTOM (NavBar's
-  // env(safe-area-inset-bottom)), nothing at the top, and the page's
-  // <meta viewport> has no viewport-fit=cover, so those env() values
-  // actually resolve to 0 in a plain browser today (Safari's own chrome
-  // covers the notch/home-indicator instead). Forcing contentInset:
-  // 'never' here would make the WebView draw truly edge-to-edge with
-  // nothing compensating for it, likely drawing under the status bar and
-  // butting the bottom nav against the home indicator. Leaving this
-  // unset keeps Capacitor's default (the native container reserves safe-
-  // area space itself), which is the safe choice until the web app is
-  // deliberately given full viewport-fit=cover + top-and-bottom inset
-  // CSS to match.
+  ios: {
+    // Real bug caught in the first simulator smoke test: Capacitor's own
+    // default here is 'never' (not 'automatic' -- easy to assume
+    // otherwise, since 'never' sounds like the more permissive/edge-to-
+    // edge option), which sets the WebView's UIScrollView
+    // contentInsetAdjustmentBehavior to .never. That doesn't just skip
+    // native inset adjustment -- it's also what left env(safe-area-inset-
+    // top/bottom) resolving to 0 in this app's own CSS (see layout.tsx's
+    // viewport-fit=cover + padding, added the same time as this), so the
+    // page's header rendered right under the status bar/Dynamic Island
+    // with nothing pushing it clear. 'automatic' is the standard UIKit
+    // answer for exactly this "let the system reserve safe-area space,
+    // and report it correctly to the page" case.
+    contentInset: 'automatic',
+  },
 };
 
 export default config;
