@@ -3,7 +3,12 @@
 import { WORDS, Word, BookLevelId } from './words';
 import { extractHeadwords, defineHeadwords, Headword } from './ai';
 import { extractPdfPagesText, chunkPageTexts } from './pdf';
-import { MAX_WORDS_PER_BOOK, newCustomWordId } from './storage';
+import {
+  MAX_WORDS_PER_BOOK, newCustomWordId, newBookId, ImportedBook, saveImportedBook,
+  getImportedBook, setImportedBookShareCode, getAllCustomWordsForLevel,
+} from './storage';
+import { supabase } from './supabase';
+import { scheduleSync } from './sync';
 
 // The pipeline behind components/ImportBookModal.tsx:
 //   PDF pages -> text (on device) -> headwords (AI, one call per chunk)
@@ -155,4 +160,66 @@ export async function extractBookWords(
     aiCalls,
     headwordCount: headwords.length,
   };
+}
+
+// --- Book codes (see supabase/functions/share-book) ---
+
+export interface SharedBook {
+  code: string;
+  name: string;
+  sourcePages: string;
+  wordCount: number;
+  words: Omit<Word, 'id' | 'level'>[];
+}
+
+export class ShareLimitReachedError extends Error {}
+
+// Copies the book's current word list to the server and returns its code
+// (or the code it already has). Only words are shared, never progress.
+export async function shareImportedBook(bookId: BookLevelId): Promise<string> {
+  const book = getImportedBook(bookId);
+  if (!book) throw new Error('Book not found');
+  if (book.shareCode) return book.shareCode;
+  const words = Object.values(getAllCustomWordsForLevel(bookId)).map(({ id: _id, level: _level, ...rest }) => rest);
+  const { data, error } = await supabase.functions.invoke<{ code?: string; limitReached?: boolean }>('share-book', {
+    body: { action: 'create', name: book.name, sourcePages: book.sourcePages, words },
+  });
+  if (error || !data) throw new Error("Couldn't create a code. Check your connection and try again.");
+  if (data.limitReached) throw new ShareLimitReachedError("You've shared a lot of books today — try again tomorrow.");
+  if (!data.code) throw new Error("Couldn't create a code.");
+  setImportedBookShareCode(bookId, data.code);
+  scheduleSync();
+  return data.code;
+}
+
+export function normalizeBookCode(raw: string): string {
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+// join=true counts it as a join (only on the final "add" step, not the
+// preview), so the sharer could one day see how many classmates joined.
+export async function fetchSharedBook(code: string, join = false): Promise<SharedBook | null> {
+  const { data, error } = await supabase.functions.invoke<{ found?: boolean; book?: SharedBook }>('share-book', {
+    body: { action: 'get', code: normalizeBookCode(code), join },
+  });
+  if (error) throw new Error("Couldn't reach the server. Check your connection and try again.");
+  return data?.found && data.book ? data.book : null;
+}
+
+// Adds a shared book as this learner's own imported book: fresh book id
+// and word ids (ids are per-device-unique; reusing the sharer's would
+// collide if the same person joined on a device that already has it).
+export function addSharedBook(shared: SharedBook): ImportedBook {
+  const id = newBookId();
+  const book: ImportedBook = {
+    id,
+    name: shared.name,
+    createdAt: new Date().toISOString(),
+    wordCount: shared.words.length,
+    sourcePages: shared.sourcePages,
+    shareCode: shared.code,
+  };
+  saveImportedBook(book, shared.words.map(w => ({ ...w, id: newCustomWordId(), level: id }) as Word));
+  scheduleSync();
+  return book;
 }

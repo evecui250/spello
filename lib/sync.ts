@@ -2,7 +2,7 @@
 
 import { supabase } from './supabase';
 import {
-  getActiveLevel,
+  getActiveLevel, switchToLevel,
   getAllProgressForLevel, saveAllProgressForLevel, WordProgress, MascotStageId,
   getStreak, saveStreak, Streak,
   getSettingsForLevel, saveSettingsForLevel, getSettingsUpdatedAtForLevel, Settings,
@@ -11,7 +11,7 @@ import {
   getDailyWordLogForSync, mergeDailyWordLogFromSync, DailyWordLog,
   getAllCustomWordsForLevel, saveAllCustomWordsForLevel,
   getDailySessionForLevel, saveDailySessionForLevel, DailySession,
-  getImportedBooks, saveImportedBooks, ImportedBook, allProfileLevels,
+  getImportedBooksForSync, saveImportedBooksFromSync, ImportedBook, allProfileLevels,
   today,
 } from './storage';
 import { Level, Word, isProfileLevelId, isBookLevelId } from './words';
@@ -71,7 +71,9 @@ function isNestedByLevel(obj: unknown): obj is Record<string, unknown> {
 }
 
 // Union by id; local wins on a collision (same policy as custom_words —
-// a book's metadata is user-authored and never mutated after import).
+// a book's metadata is user-authored and never mutated after import) —
+// except a removal (deletedAt tombstone) on either side always wins, or a
+// book removed on one device would come straight back from the other.
 // Exported for testing the merge in isolation.
 export function mergeImportedBooks(local: ImportedBook[], remote: unknown): ImportedBook[] {
   if (!Array.isArray(remote)) return local;
@@ -79,7 +81,13 @@ export function mergeImportedBooks(local: ImportedBook[], remote: unknown): Impo
   for (const b of remote) {
     if (b && typeof b === 'object' && isBookLevelId((b as ImportedBook).id)) byId.set(b.id, b as ImportedBook);
   }
-  for (const b of local) byId.set(b.id, b);
+  // Local wins, except a share code only one side has learned yet (shared
+  // from the other device) is kept rather than dropped.
+  for (const b of local) {
+    const r = byId.get(b.id);
+    if (r?.deletedAt && !b.deletedAt) continue; // keep the remote tombstone
+    byId.set(b.id, !b.shareCode && r?.shareCode ? { ...b, shareCode: r.shareCode } : b);
+  }
   return [...byId.values()];
 }
 
@@ -191,8 +199,12 @@ export async function pullAndMerge(userId: string): Promise<void> {
   // Must run before any per-profile loop below — allProfileLevels() reads
   // this registry, so a book imported on another device only gets its
   // progress/settings/words merged here once its id is known locally.
-  const mergedBooks = mergeImportedBooks(getImportedBooks(), data.imported_books);
-  if (mergedBooks.length !== getImportedBooks().length) saveImportedBooks(mergedBooks);
+  const localBooks = getImportedBooksForSync();
+  const mergedBooks = mergeImportedBooks(localBooks, data.imported_books);
+  if (JSON.stringify(mergedBooks) !== JSON.stringify(localBooks)) saveImportedBooksFromSync(mergedBooks);
+  // The active book was removed on another device -> back to A1 here too.
+  const active = getActiveLevel();
+  if (isBookLevelId(active) && mergedBooks.some(b => b.id === active && b.deletedAt)) switchToLevel('A1');
   const profileLevels = allProfileLevels();
 
   // Streak's own shape is checked separately from progress/settings — since
@@ -348,7 +360,7 @@ async function pushToRemote(userId: string): Promise<void> {
     // account's upsert byte-identical to before (so a not-yet-applied
     // imported_books migration can't break sync for anyone who hasn't
     // imported anything).
-    ...(getImportedBooks().length > 0 ? { imported_books: getImportedBooks() } : {}),
+    ...(getImportedBooksForSync().length > 0 ? { imported_books: getImportedBooksForSync() } : {}),
     updated_at: new Date().toISOString(),
     level: activeLevel,
   };

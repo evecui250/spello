@@ -191,7 +191,7 @@ export default function Leaderboard() {
       </div>
       {showHelp && (
         <p className="text-ink-soft text-xs bg-paper-dim rounded-lg px-3 py-2 mb-3">
-          Change your own nickname and profile picture in Settings → Account. Tap the title or the ··· below to see every ranked learner.
+          Change your own nickname and profile picture in Profile → Account. Tap the title or the ··· below to see every ranked learner.
         </p>
       )}
       {range && <p className="text-ink-soft text-xs mb-3">{fmtRange(range)}</p>}
@@ -210,7 +210,7 @@ export default function Leaderboard() {
       )}
       {authChecked && !myUserId && (
         <p className="text-ink-soft text-xs mt-3 pt-3 border-t border-paper-line/60">
-          Sign in (Settings → Account) to appear on this leaderboard yourself.
+          Sign in (Profile → Account) to appear on this leaderboard yourself.
         </p>
       )}
 

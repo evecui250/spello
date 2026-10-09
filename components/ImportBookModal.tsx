@@ -2,8 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { getPdfPagePreviews, formatPageList, PdfPagePreview, MAX_IMPORT_PAGES } from '../lib/pdf';
-import { extractBookWords, ImportCandidate, ImportStage } from '../lib/bookImport';
+import { getPdfPagePreviews, formatPageList, PdfPagePreview, MAX_IMPORT_PAGES, findContinuationPages, findVocabularyPages } from '../lib/pdf';
+import { extractBookWords, ImportCandidate, ImportStage, shareImportedBook } from '../lib/bookImport';
 import { DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
 import { saveImportedBook, newBookId, MAX_WORDS_PER_BOOK, ImportedBook } from '../lib/storage';
 import { BookLevelId } from '../lib/words';
@@ -26,6 +26,26 @@ function stageLabel(s: ImportStage | null): string {
   return `Defining new words… (${s.done}/${s.total})`;
 }
 
+// The code big enough to copy off a phone screen or a whiteboard, plus a
+// copy button. Shared with Settings' own "Share this book" row.
+export function BookCodeDisplay({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex items-center gap-3">
+      <span className="font-mono text-2xl font-bold tracking-[0.2em] text-ink select-all">{code}</span>
+      <button
+        type="button"
+        onClick={() => {
+          navigator.clipboard?.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }, () => {});
+        }}
+        className="text-sm font-semibold text-label hover:text-ink underline underline-offset-2"
+      >
+        {copied ? 'Copied ✓' : 'Copy'}
+      </button>
+    </div>
+  );
+}
+
 export default function ImportBookModal({ onClose, onSwitchTo }: {
   onClose: () => void;
   onSwitchTo: (id: BookLevelId) => void;
@@ -42,6 +62,11 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState<{ aiCalls: number; matched: number } | null>(null);
   const [saved, setSaved] = useState<ImportedBook | null>(null);
+  const [shareCode, setShareCode] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  // Pages ticked automatically as a continuation of a page the learner
+  // ticked (see findContinuationPages) — labelled so it's not a surprise.
+  const [autoAdded, setAutoAdded] = useState<Set<number>>(new Set());
   const bookId = useRef<BookLevelId>(newBookId());
 
   const busy = step === 'working';
@@ -50,6 +75,7 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
     setError(null);
     setPreviews(null);
     setPickedPages(new Set());
+    setAutoAdded(new Set());
     if (!f) return;
     setFile(f);
     setName(f.name.replace(/\.pdf$/i, ''));
@@ -68,12 +94,42 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
     }
   }
 
+  const continuations = previews ? findContinuationPages(previews) : new Map<number, number>();
+  const vocabPages = previews ? findVocabularyPages(previews) : [];
+
+  // Ticking a page also ticks the pages its section overflows onto.
   function togglePage(n: number) {
-    setPickedPages(prev => {
-      const next = new Set(prev);
-      if (next.has(n)) next.delete(n); else next.add(n);
-      return next;
-    });
+    const next = new Set(pickedPages);
+    const auto = new Set(autoAdded);
+    auto.delete(n);
+    if (next.has(n)) {
+      next.delete(n);
+    } else {
+      next.add(n);
+      for (let k = n + 1; continuations.get(k) === k - 1; k++) {
+        if (!next.has(k)) { next.add(k); auto.add(k); }
+      }
+    }
+    setPickedPages(next);
+    setAutoAdded(auto);
+  }
+
+  function selectVocabularyPages() {
+    setPickedPages(new Set(vocabPages));
+    setAutoAdded(new Set(vocabPages.filter(p => continuations.has(p))));
+  }
+
+  async function handleShare() {
+    if (!saved) return;
+    setSharing(true);
+    setError(null);
+    try {
+      setShareCode(await shareImportedBook(saved.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't create a code.");
+    } finally {
+      setSharing(false);
+    }
   }
 
   async function handleExtract() {
@@ -169,6 +225,15 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
                   <span className="font-semibold text-ink text-sm">Pages to import</span>
                   <span className="text-ink-soft text-xs">{pickedPages.size} selected</span>
                 </div>
+                {vocabPages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={selectVocabularyPages}
+                    className="self-start bg-accent/15 text-label px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-accent/25 transition-colors"
+                  >
+                    Select vocabulary pages ({vocabPages.length})
+                  </button>
+                )}
                 <div className="flex-1 min-h-0 max-h-72 overflow-y-auto border border-paper-line rounded-xl divide-y divide-paper-line">
                   {previews.map(p => {
                     const on = pickedPages.has(p.page);
@@ -185,7 +250,14 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
                           p. {p.page}
                           {p.printedNumber && <span className="block opacity-75">({p.printedNumber})</span>}
                         </span>
-                        <span className="min-w-0 flex-1 text-ink text-sm truncate">{p.hasText ? p.title || '—' : 'No text on this page'}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-ink text-sm truncate">{p.hasText ? p.title || '—' : 'No text on this page'}</span>
+                          {continuations.has(p.page) && (
+                            <span className={`block text-xs ${autoAdded.has(p.page) && on ? 'text-label font-medium' : 'text-ink-soft'}`}>
+                              ↳ continues p. {continuations.get(p.page)}{autoAdded.has(p.page) && on ? ' · added' : ''}
+                            </span>
+                          )}
+                        </span>
                       </label>
                     );
                   })}
@@ -252,6 +324,24 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
             <p className="text-ink text-sm">
               ✓ “{saved.name}” saved with {saved.wordCount} words. It's its own book — your A1–B2 progress is untouched.
             </p>
+            <div className="border border-paper-line rounded-xl p-3 flex flex-col gap-2">
+              <span className="text-ink text-sm font-semibold">Studying with a class?</span>
+              {shareCode ? (
+                <BookCodeDisplay code={shareCode} />
+              ) : (
+                <>
+                  <span className="text-ink-soft text-xs">Get a book code — classmates enter it in Profile to get the same words, with their own progress.</span>
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    disabled={sharing}
+                    className="self-start bg-accent/15 text-label px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-accent/25 disabled:opacity-50 transition-colors"
+                  >
+                    {sharing ? 'Creating code…' : 'Create book code'}
+                  </button>
+                </>
+              )}
+            </div>
             <button type="button" onClick={() => onSwitchTo(saved.id)} className={PRIMARY_BTN}>
               Study this book now
             </button>

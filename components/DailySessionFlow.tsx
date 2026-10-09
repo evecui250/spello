@@ -752,7 +752,7 @@ function SentenceExercise({
       {promptStatus === 'unreachable' && (
         <p className="text-label text-sm text-center py-4">
           Can't reach our AI service right now (this can happen depending on your network) —
-          switched off sentence-writing mode. You can turn it back on anytime in Settings.
+          switched off sentence-writing mode. You can turn it back on anytime in Profile.
         </p>
       )}
       {promptStatus === 'ready' && promptSentence && (
@@ -910,7 +910,7 @@ function SentenceExercise({
           {status === 'unreachable' && (
             <p className="text-label text-sm text-center">
               Can't reach our AI service right now (this can happen depending on your network) —
-              switched off sentence-writing mode. You can turn it back on anytime in Settings.
+              switched off sentence-writing mode. You can turn it back on anytime in Profile.
             </p>
           )}
           {correction && correctionDiff ? (

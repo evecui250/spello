@@ -77,9 +77,9 @@ export default function PrivacyPage() {
         <section className="flex flex-col gap-1.5">
           <h2 className="font-semibold text-stone-800">Your choices</h2>
           <ul className="list-disc pl-5 flex flex-col gap-1">
-            <li>Erase your learning progress for a single level, or reset your entire account back to brand-new (keeping the same sign-in), anytime from Settings → Danger zone.</li>
+            <li>Erase your learning progress for a single level, or reset your entire account back to brand-new (keeping the same sign-in), anytime from Profile → Reset.</li>
             <li>Delete your account and sign-in itself entirely by emailing us (below) — we don't yet have a self-service button for that specific step, but we'll act on any request promptly.</li>
-            <li>Sign out anytime from Settings; your local device copy stays until you clear it or a level's progress is erased.</li>
+            <li>Sign out anytime from Profile; your local device copy stays until you clear it or a level's progress is erased.</li>
           </ul>
         </section>
 

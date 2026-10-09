@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSettings, saveSettings, markOnboardingDone, Settings, MascotStageId, getTheme, saveTheme, Theme, saveLocalAvatarId, saveLocalNickname } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, getImportedBookByShareCode, markOnboardingDone, Settings, MascotStageId, getTheme, saveTheme, Theme, saveLocalAvatarId, saveLocalNickname } from '../../lib/storage';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
 import { Level } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
+import { fetchSharedBook, addSharedBook, normalizeBookCode, SharedBook } from '../../lib/bookImport';
 import { AVATAR_CATALOG, heroImageFor, getDisplayProfile, setAvatarId as saveRemoteAvatarId, setNickname as saveRemoteNickname } from '../../lib/shop';
 import DachshundMascot from '../../components/Mascot';
 import { THEME_CONFIG } from '../../components/AppBackground';
@@ -50,6 +51,30 @@ export default function WelcomePage() {
   // silently resetting it to these defaults.
   const existing = useMemo(() => getSettings(), []);
   const [level, setLevel] = useState<Level>(existing.level);
+  // Optional class book code (see components/JoinBookModal.tsx): when one
+  // is found, finishing adds that book and makes it the active one, so a
+  // student whose class shares its word list starts right on it instead
+  // of on A1–B2.
+  const [bookCode, setBookCode] = useState('');
+  const [sharedBook, setSharedBook] = useState<SharedBook | null>(null);
+  const [codeStatus, setCodeStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [codeError, setCodeError] = useState('');
+  const [finishing, setFinishing] = useState(false);
+
+  const lookUpCode = async () => {
+    const c = normalizeBookCode(bookCode);
+    setSharedBook(null);
+    if (c.length !== 6) { setCodeStatus('error'); setCodeError('A book code has 6 letters and numbers.'); return; }
+    setCodeStatus('loading');
+    try {
+      const book = await fetchSharedBook(c);
+      if (book) { setSharedBook(book); setCodeStatus('idle'); }
+      else { setCodeStatus('error'); setCodeError('No book found with that code. Check it and try again.'); }
+    } catch (e) {
+      setCodeStatus('error');
+      setCodeError(e instanceof Error ? e.message : 'Something went wrong.');
+    }
+  };
   const [nativeLanguage, setNativeLanguage] = useState<'en' | 'zh'>(existing.nativeLanguage);
   const [studyBatchSize, setStudyBatchSize] = useState(existing.studyBatchSize);
   const [dailyReview, setDailyReview] = useState(existing.dailyReview);
@@ -95,9 +120,28 @@ export default function WelcomePage() {
     [studyBatchSize],
   );
 
-  const finish = () => {
+  const finish = async () => {
+    let finalLevel: Level = level;
+    if (sharedBook) {
+      setFinishing(true);
+      try {
+        // Already added (welcome revisited from Settings) -> just switch to it.
+        const existingBook = getImportedBookByShareCode(sharedBook.code);
+        const fresh = existingBook ? null : await fetchSharedBook(sharedBook.code, true);
+        const id = existingBook?.id ?? (fresh ? addSharedBook(fresh).id : null);
+        if (!id) throw new Error('This book is no longer available.');
+        switchToLevel(id);
+        finalLevel = id;
+      } catch (e) {
+        setFinishing(false);
+        setStep('level');
+        setCodeStatus('error');
+        setCodeError(e instanceof Error ? e.message : 'Could not add this book.');
+        return;
+      }
+    }
     const settings: Settings = {
-      studyBatchSize, dailyReview, language: 'de', nativeLanguage, level, autoPlayAudio, requireArticle,
+      studyBatchSize, dailyReview, language: 'de', nativeLanguage, level: finalLevel, autoPlayAudio, requireArticle,
       sentenceWritingMode: true,
     };
     saveSettings(settings);
@@ -119,9 +163,9 @@ export default function WelcomePage() {
         <div className="w-full flex flex-col gap-6">
           <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-4">
             <p className="text-stone-500 text-sm -mt-1">
-              Defaults are fine if you&apos;re not sure — you can always change this later in Settings.
+              Defaults are fine if you&apos;re not sure — you can always change this later in Profile.
             </p>
-            <div>
+            <div className={sharedBook ? 'hidden' : ''}>
               <label className="block font-semibold text-stone-800 mb-1">Level</label>
               <select
                 value={level}
@@ -134,7 +178,41 @@ export default function WelcomePage() {
                 <option value="B2">B2</option>
               </select>
             </div>
-            <p className="text-stone-400 text-sm">Not sure which level? A1 is the easiest, for absolute beginners — B2 is the most advanced available right now.</p>
+            {sharedBook ? (
+              <p className="text-stone-400 text-sm">You&apos;ll study your class&apos;s book — you can switch to A1–B2 any time in Profile.</p>
+            ) : (
+              <p className="text-stone-400 text-sm">Not sure which level? A1 is the easiest, for absolute beginners — B2 is the most advanced available right now.</p>
+            )}
+            <div className="border-t border-amber-100 pt-4">
+              <label className="block font-semibold text-stone-800 mb-1">Book code from your class? <span className="font-normal text-stone-400">(optional)</span></label>
+              <div className="flex gap-2">
+                <input
+                  value={bookCode}
+                  onChange={e => { setBookCode(e.target.value.toUpperCase().slice(0, 8)); setSharedBook(null); setCodeStatus('idle'); }}
+                  onKeyDown={e => { if (e.key === 'Enter') lookUpCode(); }}
+                  placeholder="ABC234"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="min-w-0 flex-1 border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 font-mono tracking-[0.2em] uppercase focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={lookUpCode}
+                  disabled={!bookCode.trim() || codeStatus === 'loading'}
+                  className="bg-indigo-600 text-white px-4 rounded-lg font-semibold text-sm disabled:opacity-40 hover:bg-indigo-700 active:scale-95 transition-all"
+                >
+                  {codeStatus === 'loading' ? '…' : 'Find'}
+                </button>
+              </div>
+              {sharedBook && (
+                <p className="mt-2 text-sm text-stone-700">
+                  ✓ <span className="font-semibold">{sharedBook.name}</span> · {sharedBook.wordCount} words
+                  <button type="button" onClick={() => { setSharedBook(null); setBookCode(''); }} className="ml-2 text-stone-400 underline">remove</button>
+                </p>
+              )}
+              {codeStatus === 'error' && <p className="mt-2 text-sm text-red-700">{codeError}</p>}
+            </div>
             <div>
               <label className="block font-semibold text-stone-800 mb-1">Learn with</label>
               <select
@@ -160,7 +238,7 @@ export default function WelcomePage() {
         <div className="w-full flex flex-col gap-6">
           <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-1">
             <label className="block font-semibold text-stone-800 mb-1">Pick a theme</label>
-            <p className="text-stone-500 text-sm mb-3">Changes the app's background — you can always change this later in Settings.</p>
+            <p className="text-stone-500 text-sm mb-3">Changes the app's background — you can always change this later in Profile.</p>
             <div className="grid grid-cols-5 gap-x-2 gap-y-3">
               {(Object.keys(THEME_CONFIG) as Theme[]).map(t => {
                 const cfg = THEME_CONFIG[t];
@@ -339,7 +417,7 @@ export default function WelcomePage() {
         <div className="w-full flex flex-col gap-6">
           <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-4">
             <p className="text-stone-500 text-sm -mt-1">
-              Pick a pet and, if you&apos;d like, a nickname — you can always change these later in Settings.
+              Pick a pet and, if you&apos;d like, a nickname — you can always change these later in Profile.
             </p>
             <div>
               <label className="block font-semibold text-stone-800 mb-2">Your pet</label>
@@ -387,9 +465,10 @@ export default function WelcomePage() {
             </button>
             <button
               onClick={finish}
-              className="flex-[2] bg-indigo-600 text-white py-3.5 rounded-2xl font-semibold shadow-md hover:bg-indigo-700 active:scale-95 transition-all"
+              disabled={finishing}
+              className="flex-[2] bg-indigo-600 text-white py-3.5 rounded-2xl font-semibold shadow-md hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-60"
             >
-              Start Learning
+              {finishing ? 'Adding your book…' : 'Start Learning'}
             </button>
           </div>
         </div>

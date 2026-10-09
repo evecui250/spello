@@ -196,7 +196,7 @@ export default function AdminPage() {
   if (status === 'signed-out') {
     return (
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 text-center">
-        <p className="text-stone-600">Sign in from Settings first, then come back here.</p>
+        <p className="text-stone-600">Sign in from Profile first, then come back here.</p>
       </div>
     );
   }
@@ -354,7 +354,7 @@ export default function AdminPage() {
         <div>
           <h2 className="font-semibold text-stone-800">Themes</h2>
           <p className="text-stone-400 text-xs -mt-0.5">
-            Each device&apos;s current theme (its most recent usage ping) — one wedge per Settings picker option, dark to bright.
+            Each device&apos;s current theme (its most recent usage ping) — one wedge per Profile picker option, dark to bright.
           </p>
         </div>
         <DonutChart

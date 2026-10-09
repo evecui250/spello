@@ -4,16 +4,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getSettings, saveSettings, switchToLevel, getImportedBooks, getImportedBook, levelDisplayName, ImportedBook, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, getImportedBooks, levelDisplayName, ImportedBook, removeImportedBook, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch, allWordsForLevel } from '../../lib/practice';
-import { Level, LEVEL_SOURCE, isCefrLevel } from '../../lib/words';
+import { Level, LEVEL_SOURCE, isCefrLevel, isBookLevelId } from '../../lib/words';
+import { shareImportedBook } from '../../lib/bookImport';
 import { scheduleSync, syncNow, SYNCED_EVENT } from '../../lib/sync';
 import { CHIME_OPTIONS } from '../../lib/sound';
 import AccountPanel from '../../components/AccountPanel';
 import BugReportButton from '../../components/BugReportButton';
 import SoundPicker from '../../components/SoundPicker';
-import ImportBookModal from '../../components/ImportBookModal';
+import ImportBookModal, { BookCodeDisplay } from '../../components/ImportBookModal';
+import JoinBookModal from '../../components/JoinBookModal';
 import { supabase } from '../../lib/supabase';
 
 // Purely cosmetic — just decides whether to show the "Admin" link at all.
@@ -54,6 +56,9 @@ export default function SettingsPage() {
   // was built for).
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
   const [importedBooks, setImportedBooks] = useState<ImportedBook[]>([]);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -128,6 +133,33 @@ export default function SettingsPage() {
     clearTimeout(savedTimer.current);
     savedTimer.current = setTimeout(() => setSaved(false), 1200);
   };
+  // Re-derived from importedBooks state so a share/remove re-renders.
+  const activeBook = isBookLevelId(level) ? importedBooks.find(b => b.id === level) : undefined;
+
+  async function handleShareActiveBook() {
+    if (!activeBook) return;
+    setSharing(true);
+    setShareError(null);
+    try {
+      await shareImportedBook(activeBook.id);
+      setImportedBooks(getImportedBooks());
+    } catch (e) {
+      setShareError(e instanceof Error ? e.message : "Couldn't create a code.");
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  function handleRemoveActiveBook() {
+    if (!activeBook) return;
+    const note = activeBook.shareCode ? ' Classmates who already joined keep their copy.' : '';
+    if (!window.confirm(`Remove “${activeBook.name}” and all your progress on its ${activeBook.wordCount} words? This can't be undone.${note}`)) return;
+    removeImportedBook(activeBook.id);
+    setImportedBooks(getImportedBooks());
+    applySettings(getSettings());
+    syncNow();
+  }
+
 
   // Recomputed live as the sliders move, so the user can see the effect of
   // a pace change immediately.
@@ -192,7 +224,7 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Settings</h1>
+        <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Profile</h1>
         <span className={`text-sm font-medium text-good transition-opacity ${saved ? 'opacity-100' : 'opacity-0'}`}>
           ✓ Saved
         </span>
@@ -342,16 +374,55 @@ export default function SettingsPage() {
           {isCefrLevel(level) && LEVEL_SOURCE[level] && (
             <p className="text-ink-soft text-xs mt-0.5">{LEVEL_SOURCE[level]}</p>
           )}
-          {!isCefrLevel(level) && getImportedBook(level) && (
-            <p className="text-ink-soft text-xs mt-0.5">Imported from PDF, pages {getImportedBook(level)!.sourcePages}</p>
+          {activeBook && (
+            <p className="text-ink-soft text-xs mt-0.5">
+              {activeBook.sourcePages ? `From PDF pages ${activeBook.sourcePages}` : 'Imported book'}
+              {activeBook.shareCode ? ' · shared with a book code' : ''}
+            </p>
           )}
-          <button
-            type="button"
-            onClick={() => setImportOpen(true)}
-            className="mt-2 text-sm font-semibold text-label hover:text-ink underline underline-offset-2"
-          >
-            + Import a book from PDF
-          </button>
+          {activeBook && (
+            <div className="mt-3 border border-paper-line rounded-xl p-3 flex flex-col gap-2">
+              {activeBook.shareCode ? (
+                <>
+                  <span className="text-ink-soft text-xs">Book code — classmates enter it under “Join with a book code”:</span>
+                  <BookCodeDisplay code={activeBook.shareCode} />
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleShareActiveBook}
+                  disabled={sharing}
+                  className="self-start text-sm font-semibold text-label hover:text-ink underline underline-offset-2 disabled:opacity-50"
+                >
+                  {sharing ? 'Creating code…' : 'Share this book with a code'}
+                </button>
+              )}
+              {shareError && <span className="text-clay text-xs">{shareError}</span>}
+              <button
+                type="button"
+                onClick={handleRemoveActiveBook}
+                className="self-start text-sm text-clay hover:underline"
+              >
+                Remove this book
+              </button>
+            </div>
+          )}
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            <button
+              type="button"
+              onClick={() => setImportOpen(true)}
+              className="text-sm font-semibold text-label hover:text-ink underline underline-offset-2"
+            >
+              + Import a book from PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => setJoinOpen(true)}
+              className="text-sm font-semibold text-label hover:text-ink underline underline-offset-2"
+            >
+              Join with a book code
+            </button>
+          </div>
         </div>
 
         <div>
@@ -548,6 +619,17 @@ export default function SettingsPage() {
           would otherwise become the containing block for this fixed
           overlay. window.confirm() inside each handler below is still the
           final destructive-action gate; this modal is just the picker. */}
+      {joinOpen && (
+        <JoinBookModal
+          onClose={() => setJoinOpen(false)}
+          onJoined={id => {
+            setJoinOpen(false);
+            setImportedBooks(getImportedBooks());
+            handleLevelChange(id);
+          }}
+        />
+      )}
+
       {importOpen && (
         <ImportBookModal
           onClose={() => { setImportOpen(false); setImportedBooks(getImportedBooks()); }}

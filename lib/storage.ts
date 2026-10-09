@@ -918,9 +918,20 @@ export interface ImportedBook {
   name: string;
   createdAt: string;
   wordCount: number;
-  // Learner-entered page range, e.g. "12-34" — shown as provenance the
-  // same way LEVEL_SOURCE credits the CEFR books.
+  // PDF pages the words came from, e.g. "1-3, 5" — shown as provenance
+  // the same way LEVEL_SOURCE credits the CEFR books.
   sourcePages: string;
+  // Book code (see supabase/functions/share-book): set on the sharer's copy
+  // once they share it, and on every copy joined via that code — so the
+  // same code is shown again rather than minting a new one each time, and
+  // joining a code you already have is caught.
+  shareCode?: string;
+  // Tombstone: set when the learner removes the book. The entry stays in
+  // the registry (and syncs) so a union merge with another device's copy
+  // can't resurrect it — see removeImportedBook and sync.ts's
+  // mergeImportedBooks. Every reader except sync goes through
+  // getImportedBooks(), which hides these.
+  deletedAt?: string;
 }
 
 const IMPORTED_BOOKS_KEY = 'wb2_imported_books';
@@ -933,7 +944,8 @@ export const MAX_WORDS_PER_BOOK = 500;
 // Deliberately reads localStorage directly (never levelKey) — this is
 // called from allProfileLevels(), which the levelKey-triggered migrations
 // themselves can reach, so going through levelKey here would recurse.
-export function getImportedBooks(): ImportedBook[] {
+// Includes removed books' tombstones — only sync should see those.
+export function getImportedBooksForSync(): ImportedBook[] {
   if (typeof window === 'undefined') return [];
   try {
     const parsed = JSON.parse(localStorage.getItem(IMPORTED_BOOKS_KEY) || '[]');
@@ -943,13 +955,25 @@ export function getImportedBooks(): ImportedBook[] {
   }
 }
 
-export function saveImportedBooks(books: ImportedBook[]): void {
+export function saveImportedBooksFromSync(books: ImportedBook[]): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(IMPORTED_BOOKS_KEY, JSON.stringify(books));
 }
 
+export function getImportedBooks(): ImportedBook[] {
+  return getImportedBooksForSync().filter(b => !b.deletedAt);
+}
+
 export function getImportedBook(id: Level): ImportedBook | undefined {
   return getImportedBooks().find(b => b.id === id);
+}
+
+export function getImportedBookByShareCode(code: string): ImportedBook | undefined {
+  return getImportedBooks().find(b => b.shareCode === code);
+}
+
+export function setImportedBookShareCode(id: BookLevelId, code: string): void {
+  saveImportedBooksFromSync(getImportedBooksForSync().map(b => (b.id === id ? { ...b, shareCode: code } : b)));
 }
 
 // Every profile that exists on this device — the CEFR levels plus every
@@ -985,11 +1009,26 @@ export function saveImportedBook(book: ImportedBook, words: Word[]): void {
   for (const w of words) next[w.id] = { ...w, level: book.id };
   try {
     saveAllCustomWordsForLevel(book.id, next);
-    saveImportedBooks([...getImportedBooks().filter(b => b.id !== book.id), { ...book, wordCount: Object.keys(next).length }]);
+    saveImportedBooksFromSync([...getImportedBooksForSync().filter(b => b.id !== book.id), { ...book, wordCount: Object.keys(next).length }]);
   } catch {
     try { saveAllCustomWordsForLevel(book.id, existing); } catch { /* best effort */ }
     throw new Error("Your device's storage is full — couldn't save this book. Try importing fewer pages.");
   }
+  notifyProgressChanged();
+}
+
+// Deletes an imported book entirely on this device — its words, progress,
+// settings and today's session — and leaves a tombstone in the registry so
+// sync removes it everywhere else too (pushToRemote rebuilds every per-
+// level blob from allProfileLevels(), which no longer includes it). If it
+// was the active book, falls back to A1. Callers should sync right after.
+export function removeImportedBook(id: BookLevelId): void {
+  if (typeof window === 'undefined') return;
+  for (const base of Object.values(KEYS)) localStorage.removeItem(namespacedKey(base, id));
+  saveImportedBooksFromSync(getImportedBooksForSync().map(b => (
+    b.id === id ? { id: b.id, name: b.name, createdAt: b.createdAt, wordCount: 0, sourcePages: '', deletedAt: new Date().toISOString() } : b
+  )));
+  if (localStorage.getItem(ACTIVE_LEVEL_KEY) === id) switchToLevel('A1');
   notifyProgressChanged();
 }
 

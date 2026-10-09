@@ -7,7 +7,7 @@ const links = [
   { href: '/', label: 'Home' },
   { href: '/progress', label: 'Progress' },
   { href: '/words', label: 'Words' },
-  { href: '/settings', label: 'Settings' },
+  { href: '/settings', label: 'Profile' },
 ];
 
 export default function NavBar() {

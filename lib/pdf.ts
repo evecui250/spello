@@ -120,3 +120,37 @@ export function chunkPageTexts(pageTexts: string[], maxChars = 2500): string[] {
   }
   return chunks;
 }
+
+// A vocabulary section often overflows onto the next page, and that page
+// carries no section heading of its own ("Kulturelles Leben" continuing
+// "Wortschatz – Leben in Zürich") — easy to forget to tick. In a PDF that
+// is an excerpt of a larger book (its printed page numbers jump somewhere,
+// e.g. 6, 7, 35, 60, 73, 74…), a page whose printed number directly
+// follows the previous page's is that page's continuation. A PDF whose
+// numbering never jumps (a whole book, or no printed numbers at all) gives
+// no such signal, so nothing is treated as a continuation there — otherwise
+// ticking one page would cascade to the end of the book.
+// Returns: page -> the page it continues.
+export function findContinuationPages(previews: PdfPagePreview[]): Map<number, number> {
+  const nums = previews.map(p => (p.printedNumber ? Number(p.printedNumber) : null));
+  const isExcerpt = nums.some((n, i) => i > 0 && n !== null && nums[i - 1] !== null && n !== nums[i - 1]! + 1);
+  const out = new Map<number, number>();
+  if (!isExcerpt) return out;
+  for (let i = 1; i < previews.length; i++) {
+    if (nums[i] !== null && nums[i - 1] !== null && nums[i] === nums[i - 1]! + 1) out.set(previews[i].page, previews[i - 1].page);
+  }
+  return out;
+}
+
+const VOCAB_HEADING_RE = /wortschatz|vokabel|wortliste|wörterliste|vocabulary|glossar/i;
+
+// Pages whose heading names a vocabulary section, plus each one's
+// continuation pages — the one-tap "Select vocabulary pages" pick.
+export function findVocabularyPages(previews: PdfPagePreview[]): number[] {
+  const cont = findContinuationPages(previews);
+  const picked = new Set<number>();
+  for (const p of previews) {
+    if (VOCAB_HEADING_RE.test(p.title) || (cont.has(p.page) && picked.has(cont.get(p.page)!))) picked.add(p.page);
+  }
+  return [...picked];
+}
