@@ -295,42 +295,39 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Downgraded from a full second CTA button to a small inline
-            row — it's a related-but-secondary action, not a second thing
-            equally worth a whole gradient pill. Hidden entirely until
-            this book has any sentence-notebook activity at all. */}
-        {hasNotebookActivity && (
-          <Link
-            href="/mistakes"
-            className="w-full max-w-[320px] flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-xl border border-white/15 px-4 py-3.5 hover:bg-white/15 transition-colors"
+        {/* Two compact side-by-side buttons (owner call: no subtitles —
+            "All caught up" / "Practice German with your pet" were noise).
+            My Notebook only appears once this book has any sentence-
+            notebook activity, and only shows a count when there's
+            something to redo. Chat is the sole entrance to Text to Pet —
+            the pet's own small avatar doubles as its icon, same image used
+            everywhere else (Leaderboard, Pet & Shop). */}
+        <div className="w-full max-w-[320px] flex gap-3">
+          {hasNotebookActivity && (
+            <Link
+              href="/mistakes"
+              className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md rounded-xl border border-white/15 px-3 py-2.5 hover:bg-white/15 transition-colors"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`${BASE}/icon_mistake_notebook.png`} alt="" className="w-7 h-7 object-contain shrink-0" />
+              <span className="font-semibold text-on-bg text-sm truncate">Notebook</span>
+              {mistakeCount > 0 && (
+                <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center">
+                  {mistakeCount}
+                </span>
+              )}
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => router.push('/pet-chat/')}
+            className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md rounded-xl border border-white/15 px-3 py-2.5 hover:bg-white/15 transition-colors"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`${BASE}/icon_mistake_notebook.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold text-on-bg text-base">My Notebook</div>
-              <div className="text-sm text-on-bg/65">{mistakeCount > 0 ? `${mistakeCount} to redo` : 'All caught up'}</div>
-            </div>
-          </Link>
-        )}
-
-        {/* The sole entrance to Text to Pet now — real report: having
-            BOTH a tap on the pet image itself AND a nudge bubble AND
-            this button read as confusing/redundant. Same row treatment
-            as My Notebook above; the pet's own small avatar (not the big
-            hero portrait above) doubles as this row's icon, same image
-            used for it everywhere else (Leaderboard, Pet & Shop). */}
-        <button
-          type="button"
-          onClick={() => router.push('/pet-chat/')}
-          className="w-full max-w-[320px] flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-xl border border-white/15 px-4 py-3.5 hover:bg-white/15 transition-colors"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`${BASE}/${avatarImageFor(avatarId, equipped)}`} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
-          <div className="flex-1 min-w-0 text-left">
-            <div className="font-semibold text-on-bg text-base">Chat</div>
-            <div className="text-sm text-on-bg/65">Practice German with your pet</div>
-          </div>
-        </button>
+            <img src={`${BASE}/${avatarImageFor(avatarId, equipped)}`} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
+            <span className="font-semibold text-on-bg text-sm truncate">Chat</span>
+          </button>
+        </div>
       </div>
       </div>
 
