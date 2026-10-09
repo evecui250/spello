@@ -2,7 +2,7 @@
 
 import { FunctionsFetchError } from '@supabase/supabase-js';
 import { supabase } from './supabase';
-import { WordType } from './words';
+import { WordType, isBookLevelId } from './words';
 
 // Always succeeds now — see correct-sentence's own comment for why: an
 // unusable/absent attempt falls back to a fresh direct translation
@@ -61,14 +61,25 @@ function rethrow(error: unknown): never {
 // AIUnreachableError a genuine network failure already does, so a hang
 // reaches the same retry-capable UI instead of hanging indefinitely.
 const AI_CALL_TIMEOUT_MS = 20000;
-function invokeWithTimeout<T>(fnName: string, body: object): Promise<{ data: T | null; error: unknown }> {
+const IMPORTED_BOOK_AI_LEVEL = 'B1';
+// timeoutMs is opt-in for the one genuinely slow caller (bulk vocabulary
+// extraction, see extractVocabulary) — every other call keeps the 20s
+// default.
+function invokeWithTimeout<T>(fnName: string, body: object, timeoutMs = AI_CALL_TIMEOUT_MS): Promise<{ data: T | null; error: unknown }> {
+  // Every Edge Function's prompt reads `level` as a CEFR level ("roughly
+  // CEFR B1 learner…"). An imported book's `book-<uuid>` id means nothing
+  // there, so it's sent as B1 — a neutral middle register — at this one
+  // choke point rather than at every wrapper below.
+  if ('level' in body && isBookLevelId((body as { level?: unknown }).level)) {
+    body = { ...body, level: IMPORTED_BOOK_AI_LEVEL };
+  }
   return new Promise(resolve => {
     let settled = false;
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
       resolve({ data: null, error: new AIUnreachableError() });
-    }, AI_CALL_TIMEOUT_MS);
+    }, timeoutMs);
     supabase.functions.invoke(fnName, { body }).then(
       result => {
         if (settled) return;
@@ -326,6 +337,38 @@ export async function lookupWord(term: string, level: string): Promise<LookupWor
   if (data?.found === false) return null;
   if (!data?.word) throw new Error('Malformed AI response');
   return data.word;
+}
+
+// Backs PDF book import (see components/ImportBookModal.tsx), in two
+// steps so the corpus-match shortcut can sit between them: first pull the
+// headwords out of a chunk of page text (cheap — strings only), then,
+// for only those the client couldn't match against the built-in corpus,
+// define them as full Word entries (same fields as lookupWord). Each call
+// counts once against the daily AI cap, same as every other function.
+const EXTRACT_TIMEOUT_MS = 90000;
+
+// `en` is the meaning the book itself gives, when it gives one — passed
+// back into defineHeadwords so the AI defines the book's sense of the word.
+export interface Headword { de: string; en?: string }
+
+export async function extractHeadwords(text: string): Promise<Headword[]> {
+  const { data, error } = await invokeWithTimeout<{ words?: Headword[]; limitReached?: boolean }>(
+    'extract-vocabulary', { mode: 'extract', text }, EXTRACT_TIMEOUT_MS,
+  );
+  if (error) rethrow(error);
+  if (data?.limitReached) throw new DailyLimitReachedError();
+  if (!Array.isArray(data?.words)) throw new Error('Malformed AI response');
+  return data.words;
+}
+
+export async function defineHeadwords(terms: Headword[]): Promise<LookupWordResult[]> {
+  const { data, error } = await invokeWithTimeout<{ words?: LookupWordResult[]; limitReached?: boolean }>(
+    'extract-vocabulary', { mode: 'define', terms }, EXTRACT_TIMEOUT_MS,
+  );
+  if (error) rethrow(error);
+  if (data?.limitReached) throw new DailyLimitReachedError();
+  if (!Array.isArray(data?.words)) throw new Error('Malformed AI response');
+  return data.words;
 }
 
 // Generates and caches a real pronunciation clip for a just-added custom

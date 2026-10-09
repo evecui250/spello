@@ -167,7 +167,12 @@ Deno.serve(async (req: Request) => {
     await supabase.from('ai_usage').insert({
       user_id: userId,
       ip_address: ip,
-      word_id: null,
+      // word_id is NOT NULL — with null here this insert always failed
+      // silently, so lookups were never logged nor counted toward the
+      // daily cap. Fixed tag (like pet-chat-turn's 'pet_chat'), and its
+      // own kind so /admin doesn't count lookups as corrections.
+      word_id: 'lookup_word',
+      kind: 'lookup',
       level: level || 'unknown',
       model: MODEL,
       input_tokens: usage.prompt_tokens ?? 0,

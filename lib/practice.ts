@@ -1,6 +1,6 @@
 'use client';
 
-import { WORDS, Word, wordsForLevel, Level, glossFor } from './words';
+import { WORDS, Word, wordsForLevel, Level, CefrLevel, isCefrLevel, glossFor } from './words';
 import {
   getAllProgress, getSettings, today, Round, WordProgress, MascotStageId,
   getDailySession, saveDailySession, SessionPhase, getWordProgress, saveWordProgress,
@@ -314,8 +314,12 @@ export function isBootstrapCopyWord(word: Word): boolean {
 // Which levels' full vocabulary counts as "already known" for a given
 // level's translation-exercise sentences — full CEFR progression, not
 // "everything earlier in LEVEL_ORDER" (C1/C2 have no words yet but are
-// listed for completeness).
-const PREREQUISITE_LEVELS: Record<Level, Level[]> = {
+// listed for completeness). An imported book (see lib/words.ts's
+// BookLevelId) has no place in the CEFR progression, so it has no entry —
+// lookups must go through the `?? []` fallback below, never index directly
+// (doing so was a guaranteed TypeError the first time a book's study flow
+// asked for a live sentence).
+const PREREQUISITE_LEVELS: Record<CefrLevel, CefrLevel[]> = {
   A1: [],
   A2: ['A1'],
   B1: ['A1', 'A2'],
@@ -335,7 +339,7 @@ const PREREQUISITE_LEVELS: Record<Level, Level[]> = {
 // English glosses (what the AI actually needs — the learner has to know
 // the English concept to translate it into German).
 export function getKnownVocabulary(level: Level): string[] {
-  const lowerWords = PREREQUISITE_LEVELS[level].flatMap(l => allWordsForLevel(l));
+  const lowerWords = (isCefrLevel(level) ? PREREQUISITE_LEVELS[level] : []).flatMap(l => allWordsForLevel(l));
   const baseline = level === 'A1' ? wordsForLevel('A1').filter(w => w.highFrequency) : [];
   const seen = new Set<string>();
   const result: string[] = [];
@@ -881,8 +885,10 @@ export function daysToWeeks(days: number): number {
   return Math.max(1, Math.round(days / 7));
 }
 
+// ß and ss count as the same letter (Swiss spelling — see LetterInputRow).
 export function checkAnswer(word: string, answer: string): boolean {
-  return word.toLowerCase() === answer.trim().toLowerCase();
+  const norm = (s: string) => s.trim().toLowerCase().replace(/ß/g, 'ss');
+  return norm(word) === norm(answer);
 }
 
 // Wrong answer or an explicit Hint request both demote one round for more
@@ -1170,7 +1176,7 @@ export interface WordsInContextRange {
   minSentences: number; maxSentences: number;
   minWords: number; maxWords: number;
 }
-export const WORDS_IN_CONTEXT_RANGE: Record<Level, WordsInContextRange> = {
+export const WORDS_IN_CONTEXT_RANGE: Record<CefrLevel, WordsInContextRange> = {
   A1: { minTargets: 2, maxTargets: 3, minSentences: 2, maxSentences: 3, minWords: 20, maxWords: 35 },
   A2: { minTargets: 3, maxTargets: 4, minSentences: 3, maxSentences: 4, minWords: 30, maxWords: 50 },
   B1: { minTargets: 3, maxTargets: 5, minSentences: 4, maxSentences: 5, minWords: 45, maxWords: 70 },
@@ -1216,7 +1222,7 @@ export const MAX_WORDS_IN_CONTEXT_EXERCISES = 3;
 // DailySessionFlow's generation effect and combineParagraphExercises
 // below) -- not this function's job.
 export function buildWordsInContextBatches(words: Word[], level: Level): Word[][] {
-  const range = WORDS_IN_CONTEXT_RANGE[level] ?? WORDS_IN_CONTEXT_RANGE.B1;
+  const range = (isCefrLevel(level) ? WORDS_IN_CONTEXT_RANGE[level] : undefined) ?? WORDS_IN_CONTEXT_RANGE.B1;
   const maxTargets = range.maxTargets;
   // Defers anything beyond 3 groups' worth, prioritizing original order
   // (see this function's own comment on why that's the proxy used).

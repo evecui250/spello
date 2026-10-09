@@ -11,9 +11,10 @@ import {
   getDailyWordLogForSync, mergeDailyWordLogFromSync, DailyWordLog,
   getAllCustomWordsForLevel, saveAllCustomWordsForLevel,
   getDailySessionForLevel, saveDailySessionForLevel, DailySession,
+  getImportedBooks, saveImportedBooks, ImportedBook, allProfileLevels,
   today,
 } from './storage';
-import { Level, LEVEL_ORDER, Word } from './words';
+import { Level, Word, isProfileLevelId, isBookLevelId } from './words';
 import { getOrCreateDeviceId, isLocalDev } from './telemetry';
 import { migrateLocalProfileIfNeeded } from './shop';
 
@@ -48,6 +49,7 @@ interface RemoteRow {
   word_log: DailyWordLog | null;
   custom_words: CustomWordsByLevel | null;
   daily_session: DailySessionByLevel | null;
+  imported_books: ImportedBook[] | null;
   updated_at: string | null;
 }
 
@@ -56,13 +58,29 @@ function isFlatStreak(s: unknown): s is Streak {
 }
 
 // Old rows (from before the per-level split) stored a single flat blob.
-// Detect the new shape by checking that every top-level key is a known
-// CEFR level; anything else (a word id, or streak's "lastDate" field, etc.)
-// means it's the legacy flat shape.
-const KNOWN_LEVEL_KEYS = LEVEL_ORDER as string[];
+// Detect the new shape by checking that every top-level key is a profile
+// id — a CEFR level OR an imported book's `book-<uuid>` id; anything else
+// (a word id like "w123"/"custom-…", or streak's "lastDate" field, etc.)
+// means it's the legacy flat shape. Book ids are dynamic, so this can't be
+// a static whitelist: when it was CEFR-only, the first imported book's
+// settings[bookId] entry made every row read as legacy, silently dropping
+// EVERY level's progress/settings from cross-device sync.
 function isNestedByLevel(obj: unknown): obj is Record<string, unknown> {
   if (!obj || typeof obj !== 'object') return false;
-  return Object.keys(obj).every(k => KNOWN_LEVEL_KEYS.includes(k));
+  return Object.keys(obj).every(isProfileLevelId);
+}
+
+// Union by id; local wins on a collision (same policy as custom_words —
+// a book's metadata is user-authored and never mutated after import).
+// Exported for testing the merge in isolation.
+export function mergeImportedBooks(local: ImportedBook[], remote: unknown): ImportedBook[] {
+  if (!Array.isArray(remote)) return local;
+  const byId = new Map<string, ImportedBook>();
+  for (const b of remote) {
+    if (b && typeof b === 'object' && isBookLevelId((b as ImportedBook).id)) byId.set(b.id, b as ImportedBook);
+  }
+  for (const b of local) byId.set(b.id, b);
+  return [...byId.values()];
 }
 
 // Earlier stage = less mature; no stage at all (still mid-introduction) ranks
@@ -158,7 +176,9 @@ function mergeDailySession(local: DailySession | null, remote: DailySession | nu
 export async function pullAndMerge(userId: string): Promise<void> {
   const { data, error } = await supabase
     .from('user_progress')
-    .select('progress, streak, settings, goal_days, partial_days, word_log, custom_words, daily_session, updated_at')
+    // '*' rather than a column list: imported_books is a later-added column,
+    // and naming a column that doesn't exist yet fails the WHOLE pull.
+    .select('*')
     .eq('user_id', userId)
     .maybeSingle<RemoteRow>();
 
@@ -167,6 +187,13 @@ export async function pullAndMerge(userId: string): Promise<void> {
     return;
   }
   if (!data) return;
+
+  // Must run before any per-profile loop below — allProfileLevels() reads
+  // this registry, so a book imported on another device only gets its
+  // progress/settings/words merged here once its id is known locally.
+  const mergedBooks = mergeImportedBooks(getImportedBooks(), data.imported_books);
+  if (mergedBooks.length !== getImportedBooks().length) saveImportedBooks(mergedBooks);
+  const profileLevels = allProfileLevels();
 
   // Streak's own shape is checked separately from progress/settings — since
   // it's flat now instead of nested-by-level, folding it into the same
@@ -179,7 +206,7 @@ export async function pullAndMerge(userId: string): Promise<void> {
   const remoteProgressByLevel: ProgressByLevel = nested ? (data.progress as ProgressByLevel) : {};
   const remoteSettingsByLevel: SettingsByLevel = nested ? ((data.settings as SettingsByLevel) ?? {}) : {};
 
-  for (const level of LEVEL_ORDER) {
+  for (const level of profileLevels) {
     const remoteProgress = remoteProgressByLevel[level];
     if (remoteProgress) {
       saveAllProgressForLevel(level, mergeProgress(getAllProgressForLevel(level), remoteProgress));
@@ -211,7 +238,7 @@ export async function pullAndMerge(userId: string): Promise<void> {
   // copy, instead of getting silently blocked by an unrelated level having
   // been edited more recently here. A level edited moments ago locally still
   // isn't clobbered, since its own updated-at wins that comparison.
-  for (const level of LEVEL_ORDER) {
+  for (const level of profileLevels) {
     const remoteSettings = remoteSettingsByLevel[level];
     if (!remoteSettings) continue;
     const localUpdatedAt = getSettingsUpdatedAtForLevel(level);
@@ -240,7 +267,7 @@ export async function pullAndMerge(userId: string): Promise<void> {
   // reused or mutated after creation — see storage.ts's newCustomWordId),
   // so remote simply fills in whatever local doesn't already have.
   const remoteCustomWordsByLevel = (data.custom_words ?? {}) as CustomWordsByLevel;
-  for (const level of LEVEL_ORDER) {
+  for (const level of profileLevels) {
     const remoteWords = remoteCustomWordsByLevel[level];
     if (!remoteWords) continue;
     saveAllCustomWordsForLevel(level, { ...remoteWords, ...getAllCustomWordsForLevel(level) });
@@ -250,7 +277,7 @@ export async function pullAndMerge(userId: string): Promise<void> {
   // wins" policy — this is what actually lets a review started on one
   // device resume correctly on another.
   const remoteDailySessionByLevel = (data.daily_session ?? {}) as DailySessionByLevel;
-  for (const level of LEVEL_ORDER) {
+  for (const level of profileLevels) {
     const remoteSession = remoteDailySessionByLevel[level];
     if (!remoteSession) continue;
     const localSession = getDailySessionForLevel(level);
@@ -280,7 +307,7 @@ async function pushToRemote(userId: string): Promise<void> {
   const settings: SettingsByLevel = {};
   const customWords: CustomWordsByLevel = {};
   const dailySessions: DailySessionByLevel = {};
-  for (const level of LEVEL_ORDER) {
+  for (const level of allProfileLevels()) {
     const p = getAllProgressForLevel(level);
     if (Object.keys(p).length > 0) progress[level] = p;
     settings[level] = getSettingsForLevel(level);
@@ -296,7 +323,7 @@ async function pushToRemote(userId: string): Promise<void> {
   const streak = getStreak();
   const activeLevel = getActiveLevel();
   const activeSettings = settings[activeLevel];
-  const allValues = Object.values(progress).flatMap(p => Object.values(p));
+  const allValues = Object.values(progress).flatMap(p => Object.values(p ?? {}));
 
   // `level` lives in corePayload itself (not just the flat-summary spread
   // below) specifically so the fallback retry still writes it — confirmed
@@ -317,6 +344,11 @@ async function pushToRemote(userId: string): Promise<void> {
     word_log: getDailyWordLogForSync(),
     custom_words: customWords,
     daily_session: dailySessions,
+    // Only sent once the learner actually has a book — keeps every existing
+    // account's upsert byte-identical to before (so a not-yet-applied
+    // imported_books migration can't break sync for anyone who hasn't
+    // imported anything).
+    ...(getImportedBooks().length > 0 ? { imported_books: getImportedBooks() } : {}),
     updated_at: new Date().toISOString(),
     level: activeLevel,
   };
@@ -383,7 +415,7 @@ async function pushAnonActivity(): Promise<void> {
   if (isLocalDev()) return;
   try {
     const activeLevel = getActiveLevel();
-    const allValues = LEVEL_ORDER.flatMap(level => Object.values(getAllProgressForLevel(level)));
+    const allValues = allProfileLevels().flatMap(level => Object.values(getAllProgressForLevel(level)));
     const t = today();
     await supabase.functions.invoke('record-anon-activity', {
       body: {

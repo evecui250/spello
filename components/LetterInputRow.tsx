@@ -144,7 +144,22 @@ const LetterInputRow = forwardRef<LetterInputRowHandle, Props>(function LetterIn
     // those phantom spaces push real letters past the cutoff instead of
     // just being removed. Keeps hyphens/é too: a handful of corpus words
     // (E-Mail, Café) genuinely need them typed.
-    const lettersOnly = raw.replace(/[^a-zA-ZäöüßÄÖÜéÉ-]/g, '');
+    const typed = raw.replace(/[^a-zA-ZäöüßÄÖÜéÉ-]/g, '');
+    // Swiss spelling: "ss" is accepted wherever the word has ß (there's no
+    // ß in Swiss German, and many keyboards lack it). The tiles are one per
+    // letter, so a typed "ss" landing on a ß tile collapses into that one
+    // tile — re-derived from the raw field value on every keystroke, so a
+    // first "s" shows tentatively and backspacing just un-collapses it.
+    let lettersOnly = '';
+    for (let i = 0, k = 0; i < typed.length; i++, k++) {
+      const expected = chars[editableIndices[k]];
+      if (expected === 'ß' && typed[i] === 's' && typed[i + 1] === 's') {
+        lettersOnly += 'ß';
+        i++;
+      } else {
+        lettersOnly += typed[i];
+      }
+    }
     // No maxLength on the DOM input itself (see below) — enforced here
     // instead, same reasoning as the old per-tile version: a hard
     // maxlength attribute actively blocks IME composition from ever

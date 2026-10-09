@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { PointsIcon } from './icons';
+import { levelDisplayName } from '../lib/storage';
+import { Level } from '../lib/words';
 
 interface Props {
   studiedCount: number;
@@ -173,7 +175,7 @@ export default function CongratsModal({ studiedCount, reviewedCount, language, o
       // second, slightly smaller line right under the date.
       if (level) {
         ctx.font = '600 20px system-ui, -apple-system, sans-serif';
-        ctx.fillText(`${language} ${level}`, IMG_SIZE - 70, 118);
+        ctx.fillText(`${language} ${levelDisplayName(level as Level)}`.slice(0, 32), IMG_SIZE - 70, 118);
       }
       ctx.shadowColor = 'transparent';
       ctx.shadowBlur = 0;

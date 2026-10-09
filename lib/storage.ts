@@ -1,6 +1,6 @@
 'use client';
 
-import { Level, LEVEL_ORDER, Word, WORDS } from './words';
+import { Level, LEVEL_ORDER, BookLevelId, isBookLevelId, isCefrLevel, Word, WORDS } from './words';
 
 // Round 5 was removed — completing round 4 (full recall, no hints) once is
 // now the pass condition, both for a word's first climb in Study and for a
@@ -306,7 +306,7 @@ function migrateMisfiledCustomWords(): void {
     let changed = false;
     for (const [id, word] of Object.entries(words)) {
       const claimedLevel = word.level;
-      if (!claimedLevel || claimedLevel === storedUnderLevel || !LEVEL_ORDER.includes(claimedLevel)) continue;
+      if (!claimedLevel || claimedLevel === storedUnderLevel || !isCefrLevel(claimedLevel)) continue;
 
       delete words[id];
       changed = true;
@@ -429,7 +429,7 @@ interface GoalDaysRecord {
 // stand-in so an existing user's count doesn't start back at zero.
 function backfillGoalDaysFromHistory(): GoalDaysRecord {
   const days = new Set<string>();
-  for (const level of LEVEL_ORDER) {
+  for (const level of allProfileLevels()) {
     const progress = getAllProgressForLevel(level);
     for (const id of Object.keys(progress)) {
       const lastReviewedAt = progress[id].lastReviewedAt;
@@ -507,7 +507,7 @@ export function mergeGoalDaysFromSync(remoteDays: string[]): void {
 // before this), but a reasonable stand-in.
 function backfillPartialDaysFromHistory(fullDays: Set<string>): GoalDaysRecord {
   const days = new Set<string>();
-  for (const level of LEVEL_ORDER) {
+  for (const level of allProfileLevels()) {
     const progress = getAllProgressForLevel(level);
     for (const id of Object.keys(progress)) {
       const p = progress[id];
@@ -770,7 +770,7 @@ function mascotStageRank(p: WordProgress): number {
 // one under-reporting relative to the other.
 export function getMergedProgressAcrossLevels(): Record<string, WordProgress> {
   const merged: Record<string, WordProgress> = {};
-  for (const level of LEVEL_ORDER) {
+  for (const level of allProfileLevels()) {
     const store = getAllProgressForLevel(level);
     for (const [id, p] of Object.entries(store)) {
       if (!merged[id] || mascotStageRank(p) > mascotStageRank(merged[id])) merged[id] = p;
@@ -881,7 +881,7 @@ export function saveAllCustomWordsForLevel(level: Level, data: Record<string, Wo
 // which book it was added under, not just whichever is active right now).
 export function getAllCustomWordsAcrossLevels(): Word[] {
   const all: Word[] = [];
-  for (const level of LEVEL_ORDER) {
+  for (const level of allProfileLevels()) {
     all.push(...Object.values(getAllCustomWordsForLevel(level)));
   }
   return all;
@@ -905,6 +905,94 @@ export function addCustomWord(word: Word): void {
   notifyProgressChanged();
 }
 
+// --- Imported books (learner's own vocabulary book, from a PDF) ---
+// Each imported book is its own profile, exactly like a CEFR level: its
+// words are ordinary custom words tagged `level: <bookId>` and filed under
+// that id's own bucket, so allWordsForLevel(bookId) returns them and
+// nothing else (no corpus word is ever tagged with a book id). This
+// registry is the only thing that knows which book ids exist — global
+// (not level-namespaced, like ACTIVE_LEVEL_KEY), and synced via
+// user_progress.imported_books (see sync.ts).
+export interface ImportedBook {
+  id: BookLevelId;
+  name: string;
+  createdAt: string;
+  wordCount: number;
+  // Learner-entered page range, e.g. "12-34" — shown as provenance the
+  // same way LEVEL_SOURCE credits the CEFR books.
+  sourcePages: string;
+}
+
+const IMPORTED_BOOKS_KEY = 'wb2_imported_books';
+
+// Custom words have no other count/size limit, and every level's custom
+// words push as one jsonb blob on every sync — an unbounded bulk import
+// would bloat both localStorage (hard quota, ~5MB) and every sync request.
+export const MAX_WORDS_PER_BOOK = 500;
+
+// Deliberately reads localStorage directly (never levelKey) — this is
+// called from allProfileLevels(), which the levelKey-triggered migrations
+// themselves can reach, so going through levelKey here would recurse.
+export function getImportedBooks(): ImportedBook[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(IMPORTED_BOOKS_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.filter((b: ImportedBook) => b && isBookLevelId(b.id)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveImportedBooks(books: ImportedBook[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(IMPORTED_BOOKS_KEY, JSON.stringify(books));
+}
+
+export function getImportedBook(id: Level): ImportedBook | undefined {
+  return getImportedBooks().find(b => b.id === id);
+}
+
+// Every profile that exists on this device — the CEFR levels plus every
+// imported book. Anything that iterates "all profiles" (merging, reset,
+// sync push/pull, the Progress page's All-books view) must use this, not
+// LEVEL_ORDER, or an imported book's data silently drops out of it.
+export function allProfileLevels(): Level[] {
+  return [...LEVEL_ORDER, ...getImportedBooks().map(b => b.id)];
+}
+
+// What to call a profile in the UI: a CEFR level is its own name; an
+// imported book shows the name the learner gave it.
+export function levelDisplayName(level: Level): string {
+  if (!isBookLevelId(level)) return level;
+  return getImportedBook(level)?.name ?? 'Imported book';
+}
+
+export function newBookId(): BookLevelId {
+  return `book-${crypto.randomUUID()}`;
+}
+
+// Saves a whole imported book in one go: its words (each must already be
+// tagged level: book.id) and its registry entry. Throws a learner-readable
+// Error over the cap or when the browser's storage is full — in the
+// quota case nothing is left half-written.
+export function saveImportedBook(book: ImportedBook, words: Word[]): void {
+  if (words.length === 0) throw new Error('No words selected.');
+  if (words.length > MAX_WORDS_PER_BOOK) {
+    throw new Error(`A book can hold at most ${MAX_WORDS_PER_BOOK} words — deselect ${words.length - MAX_WORDS_PER_BOOK} or import fewer pages.`);
+  }
+  const existing = getAllCustomWordsForLevel(book.id);
+  const next = { ...existing };
+  for (const w of words) next[w.id] = { ...w, level: book.id };
+  try {
+    saveAllCustomWordsForLevel(book.id, next);
+    saveImportedBooks([...getImportedBooks().filter(b => b.id !== book.id), { ...book, wordCount: Object.keys(next).length }]);
+  } catch {
+    try { saveAllCustomWordsForLevel(book.id, existing); } catch { /* best effort */ }
+    throw new Error("Your device's storage is full — couldn't save this book. Try importing fewer pages.");
+  }
+  notifyProgressChanged();
+}
+
 // Also drops any progress recorded against it — an abandoned/mistaken add
 // shouldn't leave an orphaned progress record behind (nothing else could
 // ever reach it again to clean it up once the word itself is gone).
@@ -914,7 +1002,7 @@ export function addCustomWord(word: Word): void {
 // added before the addCustomWord fix above may still be misfiled under a
 // different level than its own `level` field claims.
 export function removeCustomWord(id: string): void {
-  for (const level of LEVEL_ORDER) {
+  for (const level of allProfileLevels()) {
     const words = getAllCustomWordsForLevel(level);
     if (!(id in words)) continue;
     delete words[id];
@@ -1545,6 +1633,12 @@ export interface DailySession {
   isExtra: boolean; // true for a "Study more"/"Review more" bonus round, so
                      // Home keeps showing "Study more" (not "Start") if the
                      // user quits mid-round and comes back.
+  // Set once the learner has answered the "sentence writing or spelling
+  // only?" question shown as study begins (see DailySessionFlow's
+  // beginStudy) — so resuming this session never asks again. The answer
+  // itself lives in Settings.sentenceWritingMode, still toggleable on any
+  // round-1 card.
+  studyModeChosen?: boolean;
 }
 
 // Backfills any fields a session persisted before they existed would be
@@ -1683,7 +1777,7 @@ export function clearAllProgress(): void {
 // silently resurrect everything from the still-stale remote row.
 export function resetEverything(): void {
   if (typeof window === 'undefined') return;
-  for (const level of LEVEL_ORDER) {
+  for (const level of allProfileLevels()) {
     localStorage.removeItem(namespacedKey(KEYS.progress, level));
     localStorage.removeItem(namespacedKey(KEYS.streak, level)); // legacy per-level key, harmless if absent
     localStorage.removeItem(namespacedKey(KEYS.settings, level));

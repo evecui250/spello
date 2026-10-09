@@ -1241,6 +1241,9 @@ export default function DailySessionFlow() {
   }, []);
   const [showSignInNudge, setShowSignInNudge] = useState(false);
   const [showAiUnlockCelebration, setShowAiUnlockCelebration] = useState(false);
+  // Non-null while the "how do you want to learn today?" chooser is up —
+  // the session study is about to begin with (see beginStudy).
+  const [modeChoiceFor, setModeChoiceFor] = useState<DailySession | null>(null);
   // Which of the two bonus-round games is showing during session.phase
   // === 'play' (see GamePicker) — purely a within-render choice, not
   // persisted to DailySession, same reasoning as WordMatchGame's own
@@ -1706,7 +1709,7 @@ export default function DailySessionFlow() {
 
     setSession(ds);
     if (ds.phase === 'study-mcq') enterStudyMcqPhase(ds);
-    else if (ds.phase === 'study-rounds') enterRoundsPhase(ds, 'study');
+    else if (ds.phase === 'study-rounds') beginStudy(ds);
     else if (ds.phase === 'review-mcq') enterReviewMcqPhase(ds);
     else if (ds.phase === 'review-mcq-reversed') enterReviewMcqReversedPhase(ds);
     else if (ds.phase === 'review-rounds') enterRoundsPhase(ds, 'review');
@@ -2324,12 +2327,46 @@ export default function DailySessionFlow() {
   // The report card's (review's results screen) own "Continue" button —
   // review runs first in the day, so this is what takes the learner onward
   // into study, or straight to congrats if there's nothing to study today.
+  // Study's entry point (fresh, after review, or resuming): before the first
+  // new word, asks whether the learner has time for sentence writing today
+  // or just wants spelling — once per session (studyModeChosen), and only
+  // when it matters: some word in the batch would actually get the
+  // sentence exercise (not a bootstrap-copy word) and hasn't had its round
+  // 1 yet today (a session resumed mid-study isn't interrupted).
+  function beginStudy(ds: DailySession) {
+    const t = today();
+    const progress = getAllProgress();
+    const wouldWriteSentence = wordsById(ds.studyWordIds).some(w =>
+      !isBootstrapCopyWord(w) && progress[w.id]?.lastPracticed !== t && !progress[w.id]?.exampleSentence);
+    if (!ds.studyModeChosen && wouldWriteSentence) {
+      setModeChoiceFor(ds);
+      return;
+    }
+    enterRoundsPhase(ds, 'study');
+  }
+
+  function handleChooseStudyMode(sentenceWritingMode: boolean) {
+    const ds = modeChoiceFor;
+    if (!ds) return;
+    const s = getSettings();
+    if (s.sentenceWritingMode !== sentenceWritingMode) {
+      const nextSettings = { ...s, sentenceWritingMode };
+      saveSettings(nextSettings);
+      setSettings(nextSettings);
+      scheduleSync();
+    }
+    const next: DailySession = { ...ds, studyModeChosen: true };
+    persistSession(next);
+    setModeChoiceFor(null);
+    enterRoundsPhase(next, 'study');
+  }
+
   function handleContinueFromReport() {
     if (!session) return;
     if (session.studyWordIds.length > 0) {
       const next: DailySession = { ...session, phase: 'study-rounds' };
       persistSession(next);
-      enterRoundsPhase(next, 'study');
+      beginStudy(next);
     } else {
       persistSession({ ...session, phase: 'congrats' });
     }
@@ -2466,6 +2503,34 @@ export default function DailySessionFlow() {
 
   if (showAiUnlockCelebration) {
     return <AiUnlockCelebration onClose={handleCloseAiUnlockCelebration} />;
+  }
+
+  if (modeChoiceFor) {
+    const writing = settings.sentenceWritingMode;
+    const option = (on: boolean, title: string, body: string) => (
+      <button
+        type="button"
+        onClick={() => handleChooseStudyMode(on)}
+        className={`w-full text-left bg-paper/75 backdrop-blur-sm rounded-2xl border-2 px-5 py-4 shadow-sm active:scale-[0.98] transition-all ${
+          writing === on ? 'border-accent' : 'border-paper-line/50 hover:border-accent/60'
+        }`}
+      >
+        <div className="font-semibold text-ink">{title}{writing === on ? <span className="ml-2 text-xs font-medium text-label">last time</span> : null}</div>
+        <div className="text-ink-soft text-sm mt-0.5">{body}</div>
+      </button>
+    );
+    return (
+      <div className="py-12 max-w-sm mx-auto flex flex-col gap-3">
+        <h2 className="text-2xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+          How do you want to learn today?
+        </h2>
+        <p className="text-on-bg/80 text-center mb-2">
+          {modeChoiceFor.studyWordIds.length} new word{modeChoiceFor.studyWordIds.length === 1 ? '' : 's'}. You can switch any time with the Writing toggle.
+        </p>
+        {option(true, 'Sentence mode', 'Translate a short sentence using each new word, then spell it. Takes longer, sticks better.')}
+        {option(false, 'Spelling mode', 'Just spell each new word, with an example sentence shown for reference. Quicker.')}
+      </div>
+    );
   }
 
   if (!session) {

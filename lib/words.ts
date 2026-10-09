@@ -7,8 +7,30 @@ export type WordType = 'noun' | 'verb' | 'adjective' | 'adverb' | 'conjunction' 
 // lower ones too. LEVEL_ORDER is still the canonical list/ordering of every
 // known level, used for iteration (migration, sync) and the Settings
 // dropdown, not for cumulative filtering.
-export type Level = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
-export const LEVEL_ORDER: Level[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+//
+// A learner-imported book (see lib/storage.ts's imported-books section) is
+// its own profile exactly like a CEFR level, keyed by a `book-<uuid>` id —
+// so Level is widened with that template literal rather than a plain
+// string: dynamic ids are allowed, typos still fail to compile, and any
+// `Record<Level, X>` table can no longer be written exhaustively (which is
+// the point — those must be Record<CefrLevel, X> with a safe lookup).
+// LEVEL_ORDER stays CEFR-only; iterate allProfileLevels() (storage.ts) to
+// cover every profile on this device including imported books.
+export type CefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+export type BookLevelId = `book-${string}`;
+export type Level = CefrLevel | BookLevelId;
+export const LEVEL_ORDER: CefrLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+const BOOK_ID_RE = /^book-[A-Za-z0-9-]{1,64}$/;
+export function isBookLevelId(s: unknown): s is BookLevelId {
+  return typeof s === 'string' && BOOK_ID_RE.test(s);
+}
+export function isCefrLevel(s: unknown): s is CefrLevel {
+  return typeof s === 'string' && (LEVEL_ORDER as string[]).includes(s);
+}
+// Any key a per-level storage/sync blob may legitimately carry.
+export function isProfileLevelId(s: unknown): s is Level {
+  return isCefrLevel(s) || isBookLevelId(s);
+}
 
 // Which real-world wordlist each level's vocabulary was actually drawn
 // from (see the commits that added each level's words for the full
@@ -22,7 +44,7 @@ export const LEVEL_ORDER: Level[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 // real, populated levels yet (see Level's own comment on LEVEL_ORDER
 // covering more than what's actually selectable), so there's nothing
 // truthful to credit them with.
-export const LEVEL_SOURCE: Partial<Record<Level, string>> = {
+export const LEVEL_SOURCE: Partial<Record<CefrLevel, string>> = {
   A1: 'Wordlist: Goethe-Institut',
   A2: 'Wordlist: Goethe-Institut',
   B1: 'Wordlist: Goethe-Institut',
@@ -3841,7 +3863,10 @@ export function diffAgainstAttempt(originalAttempt: string, correctedSentence: s
   const correctedWordIndices: number[] = [];
   correctedTokens.forEach((t, idx) => { if (isWordToken(t)) correctedWordIndices.push(idx); });
   const correctedWords = correctedWordIndices.map(idx => correctedTokens[idx]);
-  const matched = diffWords(originalWords, correctedWords);
+  // ß and ss are the same letter here (Swiss spelling) — "heiss" corrected
+  // to "heiß" is not a mistake.
+  const sz = (w: string) => w.replace(/ß/g, 'ss');
+  const matched = diffWords(originalWords.map(sz), correctedWords.map(sz));
   const perfect = matched.length > 0 && originalWords.length === correctedWords.length && matched.every(Boolean);
   const changedByTokenIdx = new Set(correctedWordIndices.filter((_, wi) => !matched[wi]));
   const tokens = correctedTokens.map((text, idx) => ({ text, changed: changedByTokenIdx.has(idx) }));

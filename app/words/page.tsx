@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { WORDS, Word, Level, glossFor } from '../../lib/words';
+import { WORDS, Word, Level, glossFor, isBookLevelId } from '../../lib/words';
 import {
   getMergedProgressAcrossLevels, getSettings, WordProgress, MascotStageId, today,
   getAllCustomWordsAcrossLevels, addCustomWord, removeCustomWord, getWordProgress, saveWordProgress,
   newCustomWordId, isCustomWordId, PROGRESS_CHANGED_EVENT,
+  levelDisplayName,
 } from '../../lib/storage';
 import { daysBetween, recordMilestonePass } from '../../lib/srs';
 import { imageUrlForWord } from '../../lib/wordImage';
@@ -325,7 +326,9 @@ export default function WordsPage() {
   // worth of untouched vocabulary. Custom words show regardless of which
   // book they were added under, same as before.
   const myWordsPool = useMemo(
-    () => [...WORDS.filter(w => w.level === activeLevel), ...customWords],
+    // An imported book's words (hundreds at once) stay in that book's own
+    // My Words only — one-off adds still show everywhere, as before.
+    () => [...WORDS.filter(w => w.level === activeLevel), ...customWords.filter(w => !isBookLevelId(w.level) || w.level === activeLevel)],
     [activeLevel, customWords],
   );
 
@@ -472,7 +475,7 @@ export default function WordsPage() {
         {w.plural && <span className="text-ink-soft text-sm ml-2">· {w.plural}</span>}
         {showBook && (
           <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-ink-soft bg-paper-dim rounded-full px-2 py-0.5 align-middle">
-            {w.level}
+            {levelDisplayName(w.level)}
           </span>
         )}
         {isCustomWordId(w.id) && (

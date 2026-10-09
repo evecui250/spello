@@ -4,15 +4,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getSettings, saveSettings, switchToLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, getImportedBooks, getImportedBook, levelDisplayName, ImportedBook, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
-import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch } from '../../lib/practice';
-import { Level, wordsForLevel, LEVEL_SOURCE } from '../../lib/words';
-import { scheduleSync, syncNow } from '../../lib/sync';
+import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch, allWordsForLevel } from '../../lib/practice';
+import { Level, LEVEL_SOURCE, isCefrLevel } from '../../lib/words';
+import { scheduleSync, syncNow, SYNCED_EVENT } from '../../lib/sync';
 import { CHIME_OPTIONS } from '../../lib/sound';
 import AccountPanel from '../../components/AccountPanel';
 import BugReportButton from '../../components/BugReportButton';
 import SoundPicker from '../../components/SoundPicker';
+import ImportBookModal from '../../components/ImportBookModal';
 import { supabase } from '../../lib/supabase';
 
 // Purely cosmetic — just decides whether to show the "Admin" link at all.
@@ -52,6 +53,8 @@ export default function SettingsPage() {
   // shows until asked for (see the settings-page-length feedback this
   // was built for).
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importedBooks, setImportedBooks] = useState<ImportedBook[]>([]);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const applySettings = (s: Settings) => {
@@ -68,6 +71,14 @@ export default function SettingsPage() {
   const loadFromStorage = () => applySettings(getSettings());
 
   useEffect(loadFromStorage, []);
+  // Re-read after a sync too — a book imported on another device only
+  // shows up here once pullAndMerge has brought its registry entry down.
+  useEffect(() => {
+    const load = () => setImportedBooks(getImportedBooks());
+    load();
+    window.addEventListener(SYNCED_EVENT, load);
+    return () => window.removeEventListener(SYNCED_EVENT, load);
+  }, []);
   useEffect(() => setTheme(getTheme()), []);
   useEffect(() => setCardMode(getCardMode()), []);
   useEffect(() => setFontScale(getFontScale()), []);
@@ -151,7 +162,7 @@ export default function SettingsPage() {
   };
 
   const handleClearAll = async () => {
-    if (!window.confirm(`This will erase all learning progress for the ${level} level — every word starts over. Other levels, and your account-wide streak/goal days, aren't affected. This can't be undone. Continue?`)) return;
+    if (!window.confirm(`This will erase all learning progress for the ${levelDisplayName(level)} level — every word starts over. Other levels, and your account-wide streak/goal days, aren't affected. This can't be undone. Continue?`)) return;
     clearAllProgress();
     // Awaited and immediate (not the debounced scheduleSync) — this is a
     // destructive action, so the cleared state needs to actually reach
@@ -321,11 +332,26 @@ export default function SettingsPage() {
             <option value="A2">A2</option>
             <option value="B1">B1</option>
             <option value="B2">B2</option>
+            {importedBooks.length > 0 && (
+              <optgroup label="My imported books">
+                {importedBooks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </optgroup>
+            )}
           </select>
-          <p className="text-ink-soft text-sm mt-1">This vocabulary book has {wordsForLevel(level).length} words for {level}.</p>
-          {LEVEL_SOURCE[level] && (
+          <p className="text-ink-soft text-sm mt-1">This vocabulary book has {allWordsForLevel(level).length} words{isCefrLevel(level) ? ` for ${level}` : ''}.</p>
+          {isCefrLevel(level) && LEVEL_SOURCE[level] && (
             <p className="text-ink-soft text-xs mt-0.5">{LEVEL_SOURCE[level]}</p>
           )}
+          {!isCefrLevel(level) && getImportedBook(level) && (
+            <p className="text-ink-soft text-xs mt-0.5">Imported from PDF, pages {getImportedBook(level)!.sourcePages}</p>
+          )}
+          <button
+            type="button"
+            onClick={() => setImportOpen(true)}
+            className="mt-2 text-sm font-semibold text-label hover:text-ink underline underline-offset-2"
+          >
+            + Import a book from PDF
+          </button>
         </div>
 
         <div>
@@ -522,6 +548,17 @@ export default function SettingsPage() {
           would otherwise become the containing block for this fixed
           overlay. window.confirm() inside each handler below is still the
           final destructive-action gate; this modal is just the picker. */}
+      {importOpen && (
+        <ImportBookModal
+          onClose={() => { setImportOpen(false); setImportedBooks(getImportedBooks()); }}
+          onSwitchTo={id => {
+            setImportOpen(false);
+            setImportedBooks(getImportedBooks());
+            handleLevelChange(id);
+          }}
+        />
+      )}
+
       {resetModalOpen && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -545,13 +582,13 @@ export default function SettingsPage() {
 
             <div>
               <p className="text-ink-soft text-sm mb-2">
-                Erase all word progress for the {level} level to start over from scratch. Other levels, and your account-wide streak/goal days, are untouched.
+                Erase all word progress for the {levelDisplayName(level)} level to start over from scratch. Other levels, and your account-wide streak/goal days, are untouched.
               </p>
               <button
                 onClick={handleClearAll}
                 className="w-full bg-clay/20 text-clay border-2 border-clay py-3 rounded-xl font-semibold hover:bg-clay/30 active:scale-95 transition-all"
               >
-                {cleared ? '✓ Cleared!' : `Clear all progress (${level})`}
+                {cleared ? '✓ Cleared!' : `Clear all progress (${levelDisplayName(level)})`}
               </button>
             </div>
 

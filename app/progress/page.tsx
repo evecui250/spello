@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { WORDS, wordsForLevel, glossFor, Level, LEVEL_ORDER, Word } from '../../lib/words';
+import { WORDS, wordsForLevel, glossFor, Level, Word } from '../../lib/words';
 import {
   getAllProgress, getAllProgressForLevel, getMergedProgressAcrossLevels,
   getSettings, MascotStageId, WordProgress,
   getTheme, Theme, THEME_CHANGED_EVENT, getAllCustomWordsAcrossLevels,
+  allProfileLevels, levelDisplayName,
 } from '../../lib/storage';
 import { allWordsForLevel, hasEnoughWordsForGame } from '../../lib/practice';
 import { SYNCED_EVENT } from '../../lib/sync';
@@ -73,7 +74,7 @@ export default function ProgressPage() {
     // pull, until the next manual reload.
     const load = () => {
       setProgress(getAllProgress());
-      setStudiedLevels(LEVEL_ORDER.filter(l => Object.keys(getAllProgressForLevel(l)).length > 0));
+      setStudiedLevels(allProfileLevels().filter(l => Object.keys(getAllProgressForLevel(l)).length > 0));
     };
     load();
     window.addEventListener(SYNCED_EVENT, load);
@@ -324,10 +325,10 @@ export default function ProgressPage() {
             {scope === 'all' ? (
               <div className="flex flex-col gap-1.5">
                 {Object.entries(stageLevelCounts[openStage])
-                  .sort((a, b) => LEVEL_ORDER.indexOf(a[0] as Level) - LEVEL_ORDER.indexOf(b[0] as Level))
+                  .sort((a, b) => allProfileLevels().indexOf(a[0] as Level) - allProfileLevels().indexOf(b[0] as Level))
                   .map(([lvl, count]) => (
                     <div key={lvl} className="flex items-center justify-between bg-paper/60 rounded-lg px-3 py-2">
-                      <span className="text-ink font-medium">{lvl}</span>
+                      <span className="text-ink font-medium">{levelDisplayName(lvl as Level)}</span>
                       <span className="text-ink-soft text-sm">{count} word{count === 1 ? '' : 's'}</span>
                     </div>
                   ))}
