@@ -247,7 +247,7 @@ export default function HomePage() {
           src={`${BASE}/${heroImageFor(avatarId)}`}
           alt="Your pet"
           onLoad={() => setPetLoaded(true)}
-          style={{ height: 'clamp(120px, 34dvh, 300px)' }}
+          style={{ height: 'clamp(110px, 22dvh, 190px)' }}
           className={`w-auto max-w-full object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
         />
       </div>
