@@ -198,15 +198,21 @@ export default function HomePage() {
   const label = isDoneForNow ? 'Goal completed' : inProgress && session?.isExtra ? 'Study more' : 'Start';
   const handleClick = isDoneForNow ? startExtraRound : inProgress ? () => router.push('/practice') : startSession;
 
+  const gradientButton = 'group relative w-full rounded-full px-5 py-3.5 overflow-hidden shadow-[0_4px_16px_rgba(90,58,26,0.35)] active:scale-[0.98] transition-all duration-300 ease-out';
+  const gradientStyle = { backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' };
+  const shine = <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />;
+
   return (
-    // Capped to a phone-proportioned column (not the page's own wider
-    // max-w-2xl) so this doesn't stretch into a spread-out-looking row on
-    // a laptop — every other element below is centered within this same
-    // width. min-h + the flex-1 content block below split the screen into
-    // a pinned top row and a vertically-centered rest, so short content
-    // (e.g. the plain "done" pill) distributes its leftover space instead
-    // of leaving a big dead gap at the bottom before the fixed nav.
-    <div className="relative flex flex-col mx-auto w-full max-w-sm min-h-[calc(100dvh-11rem)] py-2">
+    // Three bands filling exactly one phone screen (main's own top/bottom
+    // padding and the fixed nav subtracted): greeting on top, the pet
+    // centered in whatever height is left, and every action grouped at the
+    // bottom where a thumb reaches — so there's no dead band on tall
+    // phones and nothing to scroll on small ones. Capped to a phone-width
+    // column so it doesn't spread out on a laptop.
+    <div
+      className="relative flex flex-col mx-auto w-full max-w-sm"
+      style={{ minHeight: 'calc(100dvh - 7rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))' }}
+    >
       <div className="w-full flex items-start justify-between gap-3">
         <div>
           {nickname ? (
@@ -232,81 +238,69 @@ export default function HomePage() {
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center gap-5">
-      {/* Real report: the pet's own tap-to-chat and its "Sprich mit mir!"
-          nudge bubble were confusing as a SECOND entrance to Text to Pet
-          alongside the new Chat button below (see that button's own
-          comment) — the pet image is decorative again, matching how it
-          worked before this feature existed. */}
-      <img
-        ref={petImgRef}
-        src={`${BASE}/${heroImageFor(avatarId)}`}
-        alt="Your pet"
-        onLoad={() => setPetLoaded(true)}
-        className={`h-32 w-32 object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
-      />
+      {/* Decorative only (see PetChat's Chat button below for why tapping
+          it no longer opens chat). Sized by screen height, so it fills a
+          tall phone and still leaves room on an iPhone SE. */}
+      <div className="flex-1 flex items-center justify-center py-3">
+        <img
+          ref={petImgRef}
+          src={`${BASE}/${heroImageFor(avatarId)}`}
+          alt="Your pet"
+          onLoad={() => setPetLoaded(true)}
+          style={{ height: 'clamp(120px, 34dvh, 300px)' }}
+          className={`w-auto max-w-full object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
+        />
+      </div>
 
-      <div className="w-full flex flex-col items-center gap-3">
-        {nothingLeftAtAll ? (
-          <div className="w-full max-w-[320px] rounded-full border bg-paper/40 backdrop-blur-sm border-paper-line/30 opacity-80 flex items-center justify-center gap-2 px-6 py-4">
-            <CheckCircleIcon className="w-6 h-6 text-good-deep" />
-            <span className="font-semibold text-ink text-lg">All done today</span>
-          </div>
-        ) : isDoneForNow ? (
-          <button
-            onClick={handleClick}
-            className="group relative w-full max-w-[320px] rounded-full px-5 py-4 flex flex-col items-center gap-0.5 overflow-hidden shadow-[0_4px_16px_rgba(90,58,26,0.35)] hover:shadow-[0_8px_24px_rgba(90,58,26,0.45)] hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 ease-out"
-            style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
-          >
-            <span className="text-xl font-extrabold text-on-bg tracking-wide">{label}</span>
-            <span className="text-sm font-medium text-on-bg/75 text-center">study more →</span>
-            <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />
-          </button>
-        ) : (
-          <div className="w-full max-w-[320px] bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 shadow-sm p-5 flex flex-col gap-4">
-            <span className="text-sm font-semibold text-on-bg/70 uppercase tracking-wide">Today&apos;s session</span>
-            <div className="flex items-center">
-              <div className="flex-1 flex items-center gap-2.5">
+      <div className="w-full flex flex-col gap-3">
+        {/* One card shape in every state, so the screen doesn't reshape
+            itself once the goal is done. */}
+        <div className="w-full bg-white/10 backdrop-blur-md rounded-3xl border border-white/15 shadow-sm p-4 flex flex-col gap-4">
+          {isDoneForNow ? (
+            <div className="flex items-center gap-3 px-1">
+              <CheckCircleIcon className="w-9 h-9 text-good shrink-0" />
+              <div>
+                <div className="font-bold text-on-bg text-lg leading-tight">{nothingLeftAtAll ? 'All done for today' : "Today's goal done"}</div>
+                <div className="text-sm text-on-bg/65">{nothingLeftAtAll ? 'Come back tomorrow for more.' : 'Nice work! Want a few more?'}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex">
+              <div className="flex-1 flex items-center justify-center gap-2.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`${BASE}/icon_learn_new.png`} alt="" className="w-10 h-10 object-contain shrink-0" />
-                <div>
-                  <div className="font-bold text-on-bg font-mono text-lg">{previewStudyCount}/{totalStudyCount}</div>
-                  <div className="text-sm text-on-bg/65">new</div>
+                <img src={`${BASE}/icon_learn_new.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
+                <div className="leading-tight">
+                  <div className="font-bold text-on-bg text-xl">{previewStudyCount}</div>
+                  <div className="text-xs text-on-bg/65">{inProgress && previewStudyCount !== totalStudyCount ? `new · of ${totalStudyCount}` : 'new words'}</div>
                 </div>
               </div>
-              <div className="w-px h-10 bg-white/15 shrink-0" />
-              <div className="flex-1 flex items-center gap-2.5">
+              <div className="w-px bg-white/15 shrink-0" />
+              <div className="flex-1 flex items-center justify-center gap-2.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`${BASE}/icon_review.png`} alt="" className="w-10 h-10 object-contain shrink-0" />
-                <div>
-                  <div className="font-bold text-on-bg font-mono text-lg">{previewReviewCount}/{totalReviewCount}</div>
-                  <div className="text-sm text-on-bg/65">to review</div>
+                <img src={`${BASE}/icon_review.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
+                <div className="leading-tight">
+                  <div className="font-bold text-on-bg text-xl">{previewReviewCount}</div>
+                  <div className="text-xs text-on-bg/65">{inProgress && previewReviewCount !== totalReviewCount ? `review · of ${totalReviewCount}` : 'to review'}</div>
                 </div>
               </div>
             </div>
-            <button
-              onClick={handleClick}
-              className="group relative w-full rounded-full px-5 py-3.5 overflow-hidden shadow-[0_4px_16px_rgba(90,58,26,0.35)] hover:shadow-[0_8px_24px_rgba(90,58,26,0.45)] active:scale-[0.98] transition-all duration-300 ease-out"
-              style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
-            >
-              <span className="text-lg font-extrabold text-on-bg tracking-wide">{label} →</span>
-              <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+          )}
+          {!nothingLeftAtAll && (
+            <button onClick={handleClick} className={gradientButton} style={gradientStyle}>
+              <span className="text-lg font-extrabold text-on-bg tracking-wide">{isDoneForNow ? 'Study more' : label} →</span>
+              {shine}
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Two compact side-by-side buttons (owner call: no subtitles —
-            "All caught up" / "Practice German with your pet" were noise).
-            My Notebook only appears once this book has any sentence-
-            notebook activity, and only shows a count when there's
-            something to redo. Chat is the sole entrance to Text to Pet —
-            the pet's own small avatar doubles as its icon, same image used
-            everywhere else (Leaderboard, Pet & Shop). */}
-        <div className="w-full max-w-[320px] flex gap-3">
+        {/* Notebook only once this book has any sentence-notebook activity,
+            with a count only when there's something to redo; Chat is the
+            sole entrance to Text to Pet, the pet's small avatar as icon. */}
+        <div className="w-full flex gap-3">
           {hasNotebookActivity && (
             <Link
               href="/mistakes"
-              className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md rounded-xl border border-white/15 px-3 py-2.5 hover:bg-white/15 transition-colors"
+              className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 px-3 py-2.5 hover:bg-white/15 transition-colors"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={`${BASE}/icon_mistake_notebook.png`} alt="" className="w-7 h-7 object-contain shrink-0" />
@@ -321,14 +315,13 @@ export default function HomePage() {
           <button
             type="button"
             onClick={() => router.push('/pet-chat/')}
-            className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md rounded-xl border border-white/15 px-3 py-2.5 hover:bg-white/15 transition-colors"
+            className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 px-3 py-2.5 hover:bg-white/15 transition-colors"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={`${BASE}/${avatarImageFor(avatarId, equipped)}`} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
             <span className="font-semibold text-on-bg text-sm truncate">Chat</span>
           </button>
         </div>
-      </div>
       </div>
 
       {petModalOpen && (
