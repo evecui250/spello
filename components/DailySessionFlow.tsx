@@ -36,7 +36,7 @@ import SignInNudge from './SignInNudge';
 import AiUnlockCelebration from './AiUnlockCelebration';
 import WordInfoPanel from './WordInfoPanel';
 import GlossPopup from './GlossPopup';
-import { speakWord, speakText, stopSpeech } from '../lib/speech';
+import { speakWord, speakText, stopSpeech, prefetchWordAudio } from '../lib/speech';
 import { imageUrlForWord } from '../lib/wordImage';
 import { WORDS_WITH_IMAGES } from '../lib/wordImageManifest';
 import { scheduleSync, syncNow } from '../lib/sync';
@@ -1708,6 +1708,10 @@ export default function DailySessionFlow() {
     if (ds.reviewWordIds.length === 0 && !isReviewGoalDoneToday()) markReviewGoalDone(0);
 
     setSession(ds);
+    // Imported/added words have no pre-recorded clip — generate any missing
+    // ones now, in the background, so their cards and multiple-choice
+    // questions play the real voice rather than the browser's.
+    prefetchWordAudio(wordsById([...ds.studyWordIds, ...ds.reviewWordIds]));
     if (ds.phase === 'study-mcq') enterStudyMcqPhase(ds);
     else if (ds.phase === 'study-rounds') beginStudy(ds);
     else if (ds.phase === 'review-mcq') enterReviewMcqPhase(ds);

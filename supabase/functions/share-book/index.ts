@@ -43,6 +43,7 @@ function sanitizeWord(w: any): Record<string, unknown> | null {
   }
   if (['der', 'die', 'das'].includes(w.article)) out.article = w.article;
   if (w.copyModeOnly === true) out.copyModeOnly = true;
+  if (typeof w.sourceId === 'string' && /^w\d{1,6}$/.test(w.sourceId)) out.sourceId = w.sourceId;
   return out;
 }
 

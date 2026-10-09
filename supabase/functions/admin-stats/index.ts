@@ -495,10 +495,10 @@ Deno.serve(async (req: Request) => {
     // for the "Today" card — one query covers both, split by whether
     // user_id is set (anonymous calls are rate-limited/logged by
     // ip_address instead; see correct-sentence/generate-sentence).
-    const aiRows = await fetchAllRows<{ user_id: string | null; ip_address: string | null; model: string | null; input_tokens: number; output_tokens: number; created_at: string; kind: string | null }>(
+    const aiRows = await fetchAllRows<{ user_id: string | null; ip_address: string | null; model: string | null; input_tokens: number; output_tokens: number; created_at: string; kind: string | null; word_id: string | null }>(
       (from, to) => admin
         .from('ai_usage')
-        .select('user_id, ip_address, model, input_tokens, output_tokens, created_at, kind')
+        .select('user_id, ip_address, model, input_tokens, output_tokens, created_at, kind, word_id')
         .gte('created_at', windowStartIso)
         .range(from, to),
     );
@@ -572,8 +572,8 @@ Deno.serve(async (req: Request) => {
     // comment); only the 3 pricing-relevant columns are selected to keep
     // the payload small regardless of how many rows exist.
     const aiSpendLast30DaysUsd = costUsd(aiRows);
-    const aiRowsAllTime = await fetchAllRows<{ model: string | null; input_tokens: number; output_tokens: number; kind: string | null }>(
-      (from, to) => admin.from('ai_usage').select('model, input_tokens, output_tokens, kind').range(from, to),
+    const aiRowsAllTime = await fetchAllRows<{ model: string | null; input_tokens: number; output_tokens: number; kind: string | null; word_id: string | null }>(
+      (from, to) => admin.from('ai_usage').select('model, input_tokens, output_tokens, kind, word_id').range(from, to),
     );
     const aiSpendAllTimeUsd = costUsd(aiRowsAllTime);
     // "Texting" = Text to Pet's own two kinds (the per-turn conversation
@@ -581,6 +581,29 @@ Deno.serve(async (req: Request) => {
     // headline total above since it's a meaningfully different cost
     // profile (several calls per session, not one) worth watching on its
     // own as the feature sees real usage.
+    // PDF book import (extract-vocabulary) -- one import makes ~10+ calls
+    // (one per page, plus batched definitions), all sharing word_id
+    // 'pdf_import:<import id>', so distinct word_ids = number of imports.
+    const pdfRows = aiRows.filter(r => r.kind === 'pdf_import');
+    const pdfRowsToday = pdfRows.filter(r => dateStr(new Date(r.created_at)) === todayStr);
+    const distinctImports = (rows: { word_id: string | null }[]) => new Set(rows.map(r => r.word_id)).size;
+    const pdfImportTrend = windowDays.map(date => {
+      const rows = pdfRows.filter(r => dateStr(new Date(r.created_at)) === date);
+      return { date, imports: distinctImports(rows), calls: rows.length, costUsd: costUsd(rows) };
+    });
+    const pdfRowsAllTime = aiRowsAllTime.filter(r => r.kind === 'pdf_import');
+    const { data: sharedBookRows } = await admin.from('shared_books').select('join_count');
+    const pdfImport = {
+      importsToday: distinctImports(pdfRowsToday),
+      callsToday: pdfRowsToday.length,
+      costTodayUsd: costUsd(pdfRowsToday),
+      imports30Days: distinctImports(pdfRows),
+      last30DaysUsd: costUsd(pdfRows),
+      importsAllTime: distinctImports(pdfRowsAllTime),
+      allTimeUsd: costUsd(pdfRowsAllTime),
+      bookCodesCreated: sharedBookRows?.length ?? 0,
+      bookCodeJoins: (sharedBookRows ?? []).reduce((a, r) => a + (r.join_count ?? 0), 0),
+    };
     const isPetChatKind = (k: string | null) => k === 'pet_chat' || k === 'pet_chat_summary';
     const petChatSpendLast30DaysUsd = costUsd(aiRows.filter(r => isPetChatKind(r.kind)));
     const petChatSpendAllTimeUsd = costUsd(aiRowsAllTime.filter(r => isPetChatKind(r.kind)));
@@ -758,6 +781,7 @@ Deno.serve(async (req: Request) => {
           allTimeUsd: petChatSpendAllTimeUsd,
         },
       },
+      pdfImport,
       trends: {
         signups: signupTrend,
         devices: deviceTrend,
@@ -765,6 +789,7 @@ Deno.serve(async (req: Request) => {
         wordsInContext: wordsInContextTrend,
         wordsStudied: wordsStudiedTrend,
         explanationClicks: explanationClicksTrend,
+        pdfImport: pdfImportTrend,
       },
       levelBreakdown,
       geoBreakdown,

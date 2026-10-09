@@ -103,6 +103,11 @@ export interface Word {
   // words, fixed phrases, and words whose only natural use doesn't fit a
   // standalone translation-exercise sentence).
   copyModeOnly?: boolean;
+  // On a custom word copied from a corpus word (PDF import corpus match,
+  // Word List's add-from-another-book, a shared book code): that corpus
+  // word's id — lets it play the corpus's own pre-recorded audio (see
+  // lib/speech.ts's audioUrlForWord) instead of generating a new clip.
+  sourceId?: string;
   // The round-1 translation exercise's English sentence — pre-generated
   // once (see scripts/generate-exercise-prompts.py) using only the word's
   // level's guaranteed-safe baseline vocabulary (every word in lower CEFR

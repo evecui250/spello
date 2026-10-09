@@ -79,6 +79,14 @@ interface AdminStats {
     // on its own as the feature sees real usage.
     petChat: { last30DaysUsd: number; allTimeUsd: number };
   };
+  // PDF book import (extract-vocabulary) + book codes — see admin-stats.
+  // Optional only so this page still renders against an older deploy.
+  pdfImport?: {
+    importsToday: number; callsToday: number; costTodayUsd: number;
+    imports30Days: number; last30DaysUsd: number;
+    importsAllTime: number; allTimeUsd: number;
+    bookCodesCreated: number; bookCodeJoins: number;
+  };
   trends: {
     signups: { date: string; count: number }[];
     devices: { date: string; signedIn: number; anonymous: number }[];
@@ -86,6 +94,7 @@ interface AdminStats {
     wordsInContext: { date: string; calls: number; costUsd: number }[];
     wordsStudied: { date: string; signedIn: number; anonymous: number }[];
     explanationClicks: { date: string; count: number }[];
+    pdfImport?: { date: string; imports: number; calls: number; costUsd: number }[];
   };
   levelBreakdown: { level: string; signedIn: number; anonymous: number }[];
   geoBreakdown: {
@@ -248,6 +257,12 @@ export default function AdminPage() {
         <StatCard label="AI spend, all-time" value={`$${stats.aiSpend.allTimeUsd.toFixed(2)}`} />
         <StatCard label="...of which, Text to Pet (30 days)" value={`$${stats.aiSpend.petChat.last30DaysUsd.toFixed(2)}`} />
         <StatCard label="...of which, Text to Pet (all-time)" value={`$${stats.aiSpend.petChat.allTimeUsd.toFixed(2)}`} />
+        {stats.pdfImport && (
+          <>
+            <StatCard label={`...of which, PDF import (30 days, ${stats.pdfImport.imports30Days} imports)`} value={`$${stats.pdfImport.last30DaysUsd.toFixed(2)}`} />
+            <StatCard label={`...of which, PDF import (all-time, ${stats.pdfImport.importsAllTime} imports)`} value={`$${stats.pdfImport.allTimeUsd.toFixed(2)}`} />
+          </>
+        )}
       </div>
 
       {/* Today */}
@@ -263,6 +278,12 @@ export default function AdminPage() {
           <StatCard label="...of which signed in" value={stats.today.newIpsSignedIn} />
           <StatCard label="'Why?' button clicks" value={stats.today.explanationClicks} />
           <StatCard label="Word-click gloss lookups" value={stats.today.glossCalls} />
+          {stats.pdfImport && (
+            <>
+              <StatCard label={`PDF imports (${stats.pdfImport.callsToday} AI calls, $${stats.pdfImport.costTodayUsd.toFixed(3)})`} value={stats.pdfImport.importsToday} />
+              <StatCard label={`Book codes created / joins (all-time)`} value={`${stats.pdfImport.bookCodesCreated} / ${stats.pdfImport.bookCodeJoins}`} />
+            </>
+          )}
         </div>
         <div className="flex flex-col gap-2">
           <AiUsageRow label="AI calls — signed in" summary={stats.today.aiUsage.signedIn} />
@@ -302,6 +323,15 @@ export default function AdminPage() {
             { label: 'Calls', color: SIGNED_IN_COLOR, values: stats.trends.wordsInContext.map(t => t.calls) },
           ]}
         />
+        {stats.trends.pdfImport && (
+          <TrendChart
+            title={`PDF imports / day (~$${stats.trends.pdfImport.reduce((a, t) => a + t.costUsd, 0).toFixed(4)} over 30 days, gpt-4o-mini)`}
+            dates={dates}
+            series={[
+              { label: 'Imports', color: SIGNED_IN_COLOR, values: stats.trends.pdfImport.map(t => t.imports) },
+            ]}
+          />
+        )}
         <TrendChart
           title="Words practiced / day"
           dates={dates}

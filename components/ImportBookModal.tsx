@@ -293,13 +293,10 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
               {candidates.map(c => {
                 const on = !excluded.has(c.word.id);
                 return (
-                  <label key={c.word.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer ${on ? '' : 'opacity-45'}`}>
+                  <label key={c.word.id} className={`flex items-center gap-3 px-3 py-1.5 cursor-pointer ${on ? '' : 'opacity-45'}`}>
                     <input type="checkbox" checked={on} onChange={() => toggle(c.word.id)} className="accent-accent h-4 w-4 shrink-0" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-ink font-medium truncate">
-                        {c.word.article ? `${c.word.article} ` : ''}{c.word.de}
-                      </span>
-                      <span className="block text-ink-soft text-xs truncate">{c.word.en}{c.word.zh ? ` · ${c.word.zh}` : ''}</span>
+                    <span className="min-w-0 flex-1 text-ink font-medium truncate">
+                      {c.word.article ? `${c.word.article} ` : ''}{c.word.de}
                     </span>
                   </label>
                 );

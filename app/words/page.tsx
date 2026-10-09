@@ -11,9 +11,9 @@ import {
 import { daysBetween, recordMilestonePass } from '../../lib/srs';
 import { imageUrlForWord } from '../../lib/wordImage';
 import { WORDS_WITH_IMAGES } from '../../lib/wordImageManifest';
-import { lookupWord, LookupWordResult, DailyLimitReachedError, AIUnreachableError, generateWordAudio } from '../../lib/ai';
+import { lookupWord, LookupWordResult, DailyLimitReachedError, AIUnreachableError } from '../../lib/ai';
 import { scheduleSync } from '../../lib/sync';
-import { spokenForm } from '../../lib/speech';
+import { prefetchWordAudio } from '../../lib/speech';
 import SpeakerButton from '../../components/SpeakerButton';
 import DachshundMascot from '../../components/Mascot';
 import WordInfoPanel from '../../components/WordInfoPanel';
@@ -404,17 +404,11 @@ export default function WordsPage() {
     setLookupStatus('idle');
     setSearch('');
     scheduleSync();
-    // Fire-and-forget, deliberately not awaited — the word is fully usable
-    // via the browser-TTS fallback (see lib/speech.ts) the moment it's
-    // added regardless of how this turns out; this just upgrades it to a
-    // real cached clip a few seconds later, same voice as the curated
-    // corpus, once it's ready (or is already there, if the preview's own
-    // speaker already generated it -- generateWordAudio upserts, so
-    // calling it again here is harmless either way). A failure here
-    // (network hiccup, daily cap) silently leaves the browser-TTS
-    // fallback as the permanent behavior for this word — never surfaced
-    // as an error, since nothing actually broke.
-    generateWordAudio(word.id, spokenForm(word));
+    // Fire-and-forget: generates the word's real clip now (a no-op if a
+    // corpus copy or an existing clip already covers it — see
+    // lib/speech.ts's audioUrlForWord), so its first play already uses the
+    // same voice as the corpus. A failure just leaves the on-play retry.
+    prefetchWordAudio([word]);
   }
 
   // From a search match that's a REAL corpus word, but from a book other
@@ -424,11 +418,11 @@ export default function WordsPage() {
   // alone entirely (see SearchResultRow below) — the normal study
   // schedule already covers it, nothing to add.
   function handleAddFromOtherBook(w: Word) {
-    const cloned: Word = { ...w, id: newCustomWordId(), level: activeLevel };
+    const cloned: Word = { ...w, id: newCustomWordId(), level: activeLevel, sourceId: isCustomWordId(w.id) ? w.sourceId : w.id };
     addCustomWordIntroduced(cloned);
     setCustomWordsVersion(v => v + 1);
     scheduleSync();
-    generateWordAudio(cloned.id, spokenForm(cloned));
+    // No generation needed: sourceId makes it play the corpus recording.
   }
 
   function handleRemoveWord(w: Word) {

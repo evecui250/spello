@@ -351,9 +351,9 @@ const EXTRACT_TIMEOUT_MS = 90000;
 // back into defineHeadwords so the AI defines the book's sense of the word.
 export interface Headword { de: string; en?: string }
 
-export async function extractHeadwords(text: string): Promise<Headword[]> {
+export async function extractHeadwords(text: string, importId: string): Promise<Headword[]> {
   const { data, error } = await invokeWithTimeout<{ words?: Headword[]; limitReached?: boolean }>(
-    'extract-vocabulary', { mode: 'extract', text }, EXTRACT_TIMEOUT_MS,
+    'extract-vocabulary', { mode: 'extract', text, importId }, EXTRACT_TIMEOUT_MS,
   );
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
@@ -361,9 +361,9 @@ export async function extractHeadwords(text: string): Promise<Headword[]> {
   return data.words;
 }
 
-export async function defineHeadwords(terms: Headword[]): Promise<LookupWordResult[]> {
+export async function defineHeadwords(terms: Headword[], importId: string): Promise<LookupWordResult[]> {
   const { data, error } = await invokeWithTimeout<{ words?: LookupWordResult[]; limitReached?: boolean }>(
-    'extract-vocabulary', { mode: 'define', terms }, EXTRACT_TIMEOUT_MS,
+    'extract-vocabulary', { mode: 'define', terms, importId }, EXTRACT_TIMEOUT_MS,
   );
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();

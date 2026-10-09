@@ -1,6 +1,6 @@
 'use client';
 
-import { Word } from './words';
+import { Word, WORDS } from './words';
 import { supabase, SUPABASE_URL } from './supabase';
 import { getSettings, isCustomWordId } from './storage';
 import { generateWordAudio } from './ai';
@@ -35,11 +35,118 @@ export function spokenForm(word: Word): string {
 // existing fallback chain takes over exactly as it already does for a
 // missing/broken corpus file, so this never needs its own separate
 // "is the audio ready" check.
-export function audioUrlForWord(word: Word): string {
-  if (isCustomWordId(word.id)) {
-    return `${SUPABASE_URL}/storage/v1/object/public/custom-word-audio/${word.id}.mp3`;
+//
+// A custom word that is really a copy of a corpus word (cloned by a PDF
+// import's corpus match, Word List's "add from another book", or a shared
+// book code) plays the corpus's own pre-recorded clip — found by its
+// sourceId, or, for copies made before sourceId existed, by matching
+// article + word + type. Every other custom word's clip is named after
+// WHAT is said (custom-tts-<hash of the spoken form>), not the word's own
+// id: ids are per-learner (a whole class joining one book code gets
+// different ids for the same "die Gentrifizierung"), so naming by id
+// would generate and store the same recording once per student instead
+// of once.
+let corpusById: Map<string, Word> | null = null;
+let corpusByForm: Map<string, Word> | null = null;
+function corpusTwin(word: Word): Word | undefined {
+  if (!corpusById) {
+    corpusById = new Map(WORDS.map(w => [w.id, w]));
+    corpusByForm = new Map();
+    for (const w of WORDS) {
+      const k = `${w.article ?? ''}|${w.de}|${w.type}`;
+      if (!corpusByForm.has(k)) corpusByForm.set(k, w);
+    }
   }
-  return `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/audio/${word.id}.mp3`;
+  return (word.sourceId ? corpusById.get(word.sourceId) : undefined)
+    ?? corpusByForm!.get(`${word.article ?? ''}|${word.de}|${word.type}`);
+}
+
+// Small, synchronous, stable string hash (two FNV-1a 32-bit passes with
+// different seeds -> 16 hex chars) — collisions are not a practical
+// concern at this app's vocabulary scale.
+function hashSpokenForm(text: string): string {
+  const t = text.normalize('NFC').trim().replace(/\s+/g, ' ');
+  const pass = (seed: number) => {
+    let h = seed >>> 0;
+    for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    return h.toString(16).padStart(8, '0');
+  };
+  return pass(2166136261) + pass(0x9747b28c);
+}
+
+// Storage object id for a custom word's generated clip (must start with
+// "custom-" — generate-word-audio only ever writes under that prefix).
+function customClipId(word: Word): string {
+  return `custom-tts-${hashSpokenForm(spokenForm(word))}`;
+}
+
+export function audioUrlForWord(word: Word): string {
+  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+  if (!isCustomWordId(word.id)) return `${base}/audio/${word.id}.mp3`;
+  const twin = corpusTwin(word);
+  if (twin) return `${base}/audio/${twin.id}.mp3`;
+  return `${SUPABASE_URL}/storage/v1/object/public/custom-word-audio/${customClipId(word)}.mp3`;
+}
+
+// --- Generated clips for custom words ---
+// Whether a custom word's clip exists is checked up front (a HEAD request)
+// rather than discovered by the <audio> element failing: for a missing
+// object Supabase Storage answers with a JSON error body, and iOS Safari's
+// audio element can stall on that silently — never erroring, so neither
+// the browser-voice fallback nor generation ever kicked in (a real report:
+// no sound at all for imported words). Known-good clip ids are remembered
+// across page loads so each is checked at most once per device.
+const CLIP_OK_KEY = 'wb2_custom_clips_ok';
+const clipOk = new Set<string>(
+  typeof window === 'undefined' ? [] : (() => { try { return JSON.parse(localStorage.getItem(CLIP_OK_KEY) || '[]'); } catch { return []; } })(),
+);
+function rememberClipOk(id: string) {
+  clipOk.add(id);
+  try { localStorage.setItem(CLIP_OK_KEY, JSON.stringify([...clipOk].slice(-3000))); } catch { /* best effort */ }
+}
+const clipPending = new Map<string, Promise<boolean>>();
+
+function needsGeneratedClip(word: Word): boolean {
+  return isCustomWordId(word.id) && !corpusTwin(word);
+}
+
+// Resolves true once this word's clip exists — checking, and generating it
+// if missing (once per page load per clip). Concurrent callers share one
+// request.
+function ensureClip(word: Word, allowGeneration: boolean): Promise<boolean> {
+  const id = customClipId(word);
+  if (clipOk.has(id)) return Promise.resolve(true);
+  const pending = clipPending.get(id);
+  if (pending) return pending;
+  const url = audioUrlForWord(word);
+  const p = (async () => {
+    try {
+      const head = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+      if (head.ok) { rememberClipOk(id); return true; }
+    } catch { /* offline — fall through */ }
+    if (!allowGeneration || audioGenerationAttempted.has(id)) return false;
+    audioGenerationAttempted.add(id);
+    const ok = await generateWordAudio(id, spokenForm(word));
+    if (ok) rememberClipOk(id);
+    return ok;
+  })();
+  clipPending.set(id, p);
+  p.finally(() => clipPending.delete(id));
+  return p;
+}
+
+// Generates any missing clips for these words in the background (a few at
+// a time) — called as a study session opens, so a new imported word's
+// card and multiple-choice question already have the real recording by
+// the time they're shown, instead of the robotic browser voice.
+export function prefetchWordAudio(words: Word[]): void {
+  if (typeof window === 'undefined') return;
+  const todo = words.filter(needsGeneratedClip);
+  let next = 0;
+  const worker = async () => {
+    while (next < todo.length) await ensureClip(todo[next++], true);
+  };
+  for (let i = 0; i < Math.min(3, todo.length); i++) worker();
 }
 
 // --- Browser TTS fallback ---
@@ -429,12 +536,37 @@ function isPageHidden(): boolean {
 // actually finishes (whichever path it took) — speakWord's own repeat
 // chain below is the only caller that needs it; every other call site
 // just wants "play the word" and leaves it out.
+// How long a play waits for a not-yet-generated clip before settling for
+// the browser voice — generation usually takes 1-3 s.
+const CLIP_WAIT_MS = 5000;
+// An <audio> that neither starts nor errors within this long is treated
+// as failed (see ensureClip's comment on iOS stalling silently).
+const PLAY_STALL_MS = 4000;
+
 function speakWordOnce(word: Word, onEnded?: () => void, onFailure?: () => void, allowAudioGeneration = true): void {
   if (typeof window === 'undefined' || isPageHidden()) return;
   if (currentAudio) {
     currentAudio.pause();
     currentAudio = null;
   }
+  if (needsGeneratedClip(word) && !clipOk.has(customClipId(word))) {
+    // Claim "current" now, so a newer speakWord() during the wait wins.
+    const claim = new Audio();
+    currentAudio = claim;
+    const timeout = new Promise<boolean>(res => setTimeout(() => res(false), CLIP_WAIT_MS));
+    Promise.race([ensureClip(word, allowAudioGeneration), timeout]).then(ok => {
+      if (currentAudio !== claim) return;
+      currentAudio = null;
+      if (ok) playClip(word, onEnded, onFailure);
+      else speakWithBrowserVoice(spokenForm(word), 0, null, onEnded, onFailure);
+    });
+    return;
+  }
+  playClip(word, onEnded, onFailure);
+}
+
+function playClip(word: Word, onEnded?: () => void, onFailure?: () => void): void {
+  if (isPageHidden()) return;
   const audio = new Audio(audioUrlForWord(word));
   audio.volume = WORD_AUDIO_VOLUME;
   currentAudio = audio;
@@ -444,20 +576,15 @@ function speakWordOnce(word: Word, onEnded?: () => void, onFailure?: () => void,
     // promise with an AbortError — that's not a real playback failure and
     // must not trigger the (lower-quality, possibly wrong-accent) browser
     // TTS fallback. Only fall back if we're still the current audio.
-    if (currentAudio !== audio) return;
-    // allowAudioGeneration=false is for a word that isn't real/saved yet
-    // (the Word List's own lookup PREVIEW, before "Add to my words" is
-    // even tapped — see app/words/page.tsx) — confirmed real: without
-    // this, tapping the preview's speaker generated and cached audio
-    // under that preview's placeholder id, and a LATER, DIFFERENT
-    // preview reusing the same placeholder id would then incorrectly
-    // play the FIRST word's cached pronunciation instead of its own.
-    if (allowAudioGeneration && isCustomWordId(word.id) && !audioGenerationAttempted.has(word.id)) {
-      audioGenerationAttempted.add(word.id);
-      generateWordAudio(word.id, spokenForm(word));
-    }
+    if (currentAudio !== audio || fellBack) return;
+    fellBack = true;
+    clearTimeout(stallTimer);
+    audio.pause();
     speakWithBrowserVoice(spokenForm(word), 0, null, onEnded, onFailure);
   };
+  let fellBack = false;
+  const stallTimer = setTimeout(fallback, PLAY_STALL_MS);
+  audio.addEventListener('playing', () => clearTimeout(stallTimer));
   audio.addEventListener('error', fallback);
   if (onEnded) {
     // Only from OUR audio element specifically, and only while it's still

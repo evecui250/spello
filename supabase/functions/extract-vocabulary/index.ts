@@ -35,6 +35,9 @@ interface RequestBody {
   mode: Mode;
   text?: string;
   terms?: { de: string; en?: string }[];
+  // One id per import run (the new book's id), so /admin can count imports
+  // and not just the ~10+ AI calls each one makes.
+  importId?: string;
 }
 
 const TYPES = ['noun', 'verb', 'adjective', 'adverb', 'preposition', 'conjunction', 'phrase', 'other'];
@@ -179,8 +182,8 @@ Deno.serve(async (req: Request) => {
     await supabase.from('ai_usage').insert({
       user_id: userId,
       ip_address: ip,
-      // NOT NULL column — a fixed tag, same as pet-chat-turn's 'pet_chat'.
-      word_id: 'pdf_import',
+      // NOT NULL column — 'pdf_import:<import id>' groups one run's calls.
+      word_id: `pdf_import:${String(body.importId ?? '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 64) || 'unknown'}`,
       level: 'import',
       kind: 'pdf_import',
       model: MODEL,

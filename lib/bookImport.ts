@@ -104,7 +104,7 @@ export async function extractBookWords(
   let aiCalls = 0;
   let done = 0;
   onProgress({ stage: 'extracting', done, total: chunks.length });
-  const perChunk = await mapLimit(chunks, CONCURRENCY, async c => { aiCalls++; return extractHeadwords(c); },
+  const perChunk = await mapLimit(chunks, CONCURRENCY, async c => { aiCalls++; return extractHeadwords(c, bookId); },
     () => onProgress({ stage: 'extracting', done: ++done, total: chunks.length }));
 
   const seen = new Set<string>();
@@ -123,7 +123,7 @@ export async function extractBookWords(
   // Keeps the book's original order, whichever path each word takes.
   const slots: (ImportCandidate | null)[] = headwords.map(h => {
     const hit = corpusLookup(h.de);
-    return hit ? { word: { ...hit, id: newCustomWordId(), level: bookId }, source: 'corpus' } : null;
+    return hit ? { word: { ...hit, id: newCustomWordId(), level: bookId, sourceId: hit.id }, source: 'corpus' } : null;
   });
   const unmatchedIdx = slots.flatMap((s, i) => (s ? [] : [i]));
   const batches: number[][] = [];
@@ -133,7 +133,7 @@ export async function extractBookWords(
   if (batches.length > 0) onProgress({ stage: 'defining', done, total: batches.length });
   await mapLimit(batches, CONCURRENCY, async idxs => {
     aiCalls++;
-    const defs = await defineHeadwords(idxs.map(i => headwords[i]));
+    const defs = await defineHeadwords(idxs.map(i => headwords[i]), bookId);
     // The model may drop noise entries, so match definitions back by
     // headword; positional only when nothing was dropped (it may also
     // normalize a headword, e.g. "Tischen" -> "Tisch").
