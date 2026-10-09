@@ -1,6 +1,6 @@
 'use client';
 
-import { Level, LEVEL_ORDER, BookLevelId, isBookLevelId, isCefrLevel, Word, WORDS } from './words';
+import { Level, LEVEL_ORDER, CefrLevel, BookLevelId, isBookLevelId, isCefrLevel, Word, WORDS } from './words';
 
 // Round 5 was removed — completing round 4 (full recall, no hints) once is
 // now the pass condition, both for a word's first climb in Study and for a
@@ -926,6 +926,15 @@ export interface ImportedBook {
   // same code is shown again rather than minting a new one each time, and
   // joining a code you already have is caught.
   shareCode?: string;
+  // The learner's own CEFR level while studying this book — what the AI
+  // features (sentence exercises, words-in-context paragraphs, pet chat)
+  // pitch their language at, since a book has no level of its own. Chosen
+  // when importing/joining; changeable in Profile. Absent on books from
+  // before this existed -> B1 (see cefrLevelFor).
+  cefrLevel?: CefrLevel;
+  // Bumped on any edit after creation (level, share code) — sync keeps the
+  // most recently edited copy of an entry.
+  updatedAt?: string;
   // Tombstone: set when the learner removes the book. The entry stays in
   // the registry (and syncs) so a union merge with another device's copy
   // can't resurrect it — see removeImportedBook and sync.ts's
@@ -968,12 +977,25 @@ export function getImportedBook(id: Level): ImportedBook | undefined {
   return getImportedBooks().find(b => b.id === id);
 }
 
+// The CEFR level to pitch AI-generated language at for a profile: a CEFR
+// level is itself; an imported book uses the level the learner chose for it.
+export function cefrLevelFor(level: Level): CefrLevel {
+  if (isCefrLevel(level)) return level;
+  return getImportedBook(level)?.cefrLevel ?? 'B1';
+}
+
+export function setImportedBookLevel(id: BookLevelId, cefrLevel: CefrLevel): void {
+  saveImportedBooksFromSync(getImportedBooksForSync().map(b => (
+    b.id === id ? { ...b, cefrLevel, updatedAt: new Date().toISOString() } : b
+  )));
+}
+
 export function getImportedBookByShareCode(code: string): ImportedBook | undefined {
   return getImportedBooks().find(b => b.shareCode === code);
 }
 
 export function setImportedBookShareCode(id: BookLevelId, code: string): void {
-  saveImportedBooksFromSync(getImportedBooksForSync().map(b => (b.id === id ? { ...b, shareCode: code } : b)));
+  saveImportedBooksFromSync(getImportedBooksForSync().map(b => (b.id === id ? { ...b, shareCode: code, updatedAt: new Date().toISOString() } : b)));
 }
 
 // Every profile that exists on this device — the CEFR levels plus every

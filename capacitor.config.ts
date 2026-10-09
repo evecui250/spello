@@ -18,19 +18,22 @@ const config: CapacitorConfig = {
     cleartext: false,
   },
   ios: {
-    // Real bug caught in the first simulator smoke test: Capacitor's own
-    // default here is 'never' (not 'automatic' -- easy to assume
-    // otherwise, since 'never' sounds like the more permissive/edge-to-
-    // edge option), which sets the WebView's UIScrollView
-    // contentInsetAdjustmentBehavior to .never. That doesn't just skip
-    // native inset adjustment -- it's also what left env(safe-area-inset-
-    // top/bottom) resolving to 0 in this app's own CSS (see layout.tsx's
-    // viewport-fit=cover + padding, added the same time as this), so the
-    // page's header rendered right under the status bar/Dynamic Island
-    // with nothing pushing it clear. 'automatic' is the standard UIKit
-    // answer for exactly this "let the system reserve safe-area space,
-    // and report it correctly to the page" case.
-    contentInset: 'automatic',
+    // Edge to edge: the WebView fills the whole screen, under the status
+    // bar and home indicator, and the page itself keeps content clear of
+    // them with env(safe-area-inset-*) padding (layout.tsx's main/NavBar,
+    // with viewport-fit=cover). This replaced 'automatic', which kept the
+    // status-bar strip OUTSIDE the page — a separate black (or white, once
+    // scrolled) band instead of the app's own background. Verified in the
+    // iOS simulator that env(safe-area-inset-top) is reported correctly
+    // with 'never' (it was 'automatic' that zeroed it, by already
+    // insetting the content itself).
+    contentInset: 'never',
+    // Shown for the instant before the page paints (Forest's top color).
+    backgroundColor: '#0f3d3a',
+  },
+  plugins: {
+    // The page sets light/dark status-bar text per theme (AppBackground).
+    StatusBar: { overlaysWebView: true, style: 'DARK' },
   },
 };
 

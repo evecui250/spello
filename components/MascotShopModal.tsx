@@ -85,7 +85,7 @@ export default function MascotShopModal({ onClose, onProfileChange }: Props) {
       onClick={close}
     >
       <div
-        className="w-full max-w-sm max-h-[85vh] overflow-y-auto bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-4"
+        className="w-full max-w-sm max-h-[min(85dvh,calc(100dvh-var(--safe-top)-var(--safe-bottom)-2rem))] overflow-y-auto bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-4"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">

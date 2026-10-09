@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { StatusBar, Style } from '@capacitor/status-bar';
 import { getTheme, Theme, THEME_CHANGED_EVENT, getCardMode, CardMode, CARD_MODE_CHANGED_EVENT, resolveCardMode } from '../lib/storage';
 
 // The app's persistent backdrop — same structural idea across every theme
@@ -273,6 +275,25 @@ export default function AppBackground() {
 
   const cfg = THEME_CONFIG[theme];
   const gradient = resolvedCardMode === 'dark' && cfg.gradientNight ? cfg.gradientNight : cfg.gradient;
+
+  // The page is drawn edge to edge, under the iPhone's status bar (see
+  // capacitor.config.ts's contentInset and layout.tsx's viewport-fit) —
+  // so that strip shows this theme instead of a separate black/white band.
+  // Two things follow the theme's top color: the root background (what
+  // shows in any gap before this fixed layer paints) and, in the native
+  // app, whether the clock/battery text is light or dark — white text on
+  // the light themes (Citrus, Meadow, Bubblegum, Vanilla) would be
+  // unreadable.
+  useEffect(() => {
+    const top = gradient.match(/#[0-9a-fA-F]{6}/)?.[0] ?? '#0f3d3a';
+    document.documentElement.style.backgroundColor = top;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', top);
+    if (!Capacitor.isNativePlatform()) return;
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(top.slice(i, i + 2), 16) / 255);
+    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    // Style.Dark = light text (for a dark background), Style.Light = dark text.
+    StatusBar.setStyle({ style: luminance > 0.55 ? Style.Light : Style.Dark }).catch(() => {});
+  }, [gradient]);
 
   return (
     <div aria-hidden className={`fixed inset-0 -z-10 overflow-hidden bg-gradient-to-b ${gradient}`}>

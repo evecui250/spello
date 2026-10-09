@@ -86,6 +86,7 @@ export function mergeImportedBooks(local: ImportedBook[], remote: unknown): Impo
   for (const b of local) {
     const r = byId.get(b.id);
     if (r?.deletedAt && !b.deletedAt) continue; // keep the remote tombstone
+    if (r && !b.deletedAt && (r.updatedAt ?? '') > (b.updatedAt ?? '')) continue; // edited more recently there
     byId.set(b.id, !b.shareCode && r?.shareCode ? { ...b, shareCode: r.shareCode } : b);
   }
   return [...byId.values()];

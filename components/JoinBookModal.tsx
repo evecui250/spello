@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchSharedBook, addSharedBook, normalizeBookCode, SharedBook } from '../lib/bookImport';
-import { getImportedBookByShareCode } from '../lib/storage';
-import { BookLevelId } from '../lib/words';
+import { getImportedBookByShareCode, cefrLevelFor, getActiveLevel } from '../lib/storage';
+import { BookLevelId, CefrLevel } from '../lib/words';
+import CefrLevelSelect from './CefrLevelSelect';
 
 // Settings' "Join with a book code": a classmate shared a book they
 // imported from a PDF (see ImportBookModal's "Create book code"); entering
@@ -18,6 +19,7 @@ export default function JoinBookModal({ onClose, onJoined }: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [found, setFound] = useState<SharedBook | null>(null);
+  const [cefrLevel, setCefrLevel] = useState<CefrLevel>(() => cefrLevelFor(getActiveLevel()));
 
   async function handleLookup() {
     const c = normalizeBookCode(code);
@@ -47,7 +49,7 @@ export default function JoinBookModal({ onClose, onJoined }: {
       // saved is exactly what's on the server right now.
       const book = await fetchSharedBook(found.code, true);
       if (!book) throw new Error('This book is no longer available.');
-      onJoined(addSharedBook(book).id);
+      onJoined(addSharedBook(book, cefrLevel).id);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add this book.');
       setLoading(false);
@@ -91,6 +93,10 @@ export default function JoinBookModal({ onClose, onJoined }: {
             <span className="text-ink-soft text-xs truncate">
               {found.words.slice(0, 6).map(w => (w.article ? `${w.article} ${w.de}` : w.de)).join(', ')}…
             </span>
+            <label className="flex items-center justify-between gap-3 text-sm text-ink">
+              <span>Your level <span className="text-ink-soft text-xs">(for sentences & chat)</span></span>
+              <CefrLevelSelect value={cefrLevel} onChange={setCefrLevel} />
+            </label>
             <button
               type="button"
               onClick={handleAdd}

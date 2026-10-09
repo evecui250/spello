@@ -368,7 +368,7 @@ export default function MistakesPage() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           onClick={() => setRedoTarget(null)}
         >
-          <div className="w-full max-w-sm max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-sm max-h-[min(85dvh,calc(100dvh-var(--safe-top)-var(--safe-bottom)-2rem))] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <MistakeRedoCard
               word={redoTarget.word}
               mistake={redoTarget.mistake}

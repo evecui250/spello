@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import WebKit
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -46,4 +47,46 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 
+}
+
+// Reports the device's real safe-area insets (status bar / Dynamic Island
+// at the top, home indicator at the bottom) to the page as the CSS
+// variables --safe-top / --safe-bottom (see styles/globals.css). The app
+// draws edge to edge (capacitor.config.ts: contentInset 'never') so the
+// theme's background fills the status-bar strip, but in that mode this
+// WKWebView reports env(safe-area-inset-*) as 0 — verified in the iOS 26
+// simulator — so the page has no other way to know how far to keep its
+// content clear of the clock and the home indicator.
+class MainViewController: CAPBridgeViewController {
+    private var lastInsets: UIEdgeInsets?
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        reportSafeArea()
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        reportSafeArea()
+    }
+
+    private func reportSafeArea() {
+        guard let webView = webView else { return }
+        let insets = view.safeAreaInsets
+        if insets == lastInsets { return }
+        lastInsets = insets
+        let js = """
+        (function set() {
+          var d = document.documentElement;
+          if (!d) { return setTimeout(set, 0); }
+          d.style.setProperty('--safe-top', '\(insets.top)px');
+          d.style.setProperty('--safe-bottom', '\(insets.bottom)px');
+        })();
+        """
+        // Every future page load (a reload, or the site navigating) gets it
+        // at document start; the page that's already showing gets it now.
+        webView.configuration.userContentController.addUserScript(
+            WKUserScript(source: js, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
 }

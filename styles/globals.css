@@ -232,6 +232,15 @@ h1, h2, h3 { font-family: var(--font-display); }
       every form control to render at >=16px avoids the trigger entirely --
       deliberately NOT solved via `user-scalable=no` on the viewport meta,
       which would also block legitimate pinch-zoom for low-vision users. */
+/* Safe-area insets (notch / Dynamic Island, home indicator). In a browser
+   these are env()'s values; the iOS app overwrites both on <html> with
+   the real numbers (ios/App/App/AppDelegate.swift's MainViewController),
+   because its edge-to-edge WKWebView reports env() as 0. Use these
+   variables, never env(safe-area-inset-*) directly. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
 html, body {
   height: 100%;
   /* Kills the rubber-band bounce past the top/bottom edge and the

@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSettings, saveSettings, switchToLevel, getImportedBookByShareCode, markOnboardingDone, Settings, MascotStageId, getTheme, saveTheme, Theme, saveLocalAvatarId, saveLocalNickname } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, getImportedBookByShareCode, setImportedBookLevel, cefrLevelFor, markOnboardingDone, Settings, MascotStageId, getTheme, saveTheme, Theme, saveLocalAvatarId, saveLocalNickname } from '../../lib/storage';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
-import { Level } from '../../lib/words';
+import { Level, CefrLevel, isCefrLevel } from '../../lib/words';
 import { scheduleSync } from '../../lib/sync';
 import { fetchSharedBook, addSharedBook, normalizeBookCode, SharedBook } from '../../lib/bookImport';
 import { AVATAR_CATALOG, heroImageFor, getDisplayProfile, setAvatarId as saveRemoteAvatarId, setNickname as saveRemoteNickname } from '../../lib/shop';
@@ -50,7 +50,9 @@ export default function WelcomePage() {
   // changing anything just re-saves what was already there instead of
   // silently resetting it to these defaults.
   const existing = useMemo(() => getSettings(), []);
-  const [level, setLevel] = useState<Level>(existing.level);
+  // Always a CEFR level here — with a class book code it becomes that
+  // book's level (what its sentences/chat are pitched at), see finish().
+  const [level, setLevel] = useState<CefrLevel>(isCefrLevel(existing.level) ? existing.level : cefrLevelFor(existing.level));
   // Optional class book code (see components/JoinBookModal.tsx): when one
   // is found, finishing adds that book and makes it the active one, so a
   // student whose class shares its word list starts right on it instead
@@ -128,8 +130,9 @@ export default function WelcomePage() {
         // Already added (welcome revisited from Settings) -> just switch to it.
         const existingBook = getImportedBookByShareCode(sharedBook.code);
         const fresh = existingBook ? null : await fetchSharedBook(sharedBook.code, true);
-        const id = existingBook?.id ?? (fresh ? addSharedBook(fresh).id : null);
+        const id = existingBook?.id ?? (fresh ? addSharedBook(fresh, level).id : null);
         if (!id) throw new Error('This book is no longer available.');
+        if (existingBook) setImportedBookLevel(existingBook.id, level);
         switchToLevel(id);
         finalLevel = id;
       } catch (e) {
@@ -165,11 +168,11 @@ export default function WelcomePage() {
             <p className="text-stone-500 text-sm -mt-1">
               Defaults are fine if you&apos;re not sure — you can always change this later in Profile.
             </p>
-            <div className={sharedBook ? 'hidden' : ''}>
-              <label className="block font-semibold text-stone-800 mb-1">Level</label>
+            <div>
+              <label className="block font-semibold text-stone-800 mb-1">{sharedBook ? 'Your level' : 'Level'}</label>
               <select
                 value={level}
-                onChange={e => setLevel(e.target.value as Level)}
+                onChange={e => setLevel(e.target.value as CefrLevel)}
                 className="w-full border-2 border-indigo-400 rounded-lg px-3 py-2 text-stone-800 focus:outline-none focus:border-indigo-500"
               >
                 <option value="A1">A1</option>
@@ -179,7 +182,7 @@ export default function WelcomePage() {
               </select>
             </div>
             {sharedBook ? (
-              <p className="text-stone-400 text-sm">You&apos;ll study your class&apos;s book — you can switch to A1–B2 any time in Profile.</p>
+              <p className="text-stone-400 text-sm">You&apos;ll study your class&apos;s book. Your level sets how hard its example sentences, paragraphs and chat are — you can change it any time in Profile.</p>
             ) : (
               <p className="text-stone-400 text-sm">Not sure which level? A1 is the easiest, for absolute beginners — B2 is the most advanced available right now.</p>
             )}

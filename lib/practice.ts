@@ -1,11 +1,12 @@
 'use client';
 
-import { WORDS, Word, wordsForLevel, Level, CefrLevel, isCefrLevel, glossFor } from './words';
+import { WORDS, Word, wordsForLevel, Level, CefrLevel, glossFor } from './words';
 import {
   getAllProgress, getSettings, today, Round, WordProgress, MascotStageId,
   getDailySession, saveDailySession, SessionPhase, getWordProgress, saveWordProgress,
   getMergedProgressAcrossLevels, ParagraphBlank, ParagraphExercise,
   getAllCustomWords, getAllCustomWordsAcrossLevels, getAllCustomWordsForLevel,
+  cefrLevelFor,
 } from './storage';
 import { recordMilestonePass, REVIEW_PLAN, MASTERY_DAYS_AFTER_INTRODUCTION } from './srs';
 
@@ -339,7 +340,7 @@ const PREREQUISITE_LEVELS: Record<CefrLevel, CefrLevel[]> = {
 // English glosses (what the AI actually needs — the learner has to know
 // the English concept to translate it into German).
 export function getKnownVocabulary(level: Level): string[] {
-  const lowerWords = (isCefrLevel(level) ? PREREQUISITE_LEVELS[level] : []).flatMap(l => allWordsForLevel(l));
+  const lowerWords = PREREQUISITE_LEVELS[cefrLevelFor(level)].flatMap(l => allWordsForLevel(l));
   const baseline = level === 'A1' ? wordsForLevel('A1').filter(w => w.highFrequency) : [];
   const seen = new Set<string>();
   const result: string[] = [];
@@ -1222,7 +1223,7 @@ export const MAX_WORDS_IN_CONTEXT_EXERCISES = 3;
 // DailySessionFlow's generation effect and combineParagraphExercises
 // below) -- not this function's job.
 export function buildWordsInContextBatches(words: Word[], level: Level): Word[][] {
-  const range = (isCefrLevel(level) ? WORDS_IN_CONTEXT_RANGE[level] : undefined) ?? WORDS_IN_CONTEXT_RANGE.B1;
+  const range = WORDS_IN_CONTEXT_RANGE[cefrLevelFor(level)] ?? WORDS_IN_CONTEXT_RANGE.B1;
   const maxTargets = range.maxTargets;
   // Defers anything beyond 3 groups' worth, prioritizing original order
   // (see this function's own comment on why that's the proxy used).

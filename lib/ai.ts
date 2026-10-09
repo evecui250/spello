@@ -3,6 +3,7 @@
 import { FunctionsFetchError } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { WordType, isBookLevelId } from './words';
+import { cefrLevelFor } from './storage';
 
 // Always succeeds now — see correct-sentence's own comment for why: an
 // unusable/absent attempt falls back to a fresh direct translation
@@ -61,17 +62,18 @@ function rethrow(error: unknown): never {
 // AIUnreachableError a genuine network failure already does, so a hang
 // reaches the same retry-capable UI instead of hanging indefinitely.
 const AI_CALL_TIMEOUT_MS = 20000;
-const IMPORTED_BOOK_AI_LEVEL = 'B1';
 // timeoutMs is opt-in for the one genuinely slow caller (bulk vocabulary
 // extraction, see extractVocabulary) — every other call keeps the 20s
 // default.
 function invokeWithTimeout<T>(fnName: string, body: object, timeoutMs = AI_CALL_TIMEOUT_MS): Promise<{ data: T | null; error: unknown }> {
   // Every Edge Function's prompt reads `level` as a CEFR level ("roughly
   // CEFR B1 learner…"). An imported book's `book-<uuid>` id means nothing
-  // there, so it's sent as B1 — a neutral middle register — at this one
-  // choke point rather than at every wrapper below.
-  if ('level' in body && isBookLevelId((body as { level?: unknown }).level)) {
-    body = { ...body, level: IMPORTED_BOOK_AI_LEVEL };
+  // there, so it's sent as the level the learner chose for that book (see
+  // storage.ts's cefrLevelFor) — at this one choke point rather than at
+  // every wrapper below.
+  const bodyLevel = (body as { level?: unknown }).level;
+  if ('level' in body && isBookLevelId(bodyLevel)) {
+    body = { ...body, level: cefrLevelFor(bodyLevel) };
   }
   return new Promise(resolve => {
     let settled = false;

@@ -5,8 +5,9 @@ import { createPortal } from 'react-dom';
 import { getPdfPagePreviews, formatPageList, PdfPagePreview, MAX_IMPORT_PAGES, findContinuationPages, findVocabularyPages } from '../lib/pdf';
 import { extractBookWords, ImportCandidate, ImportStage, shareImportedBook } from '../lib/bookImport';
 import { DailyLimitReachedError, AIUnreachableError } from '../lib/ai';
-import { saveImportedBook, newBookId, MAX_WORDS_PER_BOOK, ImportedBook } from '../lib/storage';
-import { BookLevelId } from '../lib/words';
+import { saveImportedBook, newBookId, MAX_WORDS_PER_BOOK, ImportedBook, cefrLevelFor, getActiveLevel } from '../lib/storage';
+import { BookLevelId, CefrLevel } from '../lib/words';
+import CefrLevelSelect from './CefrLevelSelect';
 import { scheduleSync } from '../lib/sync';
 
 // Settings' "Import a book from PDF" flow: pick PDF -> tick pages ->
@@ -68,6 +69,7 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
   // ticked (see findContinuationPages) — labelled so it's not a surprise.
   const [autoAdded, setAutoAdded] = useState<Set<number>>(new Set());
   const bookId = useRef<BookLevelId>(newBookId());
+  const [cefrLevel, setCefrLevel] = useState<CefrLevel>(() => cefrLevelFor(getActiveLevel()));
 
   const busy = step === 'working';
 
@@ -173,6 +175,7 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
       createdAt: new Date().toISOString(),
       wordCount: selected.length,
       sourcePages: formatPageList([...pickedPages]),
+      cefrLevel,
     };
     try {
       saveImportedBook(book, selected.map(c => c.word));
@@ -188,10 +191,11 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      style={{ paddingTop: 'calc(1rem + var(--safe-top))', paddingBottom: 'calc(1rem + var(--safe-bottom))' }}
       onClick={() => { if (!busy) onClose(); }}
     >
       <div
-        className="w-full max-w-md max-h-[90vh] bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-3"
+        className="w-full max-w-md max-h-full bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-3"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -309,6 +313,10 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
                 onChange={e => setName(e.target.value.slice(0, 60))}
                 className="w-full border-2 border-accent/70 rounded-lg px-3 py-2 text-ink focus:outline-none focus:border-accent"
               />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm text-ink">
+              <span className="font-semibold">Your level <span className="font-normal text-ink-soft text-xs">(for sentences & chat)</span></span>
+              <CefrLevelSelect value={cefrLevel} onChange={setCefrLevel} />
             </label>
             <button type="button" onClick={handleSave} disabled={selected.length === 0} className={PRIMARY_BTN}>
               Save book ({selected.length} word{selected.length === 1 ? '' : 's'})

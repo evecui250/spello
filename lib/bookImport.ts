@@ -1,6 +1,6 @@
 'use client';
 
-import { WORDS, Word, BookLevelId } from './words';
+import { WORDS, Word, BookLevelId, CefrLevel } from './words';
 import { extractHeadwords, defineHeadwords, Headword } from './ai';
 import { extractPdfPagesText, chunkPageTexts } from './pdf';
 import {
@@ -209,7 +209,7 @@ export async function fetchSharedBook(code: string, join = false): Promise<Share
 // Adds a shared book as this learner's own imported book: fresh book id
 // and word ids (ids are per-device-unique; reusing the sharer's would
 // collide if the same person joined on a device that already has it).
-export function addSharedBook(shared: SharedBook): ImportedBook {
+export function addSharedBook(shared: SharedBook, cefrLevel: CefrLevel): ImportedBook {
   const id = newBookId();
   const book: ImportedBook = {
     id,
@@ -218,6 +218,7 @@ export function addSharedBook(shared: SharedBook): ImportedBook {
     wordCount: shared.words.length,
     sourcePages: shared.sourcePages,
     shareCode: shared.code,
+    cefrLevel,
   };
   saveImportedBook(book, shared.words.map(w => ({ ...w, id: newCustomWordId(), level: id }) as Word));
   scheduleSync();

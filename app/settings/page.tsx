@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getSettings, saveSettings, switchToLevel, getImportedBooks, levelDisplayName, ImportedBook, removeImportedBook, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, getImportedBooks, levelDisplayName, ImportedBook, removeImportedBook, setImportedBookLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch, allWordsForLevel } from '../../lib/practice';
 import { Level, LEVEL_SOURCE, isCefrLevel, isBookLevelId } from '../../lib/words';
@@ -16,6 +16,7 @@ import BugReportButton from '../../components/BugReportButton';
 import SoundPicker from '../../components/SoundPicker';
 import ImportBookModal, { BookCodeDisplay } from '../../components/ImportBookModal';
 import JoinBookModal from '../../components/JoinBookModal';
+import CefrLevelSelect from '../../components/CefrLevelSelect';
 import { supabase } from '../../lib/supabase';
 
 // Purely cosmetic — just decides whether to show the "Admin" link at all.
@@ -382,6 +383,13 @@ export default function SettingsPage() {
           )}
           {activeBook && (
             <div className="mt-3 border border-paper-line rounded-xl p-3 flex flex-col gap-2">
+              <label className="flex items-center justify-between gap-3 text-sm text-ink">
+                <span>Your level for this book <span className="block text-ink-soft text-xs">How hard its sentences, paragraphs and chat are</span></span>
+                <CefrLevelSelect
+                  value={activeBook.cefrLevel ?? 'B1'}
+                  onChange={l => { setImportedBookLevel(activeBook.id, l); setImportedBooks(getImportedBooks()); scheduleSync(); }}
+                />
+              </label>
               {activeBook.shareCode ? (
                 <>
                   <span className="text-ink-soft text-xs">Book code — classmates enter it under “Join with a book code”:</span>

@@ -211,19 +211,19 @@ export default function HomePage() {
     // column so it doesn't spread out on a laptop.
     <div
       className="relative flex flex-col mx-auto w-full max-w-sm"
-      style={{ minHeight: 'calc(100dvh - 7rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))' }}
+      style={{ minHeight: 'calc(100dvh - 7rem - var(--safe-top) - var(--safe-bottom))' }}
     >
       <div className="w-full flex items-start justify-between gap-3">
         <div>
           {nickname ? (
             <>
-              <p className="text-sm font-medium text-on-bg/70">{greetingWord()},</p>
-              <h1 className="text-2xl font-bold text-on-bg -mt-0.5" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+              <p className="text-lg font-medium text-on-bg/75">{greetingWord()},</p>
+              <h1 className="text-[2rem] leading-tight font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
                 {nickname}
               </h1>
             </>
           ) : (
-            <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+            <h1 className="text-[2rem] leading-tight font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
               {greetingWord()}!
             </h1>
           )}
@@ -238,21 +238,24 @@ export default function HomePage() {
         </button>
       </div>
 
-      {/* Decorative only (see PetChat's Chat button below for why tapping
-          it no longer opens chat). Sized by screen height, so it fills a
-          tall phone and still leaves room on an iPhone SE. */}
-      <div className="flex-1 flex items-center justify-center py-3">
-        <img
-          ref={petImgRef}
-          src={`${BASE}/${heroImageFor(avatarId)}`}
-          alt="Your pet"
-          onLoad={() => setPetLoaded(true)}
-          style={{ height: 'clamp(110px, 22dvh, 190px)' }}
-          className={`w-auto max-w-full object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
-        />
-      </div>
+      {/* The pet, the session card and the two buttons are one group,
+          centered in the space between the greeting and the tab bar — so
+          the pet sits just above the card rather than floating in its own
+          band of empty space. Pet height follows screen height (smaller
+          on an iPhone SE, capped on big phones). Decorative only: Chat is
+          the button below. */}
+      <div className="flex-1 w-full flex flex-col justify-center gap-3 py-3">
+        <div className="flex justify-center">
+          <img
+            ref={petImgRef}
+            src={`${BASE}/${heroImageFor(avatarId)}`}
+            alt="Your pet"
+            onLoad={() => setPetLoaded(true)}
+            style={{ height: 'clamp(110px, 25dvh, 220px)' }}
+            className={`w-auto max-w-full object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
+          />
+        </div>
 
-      <div className="w-full flex flex-col gap-3">
         {/* One card shape in every state, so the screen doesn't reshape
             itself once the goal is done. */}
         <div className="w-full bg-white/10 backdrop-blur-md rounded-3xl border border-white/15 shadow-sm p-4 flex flex-col gap-4">

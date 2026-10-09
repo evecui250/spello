@@ -86,8 +86,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main
           className="max-w-2xl mx-auto px-4"
           style={{
-            paddingBottom: 'calc(5.5rem + env(safe-area-inset-bottom))',
-            paddingTop: 'calc(1.5rem + env(safe-area-inset-top))',
+            paddingBottom: 'calc(5.5rem + var(--safe-bottom))',
+            paddingTop: 'calc(1.5rem + var(--safe-top))',
           }}
         >
           {children}
