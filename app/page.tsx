@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   getAllProgress, getSettings, today, PROGRESS_CHANGED_EVENT,
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
-  getStreak, levelDisplayName,
+  getPetAgeDays, formatPetAge, levelDisplayName,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
 import { SYNCED_EVENT } from '../lib/sync';
@@ -52,7 +52,7 @@ export default function HomePage() {
   // all until there's something for it to show.
   const [hasNotebookActivity, setHasNotebookActivity] = useState(false);
   const [ready, setReady] = useState(false);
-  const [streak, setStreak] = useState(0);
+  const [petAgeDays, setPetAgeDays] = useState(0);
   const [bookName, setBookName] = useState('');
 
   // The learner's chosen pet + nickname — works whether or not they're
@@ -160,7 +160,7 @@ export default function HomePage() {
       const allProgress = Object.values(progress);
       setMistakeCount(allProgress.filter(p => !!p.lastMistake).length);
       setHasNotebookActivity(allProgress.some(p => !!p.lastMistake || !!p.exampleSentence));
-      setStreak(getStreak().count);
+      setPetAgeDays(getPetAgeDays());
       setBookName(levelDisplayName(settings.level));
       setReady(true);
     };
@@ -262,8 +262,10 @@ export default function HomePage() {
               {greetingWord()}!
             </h1>
           )}
-          {streak > 0 && (
-            <p className="mt-1 text-sm font-semibold text-on-bg/85">🔥 {streak}-day streak</p>
+          {/* The pet's age = days studied (see getPetAgeDays) — it only
+              ever grows, unlike the streak (which lives on Progress). */}
+          {petAgeDays > 0 && (
+            <p className="mt-1 text-sm font-semibold text-on-bg/85">Pet age: {formatPetAge(petAgeDays)}</p>
           )}
         </div>
       </div>

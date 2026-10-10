@@ -568,6 +568,29 @@ export function getActivityCalendarDays(): { full: string[]; partial: string[] }
   return { full: [...full], partial };
 }
 
+// The pet's age, in days: every calendar day the learner studied anything
+// — a full-goal day, a partial day, or any day with a word learned or
+// reviewed (so a short 3-word day still counts). Never goes down, unlike
+// the streak; shown on Home in its place. Built from records that sync,
+// so it's the same on every device.
+export function getPetAgeDays(): number {
+  const days = new Set([...getGoalDaysRecordForSync(), ...getPartialDaysRecordForSync()]);
+  for (const [date, entry] of Object.entries(getDailyWordLog())) {
+    if (entry.learned.length > 0 || entry.reviewed.length > 0) days.add(date);
+  }
+  return days.size;
+}
+
+// "12 days" / "5 months" / "1 year 3 months".
+export function formatPetAge(days: number): string {
+  const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
+  if (days < 30) return plural(days, 'day');
+  if (days < 365) return plural(Math.floor(days / 30), 'month');
+  const years = Math.floor(days / 365);
+  const months = Math.floor((days % 365) / 30);
+  return `${plural(years, 'year')}${months > 0 ? ` ${plural(months, 'month')}` : ''}`;
+}
+
 // date -> word ids touched that day. See DAILY_WORD_LOG_KEY's own comment
 // for why this is a real log rather than derived from WordProgress.
 export type DailyWordLog = Record<string, { learned: string[]; reviewed: string[] }>;
@@ -1022,14 +1045,32 @@ export function levelDisplayName(level: Level): string {
 // progress, so another device shows them too.
 const SELECTABLE_CEFR: CefrLevel[] = ['A1', 'A2', 'B1', 'B2'];
 const ADDED_LEVELS_KEY = 'wb2_added_levels';
+// Levels the learner swiped away from their list. Hiding never touches
+// progress — adding the level back brings it all back.
+const HIDDEN_LEVELS_KEY = 'wb2_hidden_levels';
+
+function readLevelList(key: string): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
 
 export function myCefrLevels(): CefrLevel[] {
   if (typeof window === 'undefined') return [];
-  let added: string[] = [];
-  try { added = JSON.parse(localStorage.getItem(ADDED_LEVELS_KEY) || '[]'); } catch { /* none */ }
+  const added = readLevelList(ADDED_LEVELS_KEY);
+  const hidden = readLevelList(HIDDEN_LEVELS_KEY);
   const active = getActiveLevel();
-  return SELECTABLE_CEFR.filter(l => l === active || added.includes(l)
-    || Object.keys(getAllProgressForLevel(l)).length > 0);
+  return SELECTABLE_CEFR.filter(l => l === active || (!hidden.includes(l) && (added.includes(l)
+    || Object.keys(getAllProgressForLevel(l)).length > 0)));
+}
+
+export function hideCefrLevel(level: CefrLevel): void {
+  const hidden = readLevelList(HIDDEN_LEVELS_KEY);
+  if (!hidden.includes(level)) localStorage.setItem(HIDDEN_LEVELS_KEY, JSON.stringify([...hidden, level]));
+  localStorage.setItem(ADDED_LEVELS_KEY, JSON.stringify(readLevelList(ADDED_LEVELS_KEY).filter(l => l !== level)));
 }
 
 export function otherCefrLevels(): CefrLevel[] {
@@ -1038,9 +1079,9 @@ export function otherCefrLevels(): CefrLevel[] {
 }
 
 export function addCefrLevel(level: CefrLevel): void {
-  let added: string[] = [];
-  try { added = JSON.parse(localStorage.getItem(ADDED_LEVELS_KEY) || '[]'); } catch { /* none */ }
+  const added = readLevelList(ADDED_LEVELS_KEY);
   if (!added.includes(level)) localStorage.setItem(ADDED_LEVELS_KEY, JSON.stringify([...added, level]));
+  localStorage.setItem(HIDDEN_LEVELS_KEY, JSON.stringify(readLevelList(HIDDEN_LEVELS_KEY).filter(l => l !== level)));
 }
 
 export function newBookId(): BookLevelId {

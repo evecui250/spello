@@ -78,6 +78,9 @@ interface LeaderboardEntry {
   avatarId: string;
   equipped: { collar: string | null; headwear: string | null; sidewear: string | null };
   points: number;
+  // Days this learner has studied at all — their pet's age (same rule as
+  // the app's lib/storage.ts getPetAgeDays), shown in the profile popup.
+  petAgeDays: number;
 }
 
 Deno.serve(async (req: Request) => {
@@ -103,6 +106,28 @@ Deno.serve(async (req: Request) => {
     ]);
 
     const profileByUserId = new Map((profileRows ?? []).map(p => [p.user_id, p]));
+
+    // Pet age for everyone with activity in this fetch window (the only
+    // people who can be ranked): union of their full-goal days, partial
+    // days and word-log days — synced fields of user_progress.
+    const activeIds = [...new Set([
+      ...(activityRows ?? []).map(r => r.user_id),
+      ...(gameRows ?? []).map(r => r.user_id),
+    ])].filter(Boolean);
+    const petAgeByUserId = new Map<string, number>();
+    if (activeIds.length > 0) {
+      const { data: progressRows } = await admin
+        .from('user_progress')
+        .select('user_id, goal_days, partial_days, word_log')
+        .in('user_id', activeIds);
+      for (const r of progressRows ?? []) {
+        const days = new Set<string>([...(r.goal_days ?? []), ...(r.partial_days ?? [])]);
+        for (const [d, e] of Object.entries((r.word_log ?? {}) as Record<string, { learned?: string[]; reviewed?: string[] }>)) {
+          if ((e?.learned?.length ?? 0) > 0 || (e?.reviewed?.length ?? 0) > 0) days.add(d);
+        }
+        petAgeByUserId.set(r.user_id, days.size);
+      }
+    }
     const emailByUserId = new Map((usersData?.users ?? []).map(u => [u.id, u.email ?? null]));
 
     // One combined per-user, per-day points map: daily_activity's
@@ -186,6 +211,7 @@ Deno.serve(async (req: Request) => {
       // (only when timestamps are genuinely identical).
       totals.sort((a, b) => b.points - a.points || (a.lastTimestamp < b.lastTimestamp ? -1 : a.lastTimestamp > b.lastTimestamp ? 1 : (a.userId < b.userId ? -1 : 1)));
       return totals.map((t, i) => {
+        const petAgeDays = petAgeByUserId.get(t.userId) ?? 0;
         const profile = profileByUserId.get(t.userId);
         const email = emailByUserId.get(t.userId);
         const displayName = profile?.nickname || (email ? maskEmail(email) : 'Anonymous');
@@ -197,6 +223,7 @@ Deno.serve(async (req: Request) => {
             sidewear: profile?.equipped_sidewear_id ?? null,
           },
           points: t.points,
+          petAgeDays,
         };
       });
     }

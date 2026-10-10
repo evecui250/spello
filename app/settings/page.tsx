@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getSettings, saveSettings, switchToLevel, getImportedBooks, levelDisplayName, ImportedBook, removeImportedBook, setImportedBookLevel, myCefrLevels, otherCefrLevels, addCefrLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, getImportedBooks, levelDisplayName, ImportedBook, removeImportedBook, setImportedBookLevel, myCefrLevels, otherCefrLevels, addCefrLevel, hideCefrLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch, allWordsForLevel } from '../../lib/practice';
 import { Level, CefrLevel, LEVEL_SOURCE, isCefrLevel, isBookLevelId } from '../../lib/words';
@@ -17,6 +17,7 @@ import SoundPicker from '../../components/SoundPicker';
 import ImportBookModal, { BookCodeDisplay } from '../../components/ImportBookModal';
 import JoinBookModal from '../../components/JoinBookModal';
 import CefrLevelSelect from '../../components/CefrLevelSelect';
+import BookList from '../../components/BookList';
 import { supabase } from '../../lib/supabase';
 
 // Purely cosmetic — just decides whether to show the "Admin" link at all.
@@ -89,7 +90,7 @@ function SettingsPageInner() {
   const [soundName, setSoundName] = useState('Triad Bloom');
   const [importOpen, setImportOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
-  const [addLevelOpen, setAddLevelOpen] = useState(false);
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
   // Read after mount (not during render) so the first client render matches
   // the prerendered page; refreshed whenever the book or book list changes.
   const [myLevels, setMyLevels] = useState<CefrLevel[]>([]);
@@ -192,15 +193,37 @@ function SettingsPageInner() {
     }
   }
 
-  function handleRemoveActiveBook() {
-    if (!activeBook) return;
-    const note = activeBook.shareCode ? ' Classmates who already joined keep their copy.' : '';
-    if (!window.confirm(`Remove “${activeBook.name}” and all your progress on its ${activeBook.wordCount} words? This can't be undone.${note}`)) return;
-    removeImportedBook(activeBook.id);
+  // Swipe-to-remove. A Spello level is only hidden from the list (its
+  // progress stays and returns if it's added again); an imported book is
+  // deleted with its progress. You always keep at least one book, and
+  // removing the one you're studying moves you to the next in the list.
+  function handleRemoveBook(id: Level) {
+    const all: Level[] = [...myLevels, ...importedBooks.map(b => b.id)];
+    if (all.length <= 1) {
+      window.alert('You need at least one book. Add another book first, then remove this one.');
+      return;
+    }
+    const book = isBookLevelId(id) ? importedBooks.find(b => b.id === id) : undefined;
+    if (book) {
+      const note = book.shareCode ? ' Classmates who joined with its code keep their copy.' : '';
+      if (!window.confirm(`Remove “${book.name}” and your progress on its words? This can't be undone.${note}`)) return;
+      removeImportedBook(book.id);
+    } else if (isCefrLevel(id)) {
+      if (!window.confirm(`Remove ${id} from your books? Your progress is kept — add ${id} again any time to continue.`)) return;
+      hideCefrLevel(id);
+    }
+    if (id === level) {
+      const next = all.find(l => l !== id)!;
+      handleLevelChange(next);
+    } else {
+      applySettings(getSettings());
+    }
     setImportedBooks(getImportedBooks());
-    applySettings(getSettings());
+    setMyLevels(myCefrLevels());
+    setOtherLevels(otherCefrLevels());
     syncNow();
   }
+
 
 
   // Recomputed live as the sliders move, so the user can see the effect of
@@ -319,105 +342,118 @@ function SettingsPageInner() {
       )}
 
       {section === 'books' && (
-      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-6">
-        <div>
-          <label className="block font-semibold text-ink mb-1">Book you&apos;re studying</label>
-          <select
-            value={level}
-            onChange={e => handleLevelChange(e.target.value as Level)}
-            className="w-full border-2 border-accent/70 rounded-lg px-3 py-2 text-ink focus:outline-none focus:border-accent"
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5 flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <span className="font-semibold text-ink">My books</span>
+          <button
+            type="button"
+            onClick={() => setAddSheetOpen(true)}
+            aria-label="Add a book"
+            className="w-9 h-9 rounded-full bg-accent text-white text-2xl leading-none flex items-center justify-center hover:bg-accent-deep active:scale-95 transition-all"
           >
-            {myLevels.map(l => <option key={l} value={l}>{l}</option>)}
-            {importedBooks.length > 0 && (
-              <optgroup label="My imported books">
-                {importedBooks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </optgroup>
-            )}
-          </select>
-          {otherLevels.length > 0 && (
-            addLevelOpen ? (
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-ink-soft text-sm">Add:</span>
-                {otherLevels.map(l => (
-                  <button
-                    key={l}
-                    type="button"
-                    onClick={() => { addCefrLevel(l); setAddLevelOpen(false); handleLevelChange(l); }}
-                    className="px-3 py-1 rounded-full bg-accent/15 text-label text-sm font-semibold hover:bg-accent/25 transition-colors"
-                  >
-                    {l}
-                  </button>
-                ))}
-              </div>
+            +
+          </button>
+        </div>
+        <BookList
+          items={[
+            ...myLevels.map(l => ({
+              id: l as string,
+              title: `${l} vocabulary`,
+              subtitle: `${allWordsForLevel(l).length} words · ${LEVEL_SOURCE[l] ?? 'Spello'}`,
+              active: level === l,
+            })),
+            ...importedBooks.map(b => ({
+              id: b.id as string,
+              title: b.name,
+              subtitle: `${allWordsForLevel(b.id).length} words · imported · your level ${b.cefrLevel ?? 'B1'}`,
+              active: level === b.id,
+            })),
+          ]}
+          onSelect={id => { if (id !== level) handleLevelChange(id as Level); }}
+          onRemove={id => handleRemoveBook(id as Level)}
+        />
+        <p className="text-ink-soft text-xs -mt-1">Tap a book to study it. Swipe left on a book to remove it.</p>
+
+        {/* The selected imported book's own settings. */}
+        {activeBook && (
+          <div className="border border-paper-line rounded-xl p-3 flex flex-col gap-2">
+            <span className="text-sm font-semibold text-ink truncate">{activeBook.name}</span>
+            <label className="flex items-center justify-between gap-3 text-sm text-ink">
+              <span>Your level for this book <span className="block text-ink-soft text-xs">How hard its sentences, paragraphs and chat are</span></span>
+              <CefrLevelSelect
+                value={activeBook.cefrLevel ?? 'B1'}
+                onChange={l => { setImportedBookLevel(activeBook.id, l); setImportedBooks(getImportedBooks()); scheduleSync(); }}
+              />
+            </label>
+            {activeBook.shareCode ? (
+              <>
+                <span className="text-ink-soft text-xs">Book code — classmates add it with + → “Join with a book code”:</span>
+                <BookCodeDisplay code={activeBook.shareCode} />
+              </>
             ) : (
-              <button type="button" onClick={() => setAddLevelOpen(true)} className="mt-2 text-sm font-semibold text-label hover:text-ink underline underline-offset-2">
-                + Add a level book ({otherLevels.join(', ')})
-              </button>
-            )
-          )}
-          <p className="text-ink-soft text-sm mt-1">This vocabulary book has {allWordsForLevel(level).length} words{isCefrLevel(level) ? ` for ${level}` : ''}.</p>
-          {isCefrLevel(level) && LEVEL_SOURCE[level] && (
-            <p className="text-ink-soft text-xs mt-0.5">{LEVEL_SOURCE[level]}</p>
-          )}
-          {activeBook && (
-            <p className="text-ink-soft text-xs mt-0.5">
-              {activeBook.sourcePages ? `From PDF pages ${activeBook.sourcePages}` : 'Imported book'}
-              {activeBook.shareCode ? ' · shared with a book code' : ''}
-            </p>
-          )}
-          {activeBook && (
-            <div className="mt-3 border border-paper-line rounded-xl p-3 flex flex-col gap-2">
-              <label className="flex items-center justify-between gap-3 text-sm text-ink">
-                <span>Your level for this book <span className="block text-ink-soft text-xs">How hard its sentences, paragraphs and chat are</span></span>
-                <CefrLevelSelect
-                  value={activeBook.cefrLevel ?? 'B1'}
-                  onChange={l => { setImportedBookLevel(activeBook.id, l); setImportedBooks(getImportedBooks()); scheduleSync(); }}
-                />
-              </label>
-              {activeBook.shareCode ? (
-                <>
-                  <span className="text-ink-soft text-xs">Book code — classmates enter it under “Join with a book code”:</span>
-                  <BookCodeDisplay code={activeBook.shareCode} />
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleShareActiveBook}
-                  disabled={sharing}
-                  className="self-start text-sm font-semibold text-label hover:text-ink underline underline-offset-2 disabled:opacity-50"
-                >
-                  {sharing ? 'Creating code…' : 'Share this book with a code'}
-                </button>
-              )}
-              {shareError && <span className="text-clay text-xs">{shareError}</span>}
               <button
                 type="button"
-                onClick={handleRemoveActiveBook}
-                className="self-start text-sm text-clay hover:underline"
+                onClick={handleShareActiveBook}
+                disabled={sharing}
+                className="self-start text-sm font-semibold text-label hover:text-ink underline underline-offset-2 disabled:opacity-50"
               >
-                Remove this book
+                {sharing ? 'Creating code…' : 'Share this book with a code'}
               </button>
+            )}
+            {shareError && <span className="text-clay text-xs">{shareError}</span>}
+            <span className="text-ink-soft text-xs">
+              {activeBook.sourcePages ? `From PDF pages ${activeBook.sourcePages}` : 'Added with a book code'}
+            </span>
+          </div>
+        )}
+      </div>
+      )}
+
+      {addSheetOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4" onClick={() => setAddSheetOpen(false)}>
+          <div className="w-full max-w-sm bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-3" style={{ marginBottom: 'var(--safe-bottom)' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-ink">Add a book</h2>
+              <button type="button" onClick={() => setAddSheetOpen(false)} aria-label="Close" className="text-ink-soft hover:text-ink text-xl leading-none">×</button>
             </div>
-          )}
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            {otherLevels.length > 0 && (
+              <>
+                <span className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Spello books</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {otherLevels.map(l => (
+                    <button
+                      key={l}
+                      type="button"
+                      onClick={() => { addCefrLevel(l); setAddSheetOpen(false); handleLevelChange(l); }}
+                      className="text-left rounded-xl border border-paper-line px-3 py-2.5 hover:bg-paper-dim/50 transition-colors"
+                    >
+                      <span className="block font-semibold text-ink">{l}</span>
+                      <span className="block text-ink-soft text-xs">{allWordsForLevel(l).length} words</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            <span className="text-xs font-semibold uppercase tracking-wide text-ink-soft mt-1">Your own</span>
             <button
               type="button"
-              onClick={() => setImportOpen(true)}
-              className="text-sm font-semibold text-label hover:text-ink underline underline-offset-2"
+              onClick={() => { setAddSheetOpen(false); setImportOpen(true); }}
+              className="text-left rounded-xl border border-paper-line px-3 py-2.5 hover:bg-paper-dim/50 transition-colors"
             >
-              + Import a book from PDF
+              <span className="block font-semibold text-ink">Import from a PDF</span>
+              <span className="block text-ink-soft text-xs">Pick the vocabulary pages of your coursebook</span>
             </button>
             <button
               type="button"
-              onClick={() => setJoinOpen(true)}
-              className="text-sm font-semibold text-label hover:text-ink underline underline-offset-2"
+              onClick={() => { setAddSheetOpen(false); setJoinOpen(true); }}
+              className="text-left rounded-xl border border-paper-line px-3 py-2.5 hover:bg-paper-dim/50 transition-colors"
             >
-              Join with a book code
+              <span className="block font-semibold text-ink">Join with a book code</span>
+              <span className="block text-ink-soft text-xs">Get the same book as your class</span>
             </button>
           </div>
-        </div>
-
-      </div>
+        </div>,
+        document.body,
       )}
 
       {section === 'learning' && (

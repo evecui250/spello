@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { SYNCED_EVENT } from '../lib/sync';
 import { avatarImageFor, EquippedAccessories, PROFILE_UPDATED_EVENT } from '../lib/shop';
 import { PointsIcon } from './icons';
+import { formatPetAge } from '../lib/storage';
 
 interface LeaderboardEntry {
   userId: string;
@@ -14,6 +15,7 @@ interface LeaderboardEntry {
   avatarId: string;
   equipped: EquippedAccessories;
   points: number;
+  petAgeDays?: number;
 }
 
 interface DateRange {
@@ -276,6 +278,9 @@ export default function Leaderboard() {
               />
             </div>
             <span className="font-bold text-ink text-lg">{enlarged.displayName}</span>
+            {!!enlarged.petAgeDays && (
+              <span className="text-ink-soft text-sm -mt-2">Pet age: {formatPetAge(enlarged.petAgeDays)}</span>
+            )}
             <button
               type="button"
               onClick={() => setEnlarged(null)}
