@@ -301,6 +301,9 @@ export default function AppBackground() {
     // kept in step with theme changes made afterwards.
     document.documentElement.style.backgroundColor = top;
     document.documentElement.style.backgroundImage = `linear-gradient(to bottom,${hexes.join(',')})`;
+    // --surface: a solid card color in this theme's own hue (its middle
+    // color, darkened) — Home's main card uses it instead of grey glass.
+    document.documentElement.style.setProperty('--surface', `color-mix(in srgb, ${hexes[1] ?? top} 62%, #000)`);
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', top);
     if (!Capacitor.isNativePlatform()) return;
     const [r, g, b] = [1, 3, 5].map(i => parseInt(top.slice(i, i + 2), 16) / 255);

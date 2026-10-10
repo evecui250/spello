@@ -35,7 +35,7 @@ export default function NavBar() {
     // pb-[env(safe-area-inset-bottom)] gives room for the home-indicator
     // area when installed standalone; a no-op everywhere else.
     <nav
-      className="bg-black/25 backdrop-blur-md border-t border-white/10"
+      className="bg-black/25 backdrop-blur-md border-t border-white/5"
       style={{ paddingBottom: 'var(--safe-bottom)' }}
     >
       <div className="max-w-2xl mx-auto flex items-stretch">
@@ -46,7 +46,7 @@ export default function NavBar() {
               key={l.href}
               href={l.href}
               className={`flex-1 flex flex-col items-center justify-center gap-1 pt-3 pb-2.5 text-[13px] font-semibold whitespace-nowrap transition-colors ${
-                active ? 'bg-white/10 text-on-bg' : 'text-on-bg/55 hover:text-on-bg'
+                active ? 'text-on-bg' : 'text-on-bg/45 hover:text-on-bg/80'
               }`}
             >
               <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>

@@ -230,15 +230,15 @@ export default function HomePage() {
       <div className="flex items-center gap-4">
         {/* Display only — pet and nickname are changed in Profile. */}
         <div
-          style={{ width: 'clamp(7rem, 16dvh, 9.5rem)', height: 'clamp(7rem, 16dvh, 9.5rem)' }}
-          className="relative shrink-0 rounded-[1.75rem] overflow-hidden bg-gradient-to-b from-white/25 to-white/5 ring-1 ring-white/25 shadow-lg flex items-end justify-center"
+          style={{ width: 'clamp(7.5rem, 19dvh, 11rem)', height: 'clamp(7.5rem, 19dvh, 11rem)' }}
+          className="relative shrink-0 flex items-end justify-center"
         >
           <img
             ref={petImgRef}
             src={`${BASE}/${heroImageFor(avatarId)}`}
             alt="Your pet"
             onLoad={() => setPetLoaded(true)}
-            className={`h-[93%] w-auto object-contain translate-y-1 drop-shadow-[0_6px_10px_rgba(0,0,0,0.3)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
+            className={`h-full w-auto object-contain drop-shadow-[0_10px_16px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
           />
         </div>
         <div className="min-w-0 flex-1">
@@ -264,7 +264,9 @@ export default function HomePage() {
 
       {/* One card shape in every state, so the screen doesn't reshape
           itself once the goal is done. */}
-      <div className="w-full bg-white/10 backdrop-blur-md rounded-3xl border border-white/15 shadow-sm p-5 flex flex-col" style={{ gap: 'clamp(1.25rem, 2.8dvh, 1.75rem)' }}>
+      {/* A solid, slightly darker surface of the theme's own color (not
+          grey glass), no border — the screen's main focus. */}
+      <div className="w-full rounded-[1.75rem] shadow-[0_14px_36px_-16px_rgba(0,0,0,0.7)] p-6 flex flex-col" style={{ gap: 'clamp(1.25rem, 3dvh, 1.9rem)', background: 'var(--surface, rgba(0,0,0,0.3))' }}>
         <div className="text-sm font-semibold text-on-bg/70 truncate">Today · {bookName}</div>
         {isDoneForNow ? (
           <div className="flex items-center gap-3">
@@ -282,7 +284,7 @@ export default function HomePage() {
               { icon: 'icon_learn_new.png', n: previewStudyCount, total: totalStudyCount, label: 'new words' },
               { icon: 'icon_review.png', n: previewReviewCount, total: totalReviewCount, label: 'to review' },
             ].map((t, i) => (
-              <div key={t.label} className={`flex-1 min-w-0 flex items-center gap-3 ${i ? 'pl-4 border-l border-white/15' : 'pr-4'}`}>
+              <div key={t.label} className={`flex-1 min-w-0 flex items-center gap-3 ${i ? 'pl-4 border-l border-white/10' : 'pr-4'}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`${BASE}/${t.icon}`} alt="" className="w-11 h-11 object-contain shrink-0" />
                 <div className="min-w-0">
@@ -309,17 +311,18 @@ export default function HomePage() {
       {/* Notebook only once this book has any sentence-notebook activity,
           with a count only when there's something to redo; Chat is the
           sole entrance to Text to Pet, the pet's small avatar as icon. */}
-      <div className="w-full flex gap-3">
+      {/* Secondary actions: small, flat pills — clearly below the card. */}
+      <div className="w-full flex justify-center gap-2.5">
         {hasNotebookActivity && (
           <Link
             href="/mistakes"
-            className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 px-3 py-3 hover:bg-white/15 transition-colors"
+            className="flex items-center gap-2 rounded-full bg-black/15 px-4 py-2 text-on-bg/85 hover:bg-black/25 hover:text-on-bg transition-colors"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`${BASE}/icon_mistake_notebook.png`} alt="" className="w-7 h-7 object-contain shrink-0" />
-            <span className="font-semibold text-on-bg text-sm truncate">Notebook</span>
+            <img src={`${BASE}/icon_mistake_notebook.png`} alt="" className="w-5 h-5 object-contain shrink-0" />
+            <span className="font-semibold text-sm">Notebook</span>
             {mistakeCount > 0 && (
-              <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center">
+              <span className="min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-accent text-white text-[11px] font-bold flex items-center justify-center">
                 {mistakeCount}
               </span>
             )}
@@ -328,11 +331,11 @@ export default function HomePage() {
         <button
           type="button"
           onClick={() => router.push('/pet-chat/')}
-          className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 px-3 py-3 hover:bg-white/15 transition-colors"
+          className="flex items-center gap-2 rounded-full bg-black/15 px-4 py-2 text-on-bg/85 hover:bg-black/25 hover:text-on-bg transition-colors"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`${BASE}/${avatarImageFor(avatarId, equipped)}`} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
-          <span className="font-semibold text-on-bg text-sm truncate">Chat</span>
+          <img src={`${BASE}/${avatarImageFor(avatarId, equipped)}`} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" />
+          <span className="font-semibold text-sm">Chat</span>
         </button>
       </div>
 
