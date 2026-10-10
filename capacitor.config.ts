@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.yingyingcui.spello',
+  appId: 'com.spelloapp.app',
   appName: 'Spello',
   // webDir is required by the CLI (used for `cap sync`'s local-asset
   // copy step) but is otherwise unused at runtime here -- server.url
