@@ -573,12 +573,23 @@ export function getActivityCalendarDays(): { full: string[]; partial: string[] }
 // reviewed (so a short 3-word day still counts). Never goes down, unlike
 // the streak; shown on Home in its place. Built from records that sync,
 // so it's the same on every device.
-export function getPetAgeDays(): number {
+function petAgeDaySet(): Set<string> {
   const days = new Set([...getGoalDaysRecordForSync(), ...getPartialDaysRecordForSync()]);
   for (const [date, entry] of Object.entries(getDailyWordLog())) {
     if (entry.learned.length > 0 || entry.reviewed.length > 0) days.add(date);
   }
-  return days.size;
+  return days;
+}
+
+export function getPetAgeDays(): number {
+  return petAgeDaySet().size;
+}
+
+// Whether today already counts toward the pet's age — checked as a session
+// starts, so its result card can say "+1 day" only when this session is
+// the one that made today count.
+export function isTodayAPetAgeDay(): boolean {
+  return petAgeDaySet().has(today());
 }
 
 // "12 days" / "5 months" / "1 year 3 months".

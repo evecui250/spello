@@ -9,7 +9,7 @@ import {
   Round, WordProgress, Settings, MascotStageId, DailyStats, ParagraphExercise,
   isStudyGoalDoneToday, isReviewGoalDoneToday, markStudyGoalDone, markReviewGoalDone,
   touchStreak, markCongratsShown, getDailyStats, addEarnedPuppy, addEarnedUpgrade,
-  logWordActivity,
+  logWordActivity, getPetAgeDays, formatPetAge, isTodayAPetAgeDay,
 } from '../lib/storage';
 import {
   wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint, demoteReviewRound,
@@ -1244,6 +1244,10 @@ export default function DailySessionFlow() {
   // Non-null while the "how do you want to learn today?" chooser is up —
   // the session study is about to begin with (see beginStudy).
   const [modeChoiceFor, setModeChoiceFor] = useState<DailySession | null>(null);
+  // Whether today already counted toward the pet's age when this session
+  // opened (see isTodayAPetAgeDay) — if not, this session's result card
+  // shows the pet getting a day older.
+  const todayCountedAtStart = useRef(true);
   // Which of the two bonus-round games is showing during session.phase
   // === 'play' (see GamePicker) — purely a within-render choice, not
   // persisted to DailySession, same reasoning as WordMatchGame's own
@@ -1698,6 +1702,7 @@ export default function DailySessionFlow() {
   useEffect(() => {
     const s = getSettings();
     setSettings(s);
+    todayCountedAtStart.current = isTodayAPetAgeDay();
     const ds = getDailySession();
     if (!ds) { setReady(true); return; }
 
@@ -2546,6 +2551,14 @@ export default function DailySessionFlow() {
     );
   }
 
+  // "Pet age: 13 days (+1 day)" on a result card.
+  const petAgeLine = (
+    <p className="text-on-bg/85 text-sm font-semibold mb-4" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+      Pet age: {formatPetAge(getPetAgeDays())}
+      {!todayCountedAtStart.current && isTodayAPetAgeDay() && <span className="text-good"> (+1 day)</span>}
+    </p>
+  );
+
   // study-mcq (introduction's reversed-direction checkpoint, now the
   // thing that actually completes introduction — see enterStudyMcqPhase)
   // and review-mcq (the existing forward-direction, pure-reinforcement
@@ -2615,6 +2628,13 @@ export default function DailySessionFlow() {
         {signedIn && (
           <p className="flex items-center justify-center gap-1.5 text-on-bg/90 font-mono font-bold mb-6" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
             <PointsIcon className="w-4 h-4" /> +{session.studyWordIds.length} points
+          </p>
+        )}
+        {/* Only when there was no review card first — that one already
+            showed today's +1 day. */}
+        {session.reviewWordIds.length === 0 ? petAgeLine : (
+          <p className="text-on-bg/85 text-sm font-semibold mb-4" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+            Pet age: {formatPetAge(getPetAgeDays())}
           </p>
         )}
         {/* Moved up here (right under the summary line) rather than below
@@ -2774,6 +2794,7 @@ export default function DailySessionFlow() {
             <PointsIcon className="w-4 h-4" /> +{session.reviewWordIds.length} points
           </p>
         )}
+        {petAgeLine}
         {/* Moved up from below the word list -- same reasoning as
             study-done's own Continue button above: don't make learners
             scroll past every reviewed word just to move on. */}

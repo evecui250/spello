@@ -33,18 +33,28 @@ const FONT_LABEL: Record<FontScale, string> = { small: 'Small', default: 'Defaul
 type Section = 'account' | 'books' | 'learning' | 'appearance' | 'help';
 const SECTIONS: Section[] = ['account', 'books', 'learning', 'appearance', 'help'];
 
-function MenuRow({ icon, title, detail, onClick }: { icon: string; title: string; detail: string; onClick: () => void }) {
+// Line icons in the same style as the bottom tab bar (no emoji).
+const MENU_ICONS: Record<Section, string> = {
+  account: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
+  books: 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h7M8 11h5',
+  learning: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
+  appearance: 'M12 3a9 9 0 1 0 0 18c1 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.4-4-7.8-9-7.8zM7.5 12.5h.01M9.5 8h.01M14.5 8h.01M16.5 12h.01',
+  help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01',
+};
+
+function MenuRow({ section, title, onClick }: { section: Section; title: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-paper-dim/40 active:bg-paper-dim/60 transition-colors"
+      className="w-full flex items-center gap-3 px-4 py-4 text-left hover:bg-paper-dim/40 active:bg-paper-dim/60 transition-colors"
     >
-      <span className="w-9 h-9 rounded-xl bg-accent/15 flex items-center justify-center text-lg shrink-0" aria-hidden>{icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block font-semibold text-ink">{title}</span>
-        <span className="block text-ink-soft text-sm truncate">{detail}</span>
+      <span className="w-9 h-9 rounded-xl bg-accent/15 text-label flex items-center justify-center shrink-0" aria-hidden>
+        <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d={MENU_ICONS[section]} />
+        </svg>
       </span>
+      <span className="min-w-0 flex-1 font-semibold text-ink">{title}</span>
       <span className="text-ink-soft text-xl leading-none shrink-0" aria-hidden>›</span>
     </button>
   );
@@ -316,11 +326,11 @@ function SettingsPageInner() {
       {!section && (
         <>
           <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm divide-y divide-paper-line/60 overflow-hidden">
-            <MenuRow icon="👤" title="Account" detail={signedInEmail ?? 'Sign in to sync across devices'} onClick={() => openSection('account')} />
-            <MenuRow icon="📚" title="Books & level" detail={`${levelDisplayName(level)} · ${allWordsForLevel(level).length} words`} onClick={() => openSection('books')} />
-            <MenuRow icon="✏️" title="Learning" detail={`${studyBatchSize} new · up to ${dailyReview} reviews a day`} onClick={() => openSection('learning')} />
-            <MenuRow icon="🎨" title="Appearance" detail={`${theme[0].toUpperCase()}${theme.slice(1)} · ${FONT_LABEL[fontScale]} text · ${soundName}`} onClick={() => openSection('appearance')} />
-            <MenuRow icon="💬" title="Help & about" detail="Welcome guide, report a problem, privacy" onClick={() => openSection('help')} />
+            <MenuRow section="account" title="Account" onClick={() => openSection('account')} />
+            <MenuRow section="books" title="Books & level" onClick={() => openSection('books')} />
+            <MenuRow section="learning" title="Learning" onClick={() => openSection('learning')} />
+            <MenuRow section="appearance" title="Appearance" onClick={() => openSection('appearance')} />
+            <MenuRow section="help" title="Help & about" onClick={() => openSection('help')} />
           </div>
       <button
         type="button"
