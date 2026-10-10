@@ -2516,36 +2516,43 @@ export default function DailySessionFlow() {
   }
 
   if (modeChoiceFor) {
-    // Two choices, each just a clock with the time it'll take and a
-    // one-word name (owner call: no explanations). Rough per-word pace:
-    // ~1 min spelling, ~3 min with a sentence to translate.
+    // Two choices, each a clock face whose shaded slice says "quick" vs
+    // "takes longer" at a glance — illustrative only, not a time estimate
+    // (owner call), and no explanations.
     const writing = settings.sentenceWritingMode;
-    const n = modeChoiceFor.studyWordIds.length;
+    const clock = (minutes: number) => {
+      const a = (minutes / 60) * 2 * Math.PI;
+      const x = 12 + 9 * Math.sin(a), y = 12 - 9 * Math.cos(a);
+      return (
+        <svg viewBox="0 0 24 24" className="w-16 h-16 text-on-bg" aria-hidden>
+          <path d={`M12 12 L12 3 A9 9 0 ${minutes > 30 ? 1 : 0} 1 ${x.toFixed(2)} ${y.toFixed(2)} Z`} className="fill-accent/70" />
+          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <path d={`M12 12 L12 4.8 M12 12 L${(12 + 5.5 * Math.sin(a)).toFixed(2)} ${(12 - 5.5 * Math.cos(a)).toFixed(2)}`} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <circle cx="12" cy="12" r="0.9" fill="currentColor" />
+        </svg>
+      );
+    };
     const option = (on: boolean, minutes: number, title: string) => (
       <button
         type="button"
         onClick={() => handleChooseStudyMode(on)}
-        className={`flex-1 rounded-3xl px-4 py-6 flex flex-col items-center gap-3 active:scale-[0.97] transition-all ${
+        className={`flex-1 rounded-3xl px-4 py-7 flex flex-col items-center gap-4 active:scale-[0.97] transition-all ${
           writing === on ? 'ring-2 ring-accent' : 'ring-1 ring-white/10 hover:ring-white/30'
         }`}
         style={{ background: 'var(--surface, rgba(0,0,0,0.3))' }}
       >
-        <svg viewBox="0 0 24 24" className="w-12 h-12 text-on-bg/90" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" aria-hidden>
-          <circle cx="12" cy="12" r="9" />
-          <path d={on ? 'M12 7v5l3.5 2' : 'M12 7v5l-2.5 2.5'} />
-        </svg>
-        <span className="text-3xl font-bold text-on-bg leading-none">~{minutes} min</span>
-        <span className="text-on-bg/75 font-semibold">{title}</span>
+        {clock(minutes)}
+        <span className="text-lg font-bold text-on-bg">{title}</span>
       </button>
     );
     return (
       <div className="py-12 max-w-sm mx-auto flex flex-col gap-6">
-        <h2 className="text-2xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
-          How much time do you have?
+        <h2 className="text-2xl font-bold text-on-bg text-center text-balance" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+          How would you like to learn new words today?
         </h2>
         <div className="flex gap-3">
-          {option(false, Math.max(2, Math.round(n * 1)), 'Spelling')}
-          {option(true, Math.max(5, Math.round(n * 3)), 'Sentences')}
+          {option(false, 5, 'Spelling')}
+          {option(true, 15, 'Sentences')}
         </div>
       </div>
     );

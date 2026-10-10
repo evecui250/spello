@@ -12,6 +12,7 @@ import SpeechCleanup from '../components/SpeechCleanup';
 import PwaRegister from '../components/PwaRegister';
 import UsagePing from '../components/UsagePing';
 import FontScaleEffect from '../components/FontScaleEffect';
+import KeyboardBarsEffect from '../components/KeyboardBarsEffect';
 
 // Self-hosted at build time (next/font downloads once and serves from
 // Spello's own static export, unlike a <link> to Google Fonts) — Fraunces
@@ -86,6 +87,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <PwaRegister />
         <UsagePing />
         <FontScaleEffect />
+        <KeyboardBarsEffect />
         <AppBackground />
         {/* Stacked in one shared fixed-to-bottom column, not two
             independently-fixed elements — StudyRoadmap renders nothing
@@ -93,7 +95,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             everywhere else, but on the practice page the roadmap sits
             directly above it as one combined bottom bar instead of either
             overlapping the other or needing its own guessed-at height. */}
-        <div className="fixed bottom-0 inset-x-0 z-20 flex flex-col">
+        <div className="bottom-bars fixed bottom-0 inset-x-0 z-20 flex flex-col">
           <StudyRoadmap />
           <NavBar />
         </div>

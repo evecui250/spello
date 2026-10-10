@@ -317,3 +317,7 @@ input, textarea, select {
 .page-in-right { animation: page-in-right 220ms cubic-bezier(.2,.8,.2,1); }
 .page-in-left { animation: page-in-left 220ms cubic-bezier(.2,.8,.2,1); }
 @media (prefers-reduced-motion: reduce) { .page-in-right, .page-in-left { animation: none; } }
+
+/* Typing (on-screen keyboard up): hide the fixed bottom bars so they don't
+   cover the card — see components/KeyboardBarsEffect.tsx. */
+html.keyboard-open .bottom-bars { display: none; }
