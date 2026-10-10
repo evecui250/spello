@@ -8,7 +8,6 @@ import { getSettings, saveSettings, switchToLevel, getImportedBooks, levelDispla
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch, allWordsForLevel } from '../../lib/practice';
 import { Level, CefrLevel, LEVEL_SOURCE, isCefrLevel, isBookLevelId, wordsForLevel } from '../../lib/words';
-import { shareImportedBook } from '../../lib/bookImport';
 import { scheduleSync, syncNow, SYNCED_EVENT } from '../../lib/sync';
 import { CHIME_OPTIONS } from '../../lib/sound';
 import AccountPanel from '../../components/AccountPanel';
@@ -18,6 +17,7 @@ import ImportBookModal, { BookCodeDisplay } from '../../components/ImportBookMod
 import JoinBookModal from '../../components/JoinBookModal';
 import CefrLevelSelect from '../../components/CefrLevelSelect';
 import BookList from '../../components/BookList';
+import BookDetail from '../../components/BookDetail';
 import PetNicknameModal from '../../components/PetNicknameModal';
 import { supabase } from '../../lib/supabase';
 
@@ -31,8 +31,8 @@ const FONT_LABEL: Record<FontScale, string> = { small: 'Small', default: 'Defaul
 
 // Profile is a short menu; each row opens one of these as its own screen
 // (/settings?section=…), so the phone's back gesture returns to the menu.
-type Section = 'account' | 'books' | 'learning' | 'appearance' | 'help';
-const SECTIONS: Section[] = ['account', 'books', 'learning', 'appearance', 'help'];
+type Section = 'account' | 'books' | 'learning' | 'appearance' | 'help' | 'book';
+const SECTIONS: Section[] = ['account', 'books', 'learning', 'appearance', 'help', 'book'];
 
 // Line icons in the same style as the bottom tab bar (no emoji).
 const MENU_ICONS: Record<Section, string> = {
@@ -41,6 +41,7 @@ const MENU_ICONS: Record<Section, string> = {
   learning: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
   appearance: 'M12 3a9 9 0 1 0 0 18c1 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.4-4-7.8-9-7.8zM7.5 12.5h.01M9.5 8h.01M14.5 8h.01M16.5 12h.01',
   help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01',
+  book: 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h7M8 11h5',
 };
 
 function MenuRow({ section, title, onClick }: { section: Section; title: string; onClick: () => void }) {
@@ -76,7 +77,10 @@ function SettingsPageInner() {
   const rawSection = searchParams.get('section');
   const section: Section | null = (SECTIONS as string[]).includes(rawSection ?? '') ? (rawSection as Section) : null;
   const openSection = (s: Section) => { router.push(`/settings?section=${s}`); window.scrollTo(0, 0); };
-  const closeSection = () => { router.push('/settings'); window.scrollTo(0, 0); };
+  // One book's page (?section=book&id=…) goes back to the book list.
+  const bookId = section === 'book' ? (searchParams.get('id') as Level | null) : null;
+  const openBook = (id: string) => { router.push(`/settings?section=book&id=${encodeURIComponent(id)}`); window.scrollTo(0, 0); };
+  const closeSection = () => { router.push(section === 'book' ? '/settings?section=books' : '/settings'); window.scrollTo(0, 0); };
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
   const [studyBatchSize, setStudyBatchSize] = useState(5);
   const [dailyReview, setDailyReview] = useState(15);
@@ -107,8 +111,6 @@ function SettingsPageInner() {
   // the prerendered page; refreshed whenever the book or book list changes.
   const [myLevels, setMyLevels] = useState<CefrLevel[]>([]);
   const [otherLevels, setOtherLevels] = useState<CefrLevel[]>([]);
-  const [sharing, setSharing] = useState(false);
-  const [shareError, setShareError] = useState<string | null>(null);
   const [importedBooks, setImportedBooks] = useState<ImportedBook[]>([]);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -188,22 +190,8 @@ function SettingsPageInner() {
     clearTimeout(savedTimer.current);
     savedTimer.current = setTimeout(() => setSaved(false), 1200);
   };
-  // Re-derived from importedBooks state so a share/remove re-renders.
-  const activeBook = isBookLevelId(level) ? importedBooks.find(b => b.id === level) : undefined;
 
-  async function handleShareActiveBook() {
-    if (!activeBook) return;
-    setSharing(true);
-    setShareError(null);
-    try {
-      await shareImportedBook(activeBook.id);
-      setImportedBooks(getImportedBooks());
-    } catch (e) {
-      setShareError(e instanceof Error ? e.message : "Couldn't create a code.");
-    } finally {
-      setSharing(false);
-    }
-  }
+
 
   // Swipe-to-remove. A Spello level is only hidden from the list (its
   // progress stays and returns if it's added again); an imported book is
@@ -300,6 +288,7 @@ function SettingsPageInner() {
 
   const SECTION_TITLES: Record<Section, string> = {
     account: 'Account', books: 'Books & level', learning: 'Learning', appearance: 'Appearance', help: 'Help & about',
+    book: bookId ? (isCefrLevel(bookId) ? `${bookId} vocabulary` : levelDisplayName(bookId)) : 'Book',
   };
 
   return (
@@ -395,44 +384,11 @@ function SettingsPageInner() {
               active: level === b.id,
             })),
           ]}
-          onSelect={id => { if (id !== level) handleLevelChange(id as Level); }}
+          onSelect={id => openBook(id)}
           onRemove={id => handleRemoveBook(id as Level)}
         />
-        <p className="text-ink-soft text-xs -mt-1">Tap a book to study it. Swipe left on a book to remove it.</p>
+        <p className="text-ink-soft text-xs -mt-1">Tap a book to see its words. Swipe left on a book to remove it.</p>
 
-        {/* The selected imported book's own settings. */}
-        {activeBook && (
-          <div className="border border-paper-line rounded-xl p-3 flex flex-col gap-2">
-            <span className="text-sm font-semibold text-ink truncate">{activeBook.name}</span>
-            <label className="flex items-center justify-between gap-3 text-sm text-ink">
-              <span>Your level for this book <span className="block text-ink-soft text-xs">How hard its sentences, paragraphs and chat are</span></span>
-              <CefrLevelSelect
-                value={activeBook.cefrLevel ?? 'B1'}
-                onChange={l => { setImportedBookLevel(activeBook.id, l); setImportedBooks(getImportedBooks()); scheduleSync(); }}
-              />
-            </label>
-            {activeBook.id === DICTIONARY_BOOK_ID ? null : activeBook.shareCode ? (
-              <>
-                <span className="text-ink-soft text-xs">Book code — classmates add it with + → “Join with a book code”:</span>
-                <BookCodeDisplay code={activeBook.shareCode} />
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={handleShareActiveBook}
-                disabled={sharing}
-                className="self-start text-sm font-semibold text-label hover:text-ink underline underline-offset-2 disabled:opacity-50"
-              >
-                {sharing ? 'Creating code…' : 'Share this book with a code'}
-              </button>
-            )}
-            {shareError && <span className="text-clay text-xs">{shareError}</span>}
-            <span className="text-ink-soft text-xs">
-              {activeBook.id === DICTIONARY_BOOK_ID ? 'Words you added from the Dictionary in Words'
-                : activeBook.sourcePages ? `From PDF pages ${activeBook.sourcePages}` : 'Added with a book code'}
-            </span>
-          </div>
-        )}
       </div>
       )}
 
@@ -485,6 +441,15 @@ function SettingsPageInner() {
           </div>
         </div>,
         document.body,
+      )}
+
+      {section === 'book' && bookId && (
+        <BookDetail
+          key={bookId}
+          bookId={bookId}
+          isActive={bookId === level}
+          onStudy={() => handleLevelChange(bookId)}
+        />
       )}
 
       {section === 'learning' && (
