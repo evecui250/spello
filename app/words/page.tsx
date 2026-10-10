@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { WORDS, Word, Level, glossFor, isBookLevelId } from '../../lib/words';
+import { WORDS, Word, Level, glossFor } from '../../lib/words';
 import {
   getMergedProgressAcrossLevels, getSettings, WordProgress, MascotStageId, today,
   getAllCustomWordsAcrossLevels, addCustomWord, removeCustomWord, getWordProgress, saveWordProgress,
@@ -316,20 +316,15 @@ export default function WordsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, search, searchPool]);
 
-  // My Words used to mean "only what you explicitly added" -- but a freshly
-  // added word is stamped straight to Introduced (see addCustomWordIntroduced's
-  // own comment) and reviewed in the exact same rotation as every other word
-  // from the current book, so a book word the learner has actually been
-  // studying belongs here just as much. Scoped to the CURRENT book only
-  // (not every book the way Search's pool is) -- "my words" means what
-  // you're actually working through right now, not the other three books'
-  // worth of untouched vocabulary. Custom words show regardless of which
-  // book they were added under, same as before.
+  // My Words = every word the learner has actually learned, from EVERY book
+  // (CEFR books and imported ones), each row tagged with its book. Its only
+  // filters are Learning / Mastered, so untouched vocabulary never floods
+  // it — and scoping it to the selected book hid real learning: a real
+  // report studied an imported book, then found none of those words here
+  // on a device where a different book happened to be selected.
   const myWordsPool = useMemo(
-    // An imported book's words (hundreds at once) stay in that book's own
-    // My Words only — one-off adds still show everywhere, as before.
-    () => [...WORDS.filter(w => w.level === activeLevel), ...customWords.filter(w => !isBookLevelId(w.level) || w.level === activeLevel)],
-    [activeLevel, customWords],
+    () => [...WORDS.filter(w => (BOOK_LEVELS as string[]).includes(w.level)), ...customWords],
+    [customWords],
   );
 
   const myWordsList = useMemo(() => {
@@ -568,7 +563,6 @@ export default function WordsPage() {
       {view === 'search' && (
         <input
           type="search"
-          autoFocus
           placeholder="Search any German or English word to add it…"
           value={search}
           onChange={e => { setSearch(e.target.value); setLookupStatus('idle'); setLookupResult(null); setLookupResultId(null); }}

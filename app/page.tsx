@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation';
 import {
   getAllProgress, getSettings, today, PROGRESS_CHANGED_EVENT,
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
+  getStreak, levelDisplayName,
 } from '../lib/storage';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
 import { SYNCED_EVENT } from '../lib/sync';
-import { getDisplayProfile, heroImageFor, avatarImageFor, EquippedAccessories, NO_ACCESSORIES } from '../lib/shop';
-import { CheckCircleIcon, SettingsGearIcon } from '../components/icons';
+import { getDisplayProfile, getCachedDisplayProfile, heroImageFor, avatarImageFor, EquippedAccessories, NO_ACCESSORIES } from '../lib/shop';
+import { CheckCircleIcon, PencilIcon } from '../components/icons';
 import PetNicknameModal from '../components/PetNicknameModal';
 import Link from 'next/link';
 
@@ -51,6 +52,8 @@ export default function HomePage() {
   // all until there's something for it to show.
   const [hasNotebookActivity, setHasNotebookActivity] = useState(false);
   const [ready, setReady] = useState(false);
+  const [streak, setStreak] = useState(0);
+  const [bookName, setBookName] = useState('');
 
   // The learner's chosen pet + nickname — works whether or not they're
   // signed in (see lib/shop.ts's getDisplayProfile).
@@ -105,6 +108,14 @@ export default function HomePage() {
     // lands here before that async pull resolves sees a stale/empty local
     // state until they happen to visit Settings, the only page that used to
     // trigger the pull.
+    // Last-shown pet/nickname, before the first paint (see
+    // getCachedDisplayProfile) — loadProfile() refreshes it right after.
+    const cached = getCachedDisplayProfile();
+    if (cached) {
+      setAvatarId(cached.avatarId);
+      setEquipped(cached.equipped);
+      setNickname(cached.nickname);
+    }
     const load = () => {
       const progress = getAllProgress();
       const settings = getSettings();
@@ -149,6 +160,8 @@ export default function HomePage() {
       const allProgress = Object.values(progress);
       setMistakeCount(allProgress.filter(p => !!p.lastMistake).length);
       setHasNotebookActivity(allProgress.some(p => !!p.lastMistake || !!p.exampleSentence));
+      setStreak(getStreak().count);
+      setBookName(levelDisplayName(settings.level));
       setReady(true);
     };
     load();
@@ -203,22 +216,44 @@ export default function HomePage() {
   const shine = <span className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent" />;
 
   return (
-    // Three bands filling exactly one phone screen (main's own top/bottom
-    // padding and the fixed nav subtracted): greeting on top, the pet
-    // centered in whatever height is left, and every action grouped at the
-    // bottom where a thumb reaches — so there's no dead band on tall
-    // phones and nothing to scroll on small ones. Capped to a phone-width
-    // column so it doesn't spread out on a laptop.
+    // One column, vertically centered as a whole between the top of the
+    // screen and the tab bar, so leftover height splits evenly above and
+    // below instead of opening a gap in the middle. The pet is framed in
+    // a rounded square beside the greeting (owner call: a lone pet
+    // floating in the background felt abrupt); the session card is the
+    // main element. Fills exactly one screen on every phone size.
     <div
-      className="relative flex flex-col mx-auto w-full max-w-sm"
-      style={{ minHeight: 'calc(100dvh - 7rem - var(--safe-top) - var(--safe-bottom))' }}
+      className="relative flex flex-col justify-center mx-auto w-full max-w-sm py-2"
+      // Spacing and the pet window grow with screen height (clamp), so a
+      // tall phone fills with the content itself rather than empty bands;
+      // the minimums are what fits an iPhone SE.
+      style={{ minHeight: 'calc(100dvh - 7rem - var(--safe-top) - var(--safe-bottom))', gap: 'clamp(1.25rem, 3.6dvh, 2.25rem)' }}
     >
-      <div className="w-full flex items-start justify-between gap-3">
-        <div>
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={() => setPetModalOpen(true)}
+          aria-label="Choose pet and nickname"
+          style={{ width: 'clamp(7rem, 16dvh, 9.5rem)', height: 'clamp(7rem, 16dvh, 9.5rem)' }}
+          className="relative shrink-0 rounded-[1.75rem] overflow-hidden bg-gradient-to-b from-white/25 to-white/5 ring-1 ring-white/25 shadow-lg flex items-end justify-center"
+        >
+          <img
+            ref={petImgRef}
+            src={`${BASE}/${heroImageFor(avatarId)}`}
+            alt="Your pet"
+            onLoad={() => setPetLoaded(true)}
+            className={`h-[93%] w-auto object-contain translate-y-1 drop-shadow-[0_6px_10px_rgba(0,0,0,0.3)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
+          />
+          {/* Tapping the pet opens pet & nickname — this badge says so. */}
+          <span className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/30 text-white flex items-center justify-center" aria-hidden>
+            <PencilIcon className="w-3 h-3" />
+          </span>
+        </button>
+        <div className="min-w-0 flex-1">
           {nickname ? (
             <>
-              <p className="text-lg font-medium text-on-bg/75">{greetingWord()},</p>
-              <h1 className="text-[2rem] leading-tight font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+              <p className="text-lg font-medium text-on-bg/75 leading-tight">{greetingWord()},</p>
+              <h1 className="text-[2rem] leading-tight font-bold text-on-bg truncate" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
                 {nickname}
               </h1>
             </>
@@ -227,104 +262,75 @@ export default function HomePage() {
               {greetingWord()}!
             </h1>
           )}
+          {streak > 0 && (
+            <p className="mt-1 text-sm font-semibold text-on-bg/85">🔥 {streak}-day streak</p>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={() => setPetModalOpen(true)}
-          aria-label="Choose pet and nickname"
-          className="shrink-0 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-on-bg/80 hover:text-on-bg flex items-center justify-center transition-colors"
-        >
-          <SettingsGearIcon className="w-5 h-5" />
-        </button>
       </div>
 
-      {/* The pet, the session card and the two buttons are one group,
-          centered in the space between the greeting and the tab bar — so
-          the pet sits just above the card rather than floating in its own
-          band of empty space. Pet height follows screen height (smaller
-          on an iPhone SE, capped on big phones). Decorative only: Chat is
-          the button below. */}
-      <div className="flex-1 w-full flex flex-col justify-center gap-3 py-3">
-        <div className="flex justify-center">
-          <img
-            ref={petImgRef}
-            src={`${BASE}/${heroImageFor(avatarId)}`}
-            alt="Your pet"
-            onLoad={() => setPetLoaded(true)}
-            style={{ height: 'clamp(110px, 25dvh, 220px)' }}
-            className={`w-auto max-w-full object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.35)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
-          />
-        </div>
-
-        {/* One card shape in every state, so the screen doesn't reshape
-            itself once the goal is done. */}
-        <div className="w-full bg-white/10 backdrop-blur-md rounded-3xl border border-white/15 shadow-sm p-4 flex flex-col gap-4">
-          {isDoneForNow ? (
-            <div className="flex items-center gap-3 px-1">
-              <CheckCircleIcon className="w-9 h-9 text-good shrink-0" />
-              <div>
-                <div className="font-bold text-on-bg text-lg leading-tight">{nothingLeftAtAll ? 'All done for today' : "Today's goal done"}</div>
-                <div className="text-sm text-on-bg/65">{nothingLeftAtAll ? 'Come back tomorrow for more.' : 'Nice work! Want a few more?'}</div>
-              </div>
+      {/* One card shape in every state, so the screen doesn't reshape
+          itself once the goal is done. */}
+      <div className="w-full bg-white/10 backdrop-blur-md rounded-3xl border border-white/15 shadow-sm p-5 flex flex-col" style={{ gap: 'clamp(1.25rem, 2.8dvh, 1.75rem)' }}>
+        <div className="text-sm font-semibold text-on-bg/70 truncate">Today · {bookName}</div>
+        {isDoneForNow ? (
+          <div className="flex items-center gap-3">
+            <CheckCircleIcon className="w-10 h-10 text-good shrink-0" />
+            <div>
+              <div className="font-bold text-on-bg text-xl leading-tight">{nothingLeftAtAll ? 'All done for today' : "Today's goal done"}</div>
+              <div className="text-sm text-on-bg/65">{nothingLeftAtAll ? 'Come back tomorrow for more.' : 'Nice work! Want a few more?'}</div>
             </div>
-          ) : (
-            <div className="flex">
-              <div className="flex-1 flex items-center justify-center gap-2.5">
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { icon: 'icon_learn_new.png', n: previewStudyCount, total: totalStudyCount, label: 'new words' },
+              { icon: 'icon_review.png', n: previewReviewCount, total: totalReviewCount, label: 'to review' },
+            ].map(t => (
+              <div key={t.label} className="rounded-2xl bg-white/10 px-4 flex flex-col items-start gap-2" style={{ paddingBlock: 'clamp(1rem, 2.4dvh, 1.5rem)' }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`${BASE}/icon_learn_new.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
-                <div className="leading-tight">
-                  <div className="font-bold text-on-bg text-xl">{previewStudyCount}</div>
-                  <div className="text-xs text-on-bg/65">{inProgress && previewStudyCount !== totalStudyCount ? `new · of ${totalStudyCount}` : 'new words'}</div>
-                </div>
+                <img src={`${BASE}/${t.icon}`} alt="" className="w-10 h-10 object-contain" />
+                <div className="text-3xl font-bold text-on-bg leading-none">{t.n}</div>
+                <div className="text-sm text-on-bg/65">{inProgress && t.n !== t.total ? `${t.label} · of ${t.total}` : t.label}</div>
               </div>
-              <div className="w-px bg-white/15 shrink-0" />
-              <div className="flex-1 flex items-center justify-center gap-2.5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`${BASE}/icon_review.png`} alt="" className="w-9 h-9 object-contain shrink-0" />
-                <div className="leading-tight">
-                  <div className="font-bold text-on-bg text-xl">{previewReviewCount}</div>
-                  <div className="text-xs text-on-bg/65">{inProgress && previewReviewCount !== totalReviewCount ? `review · of ${totalReviewCount}` : 'to review'}</div>
-                </div>
-              </div>
-            </div>
-          )}
-          {!nothingLeftAtAll && (
-            <button onClick={handleClick} className={gradientButton} style={gradientStyle}>
-              <span className="text-lg font-extrabold text-on-bg tracking-wide">{isDoneForNow ? 'Study more' : label} →</span>
-              {shine}
-            </button>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
+        {!nothingLeftAtAll && (
+          <button onClick={handleClick} className={`${gradientButton} py-4`} style={gradientStyle}>
+            <span className="text-xl font-extrabold text-on-bg tracking-wide">{isDoneForNow ? 'Study more' : label} →</span>
+            {shine}
+          </button>
+        )}
+      </div>
 
-        {/* Notebook only once this book has any sentence-notebook activity,
-            with a count only when there's something to redo; Chat is the
-            sole entrance to Text to Pet, the pet's small avatar as icon. */}
-        <div className="w-full flex gap-3">
-          {hasNotebookActivity && (
-            <Link
-              href="/mistakes"
-              className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 px-3 py-2.5 hover:bg-white/15 transition-colors"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`${BASE}/icon_mistake_notebook.png`} alt="" className="w-7 h-7 object-contain shrink-0" />
-              <span className="font-semibold text-on-bg text-sm truncate">Notebook</span>
-              {mistakeCount > 0 && (
-                <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center">
-                  {mistakeCount}
-                </span>
-              )}
-            </Link>
-          )}
-          <button
-            type="button"
-            onClick={() => router.push('/pet-chat/')}
-            className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 px-3 py-2.5 hover:bg-white/15 transition-colors"
+      {/* Notebook only once this book has any sentence-notebook activity,
+          with a count only when there's something to redo; Chat is the
+          sole entrance to Text to Pet, the pet's small avatar as icon. */}
+      <div className="w-full flex gap-3">
+        {hasNotebookActivity && (
+          <Link
+            href="/mistakes"
+            className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 px-3 py-3 hover:bg-white/15 transition-colors"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`${BASE}/${avatarImageFor(avatarId, equipped)}`} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
-            <span className="font-semibold text-on-bg text-sm truncate">Chat</span>
-          </button>
-        </div>
+            <img src={`${BASE}/icon_mistake_notebook.png`} alt="" className="w-7 h-7 object-contain shrink-0" />
+            <span className="font-semibold text-on-bg text-sm truncate">Notebook</span>
+            {mistakeCount > 0 && (
+              <span className="shrink-0 min-w-5 h-5 px-1.5 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center">
+                {mistakeCount}
+              </span>
+            )}
+          </Link>
+        )}
+        <button
+          type="button"
+          onClick={() => router.push('/pet-chat/')}
+          className="flex-1 min-w-0 flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/15 px-3 py-3 hover:bg-white/15 transition-colors"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`${BASE}/${avatarImageFor(avatarId, equipped)}`} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
+          <span className="font-semibold text-on-bg text-sm truncate">Chat</span>
+        </button>
       </div>
 
       {petModalOpen && (

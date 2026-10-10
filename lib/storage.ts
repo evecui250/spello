@@ -1013,6 +1013,36 @@ export function levelDisplayName(level: Level): string {
   return getImportedBook(level)?.name ?? 'Imported book';
 }
 
+// --- Which CEFR books show in the book picker ---
+// Only the learner's own: the one they're on, any they've studied, and any
+// they've explicitly added — plus their imported books. The rest of A1–B2
+// sit behind "+ Add a level book" (owner call: four near-identical
+// options up front was noise for someone studying one level or a class
+// book). The added list is per device; studied levels come from synced
+// progress, so another device shows them too.
+const SELECTABLE_CEFR: CefrLevel[] = ['A1', 'A2', 'B1', 'B2'];
+const ADDED_LEVELS_KEY = 'wb2_added_levels';
+
+export function myCefrLevels(): CefrLevel[] {
+  if (typeof window === 'undefined') return [];
+  let added: string[] = [];
+  try { added = JSON.parse(localStorage.getItem(ADDED_LEVELS_KEY) || '[]'); } catch { /* none */ }
+  const active = getActiveLevel();
+  return SELECTABLE_CEFR.filter(l => l === active || added.includes(l)
+    || Object.keys(getAllProgressForLevel(l)).length > 0);
+}
+
+export function otherCefrLevels(): CefrLevel[] {
+  const mine = myCefrLevels();
+  return SELECTABLE_CEFR.filter(l => !mine.includes(l));
+}
+
+export function addCefrLevel(level: CefrLevel): void {
+  let added: string[] = [];
+  try { added = JSON.parse(localStorage.getItem(ADDED_LEVELS_KEY) || '[]'); } catch { /* none */ }
+  if (!added.includes(level)) localStorage.setItem(ADDED_LEVELS_KEY, JSON.stringify([...added, level]));
+}
+
 export function newBookId(): BookLevelId {
   return `book-${crypto.randomUUID()}`;
 }
@@ -1052,6 +1082,42 @@ export function removeImportedBook(id: BookLevelId): void {
   )));
   if (localStorage.getItem(ACTIVE_LEVEL_KEY) === id) switchToLevel('A1');
   notifyProgressChanged();
+}
+
+// Two live books with the same share code are the same book — e.g. a
+// learner joined their own class code on a new device before signing in,
+// then sign-in synced down the original too (a real report: the same book
+// listed twice). Keeps the earliest-created copy, carries any progress made
+// on the other copy over (matched word by word on article + German, since
+// each copy has its own word ids, keeping whichever record is further
+// along), then removes the extra copy. Run after every sync merge.
+export function dedupeSharedBooks(): void {
+  const byCode = new Map<string, ImportedBook[]>();
+  for (const b of getImportedBooks()) {
+    if (b.shareCode) byCode.set(b.shareCode, [...(byCode.get(b.shareCode) ?? []), b]);
+  }
+  for (const group of byCode.values()) {
+    if (group.length < 2) continue;
+    const [keep, ...extras] = [...group].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const keepWords = getAllCustomWordsForLevel(keep.id);
+    const keyOf = (w: Word) => `${w.article ?? ''}|${w.de}`;
+    const keepIdByKey = new Map(Object.values(keepWords).map(w => [keyOf(w), w.id]));
+    const keepProgress = getAllProgressForLevel(keep.id);
+    for (const extra of extras) {
+      const extraWords = getAllCustomWordsForLevel(extra.id);
+      for (const [id, p] of Object.entries(getAllProgressForLevel(extra.id))) {
+        const w = extraWords[id];
+        const target = w && keepIdByKey.get(keyOf(w));
+        if (!target) continue;
+        const existing = keepProgress[target];
+        if (!existing || (p.studiedTimes ?? 0) > (existing.studiedTimes ?? 0)) keepProgress[target] = { ...p, id: target };
+      }
+      const wasActive = localStorage.getItem(ACTIVE_LEVEL_KEY) === extra.id;
+      removeImportedBook(extra.id);
+      if (wasActive) switchToLevel(keep.id); // stay on this book, not A1
+    }
+    saveAllProgressForLevel(keep.id, keepProgress);
+  }
 }
 
 // Also drops any progress recorded against it — an abandoned/mistaken add

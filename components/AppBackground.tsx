@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
+import { THEME_GRADIENTS } from '../lib/themeGradients';
 import { getTheme, Theme, THEME_CHANGED_EVENT, getCardMode, CardMode, CARD_MODE_CHANGED_EVENT, resolveCardMode } from '../lib/storage';
 
 // The app's persistent backdrop — same structural idea across every theme
@@ -52,7 +53,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   stellar: {
     stageColors: ['#a89bd6', '#7b7ec2', '#5457a0', '#332f6b'],
     buttonGradient: 'linear-gradient(135deg, #8b7ec8 0%, #6a5aa8 50%, #443a78 100%)',
-    gradient: 'from-[#0a0a2e] via-[#171344] to-[#050512]',
+    gradient: THEME_GRADIENTS.stellar.day,
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(167,139,250,0.18),transparent_65%)', className: '-top-10 left-[8%] w-1/2 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(147,197,253,0.13),transparent_65%)', className: '-top-4 right-[8%] w-2/5 h-1/2' },
@@ -65,7 +66,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   ocean: {
     stageColors: ['#8fc9c9', '#5fa8ad', '#3d7f8c', '#1f4d5c'],
     buttonGradient: 'linear-gradient(135deg, #4a9bab 0%, #327b8c 50%, #1d5266 100%)',
-    gradient: 'from-[#062736] via-[#0b5266] to-[#031a24]',
+    gradient: THEME_GRADIENTS.ocean.day,
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(165,243,252,0.16),transparent_65%)', className: '-top-10 left-[12%] w-1/2 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(110,231,183,0.10),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
@@ -78,7 +79,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   ember: {
     stageColors: ['#d9a066', '#c17a3d', '#8a5423', '#4a2e14'],
     buttonGradient: 'linear-gradient(135deg, #c17a3d 0%, #a35a24 50%, #74390f 100%)',
-    gradient: 'from-[#1f1410] via-[#7a3f1a] to-[#160d09]',
+    gradient: THEME_GRADIENTS.ember.day,
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,178,102,0.20),transparent_65%)', className: '-top-8 left-[12%] w-3/5 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(255,120,80,0.12),transparent_65%)', className: '-top-4 right-[8%] w-2/5 h-1/2' },
@@ -91,7 +92,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   forest: {
     stageColors: ['#c9a86a', '#a3b18a', '#588157', '#5b3a5e'],
     buttonGradient: 'linear-gradient(135deg, #a9835e 0%, #8a6440 50%, #6b4a2c 100%)',
-    gradient: 'from-[#0f3d3a] via-[#155c4a] to-[#0c2e25]',
+    gradient: THEME_GRADIENTS.forest.day,
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,244,200,0.16),transparent_65%)', className: '-top-10 left-[10%] w-1/2 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(190,255,230,0.11),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
@@ -104,7 +105,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   lavender: {
     stageColors: ['#c9a8d6', '#a37eb8', '#7a5691', '#4a3060'],
     buttonGradient: 'linear-gradient(135deg, #9b7bb8 0%, #7a5a96 50%, #543a70 100%)',
-    gradient: 'from-[#382a52] via-[#5b3f78] to-[#241a38]',
+    gradient: THEME_GRADIENTS.lavender.day,
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(253,224,196,0.16),transparent_65%)', className: '-top-10 left-[10%] w-1/2 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(244,194,255,0.12),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
@@ -117,7 +118,7 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   sunset: {
     stageColors: ['#e0a86a', '#d97b4a', '#b8542e', '#6b2e3a'],
     buttonGradient: 'linear-gradient(135deg, #d9773f 0%, #b8542a 50%, #832e14 100%)',
-    gradient: 'from-[#2b1750] via-[#c2542e] to-[#3a0e1a]',
+    gradient: THEME_GRADIENTS.sunset.day,
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,214,153,0.22),transparent_65%)', className: '-top-6 left-[15%] w-3/5 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(255,150,180,0.14),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
@@ -136,8 +137,8 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   citrus: {
     stageColors: ['#ffd699', '#f2a35c', '#d9773f', '#8a3d1a'],
     buttonGradient: 'linear-gradient(135deg, #d9622a 0%, #b8431a 50%, #8a2f10 100%)',
-    gradient: 'from-[#ffb347] via-[#ff7043] to-[#b8390f]',
-    gradientNight: 'from-[#7A4A1F] to-[#3D1608]',
+    gradient: THEME_GRADIENTS.citrus.day,
+    gradientNight: THEME_GRADIENTS.citrus.night,
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.22),transparent_65%)', className: '-top-6 left-[15%] w-3/5 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(255,214,102,0.18),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
@@ -150,8 +151,8 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   meadow: {
     stageColors: ['#a8d6a0', '#7ab86a', '#4a8f45', '#2a5c30'],
     buttonGradient: 'linear-gradient(135deg, #4a9b5e 0%, #2f7a45 50%, #1d5c30 100%)',
-    gradient: 'from-[#5ec8e8] via-[#8bd450] to-[#1f6b3a]',
-    gradientNight: 'from-[#1F3D4A] to-[#12331D]',
+    gradient: THEME_GRADIENTS.meadow.day,
+    gradientNight: THEME_GRADIENTS.meadow.night,
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.22),transparent_65%)', className: '-top-6 left-[12%] w-3/5 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(255,244,168,0.16),transparent_65%)', className: '-top-4 right-[8%] w-2/5 h-1/2' },
@@ -164,8 +165,8 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   bubblegum: {
     stageColors: ['#f0a8d9', '#d975b8', '#b8489a', '#6e2a5c'],
     buttonGradient: 'linear-gradient(135deg, #d94fb0 0%, #b8318f 50%, #862368 100%)',
-    gradient: 'from-[#ff8fd6] via-[#e85fc2] to-[#9c2f8a]',
-    gradientNight: 'from-[#5C2F52] to-[#331C30]',
+    gradient: THEME_GRADIENTS.bubblegum.day,
+    gradientNight: THEME_GRADIENTS.bubblegum.night,
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.24),transparent_65%)', className: '-top-6 left-[15%] w-3/5 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(255,214,245,0.18),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
@@ -183,8 +184,8 @@ export const THEME_CONFIG: Record<Theme, ThemeConfig> = {
   vanilla: {
     stageColors: ['#f5e6b8', '#e0c078', '#c19648', '#8a6a2e'],
     buttonGradient: 'linear-gradient(135deg, #d9a860 0%, #b8823a 50%, #8a5f22 100%)',
-    gradient: 'from-[#f2d38a] via-[#e8b855] to-[#c48f3a]',
-    gradientNight: 'from-[#4A3A1F] to-[#2E2010]',
+    gradient: THEME_GRADIENTS.vanilla.day,
+    gradientNight: THEME_GRADIENTS.vanilla.night,
     glows: [
       { style: 'radial-gradient(ellipse_at_top,rgba(255,255,255,0.18),transparent_65%)', className: '-top-6 left-[15%] w-3/5 h-2/3' },
       { style: 'radial-gradient(ellipse_at_top,rgba(255,244,214,0.12),transparent_65%)', className: '-top-4 right-[5%] w-2/5 h-1/2' },
@@ -216,6 +217,12 @@ export default function AppBackground() {
   // app to avoid a static-export/client hydration mismatch. A one-frame
   // flash to the real theme on load is a fair trade for that.
   const [theme, setTheme] = useState<Theme>('forest');
+  // False until the effects below have read the real theme/card mode. Until
+  // then this layer stays invisible and layout.tsx's early paint (already
+  // the saved theme's colors) is what shows — so the default theme never
+  // flashes up first. Set by the last effect, so it lands in the same
+  // render as the real theme.
+  const [ready, setReady] = useState(false);
   // Same pre-hydration-default reasoning as theme above — the card
   // surfaces this drives (see globals.css's [data-card-mode="dark"])
   // aren't wired into any component yet, but the sky itself (this
@@ -276,6 +283,8 @@ export default function AppBackground() {
   const cfg = THEME_CONFIG[theme];
   const gradient = resolvedCardMode === 'dark' && cfg.gradientNight ? cfg.gradientNight : cfg.gradient;
 
+  useEffect(() => setReady(true), []);
+
   // The page is drawn edge to edge, under the iPhone's status bar (see
   // capacitor.config.ts's contentInset and layout.tsx's viewport-fit) —
   // so that strip shows this theme instead of a separate black/white band.
@@ -285,18 +294,23 @@ export default function AppBackground() {
   // the light themes (Citrus, Meadow, Bubblegum, Vanilla) would be
   // unreadable.
   useEffect(() => {
-    const top = gradient.match(/#[0-9a-fA-F]{6}/)?.[0] ?? '#0f3d3a';
+    if (!ready) return; // don't overwrite the early paint with the default theme
+    const hexes = gradient.match(/#[0-9a-fA-F]{6}/g) ?? ['#0f3d3a'];
+    const top = hexes[0];
+    // Same paint layout.tsx's early script put on <html> before startup —
+    // kept in step with theme changes made afterwards.
     document.documentElement.style.backgroundColor = top;
+    document.documentElement.style.backgroundImage = `linear-gradient(to bottom,${hexes.join(',')})`;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', top);
     if (!Capacitor.isNativePlatform()) return;
     const [r, g, b] = [1, 3, 5].map(i => parseInt(top.slice(i, i + 2), 16) / 255);
     const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
     // Style.Dark = light text (for a dark background), Style.Light = dark text.
     StatusBar.setStyle({ style: luminance > 0.55 ? Style.Light : Style.Dark }).catch(() => {});
-  }, [gradient]);
+  }, [gradient, ready]);
 
   return (
-    <div aria-hidden className={`fixed inset-0 -z-10 overflow-hidden bg-gradient-to-b ${gradient}`}>
+    <div aria-hidden className={`fixed inset-0 -z-10 overflow-hidden bg-gradient-to-b ${gradient} transition-opacity duration-500 ${ready ? 'opacity-100' : 'opacity-0'}`}>
       {cfg.glows.map((g, i) => (
         <div key={i} className={`absolute ${g.className}`} style={{ backgroundImage: g.style.replace(/_/g, ' ') }} />
       ))}

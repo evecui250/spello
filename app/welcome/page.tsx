@@ -2,10 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSettings, saveSettings, switchToLevel, getImportedBookByShareCode, setImportedBookLevel, cefrLevelFor, markOnboardingDone, Settings, MascotStageId, getTheme, saveTheme, Theme, saveLocalAvatarId, saveLocalNickname } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, allProfileLevels, getImportedBookByShareCode, setImportedBookLevel, cefrLevelFor, markOnboardingDone, Settings, MascotStageId, getTheme, saveTheme, Theme, saveLocalAvatarId, saveLocalNickname } from '../../lib/storage';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview } from '../../lib/practice';
-import { Level, CefrLevel, isCefrLevel } from '../../lib/words';
-import { scheduleSync } from '../../lib/sync';
+import { Level, CefrLevel, isCefrLevel, isProfileLevelId } from '../../lib/words';
+import { scheduleSync, pullAndMerge } from '../../lib/sync';
+import { supabase } from '../../lib/supabase';
+import { createPortal } from 'react-dom';
+import AccountPanel from '../../components/AccountPanel';
 import { fetchSharedBook, addSharedBook, normalizeBookCode, SharedBook } from '../../lib/bookImport';
 import { AVATAR_CATALOG, heroImageFor, getDisplayProfile, setAvatarId as saveRemoteAvatarId, setNickname as saveRemoteNickname } from '../../lib/shop';
 import DachshundMascot from '../../components/Mascot';
@@ -62,6 +65,28 @@ export default function WelcomePage() {
   const [codeStatus, setCodeStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [codeError, setCodeError] = useState('');
   const [finishing, setFinishing] = useState(false);
+  // "Already have an account?" — signs in with the emailed code, brings
+  // the account's progress down, and skips the rest of the welcome steps.
+  const [signInOpen, setSignInOpen] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+
+  const handleSignedIn = async (userId: string) => {
+    setRestoring(true);
+    await pullAndMerge(userId);
+    const { data } = await supabase.from('user_progress').select('level').eq('user_id', userId).maybeSingle();
+    if (!data) {
+      // A brand-new account after all — nothing to restore, so carry on
+      // with the welcome steps (now signed in).
+      setRestoring(false);
+      setSignInOpen(false);
+      return;
+    }
+    // The book this account was last studying (pushed with every sync),
+    // so this device opens where the learner left off rather than on A1.
+    if (isProfileLevelId(data.level) && allProfileLevels().includes(data.level)) switchToLevel(data.level);
+    markOnboardingDone();
+    router.replace('/');
+  };
 
   const lookUpCode = async () => {
     const c = normalizeBookCode(bookCode);
@@ -160,7 +185,35 @@ export default function WelcomePage() {
       <div className="flex flex-col items-center gap-3 text-center px-4">
         <h1 className="text-xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Welcome to Spello</h1>
         <StepDots step={step} />
+        {step === 'level' && (
+          <button
+            type="button"
+            onClick={() => setSignInOpen(true)}
+            className="text-sm text-amber-50/85 underline underline-offset-2 hover:text-amber-50"
+          >
+            Already have an account? Sign in
+          </button>
+        )}
       </div>
+
+      {signInOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { if (!restoring) setSignInOpen(false); }}>
+          <div className="w-full max-w-sm bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-ink">Welcome back</h2>
+              {!restoring && (
+                <button type="button" onClick={() => setSignInOpen(false)} aria-label="Close" className="text-ink-soft hover:text-ink text-xl leading-none">×</button>
+              )}
+            </div>
+            {restoring ? (
+              <p className="text-ink text-sm py-4 text-center">Loading your progress…</p>
+            ) : (
+              <AccountPanel onSignedIn={handleSignedIn} />
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {step === 'level' && (
         <div className="w-full flex flex-col gap-6">

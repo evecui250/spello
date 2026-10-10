@@ -11,7 +11,7 @@ import {
   getDailyWordLogForSync, mergeDailyWordLogFromSync, DailyWordLog,
   getAllCustomWordsForLevel, saveAllCustomWordsForLevel,
   getDailySessionForLevel, saveDailySessionForLevel, DailySession,
-  getImportedBooksForSync, saveImportedBooksFromSync, ImportedBook, allProfileLevels,
+  getImportedBooksForSync, saveImportedBooksFromSync, ImportedBook, allProfileLevels, dedupeSharedBooks,
   today,
 } from './storage';
 import { Level, Word, isProfileLevelId, isBookLevelId } from './words';
@@ -301,6 +301,9 @@ export async function pullAndMerge(userId: string): Promise<void> {
     // on every single pull.
     if (merged && merged !== localSession) saveDailySessionForLevel(level, merged);
   }
+
+  // Same book twice (one per device, same share code) -> fold into one.
+  dedupeSharedBooks();
 }
 
 // Pushes every level's local state up as this user's remote snapshot —

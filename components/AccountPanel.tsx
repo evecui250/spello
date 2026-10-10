@@ -12,6 +12,9 @@ interface Props {
   // Called after remote data has been pulled and merged in, so the caller
   // can refresh anything it's already displaying (e.g. settings sliders).
   onSync?: () => void;
+  // Called right after a code is verified (the Welcome page's "I already
+  // have an account" flow uses it to finish onboarding).
+  onSignedIn?: (userId: string) => void;
 }
 
 // Purely a UI throttle so a tester can't spam the button faster than the
@@ -19,7 +22,7 @@ interface Props {
 // limit server-side regardless (see handleSendLink's error path below).
 const RESEND_COOLDOWN_SECONDS = 60;
 
-export default function AccountPanel({ onSync }: Props) {
+export default function AccountPanel({ onSync, onSignedIn }: Props) {
   const [email, setEmail] = useState<string | null>(null);
   const [inputEmail, setInputEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
@@ -121,9 +124,9 @@ export default function AccountPanel({ onSync }: Props) {
     if (!otpCode.trim() || verifying) return;
     setVerifying(true);
     setVerifyError('');
-    const { error } = await supabase.auth.verifyOtp({
+    const { data, error } = await supabase.auth.verifyOtp({
       email: inputEmail.trim(),
-      token: otpCode.trim(),
+      token: otpCode.replace(/\D/g, ''),
       type: 'email',
     });
     setVerifying(false);
@@ -136,6 +139,7 @@ export default function AccountPanel({ onSync }: Props) {
       setOtpCode('');
       setStatus('idle');
       setInputEmail('');
+      if (data.user) onSignedIn?.(data.user.id);
     }
   };
 
@@ -284,31 +288,33 @@ export default function AccountPanel({ onSync }: Props) {
               Supabase quotes as its own default -- no maxLength here so a
               future otp_length change doesn't silently re-truncate it). */}
           <p className="text-ink-soft text-sm">
-            Enter the code from that email below — this keeps you in this tab, which matters if you already have progress saved here.
+            Enter the code from that email. On iPhone, tap the code suggested above the keyboard to fill it in.
           </p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="Enter code from email"
-              value={otpCode}
-              onChange={e => setOtpCode(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
-              autoFocus
-              className="flex-1 min-w-0 border-2 border-accent/70 rounded-lg px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent font-mono tracking-widest"
-            />
-            <button
-              onClick={handleVerifyOtp}
-              disabled={!otpCode.trim() || verifying}
-              className="bg-accent text-white px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-40 hover:bg-accent-deep active:scale-95 transition-all shrink-0"
-            >
-              {verifying ? 'Verifying…' : 'Verify'}
-            </button>
-          </div>
+          {/* Big, centered digits — easy to check against the email at a
+              glance. autoComplete one-time-code lets iOS offer the code
+              from Mail right above the keyboard. Digits only (spaces or
+              dashes from a paste are dropped). */}
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="••••••"
+            value={otpCode}
+            onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 10))}
+            onKeyDown={e => e.key === 'Enter' && handleVerifyOtp()}
+            autoFocus
+            className="w-full border-2 border-accent/70 rounded-xl px-3 py-3 text-ink text-center text-3xl font-mono tracking-[0.4em] placeholder:text-ink-soft/50 focus:outline-none focus:border-accent"
+          />
+          <button
+            onClick={handleVerifyOtp}
+            disabled={otpCode.length < 6 || verifying}
+            className="w-full bg-accent text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-accent-deep active:scale-95 transition-all"
+          >
+            {verifying ? 'Signing in…' : 'Sign in'}
+          </button>
           {verifyError && <p className="text-clay text-xs">{verifyError}</p>}
           <p className="text-ink-soft text-xs pt-1 border-t border-good/40">
-            The email also has a sign-in link — avoid tapping it if you have progress saved on this device, since it can open a different browser with nothing saved in it. Don&apos;t see the email? Check spam/junk, it can take a minute.
+            Don&apos;t see the email? Check spam/junk — it can take a minute.
           </p>
           <button
             onClick={handleSendLink}

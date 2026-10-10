@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { getSettings, saveSettings, switchToLevel, getImportedBooks, levelDisplayName, ImportedBook, removeImportedBook, setImportedBookLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { getSettings, saveSettings, switchToLevel, getImportedBooks, levelDisplayName, ImportedBook, removeImportedBook, setImportedBookLevel, myCefrLevels, otherCefrLevels, addCefrLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch, allWordsForLevel } from '../../lib/practice';
-import { Level, LEVEL_SOURCE, isCefrLevel, isBookLevelId } from '../../lib/words';
+import { Level, CefrLevel, LEVEL_SOURCE, isCefrLevel, isBookLevelId } from '../../lib/words';
 import { shareImportedBook } from '../../lib/bookImport';
 import { scheduleSync, syncNow, SYNCED_EVENT } from '../../lib/sync';
 import { CHIME_OPTIONS } from '../../lib/sound';
@@ -27,8 +27,44 @@ const ADMIN_EMAIL = 'evecui250@gmail.com';
 
 const FONT_LABEL: Record<FontScale, string> = { small: 'Small', default: 'Default', large: 'Large' };
 
+// Profile is a short menu; each row opens one of these as its own screen
+// (/settings?section=…), so the phone's back gesture returns to the menu.
+type Section = 'account' | 'books' | 'learning' | 'appearance' | 'help';
+const SECTIONS: Section[] = ['account', 'books', 'learning', 'appearance', 'help'];
+
+function MenuRow({ icon, title, detail, onClick }: { icon: string; title: string; detail: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-paper-dim/40 active:bg-paper-dim/60 transition-colors"
+    >
+      <span className="w-9 h-9 rounded-xl bg-accent/15 flex items-center justify-center text-lg shrink-0" aria-hidden>{icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold text-ink">{title}</span>
+        <span className="block text-ink-soft text-sm truncate">{detail}</span>
+      </span>
+      <span className="text-ink-soft text-xl leading-none shrink-0" aria-hidden>›</span>
+    </button>
+  );
+}
+
+// useSearchParams needs a Suspense boundary in a statically exported page.
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SettingsPageInner />
+    </Suspense>
+  );
+}
+
+function SettingsPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawSection = searchParams.get('section');
+  const section: Section | null = (SECTIONS as string[]).includes(rawSection ?? '') ? (rawSection as Section) : null;
+  const openSection = (s: Section) => { router.push(`/settings?section=${s}`); window.scrollTo(0, 0); };
+  const closeSection = () => { router.push('/settings'); window.scrollTo(0, 0); };
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
   const [studyBatchSize, setStudyBatchSize] = useState(5);
   const [dailyReview, setDailyReview] = useState(15);
@@ -51,13 +87,13 @@ export default function SettingsPage() {
   const [cardMode, setCardMode] = useState<CardMode>('auto');
   const [fontScale, setFontScale] = useState<FontScale>('default');
   const [soundName, setSoundName] = useState('Triad Bloom');
-  // Collapsed by default -- the whole point of grouping Theme/Font
-  // size/Sound under one "Appearance" accordion is that none of it
-  // shows until asked for (see the settings-page-length feedback this
-  // was built for).
-  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
+  const [addLevelOpen, setAddLevelOpen] = useState(false);
+  // Read after mount (not during render) so the first client render matches
+  // the prerendered page; refreshed whenever the book or book list changes.
+  const [myLevels, setMyLevels] = useState<CefrLevel[]>([]);
+  const [otherLevels, setOtherLevels] = useState<CefrLevel[]>([]);
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [importedBooks, setImportedBooks] = useState<ImportedBook[]>([]);
@@ -77,6 +113,11 @@ export default function SettingsPage() {
   const loadFromStorage = () => applySettings(getSettings());
 
   useEffect(loadFromStorage, []);
+  useEffect(() => {
+    setMyLevels(myCefrLevels());
+    setOtherLevels(otherCefrLevels());
+  }, [level, importedBooks]);
+
   // Re-read after a sync too — a book imported on another device only
   // shows up here once pullAndMerge has brought its registry entry down.
   useEffect(() => {
@@ -222,155 +263,98 @@ export default function SettingsPage() {
     router.push('/welcome');
   };
 
+  const SECTION_TITLES: Record<Section, string> = {
+    account: 'Account', books: 'Books & level', learning: 'Learning', appearance: 'Appearance', help: 'Help & about',
+  };
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Profile</h1>
+      <div className="flex items-center justify-between gap-3">
+        {section ? (
+          <button
+            type="button"
+            onClick={closeSection}
+            className="flex items-center gap-2 text-on-bg hover:text-on-bg/80 transition-colors min-w-0"
+          >
+            <span className="text-2xl leading-none">‹</span>
+            <h1 className="text-2xl font-bold truncate" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>{SECTION_TITLES[section]}</h1>
+          </button>
+        ) : (
+          <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Profile</h1>
+        )}
         <span className={`text-sm font-medium text-good transition-opacity ${saved ? 'opacity-100' : 'opacity-0'}`}>
           ✓ Saved
         </span>
       </div>
 
+      {/* The menu: one row per area, each opening its own screen — like
+          other apps' settings, instead of every control on one long page
+          (real feedback: too crowded, everything needed scrolling). */}
+      {!section && (
+        <>
+          <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm divide-y divide-paper-line/60 overflow-hidden">
+            <MenuRow icon="👤" title="Account" detail={signedInEmail ?? 'Sign in to sync across devices'} onClick={() => openSection('account')} />
+            <MenuRow icon="📚" title="Books & level" detail={`${levelDisplayName(level)} · ${allWordsForLevel(level).length} words`} onClick={() => openSection('books')} />
+            <MenuRow icon="✏️" title="Learning" detail={`${studyBatchSize} new · up to ${dailyReview} reviews a day`} onClick={() => openSection('learning')} />
+            <MenuRow icon="🎨" title="Appearance" detail={`${theme[0].toUpperCase()}${theme.slice(1)} · ${FONT_LABEL[fontScale]} text · ${soundName}`} onClick={() => openSection('appearance')} />
+            <MenuRow icon="💬" title="Help & about" detail="Welcome guide, report a problem, privacy" onClick={() => openSection('help')} />
+          </div>
+      <button
+        type="button"
+        onClick={() => setResetModalOpen(true)}
+        className="text-center bg-clay/15 backdrop-blur-sm rounded-2xl border border-clay shadow-sm p-4 font-semibold text-clay hover:bg-clay/25 transition-colors"
+      >
+        Reset account
+      </button>
+          {signedInEmail === ADMIN_EMAIL && (
+            <Link href="/admin" className="text-center text-sm text-on-bg/75 hover:text-on-bg underline">Admin</Link>
+          )}
+        </>
+      )}
+
+      {section === 'account' && (
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-4">
-        <span className="block font-semibold text-ink">Account</span>
         <AccountPanel onSync={loadFromStorage} />
       </div>
+      )}
 
-      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setAppearanceOpen(v => !v)}
-          aria-expanded={appearanceOpen}
-          className="w-full flex items-center justify-between gap-3 p-6 text-left hover:bg-paper-dim/40 active:bg-paper-dim/60 transition-colors"
-        >
-          <div>
-            <span className="block font-semibold text-ink">Appearance</span>
-            {!appearanceOpen && (
-              <span className="block text-ink-soft text-sm mt-0.5">
-                {theme[0].toUpperCase()}{theme.slice(1)} theme · {FONT_LABEL[fontScale]} text · {soundName} sound
-              </span>
-            )}
-          </div>
-          {/* A bare gray chevron read as too subtle to notice as tappable
-              — a filled indigo badge (same accent as everything else
-              interactive on this page) makes it look like a real control,
-              not decoration. */}
-          <span
-            className={`shrink-0 w-8 h-8 rounded-full bg-accent/15 text-label flex items-center justify-center text-base font-bold transition-transform ${appearanceOpen ? 'rotate-180' : ''}`}
-          >
-            ▾
-          </span>
-        </button>
-        {appearanceOpen && (
-          <div className="px-6 pb-6 flex flex-col gap-6 border-t border-paper-line/60 pt-5">
-            <div>
-              <label className="block font-semibold text-ink mb-1">Theme</label>
-              <p className="text-ink-soft text-sm mb-3">Changes the app's background.</p>
-              <div className="grid grid-cols-5 gap-x-2 gap-y-3">
-                {(Object.keys(THEME_CONFIG) as Theme[]).map(t => {
-                  const cfg = THEME_CONFIG[t];
-                  const isSelected = theme === t;
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => handleThemeChange(t)}
-                      className="flex flex-col items-center gap-1"
-                    >
-                      <span
-                        className={`w-9 h-9 rounded-full bg-gradient-to-b ${cfg.gradient} transition-all ${
-                          isSelected ? 'ring-2 ring-offset-2 ring-offset-amber-50 ring-accent scale-110' : 'ring-1 ring-black/10'
-                        }`}
-                      />
-                      <span className={`text-[11px] font-medium capitalize ${isSelected ? 'text-label' : 'text-ink-soft'}`}>
-                        {t}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-ink mb-1">Cards</label>
-              <p className="text-ink-soft text-sm mb-3">Dims every card for reading comfortably at night. Auto follows your device's clock.</p>
-              <div className="grid grid-cols-3 gap-2">
-                {([
-                  { value: 'light', label: 'Day' },
-                  { value: 'auto', label: 'Auto' },
-                  { value: 'dark', label: 'Night' },
-                ] as { value: CardMode; label: string }[]).map(opt => {
-                  const isSelected = cardMode === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => handleCardModeChange(opt.value)}
-                      className={`rounded-xl py-3 border-2 font-medium text-sm transition-colors ${
-                        isSelected ? 'border-accent bg-accent/10 text-label' : 'border-paper-line text-ink-soft'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-ink mb-1">Font size</label>
-              <p className="text-ink-soft text-sm mb-3">Changes the text size everywhere in the app.</p>
-              <div className="grid grid-cols-3 gap-2">
-                {([
-                  { value: 'small', label: 'Small', sample: 'text-sm' },
-                  { value: 'default', label: 'Default', sample: 'text-base' },
-                  { value: 'large', label: 'Large', sample: 'text-lg' },
-                ] as { value: FontScale; label: string; sample: string }[]).map(opt => {
-                  const isSelected = fontScale === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => handleFontScaleChange(opt.value)}
-                      className={`flex flex-col items-center gap-1 rounded-xl py-3 border-2 transition-colors ${
-                        isSelected ? 'border-accent bg-accent/10' : 'border-paper-line'
-                      }`}
-                    >
-                      <span className={`font-bold text-ink ${opt.sample}`}>Aa</span>
-                      <span className={`text-xs font-medium ${isSelected ? 'text-label' : 'text-ink-soft'}`}>{opt.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-ink mb-1">Correct-answer sound</label>
-              <p className="text-ink-soft text-sm mb-3">Plays when you spell, match, or translate a word correctly. Tap one to hear it.</p>
-              <SoundPicker onChange={id => setSoundName(CHIME_OPTIONS.find(o => o.id === id)?.name ?? 'Triad Bloom')} />
-            </div>
-          </div>
-        )}
-      </div>
-
+      {section === 'books' && (
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-6">
         <div>
-          <label className="block font-semibold text-ink mb-1">Level</label>
+          <label className="block font-semibold text-ink mb-1">Book you&apos;re studying</label>
           <select
             value={level}
             onChange={e => handleLevelChange(e.target.value as Level)}
             className="w-full border-2 border-accent/70 rounded-lg px-3 py-2 text-ink focus:outline-none focus:border-accent"
           >
-            <option value="A1">A1</option>
-            <option value="A2">A2</option>
-            <option value="B1">B1</option>
-            <option value="B2">B2</option>
+            {myLevels.map(l => <option key={l} value={l}>{l}</option>)}
             {importedBooks.length > 0 && (
               <optgroup label="My imported books">
                 {importedBooks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </optgroup>
             )}
           </select>
+          {otherLevels.length > 0 && (
+            addLevelOpen ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-ink-soft text-sm">Add:</span>
+                {otherLevels.map(l => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => { addCefrLevel(l); setAddLevelOpen(false); handleLevelChange(l); }}
+                    className="px-3 py-1 rounded-full bg-accent/15 text-label text-sm font-semibold hover:bg-accent/25 transition-colors"
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <button type="button" onClick={() => setAddLevelOpen(true)} className="mt-2 text-sm font-semibold text-label hover:text-ink underline underline-offset-2">
+                + Add a level book ({otherLevels.join(', ')})
+              </button>
+            )
+          )}
           <p className="text-ink-soft text-sm mt-1">This vocabulary book has {allWordsForLevel(level).length} words{isCefrLevel(level) ? ` for ${level}` : ''}.</p>
           {isCefrLevel(level) && LEVEL_SOURCE[level] && (
             <p className="text-ink-soft text-xs mt-0.5">{LEVEL_SOURCE[level]}</p>
@@ -433,6 +417,11 @@ export default function SettingsPage() {
           </div>
         </div>
 
+      </div>
+      )}
+
+      {section === 'learning' && (
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-6">
         <div>
           <label className="block font-semibold text-ink mb-1">Learn with</label>
           <select
@@ -589,7 +578,103 @@ export default function SettingsPage() {
           />
         </div>
       </div>
+      )}
 
+      {section === 'appearance' && (
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-6">
+          <div className="flex flex-col gap-6">
+            <div>
+              <label className="block font-semibold text-ink mb-1">Theme</label>
+              <p className="text-ink-soft text-sm mb-3">Changes the app's background.</p>
+              <div className="grid grid-cols-5 gap-x-2 gap-y-3">
+                {(Object.keys(THEME_CONFIG) as Theme[]).map(t => {
+                  const cfg = THEME_CONFIG[t];
+                  const isSelected = theme === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => handleThemeChange(t)}
+                      className="flex flex-col items-center gap-1"
+                    >
+                      <span
+                        className={`w-9 h-9 rounded-full bg-gradient-to-b ${cfg.gradient} transition-all ${
+                          isSelected ? 'ring-2 ring-offset-2 ring-offset-amber-50 ring-accent scale-110' : 'ring-1 ring-black/10'
+                        }`}
+                      />
+                      <span className={`text-[11px] font-medium capitalize ${isSelected ? 'text-label' : 'text-ink-soft'}`}>
+                        {t}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-ink mb-1">Cards</label>
+              <p className="text-ink-soft text-sm mb-3">Dims every card for reading comfortably at night. Auto follows your device's clock.</p>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { value: 'light', label: 'Day' },
+                  { value: 'auto', label: 'Auto' },
+                  { value: 'dark', label: 'Night' },
+                ] as { value: CardMode; label: string }[]).map(opt => {
+                  const isSelected = cardMode === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleCardModeChange(opt.value)}
+                      className={`rounded-xl py-3 border-2 font-medium text-sm transition-colors ${
+                        isSelected ? 'border-accent bg-accent/10 text-label' : 'border-paper-line text-ink-soft'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-ink mb-1">Font size</label>
+              <p className="text-ink-soft text-sm mb-3">Changes the text size everywhere in the app.</p>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { value: 'small', label: 'Small', sample: 'text-sm' },
+                  { value: 'default', label: 'Default', sample: 'text-base' },
+                  { value: 'large', label: 'Large', sample: 'text-lg' },
+                ] as { value: FontScale; label: string; sample: string }[]).map(opt => {
+                  const isSelected = fontScale === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleFontScaleChange(opt.value)}
+                      className={`flex flex-col items-center gap-1 rounded-xl py-3 border-2 transition-colors ${
+                        isSelected ? 'border-accent bg-accent/10' : 'border-paper-line'
+                      }`}
+                    >
+                      <span className={`font-bold text-ink ${opt.sample}`}>Aa</span>
+                      <span className={`text-xs font-medium ${isSelected ? 'text-label' : 'text-ink-soft'}`}>{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-ink mb-1">Correct-answer sound</label>
+              <p className="text-ink-soft text-sm mb-3">Plays when you spell, match, or translate a word correctly. Tap one to hear it.</p>
+              <SoundPicker onChange={id => setSoundName(CHIME_OPTIONS.find(o => o.id === id)?.name ?? 'Triad Bloom')} />
+            </div>
+          </div>
+      </div>
+      )}
+
+      {section === 'help' && (
+        <>
       <div className="grid grid-cols-2 gap-3">
         <Link
           href="/welcome"
@@ -599,28 +684,12 @@ export default function SettingsPage() {
         </Link>
         <BugReportButton />
       </div>
-
-      {/* A tester previously mis-tapped a prominent on-page danger-zone
-          button, which is why this opens a confirmation modal rather than
-          resetting outright — but per owner feedback, burying the entry
-          point itself as a small text link made it too easy to miss
-          entirely. Same visual weight as View welcome guide/Feedback
-          above, just red-tinted so it still reads as the odd one out. */}
-      <button
-        type="button"
-        onClick={() => setResetModalOpen(true)}
-        className="text-center bg-clay/15 backdrop-blur-sm rounded-2xl border border-clay shadow-sm p-4 font-semibold text-clay hover:bg-clay/25 transition-colors"
-      >
-        Reset account
-      </button>
-
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-sm">
         <Link href="/terms" className="text-on-bg/75 hover:text-on-bg underline">Terms of Service</Link>
         <Link href="/privacy" className="text-on-bg/75 hover:text-on-bg underline">Privacy Policy</Link>
-        {signedInEmail === ADMIN_EMAIL && (
-          <Link href="/admin" className="text-on-bg/75 hover:text-on-bg underline">Admin</Link>
-        )}
       </div>
+        </>
+      )}
 
       {/* Portaled straight to <body>, same reasoning as BugReportButton's
           modal — escapes any ancestor with backdrop-filter/transform that

@@ -3,6 +3,7 @@
 import { Fraunces, Karla, IBM_Plex_Mono } from 'next/font/google';
 import '../styles/globals.css';
 import NavBar from '../components/NavBar';
+import { THEME_GRADIENTS, gradientHexes } from '../lib/themeGradients';
 import StudyRoadmap from '../components/StudyRoadmap';
 import AppBackground from '../components/AppBackground';
 import SyncGate from '../components/SyncGate';
@@ -23,12 +24,29 @@ const fraunces = Fraunces({ subsets: ['latin'], variable: '--font-fraunces', dis
 const karla = Karla({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-karla', display: 'swap' });
 const plexMono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['500', '600'], variable: '--font-plex-mono', display: 'swap' });
 
+// Paints the saved theme's sky colors onto <html> before anything else
+// draws — the full AppBackground (glows, mist, particles) only exists once
+// React has started, and without this the default theme showed for a
+// moment on every launch before switching to the learner's own (a real
+// report). Mirrors storage.ts's getTheme/getCardMode/resolveCardMode.
+const EARLY_PAINT_THEMES = Object.fromEntries(Object.entries(THEME_GRADIENTS).map(([t, g]) => [
+  t, { d: gradientHexes(g.day), n: g.night ? gradientHexes(g.night) : null },
+]));
+const EARLY_PAINT_SCRIPT = `(function(){try{var G=${JSON.stringify(EARLY_PAINT_THEMES)};`
+  + `var t=localStorage.getItem('wb2_theme');if(!G[t])t='forest';`
+  + `var m=localStorage.getItem('wb2_card_mode')||'auto';`
+  + `if(m==='auto'){var h=new Date().getHours();m=(h>=20||h<7)?'dark':'light';}`
+  + `var c=(m==='dark'&&G[t].n)||G[t].d;var s=document.documentElement.style;`
+  + `s.backgroundColor=c[0];s.backgroundImage='linear-gradient(to bottom,'+c.join(',')+')';`
+  + `}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
   return (
-    <html lang="de" className={`${fraunces.variable} ${karla.variable} ${plexMono.variable}`}>
+    <html lang="de" suppressHydrationWarning className={`${fraunces.variable} ${karla.variable} ${plexMono.variable}`}>
       <head>
         <meta charSet="utf-8" />
+        <script dangerouslySetInnerHTML={{ __html: EARLY_PAINT_SCRIPT }} />
         {/* viewport-fit=cover + the safe-area-inset-top padding below is
             what apple-mobile-web-app-status-bar-style="black-translucent"
             further down actually implies -- that meta tag already asks iOS

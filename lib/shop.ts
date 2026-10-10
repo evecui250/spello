@@ -250,19 +250,41 @@ export interface DisplayProfile {
 // instead" on its own. Signed-out visitors get the local fallback (see
 // lib/storage.ts) with no equipped accessories — accessories are bought
 // with points, which only exist for a signed-in account.
+// The last profile shown on this device — Home renders it instantly while
+// getDisplayProfile() refreshes in the background. For a signed-in learner
+// that refresh is a network round trip, and without this the default
+// dachshund showed for a moment on every launch before their own pet
+// replaced it (a real report).
+const PROFILE_CACHE_KEY = 'wb2_display_profile_cache';
+
+export function getCachedDisplayProfile(): DisplayProfile | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const p = JSON.parse(localStorage.getItem(PROFILE_CACHE_KEY) || 'null');
+    return p && typeof p.avatarId === 'string' ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheDisplayProfile(p: DisplayProfile): DisplayProfile {
+  try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(p)); } catch { /* best effort */ }
+  return p;
+}
+
 export async function getDisplayProfile(): Promise<DisplayProfile> {
   const { data: { session } } = await supabase.auth.getSession();
   if (session) {
     const profile = await getMyProfile();
     if (profile) {
-      return { avatarId: profile.avatarId, equipped: profile.equipped, nickname: profile.nickname, signedIn: true };
+      return cacheDisplayProfile({ avatarId: profile.avatarId, equipped: profile.equipped, nickname: profile.nickname, signedIn: true });
     }
     // getMyProfile already retries once; a still-failed fetch falls back
     // to the same untouched defaults a brand new profile would have,
     // rather than leaving the caller with nothing to render.
     return { avatarId: 'dachshund', equipped: NO_ACCESSORIES, nickname: null, signedIn: true };
   }
-  return { avatarId: getLocalAvatarId(), equipped: NO_ACCESSORIES, nickname: getLocalNickname(), signedIn: false };
+  return cacheDisplayProfile({ avatarId: getLocalAvatarId(), equipped: NO_ACCESSORIES, nickname: getLocalNickname(), signedIn: false });
 }
 
 // Called once, right after a fresh sign-in (see lib/sync.ts's
