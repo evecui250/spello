@@ -240,14 +240,15 @@ export default function ArtikelBlitzGame({
   return (
     <div className="flex flex-col gap-5">
       {mode === 'timed' && (
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Artikel Blitz</h1>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <span />
+          <h1 className="text-2xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Artikel Blitz</h1>
           {onQuit ? (
-            <button type="button" onClick={onQuit} className="text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
+            <button type="button" onClick={onQuit} className="justify-self-end text-right text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
               {quitLabel} →
             </button>
           ) : (
-            <Link href={homeHref} className="text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
+            <Link href={homeHref} className="justify-self-end text-right text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
               {homeLabel}
             </Link>
           )}
@@ -346,33 +347,56 @@ export default function ArtikelBlitzGame({
               <PointsIcon className="w-4 h-4" /> +1
             </div>
           )}
-          {mode === 'timed' && (
-            <button
-              type="button"
-              onClick={startTimed}
-              className="w-full max-w-[220px] text-white py-3.5 rounded-full font-bold text-lg shadow-md active:scale-95 transition-all mt-2"
-              style={{ backgroundImage: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' }}
-            >
-              Play again
-            </button>
-          )}
-          {onChooseGame && (
-            <button
-              type="button"
-              onClick={onChooseGame}
-              className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
-            >
-              Choose a game
-            </button>
-          )}
-          {onQuit && (
-            <button
-              type="button"
-              onClick={onQuit}
-              className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
-            >
-              {mode === 'practice' ? 'Back to notebook' : quitLabel}
-            </button>
+          {/* In the post-session bonus round (onChooseGame + onQuit), same
+              order as Wortpaare: Finish is the big button, the rest links. */}
+          {mode === 'timed' && onChooseGame && onQuit ? (
+            <>
+              <button
+                type="button"
+                onClick={onQuit}
+                className="w-full max-w-[220px] text-white py-3.5 rounded-full font-bold text-lg shadow-md active:scale-95 transition-all mt-2"
+                style={{ backgroundImage: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' }}
+              >
+                Finish
+              </button>
+              <button type="button" onClick={onChooseGame} className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors">
+                Choose another game
+              </button>
+              <button type="button" onClick={startTimed} className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors">
+                Play again
+              </button>
+            </>
+          ) : (
+            <>
+            {mode === 'timed' && (
+              <button
+                type="button"
+                onClick={startTimed}
+                className="w-full max-w-[220px] text-white py-3.5 rounded-full font-bold text-lg shadow-md active:scale-95 transition-all mt-2"
+                style={{ backgroundImage: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)' }}
+              >
+                Play again
+              </button>
+            )}
+            {onChooseGame && (
+              <button
+                type="button"
+                onClick={onChooseGame}
+                className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
+              >
+                Choose a game
+              </button>
+            )}
+            {onQuit && (
+              <button
+                type="button"
+                onClick={onQuit}
+                className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
+              >
+                {mode === 'practice' ? 'Back to notebook' : quitLabel}
+              </button>
+            )}
+            </>
           )}
         </div>
       )}

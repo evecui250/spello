@@ -314,20 +314,19 @@ function SettingsPageInner() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
-        {section ? (
-          <button
-            type="button"
-            onClick={closeSection}
-            className="flex items-center gap-2 text-on-bg hover:text-on-bg/80 transition-colors min-w-0"
-          >
-            <span className="text-2xl leading-none">‹</span>
-            <h1 className="text-2xl font-bold truncate" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>{SECTION_TITLES[section]}</h1>
-          </button>
-        ) : (
-          <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Profile</h1>
-        )}
-        <span className={`text-sm font-medium text-good transition-opacity ${saved ? 'opacity-100' : 'opacity-0'}`}>
+      {/* Title centered; back arrow on the left, "Saved" on the right. */}
+      <div className="grid grid-cols-[3.5rem_1fr_3.5rem] items-center">
+        <div>
+          {section && (
+            <button type="button" onClick={closeSection} aria-label="Back" className="text-on-bg hover:text-on-bg/80 text-3xl leading-none px-1 transition-colors">
+              ‹
+            </button>
+          )}
+        </div>
+        <h1 className="text-2xl font-bold text-on-bg text-center truncate" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+          {section ? SECTION_TITLES[section] : 'Profile'}
+        </h1>
+        <span className={`justify-self-end text-sm font-medium text-good transition-opacity ${saved ? 'opacity-100' : 'opacity-0'}`}>
           ✓ Saved
         </span>
       </div>
@@ -559,7 +558,7 @@ function SettingsPageInner() {
               </button>
             </span>
             <span className="text-right">
-              ~{daysToWeeks(forecast.daysToMasterAll)} weeks to master all
+              ~{daysToWeeks(forecast.daysToMasterAll)} week{daysToWeeks(forecast.daysToMasterAll) === 1 ? '' : 's'} to master all
             </span>
           </div>
           {showPaceInfo && (

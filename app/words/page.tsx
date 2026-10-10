@@ -578,7 +578,7 @@ export default function WordsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Word List</h1>
+      <h1 className="text-2xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Word List</h1>
 
       <div className="flex gap-1 bg-paper-dim/70 backdrop-blur-sm rounded-full p-1 self-start">
         {(['search', 'myWords'] as const).map(v => (

@@ -227,7 +227,7 @@ export default function MistakesPage() {
 
   return (
     <div className="flex flex-col gap-4 pb-4">
-      <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+      <h1 className="text-2xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
         My Notebook
       </h1>
 

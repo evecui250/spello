@@ -250,7 +250,7 @@ export default function PetChatFlow() {
   if (phase === 'summary') {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+        <h1 className="text-xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           {topic} — session recap
         </h1>
         {!summary && !summaryError && <p className="text-on-bg/70 text-sm text-center py-8">Putting together your recap…</p>}

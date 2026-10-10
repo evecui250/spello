@@ -142,7 +142,7 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
                 <button
                   onClick={() => pickEnglish(text)}
                   disabled={enIsCorrect || !!wrongFlash}
-                  className={`min-w-0 px-3 py-3 rounded-2xl text-sm font-medium text-left hyphens-auto [overflow-wrap:anywhere] transition-all duration-200 ${enCls}`}
+                  className={`min-w-0 px-3 py-3 rounded-2xl text-sm font-medium text-left [overflow-wrap:anywhere] transition-all duration-200 ${enCls}`}
                 >
                   {text}
                 </button>

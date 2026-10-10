@@ -155,7 +155,7 @@ export default function ProgressPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Progress</h1>
+      <h1 className="text-2xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Progress</h1>
 
       {/* One section at a time (real feedback: all three on one page was
           too crowded). The last-viewed tab is remembered on this device. */}

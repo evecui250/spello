@@ -400,14 +400,15 @@ export default function WordMatchGame({
     // below the title row (same min-height convention Home already uses,
     // see app/page.tsx) — previously this content sat pinned to the top.
     <div className="flex flex-col gap-5 min-h-[calc(100dvh-11rem)]">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>{title}</h1>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <span />
+        <h1 className="text-2xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>{title}</h1>
         {onQuit ? (
-          <button type="button" onClick={onQuit} className="text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
+          <button type="button" onClick={onQuit} className="justify-self-end text-right text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
             {quitLabel} →
           </button>
         ) : (
-          <Link href={homeHref} className="text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
+          <Link href={homeHref} className="justify-self-end text-right text-sm font-semibold text-on-bg/80 hover:text-on-bg underline">
             {homeLabel}
           </Link>
         )}
@@ -465,7 +466,7 @@ export default function WordMatchGame({
               each row to its tallest cell across both columns, so a
               two-line German word (more likely at a larger font size)
               doesn't drag its own column out of alignment with the other. */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
             {roundWords.map((w, i) => {
               // Same tactile-tile treatment as MatchingQuizPage's own
               // (soft resting depth, hover lift, pulsing while selected) —
@@ -493,16 +494,17 @@ export default function WordMatchGame({
                   <button
                     onClick={() => pickGerman(w.id)}
                     disabled={isMatched || !!wrongFlash}
-                    className={`px-3.5 py-3 rounded-2xl text-left transition-all duration-200 ${germanCls}`}
+                    className={`min-w-0 px-3 py-3 rounded-2xl text-left transition-all duration-200 ${germanCls}`}
                   >
-                    <span className="font-semibold text-base" style={{ fontFamily: 'var(--font-fraunces)' }}>
+                    {/* Long compounds wrap at German syllable breaks, never past the tile. */}
+                    <span lang="de" className="font-semibold text-base hyphens-auto [overflow-wrap:anywhere]" style={{ fontFamily: 'var(--font-fraunces)' }}>
                       {w.article ? `${w.article} ` : ''}{w.de}
                     </span>
                   </button>
                   <button
                     onClick={() => pickEnglish(text)}
                     disabled={enIsMatched || !!wrongFlash}
-                    className={`px-3.5 py-3 rounded-2xl text-sm font-medium text-left transition-all duration-200 ${enCls}`}
+                    className={`min-w-0 px-3 py-3 rounded-2xl text-sm font-medium text-left [overflow-wrap:anywhere] transition-all duration-200 ${enCls}`}
                   >
                     {text}
                   </button>
@@ -523,17 +525,24 @@ export default function WordMatchGame({
             </div>
           )}
           {onChooseGame ? (
-            // daily_flow's bonus round: choosing a different game is the
-            // natural next step, so it gets the big pill; replaying the
-            // same game is demoted to a small link right below it.
+            // daily_flow's bonus round: finishing is the main next step
+            // (owner call), so it gets the big pill; another game or a
+            // replay are small links below it.
             <>
               <button
                 type="button"
-                onClick={onChooseGame}
+                onClick={onQuit ?? onChooseGame}
                 className="w-full max-w-[220px] text-white py-3.5 rounded-full font-bold text-lg shadow-md active:scale-95 transition-all mt-2"
                 style={{ backgroundImage: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-deep) 100%)' }}
               >
-                Choose a game →
+                Finish
+              </button>
+              <button
+                type="button"
+                onClick={onChooseGame}
+                className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
+              >
+                Choose another game
               </button>
               <button
                 type="button"
@@ -542,15 +551,6 @@ export default function WordMatchGame({
               >
                 Play again
               </button>
-              {onQuit && (
-                <button
-                  type="button"
-                  onClick={onQuit}
-                  className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
-                >
-                  {quitLabel}
-                </button>
-              )}
             </>
           ) : onQuit ? (
             // A rapid-review round (no onChooseGame — see app/game/page.tsx's
