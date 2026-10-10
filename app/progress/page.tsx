@@ -160,7 +160,7 @@ export default function ProgressPage() {
       {/* One section at a time (real feedback: all three on one page was
           too crowded). The last-viewed tab is remembered on this device. */}
       <div className="flex bg-black/20 rounded-full p-1" role="tablist">
-        {([['words', 'Words'], ['leaderboard', 'Leaderboard'], ['calendar', 'Calendar']] as [ProgressTab, string][]).map(([t, label]) => (
+        {([['words', 'Words'], ['leaderboard', 'Top Learners'], ['calendar', 'Calendar']] as [ProgressTab, string][]).map(([t, label]) => (
           <button
             key={t}
             type="button"

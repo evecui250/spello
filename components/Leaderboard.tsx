@@ -205,7 +205,7 @@ export default function Leaderboard() {
       )}
       {authChecked && !myUserId && (
         <p className="text-ink-soft text-xs mt-3 pt-3 border-t border-paper-line/60">
-          Sign in (Profile → Account) to appear on this leaderboard yourself.
+          Sign in (Profile → Account) to appear among the Top Learners yourself.
         </p>
       )}
 

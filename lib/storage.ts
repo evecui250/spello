@@ -970,6 +970,10 @@ export interface ImportedBook {
   // when importing/joining; changeable in Profile. Absent on books from
   // before this existed -> B1 (see cefrLevelFor).
   cefrLevel?: CefrLevel;
+  // True for a copy added with someone else's book code. Only books the
+  // learner imported themselves can be renamed. (Copies joined before this
+  // field existed don't have it, so they're treated as the learner's own.)
+  joined?: boolean;
   // Bumped on any edit after creation (level, share code) — sync keeps the
   // most recently edited copy of an entry.
   updatedAt?: string;
@@ -1020,6 +1024,14 @@ export function getImportedBook(id: Level): ImportedBook | undefined {
 export function cefrLevelFor(level: Level): CefrLevel {
   if (isCefrLevel(level)) return level;
   return getImportedBook(level)?.cefrLevel ?? 'B1';
+}
+
+export function renameImportedBook(id: BookLevelId, name: string): void {
+  const trimmed = name.trim().slice(0, 60);
+  if (!trimmed) return;
+  saveImportedBooksFromSync(getImportedBooksForSync().map(b => (
+    b.id === id ? { ...b, name: trimmed, updatedAt: new Date().toISOString() } : b
+  )));
 }
 
 export function setImportedBookLevel(id: BookLevelId, cefrLevel: CefrLevel): void {

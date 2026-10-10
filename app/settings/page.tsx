@@ -76,16 +76,31 @@ function SettingsPageInner() {
   const searchParams = useSearchParams();
   const rawSection = searchParams.get('section');
   const section: Section | null = (SECTIONS as string[]).includes(rawSection ?? '') ? (rawSection as Section) : null;
-  const openSection = (s: Section) => { router.push(`/settings?section=${s}`); window.scrollTo(0, 0); };
+  // Sub-page navigation is a plain history push of the query string, not
+  // router.push: everything is already on this page, and router.push made
+  // Next fetch the page's server data on every tap — a visible blank flash
+  // between screens (a real report: "it feels like the page jumped").
+  // useSearchParams follows native pushState, so the screen still switches.
+  // Slide direction for the screen change: deeper = in from the right
+  // (like opening an iOS screen), shallower = in from the left (going back).
+  const depth = section === null ? 0 : section === 'book' ? 2 : 1;
+  const prevDepth = useRef(depth);
+  const slide = depth > prevDepth.current ? 'page-in-right' : depth < prevDepth.current ? 'page-in-left' : '';
+  useEffect(() => { prevDepth.current = depth; }, [depth]);
+  const go = (query: string) => {
+    window.history.pushState(null, '', query ? `?${query}` : window.location.pathname);
+    window.scrollTo(0, 0);
+  };
+  const openSection = (s: Section) => go(`section=${s}`);
   // One book's page (?section=book&id=…) goes back to the book list.
   const bookId = section === 'book' ? (searchParams.get('id') as Level | null) : null;
-  const openBook = (id: string) => { router.push(`/settings?section=book&id=${encodeURIComponent(id)}`); window.scrollTo(0, 0); };
+  const openBook = (id: string) => go(`section=book&id=${encodeURIComponent(id)}`);
   // A real step back through history — so the ‹ arrow and the iOS edge
   // swipe (which walks the same history) always agree. Falls back to the
   // parent page when this screen was opened directly (nothing to go back to).
   const closeSection = () => {
-    if (window.history.length > 1) router.back();
-    else router.push(section === 'book' ? '/settings?section=books' : '/settings');
+    if (window.history.length > 1) window.history.back();
+    else go(section === 'book' ? 'section=books' : '');
   };
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
   const [studyBatchSize, setStudyBatchSize] = useState(5);
@@ -317,6 +332,7 @@ function SettingsPageInner() {
         </span>
       </div>
 
+      <div key={`${section ?? 'menu'}-${bookId ?? ''}`} className={`flex flex-col gap-6 ${slide}`}>
       {/* The menu: one row per area, each opening its own screen — like
           other apps' settings, instead of every control on one long page
           (real feedback: too crowded, everything needed scrolling). */}
@@ -398,6 +414,8 @@ function SettingsPageInner() {
       </div>
       )}
 
+      </div>
+
       {petModalOpen && (
         <PetNicknameModal onClose={() => setPetModalOpen(false)} onProfileChange={() => {}} />
       )}
@@ -455,6 +473,7 @@ function SettingsPageInner() {
           bookId={bookId}
           isActive={bookId === level}
           onStudy={() => handleLevelChange(bookId)}
+          onRenamed={() => setImportedBooks(getImportedBooks())}
         />
       )}
 

@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Level, Word, wordsForLevel, isCefrLevel, glossFor } from '../lib/words';
 import {
   getAllCustomWordsForLevel, getAllProgressForLevel, getImportedBook, setImportedBookLevel,
-  getSettings, DICTIONARY_BOOK_ID, WordProgress,
+  getSettings, DICTIONARY_BOOK_ID, WordProgress, renameImportedBook,
 } from '../lib/storage';
 import { shareImportedBook } from '../lib/bookImport';
 import { scheduleSync } from '../lib/sync';
@@ -28,10 +28,11 @@ const STATUS_STYLE: Record<Status, string> = {
   mastered: 'bg-good/25 text-good-deep',
 };
 
-export default function BookDetail({ bookId, isActive, onStudy }: {
+export default function BookDetail({ bookId, isActive, onStudy, onRenamed }: {
   bookId: Level;
   isActive: boolean;
   onStudy: () => void;
+  onRenamed?: () => void;
 }) {
   const [imported, setImported] = useState(() => getImportedBook(bookId));
   const [filter, setFilter] = useState<'all' | Status>('all');
@@ -78,6 +79,19 @@ export default function BookDetail({ bookId, isActive, onStudy }: {
   }
 
   const isDictionary = bookId === DICTIONARY_BOOK_ID;
+  // Only a book the learner imported themselves (not one joined with a
+  // classmate's code, and not the built-in dictionary) can be renamed.
+  const canRename = !!imported && !imported.joined && !isDictionary;
+  const [renaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState(imported?.name ?? '');
+  const saveName = () => {
+    if (!imported || !nameDraft.trim()) return;
+    renameImportedBook(imported.id, nameDraft);
+    setImported(getImportedBook(bookId));
+    setRenaming(false);
+    scheduleSync();
+    onRenamed?.();
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -100,6 +114,26 @@ export default function BookDetail({ bookId, isActive, onStudy }: {
         )}
         {imported && (
           <div className="flex flex-col gap-2 border-t border-paper-line/60 pt-3">
+            {canRename && (renaming ? (
+              <div className="flex gap-2">
+                <input
+                  value={nameDraft}
+                  onChange={e => setNameDraft(e.target.value.slice(0, 60))}
+                  onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setRenaming(false); }}
+                  autoFocus
+                  aria-label="Book name"
+                  className="min-w-0 flex-1 border-2 border-accent/70 rounded-lg px-3 py-1.5 text-ink focus:outline-none focus:border-accent"
+                />
+                <button type="button" onClick={saveName} disabled={!nameDraft.trim()} className="bg-accent text-white px-3 rounded-lg text-sm font-semibold disabled:opacity-40">Save</button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => { setNameDraft(imported.name); setRenaming(true); }} className="self-start text-sm font-semibold text-label hover:text-ink underline underline-offset-2">
+                Rename this book
+              </button>
+            ))}
+            {imported.joined && (
+              <span className="text-ink-soft text-xs">Added with a classmate&apos;s book code — its name comes from them.</span>
+            )}
             <label className="flex items-center justify-between gap-3 text-sm text-ink">
               <span>Your level for this book <span className="block text-ink-soft text-xs">How hard its sentences, paragraphs and chat are</span></span>
               <CefrLevelSelect

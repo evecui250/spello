@@ -219,6 +219,7 @@ export function addSharedBook(shared: SharedBook, cefrLevel: CefrLevel): Importe
     sourcePages: shared.sourcePages,
     shareCode: shared.code,
     cefrLevel,
+    joined: true,
   };
   saveImportedBook(book, shared.words.map(w => ({ ...w, id: newCustomWordId(), level: id }) as Word));
   scheduleSync();

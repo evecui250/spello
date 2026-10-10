@@ -309,3 +309,11 @@ input, textarea, select {
 .animate-pet-sad {
   animation: shake-btn 0.4s ease;
 }
+
+/* Profile sub-screens slide in like native iOS screens (see settings
+   page's `slide`). Short and subtle; off for Reduce Motion. */
+@keyframes page-in-right { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes page-in-left { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+.page-in-right { animation: page-in-right 220ms cubic-bezier(.2,.8,.2,1); }
+.page-in-left { animation: page-in-left 220ms cubic-bezier(.2,.8,.2,1); }
+@media (prefers-reduced-motion: reduce) { .page-in-right, .page-in-left { animation: none; } }

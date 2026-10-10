@@ -177,7 +177,7 @@ export default function AccountPanel({ onSync, onSignedIn }: Props) {
                     onChange={e => setNicknameState(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleNicknameSave()}
                     maxLength={24}
-                    placeholder="Shown on the leaderboard"
+                    placeholder="Shown in Top Learners"
                     className="flex-1 min-w-0 border-2 border-accent/70 rounded-lg px-3 py-1.5 text-lg font-bold text-ink placeholder:text-ink-soft placeholder:text-sm placeholder:font-normal focus:outline-none focus:border-accent"
                     autoFocus
                   />
@@ -226,7 +226,7 @@ export default function AccountPanel({ onSync, onSignedIn }: Props) {
         </div>
 
         <label className="flex items-center justify-between cursor-pointer">
-          <span className="text-ink-soft text-sm">Appear on the weekly/monthly leaderboard</span>
+          <span className="text-ink-soft text-sm">Appear in this week's and month's Top Learners</span>
           <button
             type="button"
             role="switch"

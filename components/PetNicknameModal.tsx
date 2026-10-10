@@ -111,7 +111,7 @@ export default function PetNicknameModal({ onClose, onProfileChange }: Props) {
 
             {!signedIn && (
               <p className="text-ink-soft text-xs bg-paper-dim rounded-lg px-3 py-2">
-                Sign in from Profile to appear on the leaderboard and unlock accessories.
+                Sign in from Profile to appear in Top Learners and unlock accessories.
               </p>
             )}
 
