@@ -228,7 +228,7 @@ Deno.serve(async (req: Request) => {
       .map(e => ({
         de: e.de,
         article: ['der', 'die', 'das'].includes(e.article) ? e.article : undefined,
-        plural: e.plural || undefined,
+        plural: typeof e.plural === 'string' && e.plural.trim() ? e.plural.trim().replace(/^die\s+/i, '') : undefined,
         type: e.type,
         thirdPerson: e.thirdPerson || undefined,
         pastTense: e.pastTense || undefined,

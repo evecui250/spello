@@ -28,6 +28,10 @@ const CORS_HEADERS = {
 interface RequestBody {
   term: string;
   level: string;
+  // The Dictionary's language toggle: 'de' = the term is German (define
+  // it), 'en' = it's English (or the learner's native language) — give the
+  // German translation. Absent = let the model work it out.
+  lang?: 'de' | 'en';
 }
 
 interface LookupResult {
@@ -99,7 +103,12 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as RequestBody;
-    const { term, level } = body;
+    const { term, level, lang } = body;
+    const langHint = lang === 'de'
+      ? ' The learner says this term is GERMAN: resolve it to that German word (do not translate it as English).'
+      : lang === 'en'
+        ? ' The learner says this term is NOT German — it is English (or Chinese): give the German word for it, even if a German word with the same spelling exists (e.g. English "land" -> das Land / der Boden, not a German word containing "land").'
+        : '';
     if (!term || !term.trim()) {
       return json({ error: 'Missing term' }, 400);
     }
@@ -140,7 +149,7 @@ Deno.serve(async (req: Request) => {
               'does not apply (a noun has no verb fields; only nouns get article/plural). Pick the ' +
               'single most common everyday sense if the word has several. The target learner is ' +
               `roughly CEFR ${level || 'A1'} level, so prefer the most standard, neutral register ` +
-              'over slang/technical/archaic senses.',
+              'over slang/technical/archaic senses.' + langHint,
           },
           { role: 'user', content: term.trim() },
         ],
@@ -182,6 +191,17 @@ Deno.serve(async (req: Request) => {
     if (!parsed.found) {
       return json({ found: false });
     }
+    // The model sometimes writes the article into "de" itself ("das Land")
+    // — the app keeps it separate, or it shows and is spelled twice.
+    if (typeof parsed.de === 'string') {
+      const m = parsed.de.trim().match(/^(der|die|das)\s+(.+)$/i);
+      if (m) {
+        parsed.de = m[2];
+        if (!parsed.article) parsed.article = m[1].toLowerCase() as 'der' | 'die' | 'das';
+      }
+    }
+    // Same for the plural ("die Länder") — the app shows "die" itself.
+    if (typeof parsed.plural === 'string') parsed.plural = parsed.plural.trim().replace(/^die\s+/i, '');
     if (!parsed.de || !parsed.type || !parsed.en || !parsed.zh) {
       console.error('Malformed AI response:', raw);
       return json({ error: 'AI returned an unexpected format' }, 502);

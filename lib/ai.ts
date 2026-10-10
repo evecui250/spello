@@ -332,8 +332,10 @@ export interface LookupWordResult {
 // Returns null (not a throw) when the AI genuinely couldn't resolve it to
 // a real word/phrase at all — a distinct case from every other error
 // here, since it means "try a different search," not "something broke."
-export async function lookupWord(term: string, level: string): Promise<LookupWordResult | null> {
-  const { data, error } = await invokeWithTimeout<{ found?: boolean; word?: LookupWordResult; limitReached?: boolean }>('lookup-word', { term, level });
+// lang: the Dictionary's language toggle — 'de' (term is German), 'en'
+// (term is English/native, translate it), or undefined (auto-detect).
+export async function lookupWord(term: string, level: string, lang?: 'de' | 'en'): Promise<LookupWordResult | null> {
+  const { data, error } = await invokeWithTimeout<{ found?: boolean; word?: LookupWordResult; limitReached?: boolean }>('lookup-word', { term, level, ...(lang ? { lang } : {}) });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (data?.found === false) return null;

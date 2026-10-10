@@ -73,7 +73,14 @@ function glossParts(gloss: string): string[] {
 // detect English/Chinese/German input" (the owner's own framing) means
 // search shouldn't need to know or guess which script a query is in, only
 // whether it matches something real about the word either way.
-function searchRank(w: Word, q: string): number | null {
+// The Dictionary's language toggle: 'auto' matches German forms and
+// meanings alike; 'de' only German forms; 'en' only the meanings (English
+// or Chinese) — so typing "land" as English finds the words that MEAN
+// land, not German words that contain "land".
+type SearchLang = 'auto' | 'de' | 'en';
+const SEARCH_LANG_KEY = 'wb2_dictionary_lang';
+
+function searchRank(w: Word, q: string, lang: SearchLang = 'auto'): number | null {
   const de = w.de.toLowerCase();
   // Also matched with the article included (e.g. "der Start") — searchRank
   // only checked the bare word before, so typing the article along with it
@@ -83,10 +90,15 @@ function searchRank(w: Word, q: string): number | null {
   const inflectedForms = [w.plural, w.thirdPerson, w.pastTense, w.perfectTense]
     .filter((f): f is string => !!f)
     .map(f => f.toLowerCase());
-  const glosses = [
+  const allGlosses = [
     ...glossParts((w.en ?? '').toLowerCase()),
     ...glossParts((w.zh ?? '').toLowerCase()),
   ];
+  const glosses = lang === 'de' ? [] : allGlosses;
+  if (lang === 'en') {
+    germanForms.length = 0;
+    inflectedForms.length = 0;
+  }
 
   if (germanForms.includes(q) || inflectedForms.includes(q) || glosses.includes(q)) return 0;
 
@@ -219,6 +231,18 @@ export default function WordsPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress>>({});
   const [search, setSearch] = useState('');
   const [view, setView] = useState<View>('search');
+  const [searchLang, setSearchLangState] = useState<SearchLang>('auto');
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(SEARCH_LANG_KEY);
+      if (v === 'de' || v === 'en') setSearchLangState(v);
+    } catch { /* default auto */ }
+  }, []);
+  const setSearchLang = (l: SearchLang) => {
+    setSearchLangState(l);
+    setLookupStatus('idle'); setLookupResult(null); setLookupResultId(null);
+    try { localStorage.setItem(SEARCH_LANG_KEY, l); } catch { /* per-device convenience only */ }
+  };
   // My Words: 'all' or one book's id.
   const [bookFilter, setBookFilter] = useState<string>('all');
   // 'learning' (not 'all') is the default now that My Words pulls in the
@@ -312,12 +336,12 @@ export default function WordsPage() {
   const searchResults = useMemo(() => {
     if (view !== 'search' || !search.trim()) return [];
     return searchPool
-      .map(w => ({ w, rank: searchRank(w, q) }))
+      .map(w => ({ w, rank: searchRank(w, q, searchLang) }))
       .filter((x): x is { w: Word; rank: number } => x.rank !== null)
       .sort((a, b) => a.rank - b.rank)
       .map(x => x.w);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, search, searchPool]);
+  }, [view, search, searchPool, searchLang]);
 
   // My Words = every word the learner has actually learned, from EVERY book
   // (CEFR books and imported ones), each row tagged with its book. Its only
@@ -357,7 +381,10 @@ export default function WordsPage() {
   // all") found anything anywhere — this, not `searchResults.length === 0`,
   // is what should gate the "look up & add" offer below, so it never
   // appears just because e.g. "Mastered" happens to hide every real match.
-  const searchMatchesAnything = search.trim() !== '' && searchPool.some(w => searchRank(w, q) !== null);
+  const searchMatchesAnything = search.trim() !== '' && searchPool.some(w => searchRank(w, q, searchLang) !== null);
+  // With a language chosen, an exact hit is what the learner wants; partial
+  // hits alone ("Landschaft" for English "land") still offer a translation.
+  const searchHasExactMatch = search.trim() !== '' && searchPool.some(w => searchRank(w, q, searchLang) === 0);
 
   // Auto-fires the AI lookup once a search comes up empty locally, instead
   // of making the learner notice there's no match and tap a button to
@@ -380,7 +407,7 @@ export default function WordsPage() {
     setLookupStatus('loading');
     setLookupResult(null);
     setLookupResultId(null);
-    lookupWord(term, activeLevel)
+    lookupWord(term, activeLevel, searchLang === 'auto' ? undefined : searchLang)
       .then(result => {
         if (!result) { setLookupStatus('not-found'); return; }
         setLookupResult(result);
@@ -576,6 +603,34 @@ export default function WordsPage() {
           className="bg-paper/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-4 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent"
         />
       )}
+      {view === 'search' && (
+        <div className="flex items-center gap-2">
+          <span className="text-on-bg/70 text-xs">Typing in</span>
+          <div className="flex bg-black/20 rounded-full p-0.5" role="radiogroup" aria-label="Search language">
+            {([['auto', 'Auto'], ['de', 'German'], ['en', nativeLanguage === 'zh' ? 'English / 中文' : 'English']] as [SearchLang, string][]).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                role="radio"
+                aria-checked={searchLang === v}
+                onClick={() => setSearchLang(v)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${searchLang === v ? 'bg-paper text-ink' : 'text-on-bg/75 hover:text-on-bg'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {view === 'search' && searchLang !== 'auto' && search.trim() && searchMatchesAnything && !searchHasExactMatch && lookupStatus === 'idle' && !lookupResult && (
+        <button
+          type="button"
+          onClick={handleLookup}
+          className="self-start bg-accent text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-accent-deep active:scale-95 transition-all"
+        >
+          {searchLang === 'en' ? `Translate “${search.trim()}” into German` : `Look up “${search.trim()}”`}
+        </button>
+      )}
 
       {/* Familiarity/date filters only make sense for browsing the full My
           Words list — Search mode is a single-word lookup (usually just a
@@ -630,7 +685,9 @@ export default function WordsPage() {
           learner who already has matches to look at shouldn't be nudged
           to add a duplicate. The lookup fires automatically (see the
           debounced effect above) rather than waiting on a button tap. */}
-      {view === 'search' && search.trim() !== '' && !searchMatchesAnything && (
+      {/* Also shown, above the partial matches, once a lookup was started
+          from the language toggle's "Translate …" button. */}
+      {view === 'search' && search.trim() !== '' && (!searchMatchesAnything || lookupStatus !== 'idle' || !!lookupResult) && (
         <div className="bg-paper/75 backdrop-blur-sm rounded-xl border border-paper-line/50 shadow-sm px-4 py-3 flex flex-col gap-2.5">
           {!lookupResult && (
             <>
