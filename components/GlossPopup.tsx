@@ -1,6 +1,6 @@
 'use client';
 
-import { speakText } from '../lib/speech';
+import { speakSentence } from '../lib/speech';
 import SpeakerIcon from './SpeakerIcon';
 import { WordGloss } from '../lib/ai';
 
@@ -29,7 +29,7 @@ export default function GlossPopup({ gloss }: Props) {
         {gloss.article ? `${gloss.article} ` : ''}{gloss.lemma}
         <button
           type="button"
-          onClick={() => speakText(gloss.lemma)}
+          onClick={() => speakSentence(gloss.lemma)}
           aria-label={`Play pronunciation of ${gloss.lemma}`}
           className="ml-1.5 align-middle text-label hover:text-label transition-colors"
         >

@@ -292,9 +292,6 @@ export default function HomePage() {
                     <span className="text-3xl font-bold text-on-bg leading-none">{t.n}</span>
                     <span className="text-sm text-on-bg/70">{t.label}</span>
                   </div>
-                  {inProgress && t.n !== t.total && (
-                    <div className="text-xs text-on-bg/55 mt-0.5">of {t.total} today</div>
-                  )}
                 </div>
               </div>
             ))}

@@ -79,8 +79,16 @@ function hashSpokenForm(text: string): string {
 // "tts2": clips made with the corpus's own voice settings (WAV — see
 // generate-word-audio). The older "custom-tts-" MP3s used a different model
 // and volume; renaming means each is simply regenerated on next use.
+// Words and whole sentences share this naming: a clip is named after the
+// exact text spoken.
+function clipIdForText(text: string): string {
+  return `custom-tts2-${hashSpokenForm(text)}`;
+}
+function clipUrlForText(text: string): string {
+  return `${SUPABASE_URL}/storage/v1/object/public/custom-word-audio/${clipIdForText(text)}.wav`;
+}
 function customClipId(word: Word): string {
-  return `custom-tts2-${hashSpokenForm(spokenForm(word))}`;
+  return clipIdForText(spokenForm(word));
 }
 
 export function audioUrlForWord(word: Word): string {
@@ -88,7 +96,7 @@ export function audioUrlForWord(word: Word): string {
   if (!isCustomWordId(word.id)) return `${base}/audio/${word.id}.mp3`;
   const twin = corpusTwin(word);
   if (twin) return `${base}/audio/${twin.id}.mp3`;
-  return `${SUPABASE_URL}/storage/v1/object/public/custom-word-audio/${customClipId(word)}.wav`;
+  return clipUrlForText(spokenForm(word));
 }
 
 // --- Generated clips for custom words ---
@@ -117,11 +125,15 @@ function needsGeneratedClip(word: Word): boolean {
 // if missing (once per page load per clip). Concurrent callers share one
 // request.
 function ensureClip(word: Word, allowGeneration: boolean): Promise<boolean> {
-  const id = customClipId(word);
+  return ensureClipForText(spokenForm(word), allowGeneration);
+}
+
+function ensureClipForText(text: string, allowGeneration: boolean): Promise<boolean> {
+  const id = clipIdForText(text);
   if (clipOk.has(id)) return Promise.resolve(true);
   const pending = clipPending.get(id);
   if (pending) return pending;
-  const url = audioUrlForWord(word);
+  const url = clipUrlForText(text);
   const p = (async () => {
     try {
       const head = await fetch(url, { method: 'HEAD', cache: 'no-store' });
@@ -129,7 +141,7 @@ function ensureClip(word: Word, allowGeneration: boolean): Promise<boolean> {
     } catch { /* offline — fall through */ }
     if (!allowGeneration || audioGenerationAttempted.has(id)) return false;
     audioGenerationAttempted.add(id);
-    const ok = await generateWordAudio(id, spokenForm(word));
+    const ok = await generateWordAudio(id, text);
     if (ok) rememberClipOk(id);
     return ok;
   })();
@@ -494,6 +506,33 @@ function speakWithBrowserVoice(
 // full AI-corrected example sentence, as opposed to a single vocabulary
 // word) — always the free on-device browser voice, no pre-generated
 // recording exists to try first.
+// A whole German sentence in the same real voice as the word recordings.
+// Made on demand the first time anyone taps to hear it (owner call: never
+// automatically — a sentence nobody listens to costs nothing), then
+// cached like word clips. onLoading(true) while it's being made (~1-2 s)
+// so the button can show it's working; falls back to the browser voice
+// only if making it fails or takes too long.
+const SENTENCE_WAIT_MS = 8000;
+export function speakSentence(text: string, opts: { onLoading?: (loading: boolean) => void; onFailure?: () => void } = {}): void {
+  if (typeof window === 'undefined' || isPageHidden()) return;
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  stopSpeech();
+  const claim = new Audio();
+  currentAudio = claim;
+  const id = clipIdForText(trimmed);
+  if (clipOk.has(id)) { currentAudio = null; playUrl(clipUrlForText(trimmed), trimmed, undefined, opts.onFailure); return; }
+  opts.onLoading?.(true);
+  const timeout = new Promise<boolean>(res => setTimeout(() => res(false), SENTENCE_WAIT_MS));
+  Promise.race([ensureClipForText(trimmed, true), timeout]).then(ok => {
+    opts.onLoading?.(false);
+    if (currentAudio !== claim) return; // something else started playing meanwhile
+    currentAudio = null;
+    if (ok) playUrl(clipUrlForText(trimmed), trimmed, undefined, opts.onFailure);
+    else speakWithBrowserVoice(trimmed, 0, null, undefined, opts.onFailure);
+  });
+}
+
 export function speakText(text: string, onFailure?: () => void): void {
   speakWithBrowserVoice(text, 0, null, undefined, onFailure);
 }
@@ -569,8 +608,14 @@ function speakWordOnce(word: Word, onEnded?: () => void, onFailure?: () => void,
 }
 
 function playClip(word: Word, onEnded?: () => void, onFailure?: () => void): void {
+  playUrl(audioUrlForWord(word), spokenForm(word), onEnded, onFailure);
+}
+
+// Plays a recording; if it can't (missing, blocked, stalled), the
+// browser's own voice says `fallbackText` instead.
+function playUrl(url: string, fallbackText: string, onEnded?: () => void, onFailure?: () => void): void {
   if (isPageHidden()) return;
-  const audio = new Audio(audioUrlForWord(word));
+  const audio = new Audio(url);
   audio.volume = WORD_AUDIO_VOLUME;
   currentAudio = audio;
   const fallback = () => {
@@ -583,7 +628,7 @@ function playClip(word: Word, onEnded?: () => void, onFailure?: () => void): voi
     fellBack = true;
     clearTimeout(stallTimer);
     audio.pause();
-    speakWithBrowserVoice(spokenForm(word), 0, null, onEnded, onFailure);
+    speakWithBrowserVoice(fallbackText, 0, null, onEnded, onFailure);
   };
   let fellBack = false;
   const stallTimer = setTimeout(fallback, PLAY_STALL_MS);

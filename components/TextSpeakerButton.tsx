@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { speakText } from '../lib/speech';
+import { speakSentence } from '../lib/speech';
 import SpeakerIcon from './SpeakerIcon';
 
 interface Props {
@@ -22,12 +22,17 @@ const FAILURE_DISPLAY_MS = 2000;
 // from the tap not registering at all.
 export default function TextSpeakerButton({ text, className }: Props) {
   const [failed, setFailed] = useState(false);
+  // True while this sentence's recording is being made (first tap only).
+  const [loading, setLoading] = useState(false);
 
   const handleClick = () => {
     setFailed(false);
-    speakText(text, () => {
-      setFailed(true);
-      setTimeout(() => setFailed(false), FAILURE_DISPLAY_MS);
+    speakSentence(text, {
+      onLoading: setLoading,
+      onFailure: () => {
+        setFailed(true);
+        setTimeout(() => setFailed(false), FAILURE_DISPLAY_MS);
+      },
     });
   };
 
@@ -37,7 +42,8 @@ export default function TextSpeakerButton({ text, className }: Props) {
       onClick={handleClick}
       aria-label={failed ? "Couldn't play pronunciation of this sentence — tap to try again" : 'Play pronunciation of this sentence'}
       title={failed ? "Couldn't play — tap to try again" : undefined}
-      className={(className ?? 'text-label hover:text-label transition-colors') + (failed ? ' text-clay' : '')}
+      aria-busy={loading}
+      className={(className ?? 'text-label hover:text-label transition-colors') + (failed ? ' text-clay' : '') + (loading ? ' animate-pulse' : '')}
     >
       <SpeakerIcon muted={failed} />
     </button>

@@ -18,7 +18,7 @@ import {
   addDistractors, combineParagraphExercises,
 } from '../lib/practice';
 import { REVIEW_PLAN, recordMilestonePass } from '../lib/srs';
-import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, segmentChineseForClicks, tokenize, isWordToken, diffAgainstAttempt, applyGlossFallback } from '../lib/words';
+import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, findWordByLemma, segmentChineseForClicks, tokenize, isWordToken, diffAgainstAttempt, applyGlossFallback } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
 import SpeakerButton from './SpeakerButton';
@@ -183,20 +183,6 @@ function englishLemmaCandidates(token: string): string[] {
   return [...c];
 }
 
-// Loose German-lemma comparison used to sanity-check a single-candidate
-// corpus match against the AI's own sentence-aware lemma for that same
-// token (see the prompt-sentence click handler below) — both sides are
-// meant to already be bare dictionary-form headwords (sentence-glosses'
-// own prompt asks for "singular nominative for nouns, infinitive for
-// verbs", matching Word.de's own convention of never including the
-// article), so a plain normalized comparison is enough; startsWith gives
-// a little slack for minor spelling variance without needing to be exact.
-function lemmaRoughlyMatches(aiLemma: string, corpusDe: string): boolean {
-  const norm = (s: string) => s.trim().toLowerCase().replace(/^(der|die|das)\s+/, '');
-  const a = norm(aiLemma);
-  const b = norm(corpusDe);
-  return !!a && !!b && (a === b || a.startsWith(b) || b.startsWith(a));
-}
 
 function splitOnTranslationForm(translation: string, word: Word, nativeLanguage: 'en' | 'zh'): { before: string; match: string; after: string } | null {
   if (nativeLanguage === 'zh') {
@@ -643,12 +629,11 @@ function SentenceExercise({
     if (!correction) return;
     const diff = diffAgainstAttempt(input, correction.sentence);
     let timer: ReturnType<typeof setTimeout> | undefined;
-    if (diff.perfect) {
-      playCorrectChime();
-      if (getSettings().autoPlayAudio) timer = setTimeout(() => speakText(correction.sentence), 550);
-    } else if (getSettings().autoPlayAudio) {
-      speakText(correction.sentence);
-    }
+    // The corrected sentence is no longer read out automatically (owner
+    // call): it would be the browser's lower-quality voice, and a real
+    // recording costs money for every sentence. Its 🔊 button makes and
+    // plays the real one on request.
+    if (diff.perfect) playCorrectChime();
     return () => { clearTimeout(timer); stopSpeech(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [correction]);
@@ -838,10 +823,17 @@ function SentenceExercise({
                   // hit is very likely the wrong sense, so fall back to the
                   // context-aware AI gloss instead of the confidently-wrong
                   // corpus one.
+                  // The AI's sentence-aware gloss now wins whenever it's in:
+                  // a dictionary match on the English alone picks a sense
+                  // without context (real report: "is about to" showed
+                  // "bevorstehen", while the correction — rightly — used
+                  // "gleich"). Its lemma is still looked up in the corpus,
+                  // so a known word keeps its full entry (article, audio).
+                  // The plain English match only fills in while the AI
+                  // glosses are still loading.
                   const aiGloss = promptGlosses[text];
-                  const corpusLikelyWrongSense = !!rawMatch && !!aiGloss
-                    && !lemmaRoughlyMatches(aiGloss.lemma, rawMatch.de);
-                  const match = corpusLikelyWrongSense ? undefined : rawMatch;
+                  const aiCorpusWord = aiGloss ? findWordByLemma(aiGloss.lemma) : undefined;
+                  const match = aiGloss ? aiCorpusWord : rawMatch;
                   const gloss = !match ? aiGloss : undefined;
                   if (match) {
                     return (
@@ -1542,6 +1534,15 @@ export default function DailySessionFlow() {
       // for why the MCQ checkpoint needs this narrower set instead of all
       // of studyWordIds.
       studyRound1NeededIds = ids.filter(id => (progress[id]?.round ?? 1) === 1);
+    } else if (mode === 'study' && !ds.studyMcqDone) {
+      // Resuming before every new word has had its round 1: those words
+      // come first again (stable — their saved order is kept). The queue is
+      // only saved on Next, so leaving from a correction screen used to
+      // bring that just-finished word back first, now at its round-2
+      // spelling card, ahead of the words still waiting for a sentence
+      // (a real report: "it showed the first word again in spelling mode").
+      const progress = getAllProgress();
+      pending = [...pending].sort((a, b) => ((progress[a]?.round ?? 1) === 1 ? 0 : 1) - ((progress[b]?.round ?? 1) === 1 ? 0 : 1));
     }
     const words = wordsById(pending);
     setQueue(words);

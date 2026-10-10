@@ -157,7 +157,8 @@ Deno.serve(async (req: Request) => {
     if (!id || !id.startsWith('custom-') || !spokenForm || !spokenForm.trim()) {
       return json({ error: 'Missing or invalid id/spokenForm' }, 400);
     }
-    if (spokenForm.length > 100) {
+    // Up to a sentence (TextSpeakerButton plays whole example sentences).
+    if (spokenForm.length > 300) {
       return json({ error: 'spokenForm too long' }, 400);
     }
 
