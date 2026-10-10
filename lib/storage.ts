@@ -674,18 +674,16 @@ export function mergeDailyWordLogFromSync(remote: DailyWordLog): void {
 
 // --- Progress ---
 
+// The active book's progress — plus "My dictionary"'s (see
+// DICTIONARY_BOOK_ID), since dictionary words join every book's daily
+// review while their progress always stays in the dictionary book's own
+// store. The dictionary's records win over any stale copy.
 export function getAllProgress(): Record<string, WordProgress> {
   if (typeof window === 'undefined') return {};
-  try {
-    const raw = JSON.parse(localStorage.getItem(levelKey(KEYS.progress)) || '{}');
-    const normalized: Record<string, WordProgress> = {};
-    for (const id of Object.keys(raw)) {
-      normalized[id] = normalizeProgress(id, raw[id]);
-    }
-    return normalized;
-  } catch {
-    return {};
-  }
+  const active = getActiveLevel();
+  const own = getAllProgressForLevel(active);
+  if (active === DICTIONARY_BOOK_ID) return own;
+  return { ...own, ...getAllProgressForLevel(DICTIONARY_BOOK_ID) };
 }
 
 // Fills in defaults for any progress record saved under an older schema,
@@ -831,9 +829,14 @@ function notifyProgressChanged(): void {
 }
 
 export function saveWordProgress(p: WordProgress): void {
-  const all = getAllProgress();
+  // A dictionary word's progress always goes to the dictionary book's
+  // store, whichever book is being studied (see getAllProgress).
+  const active = getActiveLevel();
+  const target: Level = active !== DICTIONARY_BOOK_ID && p.id in getAllCustomWordsForLevel(DICTIONARY_BOOK_ID)
+    ? DICTIONARY_BOOK_ID : active;
+  const all = getAllProgressForLevel(target);
   all[p.id] = p;
-  saveAllProgress(all);
+  saveAllProgressForLevel(target, all);
   notifyProgressChanged();
 }
 
@@ -880,13 +883,14 @@ export function isCustomWordId(id: string): boolean {
   return id.startsWith(CUSTOM_WORD_ID_PREFIX);
 }
 
+// The active book's own custom words plus "My dictionary"'s (they join
+// every book's study pool — see DICTIONARY_BOOK_ID). Read-only view: write
+// through addCustomWord / saveAllCustomWordsForLevel.
 export function getAllCustomWords(): Record<string, Word> {
   if (typeof window === 'undefined') return {};
-  try {
-    return JSON.parse(localStorage.getItem(levelKey(KEYS.customWords)) || '{}');
-  } catch {
-    return {};
-  }
+  const active = getActiveLevel();
+  if (active === DICTIONARY_BOOK_ID) return getAllCustomWordsForLevel(active);
+  return { ...getAllCustomWordsForLevel(active), ...getAllCustomWordsForLevel(DICTIONARY_BOOK_ID) };
 }
 
 export function saveAllCustomWords(data: Record<string, Word>): void {
@@ -1038,6 +1042,60 @@ export function setImportedBookShareCode(id: BookLevelId, code: string): void {
 // LEVEL_ORDER, or an imported book's data silently drops out of it.
 export function allProfileLevels(): Level[] {
   return [...LEVEL_ORDER, ...getImportedBooks().map(b => b.id)];
+}
+
+// --- "My dictionary" ---
+// Words a learner adds from the Word List's Dictionary (a looked-up word,
+// or a word copied from another book) live in their own book, listed in
+// Books & level and filterable in My Words — but, unlike an imported book,
+// they still join the daily study/review of WHICHEVER book is active (owner
+// call), via the overlays in getAllProgress / getAllCustomWords /
+// practice.ts's allWordsForLevel. Their progress always lives in this
+// book's own store. It's an ordinary registry entry, so it syncs like any
+// imported book; created on the first add.
+export const DICTIONARY_BOOK_ID: BookLevelId = 'book-dictionary';
+
+export function ensureDictionaryBook(): void {
+  if (typeof window === 'undefined' || getImportedBook(DICTIONARY_BOOK_ID)) return;
+  saveImportedBooksFromSync([
+    ...getImportedBooksForSync().filter(b => b.id !== DICTIONARY_BOOK_ID),
+    { id: DICTIONARY_BOOK_ID, name: 'My dictionary', createdAt: new Date().toISOString(), wordCount: 0, sourcePages: '', updatedAt: new Date().toISOString() },
+  ]);
+}
+
+// Moves dictionary-added words still filed under a CEFR book (everything
+// added before "My dictionary" existed — the CEFR buckets never held any
+// other custom words) into the dictionary book, with their progress
+// (keeping whichever record is further along). Idempotent and run on every
+// load and after every sync, not once behind a flag: another device that
+// hasn't updated yet can sync the old placement back down.
+export function migrateDictionaryWords(): void {
+  if (typeof window === 'undefined') return;
+  const moved: Record<string, Word> = {};
+  const movedProgress: Record<string, WordProgress> = {};
+  for (const lvl of LEVEL_ORDER) {
+    const words = getAllCustomWordsForLevel(lvl);
+    const ids = Object.keys(words);
+    if (ids.length === 0) continue;
+    const progress = getAllProgressForLevel(lvl);
+    for (const id of ids) {
+      moved[id] = { ...words[id], level: DICTIONARY_BOOK_ID };
+      const p = progress[id];
+      if (p && (!movedProgress[id] || (p.studiedTimes ?? 0) > (movedProgress[id].studiedTimes ?? 0))) movedProgress[id] = p;
+      delete progress[id];
+    }
+    localStorage.removeItem(namespacedKey(KEYS.customWords, lvl));
+    saveAllProgressForLevel(lvl, progress);
+  }
+  if (Object.keys(moved).length === 0) return;
+  ensureDictionaryBook();
+  saveAllCustomWordsForLevel(DICTIONARY_BOOK_ID, { ...moved, ...getAllCustomWordsForLevel(DICTIONARY_BOOK_ID) });
+  const dictProgress = getAllProgressForLevel(DICTIONARY_BOOK_ID);
+  for (const [id, p] of Object.entries(movedProgress)) {
+    const e = dictProgress[id];
+    if (!e || (p.studiedTimes ?? 0) > (e.studiedTimes ?? 0)) dictProgress[id] = p;
+  }
+  saveAllProgressForLevel(DICTIONARY_BOOK_ID, dictProgress);
 }
 
 // What to call a profile in the UI: a CEFR level is its own name; an

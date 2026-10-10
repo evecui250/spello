@@ -11,7 +11,7 @@ import {
   getDailyWordLogForSync, mergeDailyWordLogFromSync, DailyWordLog,
   getAllCustomWordsForLevel, saveAllCustomWordsForLevel,
   getDailySessionForLevel, saveDailySessionForLevel, DailySession,
-  getImportedBooksForSync, saveImportedBooksFromSync, ImportedBook, allProfileLevels, dedupeSharedBooks,
+  getImportedBooksForSync, saveImportedBooksFromSync, ImportedBook, allProfileLevels, dedupeSharedBooks, migrateDictionaryWords,
   today,
 } from './storage';
 import { Level, Word, isProfileLevelId, isBookLevelId } from './words';
@@ -304,6 +304,9 @@ export async function pullAndMerge(userId: string): Promise<void> {
 
   // Same book twice (one per device, same share code) -> fold into one.
   dedupeSharedBooks();
+  // A not-yet-updated device may have synced old Dictionary adds back
+  // into a CEFR book — move them into "My dictionary" again.
+  migrateDictionaryWords();
 }
 
 // Pushes every level's local state up as this user's remote snapshot —

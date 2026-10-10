@@ -10,8 +10,7 @@ import {
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
 import { SYNCED_EVENT } from '../lib/sync';
 import { getDisplayProfile, getCachedDisplayProfile, heroImageFor, avatarImageFor, EquippedAccessories, NO_ACCESSORIES } from '../lib/shop';
-import { CheckCircleIcon, PencilIcon } from '../components/icons';
-import PetNicknameModal from '../components/PetNicknameModal';
+import { CheckCircleIcon } from '../components/icons';
 import Link from 'next/link';
 
 // Once today's main goal is done, "Study more" pulls a smaller bonus round
@@ -60,7 +59,6 @@ export default function HomePage() {
   const [avatarId, setAvatarId] = useState('dachshund');
   const [equipped, setEquipped] = useState<EquippedAccessories>(NO_ACCESSORIES);
   const [nickname, setNickname] = useState<string | null>(null);
-  const [petModalOpen, setPetModalOpen] = useState(false);
   // These portraits are large (~1-1.5MB), uncached PNGs on a first visit —
   // without this, some mobile browsers paint a faint bordered box in the
   // <img>'s space (worse with the drop-shadow filter below) while it's
@@ -230,10 +228,8 @@ export default function HomePage() {
       style={{ minHeight: 'calc(100dvh - 7rem - var(--safe-top) - var(--safe-bottom))', gap: 'clamp(1.25rem, 3.6dvh, 2.25rem)' }}
     >
       <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => setPetModalOpen(true)}
-          aria-label="Choose pet and nickname"
+        {/* Display only — pet and nickname are changed in Profile. */}
+        <div
           style={{ width: 'clamp(7rem, 16dvh, 9.5rem)', height: 'clamp(7rem, 16dvh, 9.5rem)' }}
           className="relative shrink-0 rounded-[1.75rem] overflow-hidden bg-gradient-to-b from-white/25 to-white/5 ring-1 ring-white/25 shadow-lg flex items-end justify-center"
         >
@@ -244,11 +240,7 @@ export default function HomePage() {
             onLoad={() => setPetLoaded(true)}
             className={`h-[93%] w-auto object-contain translate-y-1 drop-shadow-[0_6px_10px_rgba(0,0,0,0.3)] transition-opacity duration-300 ${petLoaded ? 'opacity-100' : 'opacity-0'}`}
           />
-          {/* Tapping the pet opens pet & nickname — this badge says so. */}
-          <span className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/30 text-white flex items-center justify-center" aria-hidden>
-            <PencilIcon className="w-3 h-3" />
-          </span>
-        </button>
+        </div>
         <div className="min-w-0 flex-1">
           {nickname ? (
             <>
@@ -283,16 +275,25 @@ export default function HomePage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          // Two plain columns split by a hairline — number and label on one
+          // line, no boxes inside the card.
+          <div className="flex items-center">
             {[
               { icon: 'icon_learn_new.png', n: previewStudyCount, total: totalStudyCount, label: 'new words' },
               { icon: 'icon_review.png', n: previewReviewCount, total: totalReviewCount, label: 'to review' },
-            ].map(t => (
-              <div key={t.label} className="rounded-2xl bg-white/10 px-4 flex flex-col items-start gap-2" style={{ paddingBlock: 'clamp(1rem, 2.4dvh, 1.5rem)' }}>
+            ].map((t, i) => (
+              <div key={t.label} className={`flex-1 min-w-0 flex items-center gap-3 ${i ? 'pl-4 border-l border-white/15' : 'pr-4'}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`${BASE}/${t.icon}`} alt="" className="w-10 h-10 object-contain" />
-                <div className="text-3xl font-bold text-on-bg leading-none">{t.n}</div>
-                <div className="text-sm text-on-bg/65">{inProgress && t.n !== t.total ? `${t.label} · of ${t.total}` : t.label}</div>
+                <img src={`${BASE}/${t.icon}`} alt="" className="w-11 h-11 object-contain shrink-0" />
+                <div className="min-w-0">
+                  <div className="flex items-baseline gap-1.5 whitespace-nowrap">
+                    <span className="text-3xl font-bold text-on-bg leading-none">{t.n}</span>
+                    <span className="text-sm text-on-bg/70">{t.label}</span>
+                  </div>
+                  {inProgress && t.n !== t.total && (
+                    <div className="text-xs text-on-bg/55 mt-0.5">of {t.total} today</div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -335,9 +336,6 @@ export default function HomePage() {
         </button>
       </div>
 
-      {petModalOpen && (
-        <PetNicknameModal onClose={() => setPetModalOpen(false)} onProfileChange={loadProfile} />
-      )}
     </div>
   );
 }

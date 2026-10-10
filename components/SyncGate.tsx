@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { watchAuthAndSync, watchForUnloadFlush } from '../lib/sync';
+import { migrateDictionaryWords } from '../lib/storage';
 
 // Mounted once in the root layout so a signed-in user's remote progress
 // gets pulled in on every page load, not just when they happen to visit
@@ -9,6 +10,8 @@ import { watchAuthAndSync, watchForUnloadFlush } from '../lib/sync';
 // still-pending debounced push the moment the page is hidden/closed, so
 // closing the app right after finishing a session doesn't silently drop it.
 export default function SyncGate() {
+  // Before anything syncs: older Dictionary adds move into "My dictionary".
+  useEffect(() => migrateDictionaryWords(), []);
   useEffect(() => watchAuthAndSync(), []);
   useEffect(() => watchForUnloadFlush(), []);
   return null;

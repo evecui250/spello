@@ -4,10 +4,10 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getSettings, saveSettings, switchToLevel, getImportedBooks, levelDisplayName, ImportedBook, removeImportedBook, setImportedBookLevel, myCefrLevels, otherCefrLevels, addCefrLevel, hideCefrLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, getImportedBooks, levelDisplayName, ImportedBook, removeImportedBook, setImportedBookLevel, myCefrLevels, otherCefrLevels, addCefrLevel, hideCefrLevel, DICTIONARY_BOOK_ID, getAllCustomWordsForLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch, allWordsForLevel } from '../../lib/practice';
-import { Level, CefrLevel, LEVEL_SOURCE, isCefrLevel, isBookLevelId } from '../../lib/words';
+import { Level, CefrLevel, LEVEL_SOURCE, isCefrLevel, isBookLevelId, wordsForLevel } from '../../lib/words';
 import { shareImportedBook } from '../../lib/bookImport';
 import { scheduleSync, syncNow, SYNCED_EVENT } from '../../lib/sync';
 import { CHIME_OPTIONS } from '../../lib/sound';
@@ -18,6 +18,7 @@ import ImportBookModal, { BookCodeDisplay } from '../../components/ImportBookMod
 import JoinBookModal from '../../components/JoinBookModal';
 import CefrLevelSelect from '../../components/CefrLevelSelect';
 import BookList from '../../components/BookList';
+import PetNicknameModal from '../../components/PetNicknameModal';
 import { supabase } from '../../lib/supabase';
 
 // Purely cosmetic — just decides whether to show the "Admin" link at all.
@@ -101,6 +102,7 @@ function SettingsPageInner() {
   const [importOpen, setImportOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
+  const [petModalOpen, setPetModalOpen] = useState(false);
   // Read after mount (not during render) so the first client render matches
   // the prerendered page; refreshed whenever the book or book list changes.
   const [myLevels, setMyLevels] = useState<CefrLevel[]>([]);
@@ -347,6 +349,18 @@ function SettingsPageInner() {
 
       {section === 'account' && (
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-4">
+        {/* Signed-in learners edit pet & nickname inside AccountPanel; this
+            is the place for everyone else (Home's pet is display-only). */}
+        {!signedInEmail && (
+          <button
+            type="button"
+            onClick={() => setPetModalOpen(true)}
+            className="w-full flex items-center justify-between gap-3 rounded-xl border border-paper-line px-4 py-3 text-left hover:bg-paper-dim/40 transition-colors"
+          >
+            <span className="font-semibold text-ink">Pet &amp; nickname</span>
+            <span className="text-ink-soft text-xl leading-none" aria-hidden>›</span>
+          </button>
+        )}
         <AccountPanel onSync={loadFromStorage} />
       </div>
       )}
@@ -369,13 +383,15 @@ function SettingsPageInner() {
             ...myLevels.map(l => ({
               id: l as string,
               title: `${l} vocabulary`,
-              subtitle: `${allWordsForLevel(l).length} words · ${LEVEL_SOURCE[l] ?? 'Spello'}`,
+              subtitle: `${wordsForLevel(l).length} words · ${LEVEL_SOURCE[l] ?? 'Spello'}`,
               active: level === l,
             })),
             ...importedBooks.map(b => ({
               id: b.id as string,
               title: b.name,
-              subtitle: `${allWordsForLevel(b.id).length} words · imported · your level ${b.cefrLevel ?? 'B1'}`,
+              subtitle: b.id === DICTIONARY_BOOK_ID
+                ? `${Object.keys(getAllCustomWordsForLevel(b.id)).length} words you added · reviewed with every book`
+                : `${allWordsForLevel(b.id).length} words · imported · your level ${b.cefrLevel ?? 'B1'}`,
               active: level === b.id,
             })),
           ]}
@@ -395,7 +411,7 @@ function SettingsPageInner() {
                 onChange={l => { setImportedBookLevel(activeBook.id, l); setImportedBooks(getImportedBooks()); scheduleSync(); }}
               />
             </label>
-            {activeBook.shareCode ? (
+            {activeBook.id === DICTIONARY_BOOK_ID ? null : activeBook.shareCode ? (
               <>
                 <span className="text-ink-soft text-xs">Book code — classmates add it with + → “Join with a book code”:</span>
                 <BookCodeDisplay code={activeBook.shareCode} />
@@ -412,11 +428,16 @@ function SettingsPageInner() {
             )}
             {shareError && <span className="text-clay text-xs">{shareError}</span>}
             <span className="text-ink-soft text-xs">
-              {activeBook.sourcePages ? `From PDF pages ${activeBook.sourcePages}` : 'Added with a book code'}
+              {activeBook.id === DICTIONARY_BOOK_ID ? 'Words you added from the Dictionary in Words'
+                : activeBook.sourcePages ? `From PDF pages ${activeBook.sourcePages}` : 'Added with a book code'}
             </span>
           </div>
         )}
       </div>
+      )}
+
+      {petModalOpen && (
+        <PetNicknameModal onClose={() => setPetModalOpen(false)} onProfileChange={() => {}} />
       )}
 
       {addSheetOpen && createPortal(

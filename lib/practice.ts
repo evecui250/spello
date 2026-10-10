@@ -6,7 +6,7 @@ import {
   getDailySession, saveDailySession, SessionPhase, getWordProgress, saveWordProgress,
   getMergedProgressAcrossLevels, ParagraphBlank, ParagraphExercise,
   getAllCustomWords, getAllCustomWordsAcrossLevels, getAllCustomWordsForLevel,
-  cefrLevelFor,
+  cefrLevelFor, DICTIONARY_BOOK_ID,
 } from './storage';
 import { recordMilestonePass, REVIEW_PLAN, MASTERY_DAYS_AFTER_INTRODUCTION } from './srs';
 
@@ -23,8 +23,11 @@ export function shuffled<T>(arr: T[]): T[] {
 // for anything learner-facing (as opposed to admin/corpus-content tooling)
 // should go through this instead so a custom word is never silently
 // invisible to one part of the pipeline while working in another.
+// Plus "My dictionary"'s words for every other book: they join whichever
+// book is being studied (see storage.ts's DICTIONARY_BOOK_ID).
 export function allWordsForLevel(level: Level): Word[] {
-  return [...wordsForLevel(level), ...Object.values(getAllCustomWordsForLevel(level))];
+  const dictionary = level === DICTIONARY_BOOK_ID ? [] : Object.values(getAllCustomWordsForLevel(DICTIONARY_BOOK_ID));
+  return [...wordsForLevel(level), ...Object.values(getAllCustomWordsForLevel(level)), ...dictionary];
 }
 
 // Word Match game unlock threshold (see app/game/page.tsx) — below this

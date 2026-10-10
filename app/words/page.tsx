@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { WORDS, Word, Level, glossFor } from '../../lib/words';
+import { WORDS, Word, Level, glossFor, isBookLevelId } from '../../lib/words';
 import {
   getMergedProgressAcrossLevels, getSettings, WordProgress, MascotStageId, today,
   getAllCustomWordsAcrossLevels, addCustomWord, removeCustomWord, getWordProgress, saveWordProgress,
   newCustomWordId, isCustomWordId, PROGRESS_CHANGED_EVENT,
-  levelDisplayName,
+  levelDisplayName, DICTIONARY_BOOK_ID, ensureDictionaryBook,
 } from '../../lib/storage';
 import { daysBetween, recordMilestonePass } from '../../lib/srs';
 import { imageUrlForWord } from '../../lib/wordImage';
@@ -208,6 +208,7 @@ function applyParam<T extends string>(key: string, valid: readonly T[], setter: 
 // buildReviewWords, which key off mascotStage regardless of how a word
 // got it).
 function addCustomWordIntroduced(word: Word): void {
+  ensureDictionaryBook();
   addCustomWord(word);
   saveWordProgress(recordMilestonePass(getWordProgress(word.id), 'puppy'));
 }
@@ -218,6 +219,8 @@ export default function WordsPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress>>({});
   const [search, setSearch] = useState('');
   const [view, setView] = useState<View>('search');
+  // My Words: 'all' or one book's id.
+  const [bookFilter, setBookFilter] = useState<string>('all');
   // 'learning' (not 'all') is the default now that My Words pulls in the
   // whole current book -- see myWordsPool's own comment. 'all'/'new' are no
   // longer offered as options at all (an untouched book word cluttering a
@@ -332,13 +335,22 @@ export default function WordsPage() {
     return myWordsPool
       .filter(w => {
         const p = progress[w.id];
+        if (bookFilter !== 'all' && w.level !== bookFilter) return false;
         if (!matchesFamiliarity(p, filterFamiliarity)) return false;
         if (!matchesDateFilter(p, dateFilter, t)) return false;
         return true;
       })
       .sort((a, b) => a.de.localeCompare(b.de, 'de'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, myWordsPool, progress, filterFamiliarity, dateFilter]);
+  }, [view, myWordsPool, progress, filterFamiliarity, dateFilter, bookFilter]);
+
+  // The book filter lists only books that have at least one learned word.
+  const bookOptions = useMemo(() => {
+    const seen = new Set<Level>();
+    for (const w of myWordsPool) if (progress[w.id]?.studiedTimes) seen.add(w.level);
+    const order = (l: Level) => (l === DICTIONARY_BOOK_ID ? 2 : isBookLevelId(l) ? 1 : 0);
+    return [...seen].sort((a, b) => order(a) - order(b) || a.localeCompare(b));
+  }, [myWordsPool, progress]);
 
   // Whether the search itself (ignoring the familiarity/date filters,
   // which are orthogonal display narrowing, not "does this word exist at
@@ -391,7 +403,7 @@ export default function WordsPage() {
     // already tapped the preview's speaker, this is the SAME id that
     // audio was cached under, so it's picked up immediately with no
     // second generation call needed.
-    const word: Word = { ...result, id: lookupResultId ?? newCustomWordId(), level: activeLevel };
+    const word: Word = { ...result, id: lookupResultId ?? newCustomWordId(), level: DICTIONARY_BOOK_ID };
     addCustomWordIntroduced(word);
     setCustomWordsVersion(v => v + 1);
     setLookupResult(null);
@@ -413,7 +425,7 @@ export default function WordsPage() {
   // alone entirely (see SearchResultRow below) — the normal study
   // schedule already covers it, nothing to add.
   function handleAddFromOtherBook(w: Word) {
-    const cloned: Word = { ...w, id: newCustomWordId(), level: activeLevel, sourceId: isCustomWordId(w.id) ? w.sourceId : w.id };
+    const cloned: Word = { ...w, id: newCustomWordId(), level: DICTIONARY_BOOK_ID, sourceId: isCustomWordId(w.id) ? w.sourceId : w.id };
     addCustomWordIntroduced(cloned);
     setCustomWordsVersion(v => v + 1);
     scheduleSync();
@@ -465,11 +477,6 @@ export default function WordsPage() {
         {showBook && (
           <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-ink-soft bg-paper-dim rounded-full px-2 py-0.5 align-middle">
             {levelDisplayName(w.level)}
-          </span>
-        )}
-        {isCustomWordId(w.id) && (
-          <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-label bg-accent/15 rounded-full px-2 py-0.5 align-middle">
-            My word
           </span>
         )}
         <div className="text-ink-soft text-sm">{glossFor(w, nativeLanguage)}</div>
@@ -580,7 +587,16 @@ export default function WordsPage() {
           grid item actually shrink below its content's natural width
           instead of overflowing the cell. */}
       {view === 'myWords' && (
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5">
+          <select
+            value={bookFilter}
+            onChange={e => setBookFilter(e.target.value)}
+            aria-label="Book"
+            className="min-w-0 bg-paper/75 backdrop-blur-sm border border-white/30 rounded-lg px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-accent"
+          >
+            <option value="all">All books</option>
+            {bookOptions.map(l => <option key={l} value={l}>{levelDisplayName(l)}</option>)}
+          </select>
           <select
             value={filterFamiliarity}
             onChange={e => setFilterFamiliarity(e.target.value as Familiarity)}
