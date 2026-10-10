@@ -2515,29 +2515,37 @@ export default function DailySessionFlow() {
   }
 
   if (modeChoiceFor) {
+    // Two choices, each just a clock with the time it'll take and a
+    // one-word name (owner call: no explanations). Rough per-word pace:
+    // ~1 min spelling, ~3 min with a sentence to translate.
     const writing = settings.sentenceWritingMode;
-    const option = (on: boolean, title: string, body: string) => (
+    const n = modeChoiceFor.studyWordIds.length;
+    const option = (on: boolean, minutes: number, title: string) => (
       <button
         type="button"
         onClick={() => handleChooseStudyMode(on)}
-        className={`w-full text-left bg-paper/75 backdrop-blur-sm rounded-2xl border-2 px-5 py-4 shadow-sm active:scale-[0.98] transition-all ${
-          writing === on ? 'border-accent' : 'border-paper-line/50 hover:border-accent/60'
+        className={`flex-1 rounded-3xl px-4 py-6 flex flex-col items-center gap-3 active:scale-[0.97] transition-all ${
+          writing === on ? 'ring-2 ring-accent' : 'ring-1 ring-white/10 hover:ring-white/30'
         }`}
+        style={{ background: 'var(--surface, rgba(0,0,0,0.3))' }}
       >
-        <div className="font-semibold text-ink">{title}{writing === on ? <span className="ml-2 text-xs font-medium text-label">last time</span> : null}</div>
-        <div className="text-ink-soft text-sm mt-0.5">{body}</div>
+        <svg viewBox="0 0 24 24" className="w-12 h-12 text-on-bg/90" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" aria-hidden>
+          <circle cx="12" cy="12" r="9" />
+          <path d={on ? 'M12 7v5l3.5 2' : 'M12 7v5l-2.5 2.5'} />
+        </svg>
+        <span className="text-3xl font-bold text-on-bg leading-none">~{minutes} min</span>
+        <span className="text-on-bg/75 font-semibold">{title}</span>
       </button>
     );
     return (
-      <div className="py-12 max-w-sm mx-auto flex flex-col gap-3">
+      <div className="py-12 max-w-sm mx-auto flex flex-col gap-6">
         <h2 className="text-2xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
-          How do you want to learn today?
+          How much time do you have?
         </h2>
-        <p className="text-on-bg/80 text-center mb-2">
-          {modeChoiceFor.studyWordIds.length} new word{modeChoiceFor.studyWordIds.length === 1 ? '' : 's'}. You can switch any time with the Writing toggle.
-        </p>
-        {option(true, 'Sentence mode', 'Translate a short sentence using each new word, then spell it. Takes longer, sticks better.')}
-        {option(false, 'Spelling mode', 'Just spell each new word, with an example sentence shown for reference. Quicker.')}
+        <div className="flex gap-3">
+          {option(false, Math.max(2, Math.round(n * 1)), 'Spelling')}
+          {option(true, Math.max(5, Math.round(n * 3)), 'Sentences')}
+        </div>
       </div>
     );
   }

@@ -76,8 +76,11 @@ function hashSpokenForm(text: string): string {
 
 // Storage object id for a custom word's generated clip (must start with
 // "custom-" — generate-word-audio only ever writes under that prefix).
+// "tts2": clips made with the corpus's own voice settings (WAV — see
+// generate-word-audio). The older "custom-tts-" MP3s used a different model
+// and volume; renaming means each is simply regenerated on next use.
 function customClipId(word: Word): string {
-  return `custom-tts-${hashSpokenForm(spokenForm(word))}`;
+  return `custom-tts2-${hashSpokenForm(spokenForm(word))}`;
 }
 
 export function audioUrlForWord(word: Word): string {
@@ -85,7 +88,7 @@ export function audioUrlForWord(word: Word): string {
   if (!isCustomWordId(word.id)) return `${base}/audio/${word.id}.mp3`;
   const twin = corpusTwin(word);
   if (twin) return `${base}/audio/${twin.id}.mp3`;
-  return `${SUPABASE_URL}/storage/v1/object/public/custom-word-audio/${customClipId(word)}.mp3`;
+  return `${SUPABASE_URL}/storage/v1/object/public/custom-word-audio/${customClipId(word)}.wav`;
 }
 
 // --- Generated clips for custom words ---

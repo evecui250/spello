@@ -95,7 +95,7 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
     // fixed nav/roadmap bar — same min-height convention Home already uses
     // (see app/page.tsx) — rather than sitting pinned to the top.
     <div className="flex flex-col justify-center min-h-[calc(100dvh-11rem)]">
-      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col gap-4">
+      <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-4 sm:p-6 flex flex-col gap-4">
         <div className="text-sm font-medium text-label">Match each word to its meaning</div>
         {/* One shared grid (German+English interleaved in DOM order) rather
             than two independently-flexed columns — CSS Grid sizes each row
@@ -106,7 +106,7 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
             wraps. Pairing itself is still by click, never by row position —
             English stays independently shuffled — this only keeps the grid
             itself looking like a clean set of rows. */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
           {words.map((w, i) => {
             const isCorrect = correctIds.has(w.id);
             const isSelected = selectedGerman === w.id;
@@ -130,16 +130,19 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
                 <button
                   onClick={() => pickGerman(w.id)}
                   disabled={isCorrect || !!wrongFlash}
-                  className={`px-3.5 py-3 rounded-2xl text-left transition-all duration-200 ${germanCls}`}
+                  className={`min-w-0 px-3 py-3 rounded-2xl text-left transition-all duration-200 ${germanCls}`}
                 >
-                  <span className="font-semibold text-base" style={{ fontFamily: 'var(--font-fraunces)' }}>
+                  {/* Long compounds ("die Bewerbungsunterlage") wrap at real
+                      German syllable breaks (lang="de" + hyphens), and break
+                      anywhere as a last resort — never past the tile. */}
+                  <span lang="de" className="font-semibold text-base hyphens-auto [overflow-wrap:anywhere]" style={{ fontFamily: 'var(--font-fraunces)' }}>
                     {w.article ? `${w.article} ` : ''}{w.de}
                   </span>
                 </button>
                 <button
                   onClick={() => pickEnglish(text)}
                   disabled={enIsCorrect || !!wrongFlash}
-                  className={`px-3.5 py-3 rounded-2xl text-sm font-medium text-left transition-all duration-200 ${enCls}`}
+                  className={`min-w-0 px-3 py-3 rounded-2xl text-sm font-medium text-left hyphens-auto [overflow-wrap:anywhere] transition-all duration-200 ${enCls}`}
                 >
                   {text}
                 </button>
