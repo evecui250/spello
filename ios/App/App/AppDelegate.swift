@@ -60,6 +60,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 class MainViewController: CAPBridgeViewController {
     private var lastInsets: UIEdgeInsets?
 
+    // iOS's own edge swipe (from the left edge, rightwards) goes back —
+    // e.g. from Chat or the Notebook to Home — like Safari and most apps.
+    // Works with the site's client-side navigation too: every page change
+    // is a history entry the gesture can step back through.
+    override func capacitorDidLoad() {
+        super.capacitorDidLoad()
+        webView?.allowsBackForwardNavigationGestures = true
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         reportSafeArea()

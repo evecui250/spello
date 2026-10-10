@@ -160,14 +160,7 @@ export default function Leaderboard() {
     <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setShowFullRankings(true)}
-            disabled={entries.length === 0}
-            className="font-bold text-ink hover:text-label transition-colors disabled:hover:text-ink disabled:cursor-default"
-          >
-            Top Learners
-          </button>
+          <span className="font-bold text-ink">Top Learners</span>
           <button
             type="button"
             onClick={() => setShowHelp(v => !v)}
@@ -193,7 +186,7 @@ export default function Leaderboard() {
       </div>
       {showHelp && (
         <p className="text-ink-soft text-xs bg-paper-dim rounded-lg px-3 py-2 mb-3">
-          Change your own nickname and profile picture in Profile → Account. Tap the title or the ··· below to see every ranked learner.
+          Change your own nickname and profile picture in Profile → Account. Tap the ··· below to see every ranked learner.
         </p>
       )}
       {range && <p className="text-ink-soft text-xs mb-3">{fmtRange(range)}</p>}

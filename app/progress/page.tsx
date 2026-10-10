@@ -44,9 +44,23 @@ const STAGE_LABEL: Record<MascotStageId, string> = {
 
 type Scope = 'current' | 'all';
 
+type ProgressTab = 'words' | 'leaderboard' | 'calendar';
+const PROGRESS_TAB_KEY = 'wb2_progress_tab';
+
 export default function ProgressPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress> | null>(null);
   const [scope, setScope] = useState<Scope>('current');
+  const [tab, setTab] = useState<ProgressTab>('words');
+  useEffect(() => {
+    try {
+      const t = localStorage.getItem(PROGRESS_TAB_KEY);
+      if (t === 'words' || t === 'leaderboard' || t === 'calendar') setTab(t);
+    } catch { /* default */ }
+  }, []);
+  const chooseTab = (t: ProgressTab) => {
+    setTab(t);
+    try { localStorage.setItem(PROGRESS_TAB_KEY, t); } catch { /* per-device convenience */ }
+  };
   // Which levels actually have any progress at all — "All books" only
   // ever aggregates books the learner has genuinely touched, not every
   // theoretically available level (C1/C2 have no words yet), so the total
@@ -143,6 +157,24 @@ export default function ProgressPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-bold text-on-bg" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Progress</h1>
 
+      {/* One section at a time (real feedback: all three on one page was
+          too crowded). The last-viewed tab is remembered on this device. */}
+      <div className="flex bg-black/20 rounded-full p-1" role="tablist">
+        {([['words', 'Words'], ['leaderboard', 'Leaderboard'], ['calendar', 'Calendar']] as [ProgressTab, string][]).map(([t, label]) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => chooseTab(t)}
+            className={`flex-1 py-2 rounded-full text-sm font-semibold transition-colors ${tab === t ? 'bg-paper text-ink shadow-sm' : 'text-on-bg/70 hover:text-on-bg'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'words' && (
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
         <div className="flex items-center justify-between gap-2 mb-1">
           <h2 className="font-semibold text-ink">Words breakdown</h2>
@@ -294,10 +326,11 @@ export default function ProgressPage() {
           </div>
         )}
       </div>
+      )}
 
-      <Leaderboard />
+      {tab === 'leaderboard' && <Leaderboard />}
 
-      <ActivityCalendar />
+      {tab === 'calendar' && <ActivityCalendar />}
 
       {openStage && createPortal(
         <div

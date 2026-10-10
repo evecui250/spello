@@ -595,15 +595,6 @@ export default function WordsPage() {
       </div>
 
       {view === 'search' && (
-        <input
-          type="search"
-          placeholder="Search any German or English word to add it…"
-          value={search}
-          onChange={e => { setSearch(e.target.value); setLookupStatus('idle'); setLookupResult(null); setLookupResultId(null); }}
-          className="bg-paper/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-4 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent"
-        />
-      )}
-      {view === 'search' && (
         <div className="flex items-center gap-2">
           <span className="text-on-bg/70 text-xs">Typing in</span>
           <div className="flex bg-black/20 rounded-full p-0.5" role="radiogroup" aria-label="Search language">
@@ -621,6 +612,15 @@ export default function WordsPage() {
             ))}
           </div>
         </div>
+      )}
+      {view === 'search' && (
+        <input
+          type="search"
+          placeholder="Search any German or English word to add it…"
+          value={search}
+          onChange={e => { setSearch(e.target.value); setLookupStatus('idle'); setLookupResult(null); setLookupResultId(null); }}
+          className="bg-paper/75 backdrop-blur-sm border-2 border-white/30 rounded-xl px-4 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent"
+        />
       )}
       {view === 'search' && searchLang !== 'auto' && search.trim() && searchMatchesAnything && !searchHasExactMatch && lookupStatus === 'idle' && !lookupResult && (
         <button

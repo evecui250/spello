@@ -80,7 +80,13 @@ function SettingsPageInner() {
   // One book's page (?section=book&id=…) goes back to the book list.
   const bookId = section === 'book' ? (searchParams.get('id') as Level | null) : null;
   const openBook = (id: string) => { router.push(`/settings?section=book&id=${encodeURIComponent(id)}`); window.scrollTo(0, 0); };
-  const closeSection = () => { router.push(section === 'book' ? '/settings?section=books' : '/settings'); window.scrollTo(0, 0); };
+  // A real step back through history — so the ‹ arrow and the iOS edge
+  // swipe (which walks the same history) always agree. Falls back to the
+  // parent page when this screen was opened directly (nothing to go back to).
+  const closeSection = () => {
+    if (window.history.length > 1) router.back();
+    else router.push(section === 'book' ? '/settings?section=books' : '/settings');
+  };
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
   const [studyBatchSize, setStudyBatchSize] = useState(5);
   const [dailyReview, setDailyReview] = useState(15);
