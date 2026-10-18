@@ -28,12 +28,6 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-function addDays(d: Date, n: number): Date {
-  const copy = new Date(d);
-  copy.setDate(copy.getDate() + n);
-  return copy;
-}
-
 // Monday-first weekday index (0 = Monday, 6 = Sunday) — Date.getDay() is
 // Sunday-first, so this just rotates it.
 function mondayIndex(d: Date): number {
@@ -79,7 +73,7 @@ function wordsForDate(dateStr: string): { learned: Word[]; reviewed: Word[] } {
   };
 }
 
-// Below this, a horizontal drag reads as a week-swipe rather than a
+// Below this, a horizontal drag reads as a month-swipe rather than a
 // vertical page scroll — matches typical swipe-carousel thresholds
 // (enough to filter out an accidental/shaky touch, not so much that a
 // real swipe feels ignored).
@@ -87,16 +81,9 @@ const SWIPE_THRESHOLD_PX = 40;
 
 export default function ActivityCalendar() {
   const [days, setDays] = useState<{ full: Set<string>; partial: Set<string> }>({ full: new Set(), partial: new Set() });
-  const [expanded, setExpanded] = useState(false);
-  // Which month the expanded grid shows — defaults to the current month,
-  // independent of the collapsed row (which is always "the last 7 days"
-  // regardless of this).
+  // Which month the grid shows — the full month is always shown now (it
+  // has its own Calendar tab, so there's room), starting at this month.
   const [viewDate, setViewDate] = useState(() => new Date());
-  // How many weeks back the COLLAPSED row is showing — 0 is the current
-  // window (the 7 days ending today). Swipe left (or the ‹ button) goes
-  // further into the past; swipe right (or ›) comes back toward today,
-  // capped there since there's nothing to show beyond it.
-  const [weekOffset, setWeekOffset] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   // Shown as plain text at the top of this card now instead of the
@@ -126,24 +113,6 @@ export default function ActivityCalendar() {
   };
 
   const t = today();
-  const last7 = Array.from({ length: 7 }, (_, i) => addDays(new Date(), i - 6 - weekOffset * 7));
-  // Headered by whichever month the row's last (most recent) day falls
-  // in — matches the offset-0 case (today) exactly, and gives a single,
-  // unambiguous answer for a row that happens to straddle two months.
-  const rowMonth = last7[6];
-
-  const handleTouchStart = (e: TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-  const handleTouchEnd = (e: TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const delta = e.changedTouches[0].clientX - touchStartX.current;
-    touchStartX.current = null;
-    if (Math.abs(delta) < SWIPE_THRESHOLD_PX) return;
-    if (delta < 0) setWeekOffset(w => w + 1);
-    else setWeekOffset(w => Math.max(0, w - 1));
-  };
-
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
   const firstOfMonth = new Date(year, month, 1);
@@ -156,102 +125,67 @@ export default function ActivityCalendar() {
   while (cells.length % 7 !== 0) cells.push(null);
 
   const isCurrentMonth = year === new Date().getFullYear() && month === new Date().getMonth();
+  const prevMonth = () => setViewDate(new Date(year, month - 1, 1));
+  const nextMonth = () => { if (!isCurrentMonth) setViewDate(new Date(year, month + 1, 1)); };
+
+  // Touch-swipe left/right to page through months — phone-only in
+  // practice (no mouse-drag equivalent wired up), which is why the ‹ ›
+  // buttons exist too, for anyone on desktop/without touch.
+  const handleTouchStart = (e: TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  const handleTouchEnd = (e: TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(delta) < SWIPE_THRESHOLD_PX) return;
+    if (delta < 0) prevMonth();
+    else nextMonth();
+  };
 
   return (
     <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-5">
-      <div className="flex items-center justify-between gap-2 mb-1">
-        <h2 className="font-semibold text-ink">Activity</h2>
-        <button
-          type="button"
-          onClick={() => setExpanded(e => !e)}
-          className="text-xs font-semibold text-ink-soft hover:text-ink transition-colors flex items-center gap-0.5"
-        >
-          {expanded ? 'Show less' : 'Show month'}
-          <span aria-hidden className="inline-block text-[10px] leading-none">{expanded ? '▲' : '▼'}</span>
-        </button>
-      </div>
+      <h2 className="font-semibold text-ink mb-1">Activity</h2>
       <p className="text-xs text-ink-soft mb-3">
         {totalGoalDays} goal day{totalGoalDays === 1 ? '' : 's'} · {streakCount} day streak
       </p>
 
-      {!expanded ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setWeekOffset(w => w + 1)}
-              aria-label="Previous week"
-              className="px-2 py-1 text-ink-soft hover:text-ink transition-colors text-lg leading-none"
-            >
-              ‹
-            </button>
-            <span className="text-sm font-semibold text-ink">
-              {MONTH_NAMES[rowMonth.getMonth()]} {rowMonth.getFullYear()}
-            </span>
-            <button
-              type="button"
-              onClick={() => setWeekOffset(w => Math.max(0, w - 1))}
-              aria-label="Next week"
-              disabled={weekOffset === 0}
-              className="px-2 py-1 text-ink-soft hover:text-ink disabled:opacity-30 disabled:hover:text-ink-soft transition-colors text-lg leading-none"
-            >
-              ›
-            </button>
-          </div>
-          {/* Touch-swipe left/right to page through weeks — phone-only in
-              practice (no mouse-drag equivalent wired up), which is why the
-              ‹ › buttons above exist too, for anyone on desktop/without
-              touch. */}
-          <div
-            className="grid grid-cols-7 gap-2"
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={prevMonth}
+            aria-label="Previous month"
+            className="px-2 py-1 text-ink-soft hover:text-ink transition-colors text-lg leading-none"
           >
-            {last7.map(d => {
-              const dateStr = localDateString(d);
-              return (
-                <div key={dateStr} className="flex flex-col items-center gap-1">
-                  <span className="text-xs font-medium text-ink-soft">{WEEKDAY_LETTERS[mondayIndex(d)]}</span>
-                  <DayCircle date={d.getDate()} state={stateFor(dateStr)} isToday={dateStr === t} dim={dateStr > t} onClick={() => setSelectedDate(dateStr)} />
-                </div>
-              );
-            })}
-          </div>
+            ‹
+          </button>
+          <span className="text-sm font-semibold text-ink">{MONTH_NAMES[month]} {year}</span>
+          <button
+            type="button"
+            onClick={nextMonth}
+            aria-label="Next month"
+            disabled={isCurrentMonth}
+            className="px-2 py-1 text-ink-soft hover:text-ink disabled:opacity-30 disabled:hover:text-ink-soft transition-colors text-lg leading-none"
+          >
+            ›
+          </button>
         </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setViewDate(new Date(year, month - 1, 1))}
-              aria-label="Previous month"
-              className="px-2 py-1 text-ink-soft hover:text-ink transition-colors text-lg leading-none"
-            >
-              ‹
-            </button>
-            <span className="text-sm font-semibold text-ink">{MONTH_NAMES[month]} {year}</span>
-            <button
-              type="button"
-              onClick={() => setViewDate(new Date(year, month + 1, 1))}
-              aria-label="Next month"
-              disabled={isCurrentMonth}
-              className="px-2 py-1 text-ink-soft hover:text-ink disabled:opacity-30 disabled:hover:text-ink-soft transition-colors text-lg leading-none"
-            >
-              ›
-            </button>
-          </div>
-          <div className="grid grid-cols-7 gap-2">
-            {WEEKDAY_LETTERS.map((l, i) => (
-              <span key={i} className="text-xs font-medium text-ink-soft text-center">{l}</span>
-            ))}
-            {cells.map((d, i) => {
-              if (!d) return <div key={i} />;
-              const dateStr = localDateString(d);
-              return <DayCircle key={i} date={d.getDate()} state={stateFor(dateStr)} isToday={dateStr === t} dim={dateStr > t} onClick={() => setSelectedDate(dateStr)} />;
-            })}
-          </div>
+        <div
+          className="grid grid-cols-7 gap-2"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {WEEKDAY_LETTERS.map((l, i) => (
+            <span key={i} className="text-xs font-medium text-ink-soft text-center">{l}</span>
+          ))}
+          {cells.map((d, i) => {
+            if (!d) return <div key={i} />;
+            const dateStr = localDateString(d);
+            return <DayCircle key={i} date={d.getDate()} state={stateFor(dateStr)} isToday={dateStr === t} dim={dateStr > t} onClick={() => setSelectedDate(dateStr)} />;
+          })}
         </div>
-      )}
+      </div>
 
       <div className="flex items-center gap-4 justify-center text-[11px] text-ink-soft pt-3">
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-good/70 inline-block" />Goal met</span>

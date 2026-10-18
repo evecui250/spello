@@ -102,7 +102,8 @@ function SettingsPageInner() {
     if (window.history.length > 1) window.history.back();
     else go(section === 'book' ? 'section=books' : '');
   };
-  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
+  // undefined = auth not checked yet (see the signed-out-only row below).
+  const [signedInEmail, setSignedInEmail] = useState<string | null | undefined>(undefined);
   const [studyBatchSize, setStudyBatchSize] = useState(5);
   const [dailyReview, setDailyReview] = useState(15);
   const [nativeLanguage, setNativeLanguage] = useState<'en' | 'zh'>('en');
@@ -361,7 +362,7 @@ function SettingsPageInner() {
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-4">
         {/* Signed-in learners edit pet & nickname inside AccountPanel; this
             is the place for everyone else (Home's pet is display-only). */}
-        {!signedInEmail && (
+        {signedInEmail === null && (
           <button
             type="button"
             onClick={() => setPetModalOpen(true)}

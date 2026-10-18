@@ -41,6 +41,10 @@ export interface WordProgress {
   // never cleared) the moment round 2 first passes; advances one stage per
   // review milestone thereafter. See lib/srs.ts's recordMilestonePass.
   mascotStage?: MascotStageId;
+  // Set when the learner skipped this word as already known (see
+  // lib/srs.ts's markWordKnown) rather than earning Mastered through the
+  // review schedule.
+  skippedAsKnown?: boolean;
 
   // Set once, the first time the learner translates round-1's AI-generated
   // English sentence and it comes back AI-corrected (see lib/ai.ts's
@@ -592,14 +596,19 @@ export function isTodayAPetAgeDay(): boolean {
   return petAgeDaySet().has(today());
 }
 
-// "12 days" / "5 months" / "1 year 3 months".
+// "12 days" / "5 months 3 days" / "1 year 3 months 2 days" — zero parts
+// are left out ("2 months", not "2 months 0 days").
 export function formatPetAge(days: number): string {
   const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`;
   if (days < 30) return plural(days, 'day');
-  if (days < 365) return plural(Math.floor(days / 30), 'month');
   const years = Math.floor(days / 365);
   const months = Math.floor((days % 365) / 30);
-  return `${plural(years, 'year')}${months > 0 ? ` ${plural(months, 'month')}` : ''}`;
+  const rest = (days % 365) % 30;
+  return [
+    years > 0 ? plural(years, 'year') : '',
+    months > 0 ? plural(months, 'month') : '',
+    rest > 0 ? plural(rest, 'day') : '',
+  ].filter(Boolean).join(' ');
 }
 
 // date -> word ids touched that day. See DAILY_WORD_LOG_KEY's own comment
@@ -737,6 +746,7 @@ function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): Wo
     lastReviewedAt: p?.lastReviewedAt ?? p?.lastPracticed,
     nextReviewDue,
     mascotStage,
+    skippedAsKnown: p?.skippedAsKnown,
     // Migration: exampleSentence and lastMistake are meant to be mutually
     // exclusive (see lastMistake's own comment) — a word either shows its
     // real, earned corrected sentence, or stays hidden behind a redo,
@@ -752,6 +762,12 @@ function normalizeProgress(id: string, p: Partial<WordProgress> | undefined): Wo
     // round-3 migration below.
     exampleSentence: p?.lastMistake ? undefined : p?.exampleSentence,
     lastMistake: p?.lastMistake,
+    // Carried through like every other field — leaving these out meant
+    // every read silently dropped Artikel Blitz's article tracking, and
+    // the next save of ANY word wrote the stripped records back.
+    articleMistake: p?.articleMistake,
+    articleRecallStreak: p?.articleRecallStreak,
+    articleMistakeCount: p?.articleMistakeCount,
   };
 }
 

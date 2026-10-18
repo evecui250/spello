@@ -89,3 +89,24 @@ export function recordMilestonePass(progress: WordProgress, toStage: MascotStage
     successfulReviews: progress.successfulReviews + 1,
   };
 }
+
+// "I already know this word" — the learner's own call, from a Skip button
+// on any study/review card. Jumps straight to Mastered (retired from study
+// and review for good, same as passing the 3rd review) without going
+// through the schedule. lastPracticed is deliberately left alone: it's
+// what Top Learners points count (one per word practiced that day), and a
+// skip isn't practice. Rapid review still includes it, like any other
+// mastered word.
+export function markWordKnown(progress: WordProgress, todayStr: string = today()): WordProgress {
+  return {
+    ...progress,
+    mascotStage: 'long-crowned',
+    fullyMastered: true,
+    round: 4,
+    lastReviewedAt: todayStr,
+    nextReviewDue: undefined,
+    studiedTimes: Math.max(progress.studiedTimes, 1),
+    successfulReviews: Math.max(progress.successfulReviews, 1),
+    skippedAsKnown: true,
+  };
+}

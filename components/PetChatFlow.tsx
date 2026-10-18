@@ -208,7 +208,10 @@ export default function PetChatFlow() {
 
   if (phase === 'topics') {
     return (
-      <div className="flex flex-col justify-center min-h-[calc(100dvh-11rem)] gap-6">
+      <div className="relative flex flex-col justify-center min-h-[calc(100dvh-11rem)] gap-6">
+        <div className="absolute top-0 right-0">
+          <CloseButton onClick={() => router.push('/')} />
+        </div>
         <h1 className="text-2xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           What should we talk about?
         </h1>
@@ -250,9 +253,13 @@ export default function PetChatFlow() {
   if (phase === 'summary') {
     return (
       <div className="flex flex-col gap-4">
-        <h1 className="text-xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
-          {topic} — session recap
-        </h1>
+        <div className="flex items-center gap-2">
+          <span className="w-9 shrink-0" aria-hidden />
+          <h1 className="flex-1 text-xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+            {topic} — session recap
+          </h1>
+          <CloseButton onClick={() => router.push('/')} />
+        </div>
         {!summary && !summaryError && <p className="text-on-bg/70 text-sm text-center py-8">Putting together your recap…</p>}
         {summaryError && (
           <div className="text-center py-8 flex flex-col items-center gap-3">
@@ -331,13 +338,6 @@ export default function PetChatFlow() {
             </button>
           </>
         )}
-        <button
-          type="button"
-          onClick={() => router.push('/')}
-          className="w-full bg-accent text-white py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
-        >
-          Done
-        </button>
       </div>
     );
   }
@@ -353,11 +353,9 @@ export default function PetChatFlow() {
   const mandatoryConclude = turnCount >= NORMAL_SESSION_LENGTH;
   return (
     <div className="flex flex-col h-[calc(100dvh-11rem)] gap-2">
-      <div className="flex items-center justify-between shrink-0">
-        <button type="button" onClick={() => router.push('/')} className="text-ink-soft hover:text-ink text-sm font-semibold">
-          ← Home
-        </button>
-        <span className="text-xs uppercase tracking-wide text-ink-soft font-semibold">{topic}</span>
+      <div className="flex items-center justify-between gap-2 shrink-0">
+        <span className="text-xs uppercase tracking-wide text-on-bg/85 font-semibold truncate" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}>{topic}</span>
+        <CloseButton onClick={() => router.push('/')} />
       </div>
 
       {/* The opaque paper backdrop is what gives the correction/vocabulary
@@ -448,6 +446,22 @@ export default function PetChatFlow() {
         </button>
       </div>
     </div>
+  );
+}
+
+// Top-right × on every chat screen (topic picker, conversation, recap) —
+// the one consistent way back to Home at any point, replacing the old
+// "← Home" text link and the recap's bottom "Done" button.
+function CloseButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Close chat"
+      className="w-9 h-9 shrink-0 rounded-full bg-paper/85 backdrop-blur-sm border border-paper-line/60 shadow-sm text-ink-soft hover:text-ink text-2xl leading-none flex items-center justify-center active:scale-95 transition-all"
+    >
+      ×
+    </button>
   );
 }
 

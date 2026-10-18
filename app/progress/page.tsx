@@ -16,7 +16,7 @@ import DachshundMascot from '../../components/Mascot';
 import ActivityCalendar from '../../components/ActivityCalendar';
 import Leaderboard from '../../components/Leaderboard';
 import { THEME_CONFIG } from '../../components/AppBackground';
-import { PointsIcon } from '../../components/icons';
+import { PointsIcon, StackedBooksIcon, TrophyIcon, CalendarIcon } from '../../components/icons';
 
 // A fixed pixel cap for the tallest bar, not a percentage of some
 // surrounding flex container's own height — reported as still clipping
@@ -158,17 +158,30 @@ export default function ProgressPage() {
       <h1 className="text-2xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Progress</h1>
 
       {/* One section at a time (real feedback: all three on one page was
-          too crowded). The last-viewed tab is remembered on this device. */}
-      <div className="flex bg-black/20 rounded-full p-1" role="tablist">
-        {([['words', 'Words'], ['leaderboard', 'Top Learners'], ['calendar', 'Calendar']] as [ProgressTab, string][]).map(([t, label]) => (
+          too crowded). The last-viewed tab is remembered on this device.
+          A frosted strip of the theme's own light text color with an icon
+          on every tab — the earlier faint dark pill with 70%-opacity labels
+          was easy to miss entirely (a real report: learners didn't notice
+          Top Learners/Calendar existed). */}
+      <div
+        className="flex gap-1 bg-on-bg/15 backdrop-blur-sm border border-on-bg/30 rounded-2xl p-1 shadow-[0_6px_18px_-8px_rgba(0,0,0,0.5)]"
+        role="tablist"
+      >
+        {([
+          ['words', 'Words', StackedBooksIcon],
+          ['leaderboard', 'Top Learners', TrophyIcon],
+          ['calendar', 'Calendar', CalendarIcon],
+        ] as [ProgressTab, string, typeof TrophyIcon][]).map(([t, label, Icon]) => (
           <button
             key={t}
             type="button"
             role="tab"
             aria-selected={tab === t}
             onClick={() => chooseTab(t)}
-            className={`flex-1 py-2 rounded-full text-sm font-semibold transition-colors ${tab === t ? 'bg-paper text-ink shadow-sm' : 'text-on-bg/70 hover:text-on-bg'}`}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl text-[13px] font-semibold transition-all active:scale-95 ${tab === t ? 'bg-paper text-ink shadow-sm' : 'text-on-bg hover:bg-on-bg/10'}`}
+            style={tab === t ? undefined : { textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
           >
+            <Icon className="w-5 h-5" />
             {label}
           </button>
         ))}

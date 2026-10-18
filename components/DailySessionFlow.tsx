@@ -17,7 +17,7 @@ import {
   hasEnoughWordsForGame, hasEnoughWordsForParagraph, buildWordsInContextBatches, sharedCategoryHint, parseParagraphResponse,
   addDistractors, combineParagraphExercises,
 } from '../lib/practice';
-import { REVIEW_PLAN, recordMilestonePass } from '../lib/srs';
+import { REVIEW_PLAN, recordMilestonePass, markWordKnown } from '../lib/srs';
 import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, findWordByLemma, segmentChineseForClicks, tokenize, isWordToken, diffAgainstAttempt, applyGlossFallback } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
@@ -507,6 +507,15 @@ function SentenceExercise({
   // for the rare word missing one (e.g. added to the corpus after the last
   // batch run). SentenceExercise is remounted (key={word.id}) per word, so
   // these initializers are safe to read directly from the word prop.
+  // False once this exercise unmounts — a correction still in flight when
+  // the learner moves on (e.g. skips the word, see handleSkipWord) must not
+  // land afterward: onCorrected would run against the skipped word's stale
+  // session and re-route the whole flow.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
   const [promptSentence, setPromptSentence] = useState<string | null>(word.exercisePrompt ?? null);
   // Chinese translation of promptSentence, for DISPLAY only — the AI calls
   // below (generateSentence's known-vocabulary constraint, correctSentence's
@@ -649,6 +658,7 @@ function SentenceExercise({
     setStatus('loading');
     try {
       const result = await correctSentence(word.id, word.de, level, promptSentence, input.trim(), word.thirdPerson);
+      if (!aliveRef.current) return;
       // promptSentenceZh pairs with promptSentence here the same way it's
       // displayed above (corpus exercisePromptZh, or the live generateSentence
       // call's own sentenceZh) — saving it alongside is what lets a later
@@ -1115,6 +1125,33 @@ function ReferenceSentence({ example, word, masked = false }: {
         </div>
       )}
     </div>
+  );
+}
+
+// "I already know this" under every per-word card (see handleSkipWord).
+// Two taps, since a skip retires the word for good: the first arms it
+// (and says what will happen), the second within a few seconds confirms.
+// Keyed by word at each call site, so it's always disarmed on a new card.
+function SkipWordButton({ onSkip }: { onSkip: () => void }) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 3500);
+    return () => clearTimeout(t);
+  }, [armed]);
+  return (
+    <button
+      type="button"
+      onClick={() => (armed ? onSkip() : setArmed(true))}
+      className={`self-center rounded-full px-4 py-1.5 text-sm font-semibold transition-all active:scale-95 ${
+        armed
+          ? 'bg-paper text-ink shadow-sm'
+          : 'text-on-bg/75 hover:text-on-bg'
+      }`}
+      style={armed ? undefined : { textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
+    >
+      {armed ? 'Tap again to mark as mastered' : 'Too easy? Skip this word'}
+    </button>
   );
 }
 
@@ -2138,6 +2175,13 @@ export default function DailySessionFlow() {
     if (!session) return;
     const rest = queue.slice(1);
     if (!justCompletedRef.current) rest.push(queue[0]);
+    continueStudyQueue(session, rest);
+  }
+
+  // The tail of advanceStudyQueue, split out so a Skip (handleSkipWord)
+  // can continue from its own just-updated session/queue instead of the
+  // pre-skip ones still in state.
+  function continueStudyQueue(session: DailySession, rest: Word[]) {
     setQueue(rest);
     const restIds = rest.map(w => w.id);
 
@@ -2176,11 +2220,73 @@ export default function DailySessionFlow() {
     if (!session) return;
     const rest = queue.slice(1);
     if (!justCompletedRef.current) rest.push(queue[0]);
+    continueReviewQueue(session, rest);
+  }
+
+  function continueReviewQueue(session: DailySession, rest: Word[]) {
     setQueue(rest);
     const next: DailySession = { ...session, reviewQueueIds: rest.map(w => w.id) };
     persistSession(next);
     if (rest.length > 0) loadCurrent(rest[0], 'review');
     else finishReviewRounds(next);
+  }
+
+  // "I already know this" — available on every per-word card (round
+  // ladder and all three MCQ checkpoints). Marks the word Mastered for good
+  // (see markWordKnown) and takes it out of today's session entirely —
+  // every queue, plus studyWordIds/reviewWordIds, so it doesn't come back
+  // in a retry pass, the matching recap, Words in Context, or the day's
+  // "N words learned/reviewed" counts — then carries on exactly as if the
+  // card had been finished.
+  function handleSkipWord(skipped: Word) {
+    if (!session) return;
+    stopSpeech();
+    clearTimeout(pendingWordAudioTimer.current);
+    saveWordProgress(markWordKnown(getWordProgress(skipped.id)));
+    scheduleSync();
+    const drop = (ids: string[]) => ids.filter(id => id !== skipped.id);
+    const reviewRounds = Object.fromEntries(Object.entries(session.reviewRounds ?? {}).filter(([id]) => id !== skipped.id));
+    reviewRoundsRef.current = { ...reviewRounds };
+    const ds: DailySession = {
+      ...session,
+      studyWordIds: drop(session.studyWordIds),
+      reviewWordIds: drop(session.reviewWordIds),
+      studyMcqQueueIds: drop(session.studyMcqQueueIds),
+      studyMcqWrongIds: drop(session.studyMcqWrongIds),
+      reviewMcqQueueIds: drop(session.reviewMcqQueueIds),
+      reviewMcqWrongIds: drop(session.reviewMcqWrongIds),
+      reviewMcqReversedQueueIds: drop(session.reviewMcqReversedQueueIds),
+      reviewMcqReversedWrongIds: drop(session.reviewMcqReversedWrongIds),
+      ...(session.studyQueueIds ? { studyQueueIds: drop(session.studyQueueIds) } : {}),
+      ...(session.reviewQueueIds ? { reviewQueueIds: drop(session.reviewQueueIds) } : {}),
+      ...(session.studyRound1NeededIds ? { studyRound1NeededIds: drop(session.studyRound1NeededIds) } : {}),
+      reviewRounds,
+    };
+    switch (session.phase) {
+      case 'study-mcq':
+        setMcqCurrent(null);
+        persistSession(ds);
+        enterStudyMcqPhase(ds);
+        return;
+      case 'review-mcq':
+        setMcqCurrent(null);
+        persistSession(ds);
+        enterReviewMcqPhase(ds);
+        return;
+      case 'review-mcq-reversed':
+        setMcqCurrent(null);
+        persistSession(ds);
+        enterReviewMcqReversedPhase(ds);
+        return;
+      case 'study-rounds':
+      case 'review-rounds': {
+        const rest = queue.filter(w => w.id !== skipped.id);
+        setTotalWords(n => Math.max(0, n - 1));
+        if (session.phase === 'study-rounds') continueStudyQueue(ds, rest);
+        else continueReviewQueue(ds, rest);
+        return;
+      }
+    }
   }
 
   const handleNext = () => {
@@ -2585,20 +2691,28 @@ export default function DailySessionFlow() {
   if (session.phase === 'study-mcq') {
     if (!mcqCurrent) return null;
     return (
-      <WordMeaningChoiceCard
-        key={mcqCurrent.word.id}
-        word={mcqCurrent.word}
-        correct={mcqCurrent.correct}
-        choices={mcqCurrent.choices}
-        onAnswer={handleStudyMcqAnswer}
-        initiallyRevealed={!!session.mcqReversedRevealed}
-        onReveal={handleRevealMcqReversed}
-      />
+      <div className="flex flex-col gap-3">
+        <WordMeaningChoiceCard
+          key={mcqCurrent.word.id}
+          word={mcqCurrent.word}
+          correct={mcqCurrent.correct}
+          choices={mcqCurrent.choices}
+          onAnswer={handleStudyMcqAnswer}
+          initiallyRevealed={!!session.mcqReversedRevealed}
+          onReveal={handleRevealMcqReversed}
+        />
+        <SkipWordButton key={`skip-${mcqCurrent.word.id}`} onSkip={() => handleSkipWord(mcqCurrent.word)} />
+      </div>
     );
   }
   if (session.phase === 'review-mcq') {
     if (!mcqCurrent) return null;
-    return <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={handleReviewMcqAnswer} isReview />;
+    return (
+      <div className="flex flex-col gap-3">
+        <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={handleReviewMcqAnswer} isReview />
+        <SkipWordButton key={`skip-${mcqCurrent.word.id}`} onSkip={() => handleSkipWord(mcqCurrent.word)} />
+      </div>
+    );
   }
   // 'short'-stage review's own checkpoint — see enterReviewMcqReversedPhase.
   // A fully separate phase/screen from review-mcq above (not merged into
@@ -2607,16 +2721,19 @@ export default function DailySessionFlow() {
   if (session.phase === 'review-mcq-reversed') {
     if (!mcqCurrent) return null;
     return (
-      <WordMeaningChoiceCard
-        key={mcqCurrent.word.id}
-        word={mcqCurrent.word}
-        correct={mcqCurrent.correct}
-        choices={mcqCurrent.choices}
-        onAnswer={handleReviewMcqReversedAnswer}
-        isReview
-        initiallyRevealed={!!session.mcqReversedRevealed}
-        onReveal={handleRevealMcqReversed}
-      />
+      <div className="flex flex-col gap-3">
+        <WordMeaningChoiceCard
+          key={mcqCurrent.word.id}
+          word={mcqCurrent.word}
+          correct={mcqCurrent.correct}
+          choices={mcqCurrent.choices}
+          onAnswer={handleReviewMcqReversedAnswer}
+          isReview
+          initiallyRevealed={!!session.mcqReversedRevealed}
+          onReveal={handleRevealMcqReversed}
+        />
+        <SkipWordButton key={`skip-${mcqCurrent.word.id}`} onSkip={() => handleSkipWord(mcqCurrent.word)} />
+      </div>
     );
   }
 
@@ -3317,6 +3434,9 @@ export default function DailySessionFlow() {
           </>
         )}
       </div>
+      {feedback === null && (
+        <SkipWordButton key={`skip-${word.id}`} onSkip={() => handleSkipWord(word)} />
+      )}
     </div>
   );
 }

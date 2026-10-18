@@ -77,11 +77,20 @@ function getCtx(): AudioContext | null {
 // (older/unusual browser) -- still respects the mute switch there, but
 // that's the pre-existing behavior, not a new regression.
 let sharedDestination: AudioNode | null = null;
+let sharedAudioEl: HTMLAudioElement | null = null;
 function getDestination(ctx: AudioContext): AudioNode {
-  if (sharedDestination) return sharedDestination;
+  if (sharedDestination) {
+    // iOS pauses this element on any audio-session interruption (a word's
+    // own <audio> clip, speech synthesis, a phone call) and never resumes
+    // it on its own -- leaving it paused made the next chime silent or
+    // clipped. Nudged back on every chime instead.
+    if (sharedAudioEl?.paused) sharedAudioEl.play().catch(() => {});
+    return sharedDestination;
+  }
   try {
     const streamDest = ctx.createMediaStreamDestination();
     const audioEl = new Audio();
+    sharedAudioEl = audioEl;
     audioEl.srcObject = streamDest.stream;
     // Fire-and-forget, same as every other best-effort audio.play() in
     // this app (see lib/speech.ts) -- a rejected play() here just means
@@ -139,8 +148,18 @@ function warmDestination(ctx: AudioContext, freq = 5000): AudioNode {
   filter.type = 'lowpass';
   filter.frequency.value = freq;
   filter.connect(getDestination(ctx));
+  // Every chime is well under a second -- detached afterward so a long
+  // session doesn't pile up hundreds of idle filters on the output.
+  setTimeout(() => filter.disconnect(), 1500);
   return filter;
 }
+
+// Every note is scheduled this far ahead of ctx.currentTime. Scheduling
+// AT currentTime meant the audio thread had often already moved past it
+// by the time the nodes were built, so the first note's attack got
+// clipped by a varying amount -- the reported "the chime sometimes sounds
+// different". A short lead lets every note play in full, every time.
+const SCHEDULE_LEAD_S = 0.05;
 
 const G4 = 392.0, A4 = 440.0, C5 = 523.25, E5 = 659.25, G5 = 784.0, C6 = 1046.5;
 
@@ -156,7 +175,7 @@ export const CHIME_OPTIONS: ChimeOption[] = [
     name: 'Soft Two-Note',
     play(ctx) {
       const d = warmDestination(ctx, 4500);
-      const t = ctx.currentTime;
+      const t = ctx.currentTime + SCHEDULE_LEAD_S;
       tone(ctx, d, G4, t, 0.24, { gain: 0.3 });
       tone(ctx, d, C5, t + 0.1, 0.3, { gain: 0.32 });
     },
@@ -166,7 +185,7 @@ export const CHIME_OPTIONS: ChimeOption[] = [
     name: 'Triad Bloom',
     play(ctx) {
       const d = warmDestination(ctx, 5000);
-      const t = ctx.currentTime;
+      const t = ctx.currentTime + SCHEDULE_LEAD_S;
       tone(ctx, d, C5, t, 0.42, { gain: 0.2 });
       tone(ctx, d, E5, t + 0.015, 0.42, { gain: 0.2 });
       tone(ctx, d, G5, t + 0.03, 0.48, { gain: 0.22 });
@@ -177,7 +196,7 @@ export const CHIME_OPTIONS: ChimeOption[] = [
     name: 'Rising Glow',
     play(ctx) {
       const d = warmDestination(ctx, 5000);
-      const t = ctx.currentTime;
+      const t = ctx.currentTime + SCHEDULE_LEAD_S;
       tone(ctx, d, G4, t, 0.12, { gain: 0.28 });
       tone(ctx, d, A4, t + 0.07, 0.12, { gain: 0.28 });
       tone(ctx, d, C5, t + 0.14, 0.32, { gain: 0.32 });
@@ -188,7 +207,7 @@ export const CHIME_OPTIONS: ChimeOption[] = [
     name: 'Double Ding',
     play(ctx) {
       const d = warmDestination(ctx, 5500);
-      const t = ctx.currentTime;
+      const t = ctx.currentTime + SCHEDULE_LEAD_S;
       tone(ctx, d, G5, t, 0.24, { gain: 0.3 });
       tone(ctx, d, C6, t + 0.11, 0.32, { gain: 0.32 });
     },
@@ -199,7 +218,7 @@ export const CHIME_OPTIONS: ChimeOption[] = [
     play(ctx) {
       const tickDest = warmDestination(ctx, 6000);
       const bodyDest = warmDestination(ctx, 4000);
-      const t = ctx.currentTime;
+      const t = ctx.currentTime + SCHEDULE_LEAD_S;
       tone(ctx, tickDest, E5, t, 0.06, { type: 'triangle', gain: 0.16 });
       tone(ctx, bodyDest, C5, t + 0.04, 0.36, { gain: 0.3 });
     },

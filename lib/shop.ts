@@ -267,7 +267,7 @@ export function getCachedDisplayProfile(): DisplayProfile | null {
   }
 }
 
-function cacheDisplayProfile(p: DisplayProfile): DisplayProfile {
+export function cacheDisplayProfile(p: DisplayProfile): DisplayProfile {
   try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(p)); } catch { /* best effort */ }
   return p;
 }

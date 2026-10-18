@@ -11,6 +11,7 @@ import { buildStudyWords, buildReviewWords } from '../lib/practice';
 import { SYNCED_EVENT } from '../lib/sync';
 import { getDisplayProfile, getCachedDisplayProfile, heroImageFor, avatarImageFor, EquippedAccessories, NO_ACCESSORIES } from '../lib/shop';
 import { CheckCircleIcon } from '../components/icons';
+import { supabase } from '../lib/supabase';
 import Link from 'next/link';
 
 // Once today's main goal is done, "Study more" pulls a smaller bonus round
@@ -68,6 +69,16 @@ export default function HomePage() {
   // imperceptible.
   const [petLoaded, setPetLoaded] = useState(false);
   const petImgRef = useRef<HTMLImageElement>(null);
+  // null until the (local, instant) auth check answers, so the sign-in
+  // prompt below never flashes for someone who is already signed in.
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, authSession) => {
+      setSignedIn(!!authSession);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   const loadProfile = () => {
     getDisplayProfile().then(profile => {
@@ -335,6 +346,22 @@ export default function HomePage() {
           <span className="font-semibold text-sm">Chat</span>
         </button>
       </div>
+
+      {/* Signed-out learners only: their progress lives on this device
+          alone until they sign in, and the sign-in form otherwise sits
+          two taps deep in Profile → Account. */}
+      {signedIn === false && (
+        <Link
+          href="/settings/?section=account"
+          className="w-full flex items-center gap-3 rounded-2xl bg-black/15 border border-on-bg/20 px-4 py-3 hover:bg-black/25 transition-colors"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm text-on-bg">Sign in to save your progress</div>
+            <div className="text-xs text-on-bg/70">Back it up and sync across devices</div>
+          </div>
+          <span className="shrink-0 rounded-full bg-paper text-ink text-sm font-bold px-3.5 py-1.5">Sign in</span>
+        </Link>
+      )}
 
     </div>
   );

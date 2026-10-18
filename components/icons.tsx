@@ -149,3 +149,26 @@ export function PointsIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function TrophyIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M8 4h8v5a4 4 0 0 1-8 0Z" />
+      <path d="M8 6H5.5a2.5 2.5 0 0 0 2.6 4.5" />
+      <path d="M16 6h2.5a2.5 2.5 0 0 1-2.6 4.5" />
+      <path d="M12 13v4" />
+      <path d="M8.5 20.5h7l-1-3.5h-5Z" />
+    </svg>
+  );
+}
+
+export function CalendarIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+      <path d="M3.5 10h17" />
+      <path d="M8 3v4" />
+      <path d="M16 3v4" />
+    </svg>
+  );
+}

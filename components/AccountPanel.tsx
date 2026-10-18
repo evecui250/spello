@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { SYNCED_EVENT } from '../lib/sync';
 import { getAiUsageStats, AiUsageStats } from '../lib/ai';
-import { avatarImageFor, getMyProfile, setNickname as saveNickname, setLeaderboardOptOut, EquippedAccessories, NO_ACCESSORIES } from '../lib/shop';
+import { avatarImageFor, getMyProfile, getCachedDisplayProfile, cacheDisplayProfile, setNickname as saveNickname, setLeaderboardOptOut, EquippedAccessories, NO_ACCESSORIES } from '../lib/shop';
 import MascotShopModal from './MascotShopModal';
 import { PointsIcon, PencilIcon } from './icons';
 
@@ -23,7 +23,9 @@ interface Props {
 const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function AccountPanel({ onSync, onSignedIn }: Props) {
-  const [email, setEmail] = useState<string | null>(null);
+  // undefined = auth not checked yet. Rendering nothing until it is keeps
+  // a signed-in learner from seeing the sign-in form flash first.
+  const [email, setEmail] = useState<string | null | undefined>(undefined);
   const [inputEmail, setInputEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
@@ -39,9 +41,19 @@ export default function AccountPanel({ onSync, onSignedIn }: Props) {
   const [verifyError, setVerifyError] = useState('');
   const [aiStats, setAiStats] = useState<AiUsageStats | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [avatarId, setAvatarId] = useState('dachshund');
-  const [equipped, setEquipped] = useState<EquippedAccessories>(NO_ACCESSORIES);
-  const [nickname, setNicknameState] = useState('');
+  // Seeded from the last profile shown on this device (the same cache Home
+  // paints from) so the real pet and nickname are there on first paint,
+  // instead of the default dachshund and "Set a nickname…" showing until
+  // the network fetch lands (a real report). With no cache at all (first
+  // visit on this device), the header stays hidden until that fetch does.
+  const [cached] = useState(() => {
+    const c = getCachedDisplayProfile();
+    return c?.signedIn ? c : null;
+  });
+  const [profileReady, setProfileReady] = useState(!!cached);
+  const [avatarId, setAvatarId] = useState(cached?.avatarId ?? 'dachshund');
+  const [equipped, setEquipped] = useState<EquippedAccessories>(cached?.equipped ?? NO_ACCESSORIES);
+  const [nickname, setNicknameState] = useState(cached?.nickname ?? '');
   const [editingNickname, setEditingNickname] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const [optOut, setOptOut] = useState(false);
@@ -70,7 +82,9 @@ export default function AccountPanel({ onSync, onSignedIn }: Props) {
   const loadProfile = () => {
     if (!email) return;
     getMyProfile().then(profile => {
+      setProfileReady(true);
       if (!profile) return;
+      cacheDisplayProfile({ avatarId: profile.avatarId, equipped: profile.equipped, nickname: profile.nickname, signedIn: true });
       setAvatarId(profile.avatarId);
       setEquipped(profile.equipped);
       setNicknameState(profile.nickname ?? '');
@@ -149,11 +163,13 @@ export default function AccountPanel({ onSync, onSignedIn }: Props) {
     setInputEmail('');
   };
 
+  if (email === undefined) return <div className="min-h-24" aria-hidden />;
+
   if (email) {
     return (
       <div className="flex flex-col gap-4">
         {/* Resume-style header: photo on the left, name on the right */}
-        <div className="flex items-center gap-4">
+        <div className={`flex items-center gap-4 transition-opacity duration-200 ${profileReady ? 'opacity-100' : 'opacity-0'}`}>
           <button
             type="button"
             onClick={() => setShopOpen(true)}
