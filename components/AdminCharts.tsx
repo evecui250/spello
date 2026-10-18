@@ -169,7 +169,7 @@ export function LevelBars({ rows }: { rows: BarRow[] }) {
         const total = row.segments.reduce((s, seg) => s + seg.value, 0);
         return (
           <div key={row.label} className="flex items-center gap-2">
-            <span className="w-10 text-xs font-medium text-stone-600 shrink-0">{row.label}</span>
+            <span className="w-32 text-xs font-medium text-stone-600 shrink-0 truncate" title={row.label}>{row.label}</span>
             <div className="flex-1 h-4 rounded-full bg-stone-100 overflow-hidden flex">
               {row.segments.map((seg, i) => (
                 seg.value > 0 && (

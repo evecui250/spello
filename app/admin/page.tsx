@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { TrendChart, LevelBars, DonutChart } from '../../components/AdminCharts';
 import { THEME_CONFIG } from '../../components/AppBackground';
@@ -112,6 +112,10 @@ interface AdminStats {
     wortpaarePlayers: { today: number; last7Days: number; allTime: number };
     artikelBlitzPlayers: { today: number; last7Days: number; allTime: number };
     rapidReviewCount: { today: number; last7Days: number; allTime: number };
+    // Finished rounds (not distinct people) — optional so the page still
+    // renders against an admin-stats deploy from before these existed.
+    wortpaarePlays?: { today: number; last7Days: number; allTime: number };
+    artikelBlitzPlays?: { today: number; last7Days: number; allTime: number };
   };
   // Every registered account, most-recently-active first — see
   // admin-stats' own comment for what "active" means here and why.
@@ -407,7 +411,7 @@ export default function AdminPage() {
         <div>
           <h2 className="font-semibold text-stone-800">Bonus games</h2>
           <p className="text-stone-400 text-xs -mt-0.5">
-            Distinct people who have played each game, plus total Rapid Reviews done.
+            People who played each game, and how many timed rounds they finished (a round quit early isn't counted). Plus total Rapid Reviews done.
           </p>
         </div>
         <div className="grid grid-cols-[1fr_repeat(3,4rem)] gap-x-2 gap-y-2 text-sm">
@@ -416,20 +420,20 @@ export default function AdminPage() {
           <div className="text-[11px] font-semibold uppercase tracking-wide text-stone-400 text-right">7 days</div>
           <div className="text-[11px] font-semibold uppercase tracking-wide text-stone-400 text-right">All time</div>
 
-          <div className="text-stone-600">Wortpaare players</div>
-          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.wortpaarePlayers.today}</div>
-          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.wortpaarePlayers.last7Days}</div>
-          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.wortpaarePlayers.allTime}</div>
-
-          <div className="text-stone-600">Artikel Blitz players</div>
-          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.artikelBlitzPlayers.today}</div>
-          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.artikelBlitzPlayers.last7Days}</div>
-          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.artikelBlitzPlayers.allTime}</div>
-
-          <div className="text-stone-600">Rapid Reviews done</div>
-          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.rapidReviewCount.today}</div>
-          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.rapidReviewCount.last7Days}</div>
-          <div className="text-right font-mono font-semibold text-stone-800">{stats.bonusGames.rapidReviewCount.allTime}</div>
+          {([
+            ['Wortpaare players', stats.bonusGames.wortpaarePlayers],
+            ['Wortpaare rounds', stats.bonusGames.wortpaarePlays],
+            ['Artikel Blitz players', stats.bonusGames.artikelBlitzPlayers],
+            ['Artikel Blitz rounds', stats.bonusGames.artikelBlitzPlays],
+            ['Rapid Reviews done', stats.bonusGames.rapidReviewCount],
+          ] as [string, { today: number; last7Days: number; allTime: number } | undefined][]).filter(([, v]) => v).map(([label, v]) => (
+            <Fragment key={label}>
+              <div className="text-stone-600">{label}</div>
+              <div className="text-right font-mono font-semibold text-stone-800">{v!.today}</div>
+              <div className="text-right font-mono font-semibold text-stone-800">{v!.last7Days}</div>
+              <div className="text-right font-mono font-semibold text-stone-800">{v!.allTime}</div>
+            </Fragment>
+          ))}
         </div>
       </div>
 
@@ -497,7 +501,7 @@ export default function AdminPage() {
                 {stats.wordStages.byLearner.map((row, i) => (
                   <tr key={row.email + i} className="border-t border-amber-100/60">
                     <td className="py-1.5 pr-2 text-stone-700 truncate max-w-[140px]">{row.email}</td>
-                    <td className="py-1.5 px-2 text-stone-500">{row.level ?? '—'}</td>
+                    <td className="py-1.5 px-2 text-stone-500 max-w-[8rem] truncate" title={row.level ?? undefined}>{row.level ?? "—"}</td>
                     {STAGE_ORDER.map(s => <td key={s} className="py-1.5 px-2 text-stone-600 text-right">{row.stages[s]}</td>)}
                   </tr>
                 ))}

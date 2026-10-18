@@ -187,10 +187,34 @@ Deno.serve(async (req: Request) => {
     // broken query.
     const { data: progressLevelRows, count: accountsStartedLearning, error: progressLevelError } = await admin
       .from('user_progress')
-      .select('user_id, level', { count: 'exact' });
+      .select('user_id, level, imported_books', { count: 'exact' });
     if (progressLevelError) {
       console.error('user_progress (level) query failed:', progressLevelError.message);
       debugErrors.push(`user_progress (level): ${progressLevelError.message}`);
+    }
+
+    // Every "level" value in this function is either a CEFR code, a PDF
+    // book's id ("book-<uuid>", meaningless to read), "book-dictionary",
+    // or null (hasn't chosen one yet). Book ids are named from synced
+    // accounts' imported_books lists — an anonymous learner's book never
+    // reaches the server, so that one can only say "PDF". Copies of the
+    // same PDF share a label, so they also share one row in the charts.
+    const bookNameById = new Map<string, string>();
+    for (const row of progressLevelRows ?? []) {
+      for (const b of (row.imported_books ?? []) as { id?: string; name?: string }[]) {
+        if (b?.id && b?.name) bookNameById.set(b.id, b.name);
+      }
+    }
+    const NO_LEVEL_LABEL = 'Not chosen yet';
+    function levelLabel(level: string | null | undefined): string {
+      if (!level) return NO_LEVEL_LABEL;
+      if (level === 'book-dictionary') return 'My dictionary';
+      if (level === 'B2_old') return 'B2 (old)';
+      if (level.startsWith('book-')) {
+        const name = bookNameById.get(level);
+        return name ? `PDF: ${name}` : 'PDF (name unknown)';
+      }
+      return level;
     }
 
     // Full progress blob — only used for the word-stages breakdown, kept
@@ -214,13 +238,16 @@ Deno.serve(async (req: Request) => {
     // handle. Good enough here to just check whether every top-level key
     // looks like a level code, without sync.ts's fuller migration handling
     // — this is a read-only admin view, not a data-correctness-critical path.
-    const LEVEL_KEYS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+    // Imported books ("book-…") and the legacy "B2_old" are per-level keys
+    // too — matching only the six CEFR codes misread any account that
+    // had one of those as a flat blob, zeroing all its stage counts.
+    const isLevelKey = (k: string) => /^(A1|A2|B1|B2|B2_old|C1|C2|book-.+)$/.test(k);
     const STAGE_KEYS = ['puppy', 'short', 'medium', 'long-crowned'] as const;
     function stageCounts(progress: unknown): Record<typeof STAGE_KEYS[number], number> {
       const counts = { puppy: 0, short: 0, medium: 0, 'long-crowned': 0 };
       if (!progress || typeof progress !== 'object') return counts;
       const obj = progress as Record<string, unknown>;
-      const isNested = Object.keys(obj).length > 0 && Object.keys(obj).every(k => LEVEL_KEYS.includes(k));
+      const isNested = Object.keys(obj).length > 0 && Object.keys(obj).every(isLevelKey);
       const wordMaps = (isNested ? Object.values(obj) : [obj]) as Record<string, unknown>[];
       for (const wordMap of wordMaps) {
         if (!wordMap || typeof wordMap !== 'object') continue;
@@ -233,7 +260,7 @@ Deno.serve(async (req: Request) => {
     }
     const learnerRows = (progressRows ?? []).map(r => ({
       email: emailByUserId.get(r.user_id) ?? '(unknown)',
-      level: r.level as string | null,
+      level: levelLabel(r.level),
       stages: stageCounts(r.progress),
     }));
     const stageTotals = learnerRows.reduce((acc, r) => {
@@ -401,13 +428,21 @@ Deno.serve(async (req: Request) => {
     const wortpaarePlayers = emptyGameWindow();
     const artikelBlitzPlayers = emptyGameWindow();
     const rapidReviewCounts = { today: 0, last7Days: 0, allTime: 0 };
+    // Total finished rounds too, not just distinct people — one learner
+    // playing every day only ever moves the people count once, which
+    // read as "not updating".
+    const wortpaarePlays = { today: 0, last7Days: 0, allTime: 0 };
+    const artikelBlitzPlays = { today: 0, last7Days: 0, allTime: 0 };
     for (const r of gamePlayRows ?? []) {
       const person = r.user_id ?? r.device_id;
-      const players = r.game === 'artikel_blitz' ? artikelBlitzPlayers : wortpaarePlayers;
+      const isBlitz = r.game === 'artikel_blitz';
+      const players = isBlitz ? artikelBlitzPlayers : wortpaarePlayers;
+      const plays = isBlitz ? artikelBlitzPlays : wortpaarePlays;
       const day = dateStr(new Date(r.created_at));
       players.allTime.add(person);
-      if (day >= last7DaysStart) players.last7Days.add(person);
-      if (day === todayStr) players.today.add(person);
+      plays.allTime += 1;
+      if (day >= last7DaysStart) { players.last7Days.add(person); plays.last7Days += 1; }
+      if (day === todayStr) { players.today.add(person); plays.today += 1; }
       if (r.source === 'rapid_review') {
         rapidReviewCounts.allTime += 1;
         if (day >= last7DaysStart) rapidReviewCounts.last7Days += 1;
@@ -418,6 +453,8 @@ Deno.serve(async (req: Request) => {
       wortpaarePlayers: { today: wortpaarePlayers.today.size, last7Days: wortpaarePlayers.last7Days.size, allTime: wortpaarePlayers.allTime.size },
       artikelBlitzPlayers: { today: artikelBlitzPlayers.today.size, last7Days: artikelBlitzPlayers.last7Days.size, allTime: artikelBlitzPlayers.allTime.size },
       rapidReviewCount: rapidReviewCounts,
+      wortpaarePlays,
+      artikelBlitzPlays,
     };
 
     // Every registered account, most-recently-active first — "who's
@@ -472,20 +509,22 @@ Deno.serve(async (req: Request) => {
     // level off of otherwise).
     const levelCounts = new Map<string, { signedIn: number; anonymous: number }>();
     const bump = (level: string | null | undefined, key: 'signedIn' | 'anonymous') => {
-      const l = level || 'unknown';
+      const l = levelLabel(level);
       const entry = levelCounts.get(l) ?? { signedIn: 0, anonymous: 0 };
       entry[key] += 1;
       levelCounts.set(l, entry);
     };
     for (const row of progressLevelRows ?? []) bump(row.level, 'signedIn');
     for (const row of todaysPings.filter(r => !r.signed_in)) bump(row.level, 'anonymous');
-    // A1 -> B2 (real book order), then "unknown" pinned last — was sorted
-    // by count descending before, which reshuffled every time the numbers
-    // changed and made the chart harder to scan at a glance.
-    const LEVEL_DISPLAY_ORDER = ['A1', 'A2', 'B1', 'B2'];
+    // A1 -> B2 (real book order), then PDFs/dictionary, then "Not chosen
+    // yet" pinned last — was sorted by count descending before, which
+    // reshuffled every time the numbers changed and made the chart harder
+    // to scan at a glance.
+    const LEVEL_DISPLAY_ORDER = ['A1', 'A2', 'B1', 'B2', 'B2 (old)'];
     const levelRank = (level: string) => {
+      if (level === NO_LEVEL_LABEL) return LEVEL_DISPLAY_ORDER.length + 2;
       const i = LEVEL_DISPLAY_ORDER.indexOf(level);
-      return i === -1 ? LEVEL_DISPLAY_ORDER.length + 1 : i; // unknown/anything else sorts last
+      return i === -1 ? LEVEL_DISPLAY_ORDER.length + 1 : i;
     };
     const levelBreakdown = [...levelCounts.entries()]
       .map(([level, counts]) => ({ level, ...counts }))
@@ -649,7 +688,7 @@ Deno.serve(async (req: Request) => {
         email: emailByUserId.get(r.user_id) ?? '(unknown)',
         wordsStudied: r.words_studied,
         wordsMastered: r.words_mastered,
-        level: r.level,
+        level: levelLabel(r.level),
       }));
 
     // Bug reports: total count plus the 5 most recent, for a quick glance

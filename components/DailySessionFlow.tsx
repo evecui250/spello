@@ -1150,7 +1150,7 @@ function SkipWordButton({ onSkip }: { onSkip: () => void }) {
       }`}
       style={armed ? undefined : { textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
     >
-      {armed ? 'Tap again to mark as mastered' : 'Too easy? Skip this word'}
+      {armed ? 'Tap again to mark as mastered' : 'Skip this word'}
     </button>
   );
 }

@@ -16,7 +16,7 @@ import DachshundMascot from '../../components/Mascot';
 import ActivityCalendar from '../../components/ActivityCalendar';
 import Leaderboard from '../../components/Leaderboard';
 import { THEME_CONFIG } from '../../components/AppBackground';
-import { PointsIcon, StackedBooksIcon, TrophyIcon, CalendarIcon } from '../../components/icons';
+import { PointsIcon } from '../../components/icons';
 
 // A fixed pixel cap for the tallest bar, not a percentage of some
 // surrounding flex container's own height — reported as still clipping
@@ -159,29 +159,24 @@ export default function ProgressPage() {
 
       {/* One section at a time (real feedback: all three on one page was
           too crowded). The last-viewed tab is remembered on this device.
-          A frosted strip of the theme's own light text color with an icon
-          on every tab — the earlier faint dark pill with 70%-opacity labels
+          A frosted strip of the theme's own light text color, with every
+          label at full strength — the earlier faint dark pill with 70%-opacity labels
           was easy to miss entirely (a real report: learners didn't notice
-          Top Learners/Calendar existed). */}
+          Top Learners/Calendar existed). No icons (owner call). */}
       <div
         className="flex gap-1 bg-on-bg/15 backdrop-blur-sm border border-on-bg/30 rounded-2xl p-1 shadow-[0_6px_18px_-8px_rgba(0,0,0,0.5)]"
         role="tablist"
       >
-        {([
-          ['words', 'Words', StackedBooksIcon],
-          ['leaderboard', 'Top Learners', TrophyIcon],
-          ['calendar', 'Calendar', CalendarIcon],
-        ] as [ProgressTab, string, typeof TrophyIcon][]).map(([t, label, Icon]) => (
+        {([['words', 'Words'], ['leaderboard', 'Top Learners'], ['calendar', 'Calendar']] as [ProgressTab, string][]).map(([t, label]) => (
           <button
             key={t}
             type="button"
             role="tab"
             aria-selected={tab === t}
             onClick={() => chooseTab(t)}
-            className={`flex-1 flex flex-col items-center gap-0.5 py-2 rounded-xl text-[13px] font-semibold transition-all active:scale-95 ${tab === t ? 'bg-paper text-ink shadow-sm' : 'text-on-bg hover:bg-on-bg/10'}`}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95 ${tab === t ? 'bg-paper text-ink shadow-sm' : 'text-on-bg hover:bg-on-bg/10'}`}
             style={tab === t ? undefined : { textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
           >
-            <Icon className="w-5 h-5" />
             {label}
           </button>
         ))}
