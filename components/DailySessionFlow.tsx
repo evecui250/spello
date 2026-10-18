@@ -1134,6 +1134,12 @@ function ReferenceSentence({ example, word, masked = false }: {
 // confirmation window saying exactly that; the skip itself happens on its
 // "Mark as mastered" button. Keyed by word at each call site, so a new
 // card always starts with the window closed.
+// The multiple-choice screens are short, so they're centered in the space
+// between the top of the screen and the bottom bars (practice page's own
+// mb-14 for StudyRoadmap + main's top/bottom padding, see app/layout.tsx)
+// instead of sitting at the top, out of easy thumb reach.
+const MCQ_CENTER_STYLE = { minHeight: 'calc(100dvh - 10.5rem - var(--safe-top) - var(--safe-bottom))' };
+
 function SkipWordButton({ word, onSkip }: { word: Word; onSkip: () => void }) {
   const [confirming, setConfirming] = useState(false);
   return (
@@ -2723,7 +2729,7 @@ export default function DailySessionFlow() {
   if (session.phase === 'study-mcq') {
     if (!mcqCurrent) return null;
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col justify-center gap-3" style={MCQ_CENTER_STYLE}>
         <WordMeaningChoiceCard
           key={mcqCurrent.word.id}
           word={mcqCurrent.word}
@@ -2740,7 +2746,7 @@ export default function DailySessionFlow() {
   if (session.phase === 'review-mcq') {
     if (!mcqCurrent) return null;
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col justify-center gap-3" style={MCQ_CENTER_STYLE}>
         <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={handleReviewMcqAnswer} isReview />
         <SkipWordButton key={`skip-${mcqCurrent.word.id}`} word={mcqCurrent.word} onSkip={() => handleSkipWord(mcqCurrent.word)} />
       </div>
@@ -2753,7 +2759,7 @@ export default function DailySessionFlow() {
   if (session.phase === 'review-mcq-reversed') {
     if (!mcqCurrent) return null;
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col justify-center gap-3" style={MCQ_CENTER_STYLE}>
         <WordMeaningChoiceCard
           key={mcqCurrent.word.id}
           word={mcqCurrent.word}
