@@ -13,6 +13,79 @@ import { fetchSharedBook, addSharedBook, normalizeBookCode, SharedBook } from '.
 import { AVATAR_CATALOG, heroImageFor, getDisplayProfile, setAvatarId as saveRemoteAvatarId, setNickname as saveRemoteNickname } from '../../lib/shop';
 import DachshundMascot from '../../components/Mascot';
 import { THEME_CONFIG } from '../../components/AppBackground';
+import {
+  getReminderSettings, saveReminderSettings, rescheduleReminders, requestReminderPermission,
+  remindersSupported, ReminderSettings, DEFAULT_REMINDER_SETTINGS,
+} from '../../lib/reminders';
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+// The welcome flow's slice of Profile → Notifications (see
+// ReminderSettingsPanel): just on/off and the time, with "stop after"
+// left at the default 3 days. Saved the moment it changes (not on Start
+// Learning), since turning it on is what shows iOS's permission prompt.
+// iOS app only — returns nothing on the web.
+function WelcomeReminderCard() {
+  const [settings, setSettings] = useState<ReminderSettings | null>(null);
+  const [denied, setDenied] = useState(false);
+  const supported = remindersSupported();
+  useEffect(() => { if (supported) setSettings(getReminderSettings()); }, [supported]);
+  if (!supported || !settings) return null;
+
+  const update = async (next: ReminderSettings) => {
+    if (next.enabled && !settings.enabled) {
+      const granted = await requestReminderPermission();
+      setDenied(!granted);
+      if (!granted) next = { ...next, enabled: false };
+    }
+    next = { ...next, days: DEFAULT_REMINDER_SETTINGS.days };
+    setSettings(next);
+    saveReminderSettings(next);
+    await rescheduleReminders();
+  };
+
+  return (
+    <div className="w-full bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-4">
+      <label className="flex items-center justify-between gap-3 cursor-pointer">
+        <div>
+          <div className="font-semibold text-stone-800">Daily reminder</div>
+          <p className="text-stone-500 text-sm">A nudge if you haven&apos;t studied yet that day. You can change this later in Profile.</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={settings.enabled}
+          onClick={() => update({ ...settings, enabled: !settings.enabled })}
+          className={`relative inline-block w-11 h-6 rounded-full transition-colors shrink-0 ${settings.enabled ? 'bg-indigo-600' : 'bg-stone-300'}`}
+        >
+          <span
+            className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform"
+            style={{ transform: settings.enabled ? 'translateX(1.25rem)' : 'translateX(0)' }}
+          />
+        </button>
+      </label>
+      {denied && (
+        <p className="text-red-700 text-sm -mt-2">
+          Notifications are turned off for Spello. You can allow them in your iPhone&apos;s Settings → Notifications → Spello.
+        </p>
+      )}
+      {settings.enabled && (
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-semibold text-stone-800">Remind me at</span>
+          <input
+            type="time"
+            value={`${pad2(settings.hour)}:${pad2(settings.minute)}`}
+            onChange={e => {
+              const [h, m] = e.target.value.split(':').map(Number);
+              if (Number.isFinite(h) && Number.isFinite(m)) update({ ...settings, hour: h, minute: m });
+            }}
+            className="border-2 border-indigo-400 rounded-lg px-3 py-1.5 text-stone-800 bg-white focus:outline-none focus:border-indigo-500"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 const STEPS = ['level', 'theme', 'pace', 'mascots', 'pet'] as const;
 type Step = typeof STEPS[number];
@@ -512,6 +585,7 @@ export default function WelcomePage() {
               <p className="text-stone-400 text-sm mt-1">Leave blank to stay anonymous.</p>
             </div>
           </div>
+          <WelcomeReminderCard />
           <div className="flex gap-3">
             <button
               onClick={() => setStep('mascots')}
