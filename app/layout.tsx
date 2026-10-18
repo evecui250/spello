@@ -8,6 +8,7 @@ import StudyRoadmap from '../components/StudyRoadmap';
 import AppBackground from '../components/AppBackground';
 import SyncGate from '../components/SyncGate';
 import ChunkErrorRecovery from '../components/ChunkErrorRecovery';
+import UpdateOnResume from '../components/UpdateOnResume';
 import SpeechCleanup from '../components/SpeechCleanup';
 import PwaRegister from '../components/PwaRegister';
 import UsagePing from '../components/UsagePing';
@@ -83,6 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen text-emerald-50">
         <ChunkErrorRecovery />
+        <UpdateOnResume />
         <SyncGate />
         <SpeechCleanup />
         <PwaRegister />

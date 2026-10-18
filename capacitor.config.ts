@@ -16,6 +16,11 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://evecui250.github.io/spello/',
     cleartext: false,
+    // Every page on this host is the app. Without this, Capacitor only
+    // keeps URLs that start with `url` above verbatim — so a full page
+    // load of ".../spello" (no trailing slash, which Next.js uses for Home
+    // when it recovers from a just-deployed version) was handed to Safari.
+    allowNavigation: ['evecui250.github.io'],
   },
   ios: {
     // Edge to edge: the WebView fills the whole screen, under the status
