@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
   getDailySession, saveDailySession, DailySession, SessionPhase,
@@ -1129,29 +1130,60 @@ function ReferenceSentence({ example, word, masked = false }: {
 }
 
 // "I already know this" under every per-word card (see handleSkipWord).
-// Two taps, since a skip retires the word for good: the first arms it
-// (and says what will happen), the second within a few seconds confirms.
-// Keyed by word at each call site, so it's always disarmed on a new card.
-function SkipWordButton({ onSkip }: { onSkip: () => void }) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return;
-    const t = setTimeout(() => setArmed(false), 3500);
-    return () => clearTimeout(t);
-  }, [armed]);
+// A skip retires the word for good, so the button only opens a small
+// confirmation window saying exactly that; the skip itself happens on its
+// "Mark as mastered" button. Keyed by word at each call site, so a new
+// card always starts with the window closed.
+function SkipWordButton({ word, onSkip }: { word: Word; onSkip: () => void }) {
+  const [confirming, setConfirming] = useState(false);
   return (
-    <button
-      type="button"
-      onClick={() => (armed ? onSkip() : setArmed(true))}
-      className={`self-center rounded-full px-4 py-1.5 text-sm font-semibold transition-all active:scale-95 ${
-        armed
-          ? 'bg-paper text-ink shadow-sm'
-          : 'text-on-bg/75 hover:text-on-bg'
-      }`}
-      style={armed ? undefined : { textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
-    >
-      {armed ? 'Tap again to mark as mastered' : 'Skip this word'}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => setConfirming(true)}
+        className="self-center rounded-full px-4 py-1.5 text-sm font-semibold text-on-bg/75 hover:text-on-bg transition-all active:scale-95"
+        style={{ textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}
+      >
+        Mastered
+      </button>
+      {confirming && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setConfirming(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-sm bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-3 text-center"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="font-bold text-ink text-lg">
+              Mark &ldquo;{word.article ? `${word.article} ` : ''}{word.de}&rdquo; as mastered?
+            </h2>
+            <p className="text-ink-soft text-sm">
+              It will be skipped and won&apos;t show up in your study or reviews again. You&apos;ll still see it in Rapid review.
+            </p>
+            <div className="flex flex-col gap-2 mt-1">
+              <button
+                type="button"
+                onClick={() => { setConfirming(false); onSkip(); }}
+                className="w-full bg-accent text-white py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
+              >
+                Mark as mastered
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                className="w-full text-ink-soft py-2 text-sm font-semibold hover:text-ink transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 
@@ -2701,7 +2733,7 @@ export default function DailySessionFlow() {
           initiallyRevealed={!!session.mcqReversedRevealed}
           onReveal={handleRevealMcqReversed}
         />
-        <SkipWordButton key={`skip-${mcqCurrent.word.id}`} onSkip={() => handleSkipWord(mcqCurrent.word)} />
+        <SkipWordButton key={`skip-${mcqCurrent.word.id}`} word={mcqCurrent.word} onSkip={() => handleSkipWord(mcqCurrent.word)} />
       </div>
     );
   }
@@ -2710,7 +2742,7 @@ export default function DailySessionFlow() {
     return (
       <div className="flex flex-col gap-3">
         <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={handleReviewMcqAnswer} isReview />
-        <SkipWordButton key={`skip-${mcqCurrent.word.id}`} onSkip={() => handleSkipWord(mcqCurrent.word)} />
+        <SkipWordButton key={`skip-${mcqCurrent.word.id}`} word={mcqCurrent.word} onSkip={() => handleSkipWord(mcqCurrent.word)} />
       </div>
     );
   }
@@ -2732,7 +2764,7 @@ export default function DailySessionFlow() {
           initiallyRevealed={!!session.mcqReversedRevealed}
           onReveal={handleRevealMcqReversed}
         />
-        <SkipWordButton key={`skip-${mcqCurrent.word.id}`} onSkip={() => handleSkipWord(mcqCurrent.word)} />
+        <SkipWordButton key={`skip-${mcqCurrent.word.id}`} word={mcqCurrent.word} onSkip={() => handleSkipWord(mcqCurrent.word)} />
       </div>
     );
   }
@@ -3435,7 +3467,7 @@ export default function DailySessionFlow() {
         )}
       </div>
       {feedback === null && (
-        <SkipWordButton key={`skip-${word.id}`} onSkip={() => handleSkipWord(word)} />
+        <SkipWordButton key={`skip-${word.id}`} word={word} onSkip={() => handleSkipWord(word)} />
       )}
     </div>
   );
