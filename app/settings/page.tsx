@@ -10,6 +10,7 @@ import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTo
 import { Level, CefrLevel, LEVEL_SOURCE, isCefrLevel, isBookLevelId, wordsForLevel } from '../../lib/words';
 import { scheduleSync, syncNow, SYNCED_EVENT } from '../../lib/sync';
 import { CHIME_OPTIONS } from '../../lib/sound';
+import ReminderSettingsPanel from '../../components/ReminderSettingsPanel';
 import AccountPanel from '../../components/AccountPanel';
 import BugReportButton from '../../components/BugReportButton';
 import SoundPicker from '../../components/SoundPicker';
@@ -31,14 +32,15 @@ const FONT_LABEL: Record<FontScale, string> = { small: 'Small', default: 'Defaul
 
 // Profile is a short menu; each row opens one of these as its own screen
 // (/settings?section=…), so the phone's back gesture returns to the menu.
-type Section = 'account' | 'books' | 'learning' | 'appearance' | 'help' | 'book';
-const SECTIONS: Section[] = ['account', 'books', 'learning', 'appearance', 'help', 'book'];
+type Section = 'account' | 'books' | 'learning' | 'notifications' | 'appearance' | 'help' | 'book';
+const SECTIONS: Section[] = ['account', 'books', 'learning', 'notifications', 'appearance', 'help', 'book'];
 
 // Line icons in the same style as the bottom tab bar (no emoji).
 const MENU_ICONS: Record<Section, string> = {
   account: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
   books: 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h7M8 11h5',
   learning: 'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
+  notifications: 'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0',
   appearance: 'M12 3a9 9 0 1 0 0 18c1 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.4-4-7.8-9-7.8zM7.5 12.5h.01M9.5 8h.01M14.5 8h.01M16.5 12h.01',
   help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01',
   book: 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h7M8 11h5',
@@ -309,7 +311,7 @@ function SettingsPageInner() {
   };
 
   const SECTION_TITLES: Record<Section, string> = {
-    account: 'Account', books: 'Books & level', learning: 'Learning', appearance: 'Appearance', help: 'Help & about',
+    account: 'Account', books: 'Books & level', learning: 'Learning', notifications: 'Notifications', appearance: 'Appearance', help: 'Help & about',
     book: bookId ? (isCefrLevel(bookId) ? `${bookId} vocabulary` : levelDisplayName(bookId)) : 'Book',
   };
 
@@ -342,6 +344,7 @@ function SettingsPageInner() {
             <MenuRow section="account" title="Account" onClick={() => openSection('account')} />
             <MenuRow section="books" title="Books & level" onClick={() => openSection('books')} />
             <MenuRow section="learning" title="Learning" onClick={() => openSection('learning')} />
+            <MenuRow section="notifications" title="Notifications" onClick={() => openSection('notifications')} />
             <MenuRow section="appearance" title="Appearance" onClick={() => openSection('appearance')} />
             <MenuRow section="help" title="Help & about" onClick={() => openSection('help')} />
           </div>
@@ -636,6 +639,8 @@ function SettingsPageInner() {
         </div>
       </div>
       )}
+
+      {section === 'notifications' && <ReminderSettingsPanel />}
 
       {section === 'appearance' && (
       <div className="bg-paper/75 backdrop-blur-sm rounded-2xl border border-paper-line/50 shadow-sm p-6 flex flex-col gap-6">
