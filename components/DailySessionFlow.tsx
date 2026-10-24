@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
@@ -1134,11 +1134,37 @@ function ReferenceSentence({ example, word, masked = false }: {
 // confirmation window saying exactly that; the skip itself happens on its
 // "Mark as mastered" button. Keyed by word at each call site, so a new
 // card always starts with the window closed.
-// The multiple-choice screens are short, so they're centered in the space
+// The multiple-choice screens are short, so they sit centered in the space
 // between the top of the screen and the bottom bars (practice page's own
 // mb-14 for StudyRoadmap + main's top/bottom padding, see app/layout.tsx)
-// instead of sitting at the top, out of easy thumb reach.
-const MCQ_CENTER_STYLE = { minHeight: 'calc(100dvh - 10.5rem - var(--safe-top) - var(--safe-bottom))' };
+// instead of at the top, out of easy thumb reach. Centered ONCE, as each
+// question first appears: the top edge is then pinned, so when the answer
+// feedback and Next button appear the card only grows downward. Keeping it
+// truly centered (justify-center) made the whole card jump up on every
+// answer, which felt messy (a real report). Keyed per question at the call
+// site, so every new question is measured and centered afresh.
+const MCQ_AREA_STYLE = { minHeight: 'calc(100dvh - 10.5rem - var(--safe-top) - var(--safe-bottom))' };
+
+function McqStage({ children }: { children: React.ReactNode }) {
+  const areaRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [offset, setOffset] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const area = areaRef.current, content = contentRef.current;
+    if (area && content) setOffset(Math.max(0, Math.round((area.clientHeight - content.offsetHeight) / 2)));
+  }, []);
+  return (
+    <div ref={areaRef} className="flex flex-col" style={MCQ_AREA_STYLE}>
+      <div
+        ref={contentRef}
+        className="flex flex-col gap-3"
+        style={{ marginTop: offset ?? 0, visibility: offset === null ? 'hidden' : undefined }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function SkipWordButton({ word, onSkip }: { word: Word; onSkip: () => void }) {
   const [confirming, setConfirming] = useState(false);
@@ -1603,6 +1629,20 @@ export default function DailySessionFlow() {
     // studyWordIds as a whole.
     let studyRound1NeededIds: string[] | undefined;
     if (mode === 'study' && isFirstEntryToday) {
+      // A word that started introduction on an EARLIER day but never
+      // finished it (no mascotStage, already past round 1) restarts from
+      // round 1 — copy/sentence, then the meaning checkpoint — like any
+      // new word. Otherwise it jumped straight to the old round-2 spelling
+      // card, which isn't part of introduction any more (a real report:
+      // "some words directly start with the second round"; mostly words
+      // left mid-introduction back when round 2 still existed). A word
+      // whose round 1 was done earlier TODAY is a resume and is left alone.
+      for (const id of ids) {
+        const p = getWordProgress(id);
+        if (!p.mascotStage && p.round > 1 && p.lastPracticed !== today()) {
+          saveWordProgress({ ...p, round: 1 });
+        }
+      }
       const progress = getAllProgress();
       pending = [...pending].sort((a, b) => (progress[a]?.round ?? 1) - (progress[b]?.round ?? 1));
       // Captured once, right here — see DailySession.studyRound1NeededIds
@@ -1913,7 +1953,11 @@ export default function DailySessionFlow() {
       // BEFORE this submission -- the only way a round-1 card can have
       // one at all is exactly this demoted-back case (a genuine first
       // pass never has one yet, see the JSX's own currentRound===1 gate).
-      const isDemotedRoundTwoRedo = currentRound === 1 && !!exampleSentence;
+      // A word restarted at round 1 today (see enterRoundsPhase) can carry
+      // an old saved sentence too, but it's a genuine round-1 pass that
+      // hands off to the meaning checkpoint, not this redo case.
+      const isDemotedRoundTwoRedo = currentRound === 1 && !!exampleSentence
+        && !(session.studyRound1NeededIds ?? []).includes(word.id);
       const completed = isDemotedRoundTwoRedo ? correct && !!updated.mascotStage : correct;
       const earnedBadge = updated.studiedTimes > progress.studiedTimes;
 
@@ -2729,7 +2773,7 @@ export default function DailySessionFlow() {
   if (session.phase === 'study-mcq') {
     if (!mcqCurrent) return null;
     return (
-      <div className="flex flex-col justify-center gap-3" style={MCQ_CENTER_STYLE}>
+      <McqStage key={`${mcqCurrent.word.id}:${mcqCurrent.choices.join('|')}`}>
         <WordMeaningChoiceCard
           key={mcqCurrent.word.id}
           word={mcqCurrent.word}
@@ -2740,16 +2784,16 @@ export default function DailySessionFlow() {
           onReveal={handleRevealMcqReversed}
         />
         <SkipWordButton key={`skip-${mcqCurrent.word.id}`} word={mcqCurrent.word} onSkip={() => handleSkipWord(mcqCurrent.word)} />
-      </div>
+      </McqStage>
     );
   }
   if (session.phase === 'review-mcq') {
     if (!mcqCurrent) return null;
     return (
-      <div className="flex flex-col justify-center gap-3" style={MCQ_CENTER_STYLE}>
+      <McqStage key={`${mcqCurrent.word.id}:${mcqCurrent.choices.join('|')}`}>
         <TranslationChoiceCard key={mcqCurrent.word.id} word={mcqCurrent.word} correct={mcqCurrent.correct} choices={mcqCurrent.choices} onAnswer={handleReviewMcqAnswer} isReview />
         <SkipWordButton key={`skip-${mcqCurrent.word.id}`} word={mcqCurrent.word} onSkip={() => handleSkipWord(mcqCurrent.word)} />
-      </div>
+      </McqStage>
     );
   }
   // 'short'-stage review's own checkpoint — see enterReviewMcqReversedPhase.
@@ -2759,7 +2803,7 @@ export default function DailySessionFlow() {
   if (session.phase === 'review-mcq-reversed') {
     if (!mcqCurrent) return null;
     return (
-      <div className="flex flex-col justify-center gap-3" style={MCQ_CENTER_STYLE}>
+      <McqStage key={`${mcqCurrent.word.id}:${mcqCurrent.choices.join('|')}`}>
         <WordMeaningChoiceCard
           key={mcqCurrent.word.id}
           word={mcqCurrent.word}
@@ -2771,7 +2815,7 @@ export default function DailySessionFlow() {
           onReveal={handleRevealMcqReversed}
         />
         <SkipWordButton key={`skip-${mcqCurrent.word.id}`} word={mcqCurrent.word} onSkip={() => handleSkipWord(mcqCurrent.word)} />
-      </div>
+      </McqStage>
     );
   }
 
