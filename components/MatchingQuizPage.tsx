@@ -20,13 +20,19 @@ function shuffled<T>(arr: T[]): T[] {
 // A correct pair locks in green; a wrong one flashes red and both sides
 // become pickable again — keep retrying until every pair on this page is
 // correct, then "Continue" advances to the next page.
+// Meaning tiles are tracked by position, never by their text: two German
+// words can share a translation ("der Kellner"/"der Ober" -> "waiter"), and
+// keyed by text those two tiles acted as one — matching either locked both,
+// leaving the other German word with nothing to pair with and the page
+// stuck (a real report). Identical tiles are interchangeable.
 export default function MatchingQuizPage({ words, onComplete }: Props) {
   const nativeLanguage = getSettings().nativeLanguage;
   const [shuffledEn] = useState(() => shuffled(words.map(w => glossFor(w, nativeLanguage))));
   const [correctIds, setCorrectIds] = useState<Set<string>>(new Set());
   const [selectedGerman, setSelectedGerman] = useState<string | null>(null);
-  const [selectedEnglish, setSelectedEnglish] = useState<string | null>(null);
-  const [wrongFlash, setWrongFlash] = useState<{ german: string; english: string } | null>(null);
+  const [matchedSlots, setMatchedSlots] = useState<Set<number>>(new Set());
+  const [selectedEnglish, setSelectedEnglish] = useState<number | null>(null);
+  const [wrongFlash, setWrongFlash] = useState<{ german: string; english: number } | null>(null);
 
   const allCorrect = correctIds.size === words.length;
 
@@ -39,11 +45,12 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
 
   // Once both sides of a pair are selected (in either order), evaluate it.
   useEffect(() => {
-    if (!selectedGerman || !selectedEnglish) return;
+    if (!selectedGerman || selectedEnglish === null) return;
     const word = words.find(w => w.id === selectedGerman);
     if (!word) return;
-    if (glossFor(word, nativeLanguage) === selectedEnglish) {
+    if (glossFor(word, nativeLanguage) === shuffledEn[selectedEnglish]) {
       setCorrectIds(prev => new Set(prev).add(selectedGerman));
+      setMatchedSlots(prev => new Set(prev).add(selectedEnglish));
       setSelectedGerman(null);
       setSelectedEnglish(null);
       // No speakWord here — pickGerman already spoke this word the moment
@@ -74,11 +81,9 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
     if (word) speakWord(word);
   };
 
-  const pickEnglish = (text: string) => {
-    if (wrongFlash) return;
-    const alreadyCorrect = words.some(w => correctIds.has(w.id) && glossFor(w, nativeLanguage) === text);
-    if (alreadyCorrect) return;
-    setSelectedEnglish(text);
+  const pickEnglish = (slot: number) => {
+    if (wrongFlash || matchedSlots.has(slot)) return;
+    setSelectedEnglish(slot);
   };
 
   // Shared "tactile tile" treatment for every pairing button below (idle/
@@ -117,9 +122,9 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
             else if (isSelected) germanCls = TILE_SELECTED;
 
             const text = shuffledEn[i];
-            const enIsCorrect = words.some(ew => correctIds.has(ew.id) && glossFor(ew, nativeLanguage) === text);
-            const enIsSelected = selectedEnglish === text;
-            const enIsWrong = wrongFlash?.english === text;
+            const enIsCorrect = matchedSlots.has(i);
+            const enIsSelected = selectedEnglish === i;
+            const enIsWrong = wrongFlash?.english === i;
             let enCls = TILE_IDLE;
             if (enIsCorrect) enCls = TILE_CORRECT;
             else if (enIsWrong) enCls = TILE_WRONG;
@@ -140,7 +145,7 @@ export default function MatchingQuizPage({ words, onComplete }: Props) {
                   </span>
                 </button>
                 <button
-                  onClick={() => pickEnglish(text)}
+                  onClick={() => pickEnglish(i)}
                   disabled={enIsCorrect || !!wrongFlash}
                   className={`min-w-0 px-3 py-3 rounded-2xl text-sm font-medium text-left [overflow-wrap:anywhere] transition-all duration-200 ${enCls}`}
                 >

@@ -244,8 +244,12 @@ export default function WordMatchGame({
   const [shuffledEn, setShuffledEn] = useState<string[]>([]);
   const [matchedIds, setMatchedIds] = useState<Set<string>>(new Set());
   const [selectedGerman, setSelectedGerman] = useState<string | null>(null);
-  const [selectedEnglish, setSelectedEnglish] = useState<string | null>(null);
-  const [wrongFlash, setWrongFlash] = useState<{ german: string; english: string } | null>(null);
+  // By position, never by text — see MatchingQuizPage's own comment on
+  // words sharing a translation. Here it would leave the board unclearable
+  // for the rest of the timer.
+  const [matchedSlots, setMatchedSlots] = useState<Set<number>>(new Set());
+  const [selectedEnglish, setSelectedEnglish] = useState<number | null>(null);
+  const [wrongFlash, setWrongFlash] = useState<{ german: string; english: number } | null>(null);
   const [justScored, setJustScored] = useState(false);
   // Words already seen THIS game session — a ref, not state, since it's
   // only ever read/written inside drawRound and never needs to trigger a
@@ -295,6 +299,7 @@ export default function WordMatchGame({
     setRoundWords(pool);
     setShuffledEn(shuffled(pool.map(w => glossFor(w, nativeLanguage))));
     setMatchedIds(new Set());
+    setMatchedSlots(new Set());
     setSelectedGerman(null);
     setSelectedEnglish(null);
   }
@@ -345,11 +350,12 @@ export default function WordMatchGame({
   // MatchingQuizPage/the end-of-section matching quiz, just timed and
   // continuously re-drawing instead of paging through fixed content).
   useEffect(() => {
-    if (!selectedGerman || !selectedEnglish || phase !== 'playing') return;
+    if (!selectedGerman || selectedEnglish === null || phase !== 'playing') return;
     const word = roundWords.find(w => w.id === selectedGerman);
     if (!word) return;
-    if (glossFor(word, nativeLanguage) === selectedEnglish) {
+    if (glossFor(word, nativeLanguage) === shuffledEn[selectedEnglish]) {
       setMatchedIds(prev => new Set(prev).add(selectedGerman));
+      setMatchedSlots(prev => new Set(prev).add(selectedEnglish));
       setSelectedGerman(null);
       setSelectedEnglish(null);
       setMatchedCount(c => c + POINTS_PER_MATCH);
@@ -386,11 +392,9 @@ export default function WordMatchGame({
     const word = roundWords.find(w => w.id === id);
     if (word) speakWord(word);
   };
-  const pickEnglish = (text: string) => {
-    if (wrongFlash) return;
-    const alreadyMatched = roundWords.some(w => matchedIds.has(w.id) && glossFor(w, nativeLanguage) === text);
-    if (alreadyMatched) return;
-    setSelectedEnglish(text);
+  const pickEnglish = (slot: number) => {
+    if (wrongFlash || matchedSlots.has(slot)) return;
+    setSelectedEnglish(slot);
   };
 
   const timerFraction = Math.max(0, timeLeft / GAME_DURATION);
@@ -481,9 +485,9 @@ export default function WordMatchGame({
               else if (isSelected) germanCls = 'border-2 border-accent bg-accent/10 text-label shadow-md animate-pulse';
 
               const text = shuffledEn[i];
-              const enIsMatched = roundWords.some(rw => matchedIds.has(rw.id) && glossFor(rw, nativeLanguage) === text);
-              const enIsSelected = selectedEnglish === text;
-              const enIsWrong = wrongFlash?.english === text;
+              const enIsMatched = matchedSlots.has(i);
+              const enIsSelected = selectedEnglish === i;
+              const enIsWrong = wrongFlash?.english === i;
               let enCls = 'border-2 border-paper-line bg-paper/90 text-ink shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-accent/60 active:translate-y-0 active:scale-[0.98]';
               if (enIsMatched) enCls = 'border-2 border-good-deep bg-good/25 text-good-deep opacity-0 scale-90 pointer-events-none';
               else if (enIsWrong) enCls = 'border-2 border-clay bg-clay/20 text-clay shadow-sm';
@@ -502,7 +506,7 @@ export default function WordMatchGame({
                     </span>
                   </button>
                   <button
-                    onClick={() => pickEnglish(text)}
+                    onClick={() => pickEnglish(i)}
                     disabled={enIsMatched || !!wrongFlash}
                     className={`min-w-0 px-3 py-3 rounded-2xl text-sm font-medium text-left [overflow-wrap:anywhere] transition-all duration-200 ${enCls}`}
                   >
