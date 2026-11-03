@@ -130,6 +130,17 @@ export interface Settings {
   // everything else here — a signed-in learner who's seen it on one device
   // shouldn't see it again on another.
   hasSeenAiUnlockCelebration?: boolean;
+  // Moving up a level (e.g. A1 -> A2): lower CEFR levels whose unfinished
+  // reviews join THIS level's daily review until every one of those words
+  // is mastered (see carriedReviewLevels). Only reviews carry over — new
+  // words, stats and the notebook stay per level; each carried word's
+  // progress keeps living in its own level's store (see saveWordProgress).
+  // In Settings (not a separate key) so it syncs per level.
+  carryReviewsFrom?: Level[];
+  // Home's "keep reviewing A1 here?" question was answered for this level.
+  carryReviewsAsked?: boolean;
+  // Home's "almost done — ready for A2?" card was dismissed for this level.
+  nextLevelCardDismissed?: boolean;
 }
 
 // Every one of these is per-level storage: switching level in Settings is a
@@ -380,7 +391,10 @@ export function switchToLevel(level: Level): Settings {
 
   localStorage.setItem(ACTIVE_LEVEL_KEY, level);
   if (carryOver) {
-    const next: Settings = { ...carryOver, level };
+    // Pace/audio/article taste carries over; the previous level's own
+    // level-move bookkeeping doesn't.
+    const { carryReviewsFrom: _c, carryReviewsAsked: _a, nextLevelCardDismissed: _d, ...taste } = carryOver;
+    const next: Settings = { ...taste, level };
     saveSettingsForLevel(level, next);
     return next;
   }
@@ -687,12 +701,72 @@ export function mergeDailyWordLogFromSync(remote: DailyWordLog): void {
 // DICTIONARY_BOOK_ID), since dictionary words join every book's daily
 // review while their progress always stays in the dictionary book's own
 // store. The dictionary's records win over any stale copy.
-export function getAllProgress(): Record<string, WordProgress> {
+// Also includes the unfinished words of any level whose reviews carried
+// over into this one (see carriedReviewLevels) — plus ones finished today,
+// so a word mastered mid-session doesn't vanish from that session. Pass
+// includeCarried = false for anything that's a per-book stat (e.g. Home's
+// notebook count) rather than part of the daily review.
+export function getAllProgress(includeCarried = true): Record<string, WordProgress> {
   if (typeof window === 'undefined') return {};
   const active = getActiveLevel();
   const own = getAllProgressForLevel(active);
   if (active === DICTIONARY_BOOK_ID) return own;
-  return { ...own, ...getAllProgressForLevel(DICTIONARY_BOOK_ID) };
+  const carried: Record<string, WordProgress> = {};
+  if (includeCarried) {
+    const t = today();
+    for (const level of carriedReviewLevels()) {
+      for (const [id, p] of Object.entries(getAllProgressForLevel(level))) {
+        if (isPendingReview(p) || p.lastReviewedAt === t) carried[id] = p;
+      }
+    }
+  }
+  return { ...carried, ...own, ...getAllProgressForLevel(DICTIONARY_BOOK_ID) };
+}
+
+// --- Carry-over reviews (moving up a level) ---
+
+// Introduced (has a stage) but not yet mastered — still has reviews ahead.
+export function isPendingReview(p: WordProgress): boolean {
+  return !!p.mascotStage && !p.fullyMastered;
+}
+
+// The levels whose unfinished reviews join the active level's daily
+// review (see Settings.carryReviewsFrom).
+export function carriedReviewLevels(): Level[] {
+  if (typeof window === 'undefined') return [];
+  const active = getActiveLevel();
+  return (getSettingsForLevel(active).carryReviewsFrom ?? []).filter(l => l !== active && l !== DICTIONARY_BOOK_ID);
+}
+
+// Lower CEFR levels (below the active one) that still have words with
+// reviews ahead, with how many — what Home's "keep reviewing A1 here?"
+// question and the Settings toggle offer to carry over.
+export function lowerLevelsWithPendingReviews(): { level: CefrLevel; count: number }[] {
+  if (typeof window === 'undefined') return [];
+  const active = getActiveLevel();
+  if (!isCefrLevel(active)) return [];
+  return LEVEL_ORDER.slice(0, LEVEL_ORDER.indexOf(active))
+    .map(level => ({ level, count: Object.values(getAllProgressForLevel(level)).filter(isPendingReview).length }))
+    .filter(x => x.count > 0);
+}
+
+// Turns carry-over on (the given levels) or off ([]) for the active level,
+// and marks Home's question as answered either way.
+export function setCarriedReviewLevels(levels: Level[]): void {
+  const s = getSettings();
+  saveSettings({ ...s, carryReviewsFrom: levels, carryReviewsAsked: true });
+  notifyProgressChanged();
+}
+
+// Moves the learner up to `next` with `from`'s unfinished reviews (and
+// whatever `from` itself was already carrying) coming along.
+export function moveUpToLevel(from: Level, next: CefrLevel): Settings {
+  const carry = [...new Set([...(getSettingsForLevel(from).carryReviewsFrom ?? []), from])].filter(l => l !== next);
+  addCefrLevel(next);
+  const s = switchToLevel(next);
+  const updated: Settings = { ...s, carryReviewsFrom: carry, carryReviewsAsked: true };
+  saveSettings(updated);
+  return updated;
 }
 
 // Fills in defaults for any progress record saved under an older schema,
@@ -847,9 +921,15 @@ function notifyProgressChanged(): void {
 export function saveWordProgress(p: WordProgress): void {
   // A dictionary word's progress always goes to the dictionary book's
   // store, whichever book is being studied (see getAllProgress).
+  // A carried-over word (see carriedReviewLevels) goes back to its own
+  // level's store, unless this level already has its own record of it.
   const active = getActiveLevel();
-  const target: Level = active !== DICTIONARY_BOOK_ID && p.id in getAllCustomWordsForLevel(DICTIONARY_BOOK_ID)
-    ? DICTIONARY_BOOK_ID : active;
+  let target: Level = active;
+  if (active !== DICTIONARY_BOOK_ID && p.id in getAllCustomWordsForLevel(DICTIONARY_BOOK_ID)) {
+    target = DICTIONARY_BOOK_ID;
+  } else if (!(p.id in getAllProgressForLevel(active))) {
+    target = carriedReviewLevels().find(l => p.id in getAllProgressForLevel(l)) ?? active;
+  }
   const all = getAllProgressForLevel(target);
   all[p.id] = p;
   saveAllProgressForLevel(target, all);
@@ -906,7 +986,8 @@ export function getAllCustomWords(): Record<string, Word> {
   if (typeof window === 'undefined') return {};
   const active = getActiveLevel();
   if (active === DICTIONARY_BOOK_ID) return getAllCustomWordsForLevel(active);
-  return { ...getAllCustomWordsForLevel(active), ...getAllCustomWordsForLevel(DICTIONARY_BOOK_ID) };
+  const carried = Object.assign({}, ...carriedReviewLevels().map(getAllCustomWordsForLevel));
+  return { ...carried, ...getAllCustomWordsForLevel(active), ...getAllCustomWordsForLevel(DICTIONARY_BOOK_ID) };
 }
 
 export function saveAllCustomWords(data: Record<string, Word>): void {

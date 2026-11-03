@@ -6,7 +6,7 @@ import {
   getDailySession, saveDailySession, SessionPhase, getWordProgress, saveWordProgress,
   getMergedProgressAcrossLevels, ParagraphBlank, ParagraphExercise,
   getAllCustomWords, getAllCustomWordsAcrossLevels, getAllCustomWordsForLevel,
-  cefrLevelFor, DICTIONARY_BOOK_ID,
+  cefrLevelFor, DICTIONARY_BOOK_ID, carriedReviewLevels,
 } from './storage';
 import { recordMilestonePass, REVIEW_PLAN, MASTERY_DAYS_AFTER_INTRODUCTION } from './srs';
 
@@ -455,21 +455,36 @@ export function buildReviewWords(
 ): Word[] {
   const allProgress = getAllProgress();
   const t = today();
-  const pool = allWordsForLevel(getSettings().level).filter(w => {
+  const eligible = (w: Word) => {
     const p = allProgress[w.id];
     if (!p || !p.mascotStage || p.fullyMastered) return false;
     if (excludeIds.has(w.id)) return false;
     if (!includeToday && p.nextReviewDue && p.nextReviewDue > t) return false;
     return true;
-  });
+  };
   // Most overdue first, then most-mature-stage first (see STAGE_RANK's
   // own comment) when due dates tie.
-  pool.sort((a, b) => {
+  const byUrgency = (a: Word, b: Word) => {
     const dueA = allProgress[a.id].nextReviewDue ?? t;
     const dueB = allProgress[b.id].nextReviewDue ?? t;
     return dueA.localeCompare(dueB) || STAGE_RANK[allProgress[b.id].mascotStage!] - STAGE_RANK[allProgress[a.id].mascotStage!];
-  });
-  return pool.slice(0, limit);
+  };
+  const ownWords = allWordsForLevel(getSettings().level);
+  const own = ownWords.filter(eligible).sort(byUrgency);
+
+  // Unfinished reviews carried over from a lower level (see storage.ts's
+  // carriedReviewLevels). They get up to half the slots — a backlog of
+  // hundreds of overdue A1 words would otherwise take every slot ahead of
+  // this level's own (newer, less overdue) reviews — and any slots either
+  // side can't fill go to the other.
+  const seen = new Set(ownWords.map(w => w.id));
+  const carried = carriedReviewLevels()
+    .flatMap(l => allWordsForLevel(l))
+    .filter(w => !seen.has(w.id) && seen.add(w.id) && eligible(w))
+    .sort(byUrgency);
+  if (carried.length === 0) return own.slice(0, limit);
+  const carriedTake = Math.min(carried.length, Math.max(Math.ceil(limit / 2), limit - own.length));
+  return [...own.slice(0, limit - carriedTake), ...carried.slice(0, carriedTake)];
 }
 
 // Punctuation within a word (e.g. the hyphen in "Start-up") isn't something

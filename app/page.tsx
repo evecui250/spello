@@ -11,6 +11,7 @@ import { buildStudyWords, buildReviewWords } from '../lib/practice';
 import { SYNCED_EVENT } from '../lib/sync';
 import { getDisplayProfile, getCachedDisplayProfile, heroImageFor, avatarImageFor, EquippedAccessories, NO_ACCESSORIES } from '../lib/shop';
 import { CheckCircleIcon } from '../components/icons';
+import { CarryReviewsPrompt, carryPromptLevels, NextLevelCard, nextLevelSuggestion } from '../components/LevelCarryOver';
 import { supabase } from '../lib/supabase';
 import Link from 'next/link';
 
@@ -54,6 +55,8 @@ export default function HomePage() {
   const [ready, setReady] = useState(false);
   const [petAgeDays, setPetAgeDays] = useState(0);
   const [bookName, setBookName] = useState('');
+  const [carryPrompt, setCarryPrompt] = useState<ReturnType<typeof carryPromptLevels>>([]);
+  const [nextLevel, setNextLevel] = useState<ReturnType<typeof nextLevelSuggestion>>(null);
 
   // The learner's chosen pet + nickname — works whether or not they're
   // signed in (see lib/shop.ts's getDisplayProfile).
@@ -72,6 +75,7 @@ export default function HomePage() {
   // null until the (local, instant) auth check answers, so the sign-in
   // prompt below never flashes for someone who is already signed in.
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const loadRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, authSession) => {
@@ -166,13 +170,18 @@ export default function HomePage() {
       // per feedback, the notebook row should reflect whichever book
       // the learner is actually studying right now, same as Start's own
       // counts above.
-      const allProgress = Object.values(progress);
+      // Own book only — carried-over words from a lower level (see
+      // getAllProgress) aren't this book's notebook.
+      const allProgress = Object.values(getAllProgress(false));
       setMistakeCount(allProgress.filter(p => !!p.lastMistake).length);
       setHasNotebookActivity(allProgress.some(p => !!p.lastMistake || !!p.exampleSentence));
       setPetAgeDays(getPetAgeDays());
       setBookName(levelDisplayName(settings.level));
+      setCarryPrompt(carryPromptLevels());
+      setNextLevel(nextLevelSuggestion());
       setReady(true);
     };
+    loadRef.current = load;
     load();
     window.addEventListener(SYNCED_EVENT, load);
     window.addEventListener(PROGRESS_CHANGED_EVENT, load);
@@ -346,6 +355,10 @@ export default function HomePage() {
           <span className="font-semibold text-sm">Chat</span>
         </button>
       </div>
+
+      {nextLevel && <NextLevelCard {...nextLevel} onChange={() => loadRef.current()} />}
+
+      {carryPrompt.length > 0 && <CarryReviewsPrompt levels={carryPrompt} onDone={() => loadRef.current()} />}
 
       {/* Signed-out learners only: their progress lives on this device
           alone until they sign in, and the sign-in form otherwise sits

@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getSettings, saveSettings, switchToLevel, getImportedBooks, levelDisplayName, ImportedBook, removeImportedBook, setImportedBookLevel, myCefrLevels, otherCefrLevels, addCefrLevel, hideCefrLevel, DICTIONARY_BOOK_ID, getAllCustomWordsForLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode } from '../../lib/storage';
+import { getSettings, saveSettings, switchToLevel, getImportedBooks, levelDisplayName, ImportedBook, removeImportedBook, setImportedBookLevel, myCefrLevels, otherCefrLevels, addCefrLevel, hideCefrLevel, DICTIONARY_BOOK_ID, getAllCustomWordsForLevel, clearAllProgress, resetEverything, Settings, getTheme, saveTheme, Theme, getFontScale, saveFontScale, FontScale, getSoundChoice, getCardMode, saveCardMode, CardMode, lowerLevelsWithPendingReviews, carriedReviewLevels, setCarriedReviewLevels } from '../../lib/storage';
 import { THEME_CONFIG } from '../../components/AppBackground';
 import { daysToWeeks, estimateProgressForecast, recommendedDailyReview, resizeTodayStudyBatch, allWordsForLevel } from '../../lib/practice';
 import { Level, CefrLevel, LEVEL_SOURCE, isCefrLevel, isBookLevelId, wordsForLevel } from '../../lib/words';
@@ -136,6 +136,10 @@ function SettingsPageInner() {
   const [myLevels, setMyLevels] = useState<CefrLevel[]>([]);
   const [otherLevels, setOtherLevels] = useState<CefrLevel[]>([]);
   const [importedBooks, setImportedBooks] = useState<ImportedBook[]>([]);
+  // Lower levels with unfinished reviews, and whether they're carried into
+  // this one (see storage.ts's carriedReviewLevels).
+  const [carryOptions, setCarryOptions] = useState<{ level: CefrLevel; count: number }[]>([]);
+  const [carryOn, setCarryOn] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const applySettings = (s: Settings) => {
@@ -155,7 +159,15 @@ function SettingsPageInner() {
   useEffect(() => {
     setMyLevels(myCefrLevels());
     setOtherLevels(otherCefrLevels());
+    setCarryOptions(lowerLevelsWithPendingReviews());
+    setCarryOn(carriedReviewLevels().length > 0);
   }, [level, importedBooks]);
+
+  const handleCarryToggle = () => {
+    setCarriedReviewLevels(carryOn ? [] : carryOptions.map(o => o.level));
+    setCarryOn(!carryOn);
+    syncNow();
+  };
 
   // Re-read after a sync too — a book imported on another device only
   // shows up here once pullAndMerge has brought its registry entry down.
@@ -267,7 +279,10 @@ function SettingsPageInner() {
   // Callers pass the field(s) that just changed; everything else comes
   // from current state, which is already up to date by the time this runs.
   const persist = (patch: Partial<Settings>) => {
+    // Starts from what's stored so fields this page has no control for
+    // (carry-over reviews, one-time flags) aren't wiped by an edit here.
     const next: Settings = {
+      ...getSettings(),
       studyBatchSize, dailyReview, language: 'de', nativeLanguage, level, autoPlayAudio, wordRepeatCount, requireArticle,
       sentenceWritingMode, ...patch,
     };
@@ -413,6 +428,29 @@ function SettingsPageInner() {
           onRemove={id => handleRemoveBook(id as Level)}
         />
         <p className="text-ink-soft text-xs -mt-1">Tap a book to see its words. Swipe left on a book to remove it.</p>
+
+        {carryOptions.length > 0 && (
+          <label className="flex items-center justify-between gap-3 cursor-pointer border-t border-paper-line/60 pt-4">
+            <div>
+              <div className="font-semibold text-ink text-sm">Keep reviewing {carryOptions.map(o => o.level).join(' + ')} here</div>
+              <p className="text-ink-soft text-xs">
+                {carryOptions.reduce((n, o) => n + o.count, 0)} unfinished words join your {level} reviews until they&apos;re mastered.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={carryOn}
+              onClick={handleCarryToggle}
+              className={`relative inline-block w-11 h-6 rounded-full transition-colors shrink-0 ${carryOn ? 'bg-accent' : 'bg-paper-dim'}`}
+            >
+              <span
+                className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform"
+                style={{ transform: carryOn ? 'translateX(1.25rem)' : 'translateX(0)' }}
+              />
+            </button>
+          </label>
+        )}
 
       </div>
       )}
