@@ -32,8 +32,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned, not `latest`: resolving "latest" calls GitHub's API, and a
+      # rate-limited lookup failed a deploy before any function was touched.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.116.0
 
       - run: supabase functions deploy --project-ref "$PROJECT_REF" --use-api
