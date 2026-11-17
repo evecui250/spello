@@ -122,6 +122,9 @@ export interface Settings {
   // copy-the-word mechanic as A1's bootstrap words, with a correct example
   // sentence fetched and shown alongside purely as reference — no writing
   // required. See DailySessionFlow's useDirectSentence.
+  // No longer used: study's round 1 is the same listen-and-fill for
+  // everyone now, with sentence building an optional extra. Kept so old
+  // stored settings still type-check.
   sentenceWritingMode: boolean;
   // One-time flag: has this A1 profile already seen the "you've unlocked
   // AI sentence writing" celebration (shown the first time a round-1 word
@@ -1979,12 +1982,10 @@ export interface DailySession {
   isExtra: boolean; // true for a "Study more"/"Review more" bonus round, so
                      // Home keeps showing "Study more" (not "Start") if the
                      // user quits mid-round and comes back.
-  // Set once the learner has answered the "sentence writing or spelling
-  // only?" question shown as study begins (see DailySessionFlow's
-  // beginStudy) — so resuming this session never asks again. The answer
-  // itself lives in Settings.sentenceWritingMode, still toggleable on any
-  // round-1 card.
-  studyModeChosen?: boolean;
+  // Set once today's new words have been previewed before their first
+  // round (see DailySessionFlow's beginStudy), so resuming never shows the
+  // preview again.
+  studyPreviewDone?: boolean;
 }
 
 // Backfills any fields a session persisted before they existed would be

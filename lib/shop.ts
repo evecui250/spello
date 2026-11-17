@@ -1,6 +1,7 @@
 'use client';
 
 import { supabase } from './supabase';
+import { getOrCreateDeviceId } from './telemetry';
 import { getLocalAvatarId, saveLocalAvatarId, getLocalNickname, saveLocalNickname } from './storage';
 
 // Avatar and accessory catalogs are small, curated, rarely-changing
@@ -167,6 +168,26 @@ export async function getMyProfile(): Promise<MyProfile | null> {
     if (!error && data) return data;
   }
   return null;
+}
+
+// The optional "build a sentence" step after a new word's first round
+// (see DailySessionFlow's handleSentenceBonus) earns 1 coin. Recorded as a
+// game_plays row (game 'sentence') because that's what the balance,
+// buy-accessory and the leaderboard already count one point per row of —
+// no change needed to any of them. Best-effort and silent, like the game
+// rows themselves.
+export async function recordSentenceBonus(): Promise<void> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    await supabase.from('game_plays').insert({
+      device_id: getOrCreateDeviceId(),
+      user_id: session?.user.id ?? null,
+      source: 'daily_flow',
+      game: 'sentence',
+    });
+  } catch {
+    // best-effort
+  }
 }
 
 export interface BuyAccessoryResult {

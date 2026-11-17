@@ -662,19 +662,6 @@ function SettingsPageInner() {
           />
         </div>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <label className="block font-semibold text-ink">
-              Sentence writing mode
-            </label>
-          </div>
-          <input
-            type="checkbox"
-            checked={sentenceWritingMode}
-            onChange={e => { setSentenceWritingMode(e.target.checked); persist({ sentenceWritingMode: e.target.checked }); }}
-            className="w-5 h-5 accent-accent shrink-0 ml-3"
-          />
-        </div>
       </div>
       )}
 

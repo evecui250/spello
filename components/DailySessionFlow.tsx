@@ -19,6 +19,7 @@ import {
   addDistractors, combineParagraphExercises,
 } from '../lib/practice';
 import { REVIEW_PLAN, recordMilestonePass, markWordKnown } from '../lib/srs';
+import { recordSentenceBonus } from '../lib/shop';
 import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, findWordByLemma, segmentChineseForClicks, tokenize, isWordToken, diffAgainstAttempt, applyGlossFallback } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
@@ -34,7 +35,6 @@ import WordMatchGame from './WordMatchGame';
 import ArtikelBlitzGame from './ArtikelBlitzGame';
 import GamePicker from './GamePicker';
 import SignInNudge from './SignInNudge';
-import AiUnlockCelebration from './AiUnlockCelebration';
 import WordInfoPanel from './WordInfoPanel';
 import GlossPopup from './GlossPopup';
 import { speakWord, speakText, stopSpeech, prefetchWordAudio } from '../lib/speech';
@@ -429,6 +429,85 @@ function SentenceWordHeader({ word }: { word: Word }) {
         <SpeakerButton word={word} className="align-middle text-label hover:text-label transition-colors text-xl" />
       </div>
       <WordGrammarInfo word={word} />
+    </div>
+  );
+}
+
+// Before study's first round, today's new words are shown once as
+// swipeable cards — round 1 asks for half of each word's letters by ear,
+// so it shouldn't be the first time the learner sees the word at all.
+// Purely a glance: nothing is scored, and "Start" works from any card.
+function NewWordsPreview({ words, nativeLanguage, onDone }: {
+  words: Word[];
+  nativeLanguage: 'en' | 'zh';
+  onDone: () => void;
+}) {
+  const [index, setIndex] = useState(0);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  // Each card says its word as it comes into view (if auto-play is on).
+  useEffect(() => {
+    if (getSettings().autoPlayAudio && words[index]) speakWord(words[index]);
+  }, [index, words]);
+  const goTo = (i: number) => {
+    const el = scrollerRef.current;
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
+  };
+  const isLast = index >= words.length - 1;
+  return (
+    <div className="py-6 max-w-sm mx-auto flex flex-col gap-5">
+      <h2 className="text-2xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+        Today&apos;s new words
+      </h2>
+      <div
+        ref={scrollerRef}
+        onScroll={e => {
+          const el = e.currentTarget;
+          const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
+          if (i !== index) setIndex(i);
+        }}
+        className="flex overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {words.map(w => (
+          <div key={w.id} className="w-full shrink-0 snap-center px-1">
+            <div className="bg-paper/75 backdrop-blur-sm rounded-2xl shadow-sm border border-paper-line/50 p-6 flex flex-col items-center gap-3 text-center min-h-[18rem] justify-center">
+              <RoundWordImage word={w} />
+              <div className="text-3xl font-bold text-ink tracking-wide break-words">
+                {w.article ? `${w.article} ` : ''}{w.de}{' '}
+                <SpeakerButton word={w} className="align-middle text-label hover:text-label transition-colors text-2xl" />
+              </div>
+              <WordGrammarInfo word={w} />
+              <div className="text-xl font-semibold text-ink-soft">{glossFor(w, nativeLanguage)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {words.length > 1 && (
+        <div className="flex justify-center gap-1.5">
+          {words.map((w, i) => (
+            <button
+              key={w.id}
+              type="button"
+              aria-label={`Word ${i + 1}`}
+              onClick={() => goTo(i)}
+              className={`h-2 rounded-full transition-all ${i === index ? 'w-5 bg-on-bg' : 'w-2 bg-on-bg/35'}`}
+            />
+          ))}
+        </div>
+      )}
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={isLast ? onDone : () => goTo(index + 1)}
+          className="w-full bg-accent text-white py-3 rounded-xl font-semibold hover:bg-accent-deep active:scale-95 transition-all"
+        >
+          {isLast ? 'Start →' : 'Next word →'}
+        </button>
+        {!isLast && (
+          <button type="button" onClick={onDone} className="w-full py-1.5 text-sm font-semibold text-on-bg/75 hover:text-on-bg">
+            Skip to practice
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -1286,14 +1365,10 @@ export default function DailySessionFlow() {
   // whenever the word changes (see the effect below) so it doesn't leak
   // into the next word's exercise.
   const [sentenceInput, setSentenceInput] = useState('');
-  // Sentence-writing-mode OFF (Settings): a correct example sentence
-  // fetched directly, with no user attempt involved, shown as reference
-  // alongside the copy-the-word tiles below instead of SentenceExercise's
-  // translate-and-correct flow. Non-blocking — if the fetch fails, the
-  // copy-the-word interaction still proceeds, just without a sentence
-  // saved for this word today (same as any other bootstrap-style word).
-  const [directSentence, setDirectSentence] = useState<{ sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string; at?: string } | null>(null);
-  const [directSentenceStatus, setDirectSentenceStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'unreachable'>('idle');
+  // The optional "build a sentence" step after a correct round-1 answer
+  // (see isStudyListenFill) — swaps the card's lower half for
+  // SentenceExercise until the learner moves on.
+  const [buildingSentence, setBuildingSentence] = useState(false);
   // The bonus paragraph exercise's own generation status -- separate from
   // `status`/`directSentenceStatus` above since it's a wholly different
   // phase (study-paragraph) that can't overlap with either of those. Reset
@@ -1333,10 +1408,10 @@ export default function DailySessionFlow() {
     supabase.auth.getSession().then(({ data }) => setSignedIn(!!data.session));
   }, []);
   const [showSignInNudge, setShowSignInNudge] = useState(false);
-  const [showAiUnlockCelebration, setShowAiUnlockCelebration] = useState(false);
-  // Non-null while the "how do you want to learn today?" chooser is up —
-  // the session study is about to begin with (see beginStudy).
-  const [modeChoiceFor, setModeChoiceFor] = useState<DailySession | null>(null);
+  // Non-null while today's new words are being previewed before their
+  // first round (see beginStudy): the session study begins with, and the
+  // words to show.
+  const [previewFor, setPreviewFor] = useState<{ ds: DailySession; words: Word[] } | null>(null);
   // Whether today already counted toward the pet's age when this session
   // opened (see isTodayAPetAgeDay) — if not, this session's result card
   // shows the pet getting a day older.
@@ -1348,10 +1423,9 @@ export default function DailySessionFlow() {
   // (re)entered, in handleCloseCongrats below.
   const [activeGame, setActiveGame] = useState<'picker' | 'wortpaare' | 'artikel_blitz'>('picker');
 
-  // Dev/design preview: /practice/?previewSignInNudge=1 or
-  // ?previewAiUnlock=1 show the matching one-off card immediately, without
-  // needing to actually reach the real trigger (sign out and finish a
-  // day's goal; or reach A1 word #221) to check how it looks. Plain
+  // Dev/design preview: /practice/?previewSignInNudge=1 shows the sign-in
+  // card immediately, without needing to actually reach the real trigger
+  // (sign out and finish a day's goal) to check how it looks. Plain
   // window.location (not Next's useSearchParams) specifically to avoid the
   // Suspense-boundary requirement that hook needs under `output: 'export'`,
   // for a debug-only one-liner that doesn't need it.
@@ -1359,7 +1433,6 @@ export default function DailySessionFlow() {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('previewSignInNudge') === '1') setShowSignInNudge(true);
-    if (params.get('previewAiUnlock') === '1') setShowAiUnlockCelebration(true);
   }, []);
 
   // Every answered round card this session (study or review), oldest first
@@ -1392,45 +1465,16 @@ export default function DailySessionFlow() {
   // to round 2 (demoteReviewRound) same as before — untouched, only the
   // round-4 prompt itself changes.
   const isFinalNoHintReview = currentRound === 4 && roundMode === 'review';
-  // Same gating reasons as the copy-the-word fallback below (see its own
-  // comment) PLUS sentence writing mode being explicitly off — a word
-  // that's already bootstrap/demoted doesn't need a fetched reference
-  // sentence layered on top of its own handling.
-  const useDirectSentence = !!word && currentRound === 1 && roundMode === 'study'
-    && !isBootstrapCopyWord(word) && !exampleSentence && settings?.sentenceWritingMode === false;
-  // Same gating as useDirectSentence, minus the sentenceWritingMode check
-  // itself — this is the corner toggle that flips that very setting, so it
-  // needs to show on round 1 of a genuine new-word study card regardless of
-  // which side of the setting it's currently on (sentence-writing view or
-  // the copy-mode/reference-sentence view), but nowhere else (not on
-  // rounds 2-4, review rounds, or bootstrap-copy words).
-  const showSentenceModeToggle = !!word && currentRound === 1 && roundMode === 'study'
-    && !isBootstrapCopyWord(word) && !exampleSentence;
-
-  // Fires once: the first time an A1 learner's round 1 lands on a genuine
-  // new word that ISN'T one of the ~220 bootstrap words — same shape as
-  // showSentenceModeToggle's own gate above, plus the level check and the
-  // hasSeenAiUnlockCelebration flag that keeps this from ever firing again
-  // once it has (set by handleCloseAiUnlockCelebration below). Naturally
-  // won't re-fire while the celebration is already showing (its own
-  // top-level render check takes over first), or after dismissal, since
-  // the flag flips to true immediately on close.
-  useEffect(() => {
-    if (!settings || settings.level !== 'A1' || settings.hasSeenAiUnlockCelebration) return;
-    if (!word || currentRound !== 1 || roundMode !== 'study') return;
-    if (isBootstrapCopyWord(word) || exampleSentence) return;
-    setShowAiUnlockCelebration(true);
-  }, [settings, word, currentRound, roundMode, exampleSentence]);
-
-  function handleCloseAiUnlockCelebration() {
-    setShowAiUnlockCelebration(false);
-    if (settings) {
-      const next = { ...settings, hasSeenAiUnlockCelebration: true };
-      saveSettings(next);
-      setSettings(next);
-      scheduleSync();
-    }
-  }
+  // Study's round 1 (owner call, replacing the old copy mode / AI
+  // sentence-writing split): hear the word, see its meaning, fill in the
+  // missing half of the letters. A miss shows the answer and sends the
+  // card to the back of the queue for another try (see advanceStudyQueue).
+  // A correct answer can optionally go on to build a sentence with the
+  // word (+1 coin, see handleSentenceBonus) — no longer required.
+  const isStudyListenFill = currentRound === 1 && roundMode === 'study';
+  // Sentence bonus is offered only where a sentence exercise works: the
+  // few words flagged copyModeOnly have no reliable prompt sentence.
+  const canBuildSentence = !!word && isStudyListenFill && !word.copyModeOnly;
 
   function persistSession(next: DailySession) {
     setSession(next);
@@ -1476,50 +1520,6 @@ export default function DailySessionFlow() {
       }).then(() => {}, () => {});
     }, () => {});
   }
-
-  // Fetches a correct example sentence with no user attempt involved (see
-  // directSentence above) — chains generateSentence's live fallback (rare;
-  // most words already have a pre-baked exercisePrompt) into correctSentence
-  // called with no userTranslation, which per its own contract always
-  // succeeds with a natural direct translation. Re-fires whenever a new
-  // word enters this mode (loadCurrent resets directSentenceStatus to
-  // 'idle' below). directSentenceStatus is deliberately NOT a dependency
-  // here, even though the effect reads it — setting it to 'loading' inside
-  // the effect would otherwise immediately re-trigger this same effect,
-  // whose cleanup would cancel the fetch it had just started.
-  useEffect(() => {
-    if (!useDirectSentence || !word || !settings || directSentenceStatus !== 'idle') return;
-    let cancelled = false;
-    setDirectSentenceStatus('loading');
-    (async () => {
-      try {
-        // Chinese pairs with whichever English prompt actually got used —
-        // the corpus's own exercisePromptZh for a pre-baked prompt, or the
-        // AI's own sentenceZh when a word without one falls back to a live
-        // generateSentence call. Capturing it here (not re-derived later
-        // from the word's static corpus fields at display time) is what
-        // keeps a saved sentence's language pairing accurate even for a
-        // word the corpus never got a Chinese translation for.
-        let englishPrompt = word.exercisePrompt;
-        let englishPromptZh = word.exercisePromptZh;
-        if (!englishPrompt) {
-          const generated = await generateSentence(word.id, word.de, word.en, settings.level, getKnownVocabulary(settings.level), settings.nativeLanguage);
-          englishPrompt = generated.sentence;
-          englishPromptZh = generated.sentenceZh;
-        }
-        const result = await correctSentence(word.id, word.de, settings.level, englishPrompt, undefined, word.thirdPerson);
-        if (cancelled) return;
-        setDirectSentence({ sentence: result.sentence, wordForm: result.wordForm, englishPrompt, englishPromptZh, at: new Date().toISOString() });
-        setDirectSentenceStatus('ready');
-      } catch (e) {
-        if (cancelled) return;
-        if (e instanceof AIUnreachableError) { setDirectSentenceStatus('unreachable'); handleAiUnreachable(); return; }
-        setDirectSentenceStatus('error');
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [useDirectSentence, word, settings]);
 
   // Backfills a missing reference sentence for a round 2+/review card whose
   // progress simply predates this feature (or whose real round-1 pass hit
@@ -1587,21 +1587,23 @@ export default function DailySessionFlow() {
     setCurrentRound(round);
     setRoundRange(mode === 'review' ? [plan.startRound, plan.capRound] : [1, 2]);
     setActiveChunk(mode === 'review' ? chunkForStage(stage) : 1);
-    const h = generateHint(w, round);
+    // Study's round 1 is listen-and-fill-half (see isStudyListenFill) —
+    // the same half-hidden letters review's round 2 uses.
+    const h = generateHint(w, mode === 'study' && round === 1 ? 2 : round);
     const chars = [...w.de];
     setHint(h);
     setValues(chars.map((c, i) => (h[i] ? '' : c)));
     setArticleValues(['', '', '']);
     setFeedback(null);
+    setBuildingSentence(false);
     justCompletedRef.current = false;
     setAttemptKey(k => k + 1);
     setExampleSentence(progress.exampleSentence ?? null);
     setSentenceResult(null);
     setSentenceInput('');
-    setDirectSentence(null);
-    setDirectSentenceStatus('idle');
     setWordStatus(mode === 'review' ? 'Review' : (progress.lastPracticed && progress.lastPracticed !== today() ? 'Continuing' : 'New'));
-    if (round === 1 && getSettings().autoPlayAudio) speakWord(w);
+    // Hearing the word IS study round 1's prompt, so it always plays.
+    if (mode === 'study' && round === 1) speakWord(w);
     // Round 4 is only ever reached in review mode (medium stage's final,
     // no-hint review — see REVIEW_PLAN) and audio IS this round's prompt
     // now, not an optional pronunciation aid, so it always plays on load
@@ -2020,11 +2022,7 @@ export default function DailySessionFlow() {
     // order also just reads better: "yes, correct" before "here's how
     // it's said".
     const playWord = () => {
-      if (currentRound === 1) {
-        if (settings.autoPlayAudio && !isSentenceOrDirectSubmission) speakWord(word);
-      } else {
-        speakWord(word);
-      }
+      if (!isSentenceOrDirectSubmission) speakWord(word);
     };
     if (correct && !isSentenceOrDirectSubmission) {
       playCorrectChime();
@@ -2057,16 +2055,41 @@ export default function DailySessionFlow() {
     // Chime lives in submitResult now, sequenced ahead of the word's own
     // pronunciation (see its own comment) — playing it here too would
     // double it up.
-    // A fetched reference sentence (sentence writing mode off) is saved
-    // exactly like a real round-1 correction would be — same shape, same
-    // downstream behavior (shown on Word List) — just with no actual user
-    // translation attempt behind it.
-    submitResult(
-      wordRight && articleRight,
-      directSentence ? { exampleSentence: directSentence } : undefined,
-      directSentence ? { ...directSentence, userInput: '', isDirect: true } : undefined,
-    );
+    submitResult(wordRight && articleRight);
   };
+
+  // The optional sentence step's result (see buildingSentence): saved the
+  // same way the old required round-1 sentence was — a perfect attempt
+  // becomes the word's example sentence, an imperfect one goes to the
+  // Notebook for a redo — plus 1 coin, once per word per session.
+  const sentenceBonusIdsRef = useRef(new Set<string>());
+  function handleSentenceBonus(
+    correction: { sentence: string; wordForm: string; englishPrompt?: string; englishPromptZh?: string },
+    userInput: string,
+  ) {
+    if (!word) return;
+    setSentenceResult(correction);
+    const perfect = diffAgainstAttempt(userInput, correction.sentence).perfect;
+    const at = new Date().toISOString();
+    saveWordProgress({
+      ...getWordProgress(word.id),
+      ...(perfect ? { exampleSentence: { ...correction, at }, lastMistake: undefined } : {
+        lastMistake: {
+          englishPrompt: correction.englishPrompt,
+          englishPromptZh: correction.englishPromptZh,
+          userInput,
+          correctedSentence: correction.sentence,
+          wordForm: correction.wordForm,
+          at,
+        },
+      }),
+    });
+    scheduleSync();
+    if (!sentenceBonusIdsRef.current.has(word.id)) {
+      sentenceBonusIdsRef.current.add(word.id);
+      void recordSentenceBonus();
+    }
+  }
   // A deliberate "give me more help" request — demotes one round (more
   // scaffolding) instead of retrying the same round the way a wrong typed
   // answer does. Not available at round 1 (nothing lower to demote to); the
@@ -2525,37 +2548,35 @@ export default function DailySessionFlow() {
   // The report card's (review's results screen) own "Continue" button —
   // review runs first in the day, so this is what takes the learner onward
   // into study, or straight to congrats if there's nothing to study today.
-  // Study's entry point (fresh, after review, or resuming): before the first
-  // new word, asks whether the learner has time for sentence writing today
-  // or just wants spelling — once per session (studyModeChosen), and only
-  // when it matters: some word in the batch would actually get the
-  // sentence exercise (not a bootstrap-copy word) and hasn't had its round
-  // 1 yet today (a session resumed mid-study isn't interrupted).
+  // Study's entry point (fresh, after review, or resuming): before the
+  // first round-1 card, the day's new words are shown once as swipeable
+  // cards to glance through (see NewWordsPreview) — round 1 then asks for
+  // half of each word's letters by ear, so it shouldn't be the very first
+  // time the learner sees it. Once per session (studyPreviewDone); a
+  // session resumed mid-study isn't interrupted.
   function beginStudy(ds: DailySession) {
-    const t = today();
-    const progress = getAllProgress();
-    const wouldWriteSentence = wordsById(ds.studyWordIds).some(w =>
-      !isBootstrapCopyWord(w) && progress[w.id]?.lastPracticed !== t && !progress[w.id]?.exampleSentence);
-    if (!ds.studyModeChosen && wouldWriteSentence) {
-      setModeChoiceFor(ds);
-      return;
+    if (!ds.studyPreviewDone) {
+      const t = today();
+      const progress = getAllProgress();
+      // Same set enterRoundsPhase will start at round 1 (see its own
+      // restart of earlier-day unfinished words).
+      const words = wordsById(ds.studyWordIds).filter(w => {
+        const p = progress[w.id];
+        return !p?.mascotStage && ((p?.round ?? 1) === 1 || p?.lastPracticed !== t);
+      });
+      if (words.length > 0) {
+        setPreviewFor({ ds, words });
+        return;
+      }
     }
     enterRoundsPhase(ds, 'study');
   }
 
-  function handleChooseStudyMode(sentenceWritingMode: boolean) {
-    const ds = modeChoiceFor;
-    if (!ds) return;
-    const s = getSettings();
-    if (s.sentenceWritingMode !== sentenceWritingMode) {
-      const nextSettings = { ...s, sentenceWritingMode };
-      saveSettings(nextSettings);
-      setSettings(nextSettings);
-      scheduleSync();
-    }
-    const next: DailySession = { ...ds, studyModeChosen: true };
+  function handleFinishPreview() {
+    if (!previewFor) return;
+    const next: DailySession = { ...previewFor.ds, studyPreviewDone: true };
     persistSession(next);
-    setModeChoiceFor(null);
+    setPreviewFor(null);
     enterRoundsPhase(next, 'study');
   }
 
@@ -2628,7 +2649,8 @@ export default function DailySessionFlow() {
   // pending auto-advance timer from the round that just ended.
   const isRoundScreen = session?.phase === 'study-rounds' || session?.phase === 'review-rounds';
   useEffect(() => {
-    if (feedback === null || !isRoundScreen) return;
+    // The sentence step's own textarea takes Enter while it's open.
+    if (feedback === null || !isRoundScreen || buildingSentence) return;
     // Time-gated rather than requiring a keyup-then-keydown: the sentence
     // exercise's Check is async (awaits the AI call), so by the time
     // `feedback` actually flips true and this effect attaches, the Enter
@@ -2656,7 +2678,7 @@ export default function DailySessionFlow() {
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [feedback, isRoundScreen]);
+  }, [feedback, isRoundScreen, buildingSentence]);
 
   const articleComplete = !needsArticle || articleValues.every(v => !!v);
   const wordComplete = hint.length > 0 && hint.every((h, i) => !h || !!values[i]) && articleComplete;
@@ -2699,51 +2721,8 @@ export default function DailySessionFlow() {
     return <SignInNudge onClose={handleCloseSignInNudge} />;
   }
 
-  if (showAiUnlockCelebration) {
-    return <AiUnlockCelebration onClose={handleCloseAiUnlockCelebration} />;
-  }
-
-  if (modeChoiceFor) {
-    // Two choices, each a clock face whose shaded slice says "quick" vs
-    // "takes longer" at a glance — illustrative only, not a time estimate
-    // (owner call), and no explanations.
-    const writing = settings.sentenceWritingMode;
-    const clock = (minutes: number) => {
-      const a = (minutes / 60) * 2 * Math.PI;
-      const x = 12 + 9 * Math.sin(a), y = 12 - 9 * Math.cos(a);
-      return (
-        <svg viewBox="0 0 24 24" className="w-16 h-16 text-on-bg" aria-hidden>
-          <path d={`M12 12 L12 3 A9 9 0 ${minutes > 30 ? 1 : 0} 1 ${x.toFixed(2)} ${y.toFixed(2)} Z`} className="fill-accent/70" />
-          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.4" />
-          <path d={`M12 12 L12 4.8 M12 12 L${(12 + 5.5 * Math.sin(a)).toFixed(2)} ${(12 - 5.5 * Math.cos(a)).toFixed(2)}`} stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          <circle cx="12" cy="12" r="0.9" fill="currentColor" />
-        </svg>
-      );
-    };
-    const option = (on: boolean, minutes: number, title: string) => (
-      <button
-        type="button"
-        onClick={() => handleChooseStudyMode(on)}
-        className={`flex-1 rounded-3xl px-4 py-7 flex flex-col items-center gap-4 active:scale-[0.97] transition-all ${
-          writing === on ? 'ring-2 ring-accent' : 'ring-1 ring-white/10 hover:ring-white/30'
-        }`}
-        style={{ background: 'var(--surface, rgba(0,0,0,0.3))' }}
-      >
-        {clock(minutes)}
-        <span className="text-lg font-bold text-on-bg">{title}</span>
-      </button>
-    );
-    return (
-      <div className="py-12 max-w-sm mx-auto flex flex-col gap-6">
-        <h2 className="text-2xl font-bold text-on-bg text-center text-balance" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
-          How would you like to learn new words today?
-        </h2>
-        <div className="flex gap-3">
-          {option(false, 5, 'Spelling')}
-          {option(true, 15, 'Sentences')}
-        </div>
-      </div>
-    );
+  if (previewFor) {
+    return <NewWordsPreview words={previewFor.words} nativeLanguage={settings.nativeLanguage} onDone={handleFinishPreview} />;
   }
 
   if (!session) {
@@ -3242,34 +3221,6 @@ export default function DailySessionFlow() {
             <div className="text-sm font-medium text-label">
               {CHUNK_LABELS[activeChunk]}
             </div>
-            {/* A labeled switch, not a pill that just names the current
-                state — confirmed real: "Writing"/"Copy" text alone didn't
-                read as something tappable, just as a status label. The
-                track+knob is the standard on/off affordance; the label
-                stays put either way so it doesn't look like a different
-                control depending on state. */}
-            {showSentenceModeToggle && settings && (
-              <button
-                type="button"
-                onClick={() => {
-                  const next = { ...settings, sentenceWritingMode: !settings.sentenceWritingMode };
-                  saveSettings(next);
-                  setSettings(next);
-                  scheduleSync();
-                }}
-                aria-label={settings.sentenceWritingMode ? 'Turn off sentence writing mode (switch to copy mode)' : 'Turn on sentence writing mode'}
-                title={settings.sentenceWritingMode ? 'Sentence writing: on — tap to switch to copy mode' : 'Sentence writing: off — tap to turn on'}
-                className="flex items-center gap-1.5 shrink-0"
-              >
-                <span className="text-[10px] font-semibold text-label">Writing</span>
-                <span className={`relative inline-block w-7 h-4 rounded-full transition-colors ${settings.sentenceWritingMode ? 'bg-accent' : 'bg-paper-dim'}`}>
-                  <span
-                    className="absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-paper shadow transition-transform"
-                    style={{ transform: settings.sentenceWritingMode ? 'translateX(0.75rem)' : 'translateX(0)' }}
-                  />
-                </span>
-              </button>
-            )}
           </div>
           <MilestoneBar activeChunk={activeChunk} wordId={word.id} />
         </div>
@@ -3288,6 +3239,16 @@ export default function DailySessionFlow() {
           ) : (
             <div className="text-2xl font-semibold text-ink">{glossFor(word, getSettings().nativeLanguage)}</div>
           )}
+          {isStudyListenFill && !buildingSentence && (
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <SpeakerButton
+                word={word}
+                className="flex items-center justify-center w-11 h-11 rounded-full bg-accent/15 text-label hover:bg-accent/25 active:scale-95 transition-all"
+                iconClassName="w-5 h-5"
+              />
+              <span className="text-xs uppercase tracking-wide text-ink-soft">Listen and fill in the missing letters</span>
+            </div>
+          )}
         </div>
 
         {/* Context for every round 2+/review card, not just round 1 —
@@ -3305,7 +3266,7 @@ export default function DailySessionFlow() {
             exercise or, in copy-mode, already shows the word in full —
             nothing to mask there) and any round-1 Hint-demotion (still
             pure copy-mode, same reasoning). */}
-        {currentRound > 1 && (
+        {(currentRound > 1 || (isStudyListenFill && feedback !== null && !buildingSentence)) && (
           <div className="flex flex-col gap-2">
             {exampleSentence && (
               <ReferenceSentence example={exampleSentence} word={word} masked={feedback === null} />
@@ -3314,85 +3275,31 @@ export default function DailySessionFlow() {
           </div>
         )}
 
-        {/* Four reasons the translation exercise is skipped for round 1:
-            !exampleSentence excludes a word demoted BACK to round 1 via Hint
-            from round 2 — it already has a saved sentence from its real
-            round-1 pass, so it shouldn't be asked to translate another one.
-            isBootstrapCopyWord excludes A1's ~220 curated high-frequency
-            words permanently — they always use the old copy-the-word
-            mechanic instead, never the AI exercise. sentenceWritingMode
-            === false is a deliberate opt-out (Settings) — same copy-the-
-            word fallback, but with a fetched reference sentence layered
-            on top (see useDirectSentence/directSentence above).
-            Available whether signed in or not (see this file's earlier
-            comment on SentenceWordHeader) — both still fall through to
-            the else branch's round-1 handling (copy-the-word tiles — a
-            word demoted back here from round 2 doesn't get its saved
-            sentence shown again either, same reasoning as
-            ReferenceSentence's own comment). */}
-        {currentRound === 1 && roundMode === 'study' && !isBootstrapCopyWord(word) && !exampleSentence && settings.sentenceWritingMode ? (
-          <SentenceExercise
-            key={word.id}
-            word={word}
-            level={settings.level}
-            correction={sentenceResult}
-            input={sentenceInput}
-            onInputChange={setSentenceInput}
-            onCorrected={(correction, userInput) => {
-              setSentenceResult(correction);
-              // Powers the Word List's "Needs practice" filter (the
-              // "Mistake Notebook") — see WordProgress.lastMistake's own
-              // comment. Round 1 only ever happens once per word, so
-              // without this a genuinely wrong first attempt would have
-              // no way to resurface for a redo at all; MistakeRedoCard is
-              // what clears it again on a later perfect redo.
-              const perfect = diffAgainstAttempt(userInput, correction.sentence).perfect;
-              const at = new Date().toISOString();
-              submitResult(true, {
-                // Real bug caught live: this used to set exampleSentence
-                // to the correction UNCONDITIONALLY, even on a wrong first
-                // attempt — showing the correct German answer right in
-                // the Word List's own row for a word that's supposed to
-                // still be hidden behind "Needs practice" until the
-                // learner actually gets it right themselves. Only ever
-                // set on a genuinely perfect attempt now; a redo (see
-                // MistakeRedoCard) is what fills it in later once earned.
-                ...(perfect ? { exampleSentence: { ...correction, at } } : {}),
-                lastMistake: perfect ? undefined : {
-                  englishPrompt: correction.englishPrompt,
-                  englishPromptZh: correction.englishPromptZh,
-                  userInput,
-                  correctedSentence: correction.sentence,
-                  wordForm: correction.wordForm,
-                  at,
-                },
-              }, { ...correction, userInput });
-            }}
-            onNext={handleNext}
-            onUnreachable={handleAiUnreachable}
-          />
+        {/* The optional sentence step after a correct round-1 answer (see
+            isStudyListenFill/handleSentenceBonus) takes over the lower
+            half of the card; its own Next button moves on. */}
+        {buildingSentence ? (
+          <>
+            <SentenceExercise
+              key={word.id}
+              word={word}
+              level={settings.level}
+              correction={sentenceResult}
+              input={sentenceInput}
+              onInputChange={setSentenceInput}
+              onCorrected={handleSentenceBonus}
+              onNext={handleNext}
+              onUnreachable={handleAiUnreachable}
+            />
+            {/* It's optional — moving on without writing one is fine. */}
+            {!sentenceResult && (
+              <button type="button" onClick={handleNext} className="w-full text-ink-soft py-1 text-sm font-medium hover:text-ink transition-colors">
+                Skip, next word
+              </button>
+            )}
+          </>
         ) : (
           <>
-            {/* Reachable at round 1 either as A1 bootstrap words' genuine
-                first pass, or via a Hint demotion from round 2 for a word
-                that already has a saved sentence (see the gate above). */}
-            {currentRound === 1 && (
-              <div className="text-center -mt-1">
-                <div className="text-xs uppercase tracking-wide text-ink-soft mb-1">Copy this word</div>
-                <div className="text-2xl font-bold text-ink tracking-wide break-words">
-                  {word.article ? `${word.article} ` : ''}{word.de} <SpeakerButton word={word} className="align-middle text-label hover:text-label transition-colors text-xl" />
-                </div>
-                <WordGrammarInfo word={word} />
-              </div>
-            )}
-
-            {useDirectSentence && directSentenceStatus === 'loading' && (
-              <p className="text-ink-soft text-xs text-center">Preparing an example sentence…</p>
-            )}
-            {useDirectSentence && directSentenceStatus === 'ready' && directSentence && (
-              <ReferenceSentence example={directSentence} word={word} />
-            )}
-
             {word.type === 'noun' && word.article && (
               needsArticle ? (
                 <div className="text-center -mb-2">
@@ -3511,6 +3418,15 @@ export default function DailySessionFlow() {
                 >
                   Next →
                 </button>
+                {feedback && canBuildSentence && (
+                  <button
+                    key="sentence"
+                    onClick={() => setBuildingSentence(true)}
+                    className="w-full border-2 border-accent/60 text-label py-2.5 rounded-xl font-semibold hover:bg-accent/10 active:scale-95 transition-all"
+                  >
+                    Build a sentence with it{signedIn ? ' · +1 coin' : ''}
+                  </button>
+                )}
               </div>
             )}
           </>

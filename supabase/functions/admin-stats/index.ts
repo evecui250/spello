@@ -433,8 +433,19 @@ Deno.serve(async (req: Request) => {
     // read as "not updating".
     const wortpaarePlays = { today: 0, last7Days: 0, allTime: 0 };
     const artikelBlitzPlays = { today: 0, last7Days: 0, allTime: 0 };
+    // Optional sentences built after a new word's first round (1 coin each,
+    // recorded in game_plays — see lib/shop.ts's recordSentenceBonus). Not
+    // a game, so counted on their own.
+    const sentenceBuilds = { today: 0, last7Days: 0, allTime: 0 };
     for (const r of gamePlayRows ?? []) {
       const person = r.user_id ?? r.device_id;
+      if (r.game === 'sentence') {
+        const d = dateStr(new Date(r.created_at));
+        sentenceBuilds.allTime += 1;
+        if (d >= last7DaysStart) sentenceBuilds.last7Days += 1;
+        if (d === todayStr) sentenceBuilds.today += 1;
+        continue;
+      }
       const isBlitz = r.game === 'artikel_blitz';
       const players = isBlitz ? artikelBlitzPlayers : wortpaarePlayers;
       const plays = isBlitz ? artikelBlitzPlays : wortpaarePlays;
@@ -455,6 +466,7 @@ Deno.serve(async (req: Request) => {
       rapidReviewCount: rapidReviewCounts,
       wortpaarePlays,
       artikelBlitzPlays,
+      sentenceBuilds,
     };
 
     // Every registered account, most-recently-active first — "who's

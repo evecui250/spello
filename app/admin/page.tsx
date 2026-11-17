@@ -116,6 +116,7 @@ interface AdminStats {
     // renders against an admin-stats deploy from before these existed.
     wortpaarePlays?: { today: number; last7Days: number; allTime: number };
     artikelBlitzPlays?: { today: number; last7Days: number; allTime: number };
+    sentenceBuilds?: { today: number; last7Days: number; allTime: number };
   };
   // Every registered account, most-recently-active first — see
   // admin-stats' own comment for what "active" means here and why.
@@ -426,6 +427,7 @@ export default function AdminPage() {
             ['Artikel Blitz players', stats.bonusGames.artikelBlitzPlayers],
             ['Artikel Blitz rounds', stats.bonusGames.artikelBlitzPlays],
             ['Rapid Reviews done', stats.bonusGames.rapidReviewCount],
+            ['Bonus sentences built', stats.bonusGames.sentenceBuilds],
           ] as [string, { today: number; last7Days: number; allTime: number } | undefined][]).filter(([, v]) => v).map(([label, v]) => (
             <Fragment key={label}>
               <div className="text-stone-600">{label}</div>
