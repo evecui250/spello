@@ -59,10 +59,14 @@ const EXTRACT_PROMPT =
   'List the German vocabulary a learner would study from these pages, each in its dictionary form: ' +
   'nouns in nominative singular WITHOUT the article, verbs in the infinitive, adjectives uninflected. ' +
   'Mark each entry with "kind": "word" for a single word — including a noun with its article, a ' +
-  'reflexive verb ("sich freuen") or a separable verb — and "phrase" for a multi-word expression ' +
-  'learned as a unit: idioms, fixed collocations ("Bescheid sagen", "eine Entscheidung treffen"), ' +
-  'set phrases and useful expressions ("auf jeden Fall", "Wie bitte?", "Es tut mir leid"), up to ' +
-  'about 6 words. Never return full example sentences, dialogue lines, or exercise text. ' +
+  'reflexive verb ("sich freuen") or a separable verb — and "phrase" for a short chunk of 2–4 words ' +
+  'learned as a unit that is NOT a complete sentence: idioms and fixed collocations ("Bescheid ' +
+  'sagen", "eine Entscheidung treffen", "sich Sorgen machen"), fixed adverbial expressions ("auf ' +
+  'jeden Fall", "ab und zu"), and short set exclamations or commands ("Pass auf!", "Keine Ahnung", ' +
+  '"Na klar"). A phrase built around a verb goes in the infinitive ("macht sich Sorgen" -> "sich ' +
+  'Sorgen machen"), except a set command or exclamation, which stays as the book writes it. ' +
+  'Skip complete sentences and questions entirely, even useful ones ("Wie hoch ist die Miete?", ' +
+  '"Ich hätte gern einen Kaffee") — and also example sentences, dialogue lines, and exercise text. ' +
   'If the text is itself a ' +
   'vocabulary list, return EVERY entry in it, in order — be exhaustive, never summarize or skip ' +
   'adjectives/adverbs — and also return each synonym or regional variant given alongside an entry ' +
@@ -89,7 +93,8 @@ const DEFINE_PROMPT =
   `it groups words for quiz choices): ${CATEGORIES.join(', ')}}. Omit any field that does not apply. Pick the single most common ` +
   'everyday sense — unless a headword comes with "(book: ...)", the meaning the learner\'s own book ' +
   'gives: then define exactly that sense and use that meaning as "en". If a headword is not a real ' +
-  'German word (PDF noise), return {"skip": true} in its place.';
+  'German word (PDF noise), return {"skip": true} in its place. A multi-word headword ("Pass auf!", ' +
+  '"auf jeden Fall") keeps its exact wording as "de", with type "phrase" — never reduce it to a single word.';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -212,6 +217,8 @@ Deno.serve(async (req: Request) => {
         if (typeof de !== 'string') continue;
         const t = de.trim();
         if (!t || t.length > 60 || seen.has(t.toLowerCase())) continue;
+        // A "phrase" longer than this is a sentence, whatever the model says.
+        if (kind === 'phrase' && t.split(/\s+/).length > 5) continue;
         seen.add(t.toLowerCase());
         words.push({
           de: t,
