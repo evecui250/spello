@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { transcribeSpeech, DailyLimitReachedError } from '../lib/ai';
 
-// Voice entry for the sentence step: tap to record, tap again to stop;
-// the text lands in the sentence box (see onText) for the learner to
-// check and edit before pressing Check. Renders nothing where the browser
-// can't record (no MediaRecorder/getUserMedia).
+// Voice entry for the sentence step: a mic icon inside the sentence box
+// (like a chat app's). Tap to record, tap again to stop; the text lands in
+// the box (see onText) for the learner to edit before pressing Check.
+// Renders nothing where the browser can't record.
 
 const MAX_SECONDS = 30;
 
@@ -19,18 +19,21 @@ function pickMimeType(): string | undefined {
     .find(t => MediaRecorder.isTypeSupported?.(t));
 }
 
-export default function VoiceInputButton({ wordId, disabled, onText }: {
+export default function VoiceInputButton({ wordId, nativeLanguage, disabled, onText, onError, className = '' }: {
   wordId: string;
+  // The learner's own language — words they say in it are kept as spoken.
+  nativeLanguage: 'en' | 'zh';
   disabled?: boolean;
   onText: (text: string) => void;
+  // A message to show near the box, or null to clear it.
+  onError: (message: string | null) => void;
+  className?: string;
 }) {
   const [supported, setSupported] = useState(false);
   const [state, setState] = useState<'idle' | 'recording' | 'transcribing'>('idle');
-  const [seconds, setSeconds] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const aliveRef = useRef(true);
 
   useEffect(() => {
@@ -40,7 +43,7 @@ export default function VoiceInputButton({ wordId, disabled, onText }: {
     setSupported(!nativeWithoutMic && typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia);
     return () => {
       aliveRef.current = false;
-      clearInterval(timerRef.current);
+      clearTimeout(timerRef.current);
       if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
       streamRef.current?.getTracks().forEach(t => t.stop());
     };
@@ -49,12 +52,12 @@ export default function VoiceInputButton({ wordId, disabled, onText }: {
   if (!supported) return null;
 
   async function start() {
-    setError(null);
+    onError(null);
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      setError('Microphone access is off. Allow it in your browser or phone settings to speak your sentence.');
+      onError('Microphone access is off. Allow it in your browser or phone settings to speak your sentence.');
       return;
     }
     streamRef.current = stream;
@@ -63,59 +66,55 @@ export default function VoiceInputButton({ wordId, disabled, onText }: {
     const chunks: Blob[] = [];
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
     recorder.onstop = async () => {
-      clearInterval(timerRef.current);
+      clearTimeout(timerRef.current);
       stream.getTracks().forEach(t => t.stop());
       const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
       if (!aliveRef.current) return;
       if (blob.size < 1000) { setState('idle'); return; } // a tap, not speech
       setState('transcribing');
       try {
-        const text = await transcribeSpeech(blob, wordId);
+        const text = await transcribeSpeech(blob, wordId, nativeLanguage);
         if (!aliveRef.current) return;
         if (text) onText(text);
-        else setError("Didn't catch that — try again a little louder.");
+        else onError("Didn't catch that — try again a little louder.");
       } catch (e) {
         if (!aliveRef.current) return;
-        setError(e instanceof DailyLimitReachedError ? "You've reached today's AI limit — type it instead." : "Couldn't turn that into text. Try again, or type it.");
+        onError(e instanceof DailyLimitReachedError ? "You've reached today's AI limit — type it instead." : "Couldn't turn that into text. Try again, or type it.");
       } finally {
         if (aliveRef.current) setState('idle');
       }
     };
     recorderRef.current = recorder;
     recorder.start();
-    setSeconds(0);
     setState('recording');
-    timerRef.current = setInterval(() => {
-      setSeconds(s => {
-        if (s + 1 >= MAX_SECONDS && recorder.state === 'recording') recorder.stop();
-        return s + 1;
-      });
-    }, 1000);
+    timerRef.current = setTimeout(() => { if (recorder.state === 'recording') recorder.stop(); }, MAX_SECONDS * 1000);
   }
 
   function stop() {
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
   }
 
+  const label = state === 'recording' ? 'Stop recording' : state === 'transcribing' ? 'Turning speech into text' : 'Speak your sentence';
   return (
-    <div className="flex flex-col items-center gap-1">
-      <button
-        type="button"
-        onClick={state === 'recording' ? stop : start}
-        disabled={disabled || state === 'transcribing'}
-        aria-label={state === 'recording' ? 'Stop recording' : 'Say your sentence'}
-        className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-all active:scale-95 disabled:opacity-50 ${
-          state === 'recording' ? 'bg-clay text-white animate-pulse' : 'bg-accent/15 text-label hover:bg-accent/25'
-        }`}
-      >
-        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <button
+      type="button"
+      onClick={state === 'recording' ? stop : start}
+      disabled={disabled || state === 'transcribing'}
+      aria-label={label}
+      title={label}
+      className={`w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-95 disabled:opacity-50 ${
+        state === 'recording' ? 'bg-clay text-white animate-pulse' : 'text-ink-soft hover:text-label hover:bg-accent/15'
+      } ${className}`}
+    >
+      {state === 'transcribing' ? (
+        <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
+      ) : (
+        <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           {state === 'recording'
-            ? <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+            ? <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none" />
             : <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></>}
         </svg>
-        {state === 'recording' ? `Stop · ${seconds}s` : state === 'transcribing' ? 'Listening…' : 'Say it instead'}
-      </button>
-      {error && <p className="text-clay text-xs text-center">{error}</p>}
-    </div>
+      )}
+    </button>
   );
 }

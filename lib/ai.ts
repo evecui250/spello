@@ -355,7 +355,7 @@ const EXTRACT_TIMEOUT_MS = 90000;
 
 // Voice entry for the sentence step (see components/VoiceInputButton.tsx
 // and the transcribe-speech Edge Function) — a short recording -> text.
-export async function transcribeSpeech(audio: Blob, wordId: string): Promise<string> {
+export async function transcribeSpeech(audio: Blob, wordId: string, nativeLanguage: 'en' | 'zh'): Promise<string> {
   const base64 = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
@@ -363,7 +363,7 @@ export async function transcribeSpeech(audio: Blob, wordId: string): Promise<str
     reader.readAsDataURL(audio);
   });
   const { data, error } = await invokeWithTimeout<{ text?: string; limitReached?: boolean }>(
-    'transcribe-speech', { audio: base64, mimeType: audio.type || 'audio/webm', wordId },
+    'transcribe-speech', { audio: base64, mimeType: audio.type || 'audio/webm', wordId, nativeLanguage },
   );
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();

@@ -47,12 +47,6 @@ export default function HomePage() {
   const [previewReviewCount, setPreviewReviewCount] = useState(0);
   const [totalStudyCount, setTotalStudyCount] = useState(0);
   const [totalReviewCount, setTotalReviewCount] = useState(0);
-  const [mistakeCount, setMistakeCount] = useState(0);
-  // Whether the current book has ANY sentence-notebook activity at all
-  // (mistakes or perfects) — an A1 learner who hasn't reached round-1
-  // sentence writing yet has neither, and the row shouldn't appear at
-  // all until there's something for it to show.
-  const [hasNotebookActivity, setHasNotebookActivity] = useState(false);
   const [ready, setReady] = useState(false);
   const [petAgeDays, setPetAgeDays] = useState(0);
   const [bookName, setBookName] = useState('');
@@ -167,15 +161,6 @@ export default function HomePage() {
         setTotalStudyCount(ds.studyWordIds.length);
         setTotalReviewCount(ds.reviewWordIds.length);
       }
-      // Scoped to the current book only (not merged across every level) —
-      // per feedback, the notebook row should reflect whichever book
-      // the learner is actually studying right now, same as Start's own
-      // counts above.
-      // Own book only — carried-over words from a lower level (see
-      // getAllProgress) aren't this book's notebook.
-      const allProgress = Object.values(getAllProgress(false));
-      setMistakeCount(allProgress.filter(p => !!p.lastMistake).length);
-      setHasNotebookActivity(allProgress.some(p => !!p.lastMistake || !!p.exampleSentence));
       setPetAgeDays(getPetAgeDays());
       setBookName(levelDisplayName(settings.level));
       setCarryPrompt(carryPromptLevels());
@@ -326,38 +311,21 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* Notebook only once this book has any sentence-notebook activity,
-          with a count only when there's something to redo; Chat is the
-          sole entrance to Text to Pet, the pet's small avatar as icon. */}
-      {/* Secondary actions: small, flat pills — clearly below the card. */}
-      <div className="w-full flex justify-center gap-2.5">
-        {hasNotebookActivity && (
-          <Link
-            href="/mistakes"
+      {/* Chat is the sole entrance to Text to Pet (hidden for now, see
+          lib/features.ts). The Notebook moved to Words → Mistakes. */}
+      {PET_CHAT_ENABLED && (
+        <div className="w-full flex justify-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => router.push('/pet-chat/')}
             className="flex items-center gap-2 rounded-full bg-black/15 px-4 py-2 text-on-bg/85 hover:bg-black/25 hover:text-on-bg transition-colors"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`${BASE}/icon_mistake_notebook.png`} alt="" className="w-5 h-5 object-contain shrink-0" />
-            <span className="font-semibold text-sm">Notebook</span>
-            {mistakeCount > 0 && (
-              <span className="min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-accent text-white text-[11px] font-bold flex items-center justify-center">
-                {mistakeCount}
-              </span>
-            )}
-          </Link>
-        )}
-        {PET_CHAT_ENABLED && (
-        <button
-          type="button"
-          onClick={() => router.push('/pet-chat/')}
-          className="flex items-center gap-2 rounded-full bg-black/15 px-4 py-2 text-on-bg/85 hover:bg-black/25 hover:text-on-bg transition-colors"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`${BASE}/${avatarImageFor(avatarId, equipped)}`} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" />
-          <span className="font-semibold text-sm">Chat</span>
-        </button>
-        )}
-      </div>
+            <img src={`${BASE}/${avatarImageFor(avatarId, equipped)}`} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" />
+            <span className="font-semibold text-sm">Chat</span>
+          </button>
+        </div>
+      )}
 
       {nextLevel && <NextLevelCard {...nextLevel} onChange={() => loadRef.current()} />}
 

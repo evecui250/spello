@@ -250,6 +250,8 @@ Deno.serve(async (req: Request) => {
         '- Fix only genuine errors in grammar, spelling, word order, word form, omitted ' +
         'meaning, or mistranslation.\n' +
         '- Do not rewrite a correct sentence just to match your preferred style.\n' +
+        '- Words the learner wrote in English or Chinese stand for German words they ' +
+        "don't know yet — replace them with the right German words.\n" +
         '- Preserve valid synonyms, contractions, sentence structures, person/register, ' +
         'tense, and phrasing.\n' +
         '- If the learner attempted the target word, do not replace it with another German word.\n' +

@@ -662,6 +662,7 @@ function SentenceExercise({
   // Some of the attempt came from voice entry (see VoiceInputButton) —
   // the correction then leaves capitals/punctuation/spelling alone.
   const [spoken, setSpoken] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!correction) return;
@@ -973,36 +974,42 @@ function SentenceExercise({
               gloss={promptGlosses[selectedPromptGlossToken]}
             />
           )}
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => onInputChange(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                if (!correction) handleSubmit();
-              }
-            }}
-            disabled={status === 'loading' || status === 'limit-reached' || !!correction}
-            placeholder="Your best attempt is fine — mixing in English is OK too."
-            rows={2}
-            className="w-full border-2 border-paper-line rounded-xl px-3 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent/50 resize-none disabled:opacity-60"
-          />
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={e => onInputChange(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (!correction) handleSubmit();
+                }
+              }}
+              disabled={status === 'loading' || status === 'limit-reached' || !!correction}
+              placeholder={`Your best attempt is fine — mixing in ${getSettings().nativeLanguage === 'zh' ? 'Chinese' : 'English'} is OK too.`}
+              rows={2}
+              className="w-full border-2 border-paper-line rounded-xl pl-3 pr-11 py-2 text-ink placeholder:text-ink-soft focus:outline-none focus:border-accent/50 resize-none disabled:opacity-60"
+            />
+            {!correction && (
+              <VoiceInputButton
+                wordId={word.id}
+                nativeLanguage={getSettings().nativeLanguage}
+                disabled={status === 'loading' || status === 'limit-reached'}
+                onError={setVoiceError}
+                onText={text => {
+                  setSpoken(true);
+                  onInputChange(input.trim() ? `${input.trim()} ${text}` : text);
+                  textareaRef.current?.focus();
+                }}
+                className="absolute right-1.5 bottom-2"
+              />
+            )}
+          </div>
           {/* No German keyboard on hand? There's no web API to switch the
               OS's on-screen keyboard layout — this row of ä/ö/ü/ß buttons
               is the actual, working fix (see SpecialCharButtons). Hidden
               once corrected, same as the textarea being disabled then. */}
-          {!correction && (
-            <VoiceInputButton
-              wordId={word.id}
-              disabled={status === 'loading' || status === 'limit-reached'}
-              onText={text => {
-                setSpoken(true);
-                onInputChange(input.trim() ? `${input.trim()} ${text}` : text);
-                textareaRef.current?.focus();
-              }}
-            />
-          )}
+          {voiceError && !correction && <p className="text-clay text-xs text-center -mt-1">{voiceError}</p>}
           {!correction && <SpecialCharButtons inputRef={textareaRef} />}
           {status === 'error' && (
             <p className="text-clay text-sm text-center">Couldn't get a correction — check your connection and try again.</p>

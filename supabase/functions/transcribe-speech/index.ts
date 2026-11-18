@@ -27,15 +27,23 @@ interface RequestBody {
   audio: string; // base64
   mimeType: string;
   wordId?: string;
+  // The learner's own language (Settings.nativeLanguage) — what they
+  // fall back on for words they don't know in German yet.
+  nativeLanguage?: 'en' | 'zh';
 }
 
 // Speech-to-text models tidy up what they hear — exactly what a learner's
 // mistakes must survive, or the correction would praise a sentence they
-// never said. No `language` is set: the exercise allows mixing in English.
-const PROMPT =
-  'Ein Deutschlerner spricht einen einzelnen Satz, manchmal mit englischen Wörtern gemischt. ' +
-  'Transkribiere genau, was gesagt wird, mit allen Grammatikfehlern, falschen Artikeln und Endungen. ' +
-  'Korrigiere nichts.';
+// never said. No `language` is set: the sentence is German with the
+// learner's own language mixed in for words they don't know yet.
+function promptFor(nativeLanguage: 'en' | 'zh'): string {
+  const mixed = nativeLanguage === 'zh'
+    ? 'manchmal mit chinesischen Wörtern gemischt (diese in chinesischen Schriftzeichen schreiben, nicht übersetzen)'
+    : 'manchmal mit englischen Wörtern gemischt (diese auf Englisch schreiben, nicht übersetzen)';
+  return `Ein Deutschlerner spricht einen einzelnen deutschen Satz, ${mixed}. ` +
+    'Transkribiere genau, was gesagt wird, mit allen Grammatikfehlern, falschen Artikeln und Endungen. ' +
+    'Korrigiere nichts.';
+}
 
 function extensionFor(mime: string): string {
   if (mime.includes('mp4') || mime.includes('m4a') || mime.includes('aac')) return 'm4a';
@@ -90,7 +98,7 @@ Deno.serve(async (req: Request) => {
     const form = new FormData();
     form.append('file', new Blob([bytes], { type: mime }), `speech.${extensionFor(mime)}`);
     form.append('model', MODEL);
-    form.append('prompt', PROMPT);
+    form.append('prompt', promptFor(body.nativeLanguage === 'zh' ? 'zh' : 'en'));
     form.append('response_format', 'json');
 
     const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {

@@ -393,7 +393,7 @@ export default function ArtikelBlitzGame({
                 onClick={onQuit}
                 className="text-ink-soft hover:text-ink text-sm font-medium underline transition-colors"
               >
-                {mode === 'practice' ? 'Back to notebook' : quitLabel}
+                {mode === 'practice' ? 'Back to mistakes' : quitLabel}
               </button>
             )}
             </>

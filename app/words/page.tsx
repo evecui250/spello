@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { WORDS, Word, Level, glossFor, isBookLevelId } from '../../lib/words';
 import {
-  getMergedProgressAcrossLevels, getSettings, WordProgress, MascotStageId, today,
+  getMergedProgressAcrossLevels, getAllProgress, getSettings, WordProgress, MascotStageId, today,
   getAllCustomWordsAcrossLevels, addCustomWord, removeCustomWord, getWordProgress, saveWordProgress,
   newCustomWordId, isCustomWordId, PROGRESS_CHANGED_EVENT,
   levelDisplayName, DICTIONARY_BOOK_ID, ensureDictionaryBook,
 } from '../../lib/storage';
 import { daysBetween, recordMilestonePass } from '../../lib/srs';
+import MistakesView from '../../components/MistakesView';
 import { imageUrlForWord } from '../../lib/wordImage';
 import { WORDS_WITH_IMAGES } from '../../lib/wordImageManifest';
 import { lookupWord, LookupWordResult, DailyLimitReachedError, AIUnreachableError } from '../../lib/ai';
@@ -225,12 +226,13 @@ function addCustomWordIntroduced(word: Word): void {
   saveWordProgress(recordMilestonePass(getWordProgress(word.id), 'puppy'));
 }
 
-type View = 'search' | 'myWords';
+type View = 'search' | 'myWords' | 'mistakes';
 
 export default function WordsPage() {
   const [progress, setProgress] = useState<Record<string, WordProgress>>({});
   const [search, setSearch] = useState('');
   const [view, setView] = useState<View>('search');
+  const [mistakeCount, setMistakeCount] = useState(0);
   const [searchLang, setSearchLangState] = useState<SearchLang>('auto');
   useEffect(() => {
     try {
@@ -307,6 +309,10 @@ export default function WordsPage() {
     setActiveLevel(getSettings().level);
     applyParam('familiarity', ['learning', 'mastered'], setFilterFamiliarity);
     applyParam('date', ['all', 'today', '7days', '30days'], setDateFilter);
+    applyParam('view', ['search', 'myWords', 'mistakes'], setView);
+    // Same count Home's Notebook button used to badge: this book's own
+    // sentences still waiting for a redo.
+    setMistakeCount(Object.values(getAllProgress(false)).filter(p => !!p.lastMistake).length);
   }, []);
 
   useEffect(() => {
@@ -581,7 +587,7 @@ export default function WordsPage() {
       <h1 className="text-2xl font-bold text-on-bg text-center" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>Word List</h1>
 
       <div className="flex gap-1 bg-paper-dim/70 backdrop-blur-sm rounded-full p-1 self-start">
-        {(['search', 'myWords'] as const).map(v => (
+        {(['search', 'myWords', 'mistakes'] as const).map(v => (
           <button
             key={v}
             onClick={() => setView(v)}
@@ -589,10 +595,17 @@ export default function WordsPage() {
               view === v ? 'bg-accent-deep text-white' : 'text-on-bg/70 hover:text-on-bg'
             }`}
           >
-            {v === 'search' ? 'Dictionary' : 'My Words'}
+            {v === 'search' ? 'Dictionary' : v === 'myWords' ? 'My Words' : 'Mistakes'}
+            {v === 'mistakes' && mistakeCount > 0 && (
+              <span className="ml-1.5 inline-flex min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-accent text-white text-[11px] font-bold items-center justify-center align-middle">
+                {mistakeCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
+
+      {view === 'mistakes' && <MistakesView />}
 
       {view === 'search' && (
         <div className="flex items-center gap-2">
