@@ -25,6 +25,34 @@ export interface PdfPagePreview {
   printedNumber?: string; // the number printed on the page, when it differs
   title: string;         // first meaningful line, for picking pages by eye
   hasText: boolean;
+  chapter?: string;      // the PDF's own bookmark (table of contents) entry this page falls under
+}
+
+type PdfDoc = Awaited<ReturnType<Awaited<ReturnType<typeof loadPdfjs>>['getDocument']>['promise']>;
+
+// The book's own chapters, from the PDF's bookmarks (the table of contents
+// a PDF reader shows in its sidebar) — exact and free when a publisher
+// included them, which most coursebook PDFs do. A single top-level entry
+// (usually the book's own title) is looked through to the chapters under
+// it. Returns each chapter's first page, in page order; [] when the PDF
+// has no bookmarks or none resolve to a page.
+async function outlineChapters(doc: PdfDoc): Promise<{ title: string; page: number }[]> {
+  let items = (await doc.getOutline().catch(() => null)) ?? [];
+  while (items.length === 1 && items[0].items?.length) items = items[0].items;
+  const out: { title: string; page: number }[] = [];
+  for (const it of items) {
+    try {
+      const dest = typeof it.dest === 'string' ? await doc.getDestination(it.dest) : it.dest;
+      if (!Array.isArray(dest)) continue;
+      const ref = dest[0];
+      const idx = typeof ref === 'number' ? ref : await doc.getPageIndex(ref);
+      const title = String(it.title ?? '').replace(/\s+/g, ' ').trim();
+      if (title) out.push({ title: title.slice(0, 80), page: idx + 1 });
+    } catch {
+      // An unresolvable bookmark just isn't a chapter.
+    }
+  }
+  return out.sort((a, b) => a.page - b.page);
 }
 
 function pageLines(content: { items: unknown[] }): string[] {
@@ -55,13 +83,16 @@ export async function getPdfPagePreviews(file: File): Promise<PdfPagePreview[]> 
     const freq = new Map<string, number>();
     for (const lines of all) for (const l of new Set(lines)) freq.set(l, (freq.get(l) ?? 0) + 1);
     const repeated = (l: string) => all.length >= 3 && (freq.get(l) ?? 0) >= all.length / 2;
+    const chapters = await outlineChapters(doc);
+    const chapterOf = (page: number) => chapters.filter(c => c.page <= page).pop()?.title;
     return all.map((lines, i) => {
       // Some PDFs carry the number twice in their text layer ("6 6").
       const pageNum = (l: string | undefined) => l?.match(/^(\d{1,4})(?: \1)*$/)?.[1];
       const printedRaw = pageNum(lines[lines.length - 1]);
       const printed = printedRaw && Number(printedRaw) !== i + 1 ? printedRaw : undefined;
       const title = lines.find(l => !repeated(l) && !pageNum(l) && l.length >= 3) ?? '';
-      return { page: i + 1, printedNumber: printed, title: title.slice(0, 80), hasText: lines.length > 0 };
+      const chapter = chapterOf(i + 1);
+      return { page: i + 1, printedNumber: printed, title: title.slice(0, 80), hasText: lines.length > 0, ...(chapter ? { chapter } : {}) };
     });
   } finally {
     await doc.destroy();

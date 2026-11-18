@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getPdfPagePreviews, formatPageList, PdfPagePreview, MAX_IMPORT_PAGES, findContinuationPages, findVocabularyPages } from '../lib/pdf';
 import { extractBookWords, ImportCandidate, ImportStage, shareImportedBook } from '../lib/bookImport';
@@ -116,6 +116,21 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
     setAutoAdded(auto);
   }
 
+  // The PDF's own chapters (its bookmarks), in page order — the page list
+  // groups under them, and ticking one ticks all its pages.
+  const chapterPages = new Map<string, number[]>();
+  for (const p of previews ?? []) {
+    if (p.chapter && p.hasText) chapterPages.set(p.chapter, [...(chapterPages.get(p.chapter) ?? []), p.page]);
+  }
+  function toggleChapter(chapter: string) {
+    const pages = chapterPages.get(chapter) ?? [];
+    const allOn = pages.every(n => pickedPages.has(n));
+    const next = new Set(pickedPages);
+    for (const n of pages) { if (allOn) next.delete(n); else next.add(n); }
+    setPickedPages(next);
+    setAutoAdded(new Set([...autoAdded].filter(n => !pages.includes(n))));
+  }
+
   function selectVocabularyPages() {
     setPickedPages(new Set(vocabPages));
     setAutoAdded(new Set(vocabPages.filter(p => continuations.has(p))));
@@ -142,7 +157,8 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
     setStep('working');
     setStage(null);
     try {
-      const result = await extractBookWords(file, pages, bookId.current, setStage);
+      const chapterOf = new Map((previews ?? []).map(p => [p.page, p.chapter]));
+      const result = await extractBookWords(file, pages, bookId.current, setStage, n => chapterOf.get(n));
       setCandidates(result.candidates);
       setExcluded(new Set());
       setStats({ aiCalls: result.aiCalls, matched: result.candidates.filter(c => c.source === 'corpus').length });
@@ -158,6 +174,31 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
   }
 
   const selected = candidates.filter(c => !excluded.has(c.word.id));
+  const selectedPhrases = selected.filter(c => c.kind === 'phrase').length;
+  const foundPhrases = candidates.filter(c => c.kind === 'phrase').length;
+
+  // The review list, by the book's own chapters (one unnamed group when
+  // the PDF has none), in the order they appear.
+  const groups: { section?: string; items: ImportCandidate[] }[] = [];
+  for (const c of candidates) {
+    const g = groups.find(x => x.section === c.section);
+    if (g) g.items.push(c); else groups.push({ section: c.section, items: [c] });
+  }
+
+  // A chapter's "Words"/"Phrases" chip: all on -> all off, otherwise all on.
+  function toggleKind(items: ImportCandidate[], kind: ImportCandidate['kind']) {
+    const ids = items.filter(c => c.kind === kind).map(c => c.word.id);
+    const allOn = ids.every(id => !excluded.has(id));
+    setExcluded(prev => {
+      const next = new Set(prev);
+      for (const id of ids) { if (allOn) next.add(id); else next.delete(id); }
+      return next;
+    });
+  }
+
+  const countLabel = (words: number, phrases: number) =>
+    [words > 0 || phrases === 0 ? `${words} word${words === 1 ? '' : 's'}` : '', phrases > 0 ? `${phrases} phrase${phrases === 1 ? '' : 's'}` : '']
+      .filter(Boolean).join(' and ');
 
   function toggle(id: string) {
     setExcluded(prev => {
@@ -239,10 +280,27 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
                   </button>
                 )}
                 <div className="flex-1 min-h-0 max-h-72 overflow-y-auto border border-paper-line rounded-xl divide-y divide-paper-line">
-                  {previews.map(p => {
+                  {previews.map((p, i) => {
                     const on = pickedPages.has(p.page);
+                    const chapterStart = p.chapter && p.chapter !== previews[i - 1]?.chapter ? p.chapter : null;
+                    const chapterOn = chapterStart ? (chapterPages.get(chapterStart) ?? []) : [];
                     return (
-                      <label key={p.page} className={`flex items-center gap-3 px-3 py-2 ${p.hasText ? 'cursor-pointer' : 'opacity-45'}`}>
+                      <Fragment key={p.page}>
+                      {chapterStart && chapterOn.length > 0 && (
+                        <label className="flex items-center gap-3 px-3 py-2 bg-accent/10 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={chapterOn.every(n => pickedPages.has(n))}
+                            onChange={() => toggleChapter(chapterStart)}
+                            className="accent-accent h-4 w-4 shrink-0"
+                          />
+                          <span className="min-w-0 flex-1 text-ink text-sm font-semibold truncate">{chapterStart}</span>
+                          <span className="shrink-0 text-ink-soft text-xs">
+                            {chapterOn.length} page{chapterOn.length === 1 ? '' : 's'}
+                          </span>
+                        </label>
+                      )}
+                      <label className={`flex items-center gap-3 py-2 pr-3 ${p.chapter ? 'pl-7' : 'pl-3'} ${p.hasText ? 'cursor-pointer' : 'opacity-45'}`}>
                         <input
                           type="checkbox"
                           checked={on}
@@ -263,11 +321,12 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
                           )}
                         </span>
                       </label>
+                      </Fragment>
                     );
                   })}
                 </div>
                 <span className="block text-ink-soft text-xs">
-                  Tick only the vocabulary pages. Up to {MAX_IMPORT_PAGES} pages and {MAX_WORDS_PER_BOOK} words per book.
+                  Tick the chapters or pages to learn from. Up to {MAX_IMPORT_PAGES} pages and {MAX_WORDS_PER_BOOK} words per book.
                   {previews.some(p => p.printedNumber) ? ' Numbers in brackets are the ones printed on the page.' : ''}
                 </span>
                 <button type="button" onClick={handleExtract} disabled={pickedPages.size === 0} className={PRIMARY_BTN}>
@@ -289,20 +348,48 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
         {step === 'review' && (
           <>
             <p className="text-ink-soft text-sm">
-              Found {candidates.length} words
+              Found {countLabel(candidates.length - foundPhrases, foundPhrases)}
               {stats && stats.matched > 0 ? ` (${stats.matched} matched Spello's built-in lists)` : ''}.
-              Untick anything that isn't real vocabulary.
+              Untick anything you don&apos;t want to learn.
             </p>
             <div className="flex-1 min-h-0 overflow-y-auto border border-paper-line rounded-xl divide-y divide-paper-line">
-              {candidates.map(c => {
-                const on = !excluded.has(c.word.id);
+              {groups.map(g => {
+                const kinds = (['word', 'phrase'] as const)
+                  .map(kind => ({ kind, items: g.items.filter(c => c.kind === kind) }))
+                  .filter(k => k.items.length > 0);
                 return (
-                  <label key={c.word.id} className={`flex items-center gap-3 px-3 py-1.5 cursor-pointer ${on ? '' : 'opacity-45'}`}>
-                    <input type="checkbox" checked={on} onChange={() => toggle(c.word.id)} className="accent-accent h-4 w-4 shrink-0" />
-                    <span className="min-w-0 flex-1 text-ink font-medium truncate">
-                      {c.word.article ? `${c.word.article} ` : ''}{c.word.de}
-                    </span>
-                  </label>
+                  <Fragment key={g.section ?? ''}>
+                    {(g.section || foundPhrases > 0) && (
+                      <div className="px-3 py-2 bg-accent/10 flex flex-wrap items-center gap-2">
+                        {g.section && <span className="w-full text-ink text-sm font-semibold truncate">{g.section}</span>}
+                        {kinds.map(({ kind, items }) => {
+                          const on = items.filter(c => !excluded.has(c.word.id)).length;
+                          return (
+                            <button
+                              key={kind}
+                              type="button"
+                              onClick={() => toggleKind(g.items, kind)}
+                              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors ${on > 0 ? 'bg-accent text-white' : 'bg-paper border border-paper-line text-ink-soft'}`}
+                            >
+                              {on > 0 ? '✓ ' : ''}{kind === 'phrase' ? 'Phrases' : 'Words'} {on === items.length ? items.length : `${on}/${items.length}`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {g.items.map(c => {
+                      const on = !excluded.has(c.word.id);
+                      return (
+                        <label key={c.word.id} className={`flex items-center gap-3 px-3 py-1.5 cursor-pointer ${on ? '' : 'opacity-45'}`}>
+                          <input type="checkbox" checked={on} onChange={() => toggle(c.word.id)} className="accent-accent h-4 w-4 shrink-0" />
+                          <span className="min-w-0 flex-1 text-ink font-medium truncate">
+                            {c.word.article ? `${c.word.article} ` : ''}{c.word.de}
+                          </span>
+                          {c.kind === 'phrase' && <span className="shrink-0 text-ink-soft text-xs">phrase</span>}
+                        </label>
+                      );
+                    })}
+                  </Fragment>
                 );
               })}
             </div>
@@ -319,7 +406,7 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
               <CefrLevelSelect value={cefrLevel} onChange={setCefrLevel} />
             </label>
             <button type="button" onClick={handleSave} disabled={selected.length === 0} className={PRIMARY_BTN}>
-              Save book ({selected.length} word{selected.length === 1 ? '' : 's'})
+              Save book ({countLabel(selected.length - selectedPhrases, selectedPhrases)})
             </button>
           </>
         )}

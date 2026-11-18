@@ -493,7 +493,7 @@ function SettingsPageInner() {
               className="text-left rounded-xl border border-paper-line px-3 py-2.5 hover:bg-paper-dim/50 transition-colors"
             >
               <span className="block font-semibold text-ink">Import from a PDF</span>
-              <span className="block text-ink-soft text-xs">Pick the vocabulary pages of your coursebook</span>
+              <span className="block text-ink-soft text-xs">Words and phrases from your coursebook</span>
             </button>
             <button
               type="button"

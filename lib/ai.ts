@@ -353,7 +353,9 @@ const EXTRACT_TIMEOUT_MS = 90000;
 
 // `en` is the meaning the book itself gives, when it gives one — passed
 // back into defineHeadwords so the AI defines the book's sense of the word.
-export interface Headword { de: string; en?: string }
+// kind 'phrase': a multi-word expression the book teaches as a unit (see
+// extract-vocabulary's EXTRACT_PROMPT) — kept as type 'phrase' on import.
+export interface Headword { de: string; en?: string; kind?: 'phrase' }
 
 export async function extractHeadwords(text: string, importId: string): Promise<Headword[]> {
   const { data, error } = await invokeWithTimeout<{ words?: Headword[]; limitReached?: boolean }>(

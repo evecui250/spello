@@ -57,19 +57,25 @@ const EXTRACT_PROMPT =
   'You are given raw text extracted from some pages of a German-learning book (a vocabulary list, ' +
   'a textbook chapter, or a reader). Line breaks and columns may be scrambled by the PDF extraction. ' +
   'List the German vocabulary a learner would study from these pages, each in its dictionary form: ' +
-  'nouns in nominative singular WITHOUT the article, verbs in the infinitive, adjectives uninflected; ' +
-  'fixed multi-word expressions (e.g. "Bescheid sagen") as one entry. If the text is itself a ' +
+  'nouns in nominative singular WITHOUT the article, verbs in the infinitive, adjectives uninflected. ' +
+  'Mark each entry with "kind": "word" for a single word — including a noun with its article, a ' +
+  'reflexive verb ("sich freuen") or a separable verb — and "phrase" for a multi-word expression ' +
+  'learned as a unit: idioms, fixed collocations ("Bescheid sagen", "eine Entscheidung treffen"), ' +
+  'set phrases and useful expressions ("auf jeden Fall", "Wie bitte?", "Es tut mir leid"), up to ' +
+  'about 6 words. Never return full example sentences, dialogue lines, or exercise text. ' +
+  'If the text is itself a ' +
   'vocabulary list, return EVERY entry in it, in order — be exhaustive, never summarize or skip ' +
   'adjectives/adverbs — and also return each synonym or regional variant given alongside an entry ' +
   '(after "=", "/", or in brackets like "(CH auch: der Anlass)") as its own separate entry. ' +
   'Ignore grammar notes such as plural endings, "(Sg.)", "+ Akk.", the conjugated forms printed ' +
   'under a verb (e.g. "ruht sich aus, hat sich ausgeruht" belongs to "sich ausruhen"), and example ' +
-  'sentences. Keep each noun\'s article ("die Stadt") so nouns are recognizable. ' +
-  'Otherwise (not a vocabulary list) pick the content words worth ' +
+  'sentences. In a verb table, return each verb once, in the infinitive. Keep each noun\'s article ' +
+  '("die Stadt") so nouns are recognizable. ' +
+  'Otherwise (not a vocabulary list) pick the content words and phrases worth ' +
   'learning (skip names of people, page headers, exercise instructions, and trivial function words ' +
-  'like "der", "und", "ist"). No duplicates. If the text gives a translation/meaning for a word ' +
+  'like "der", "und", "ist"). No duplicates. If the text gives a translation/meaning for an entry ' +
   '(vocabulary lists usually do), copy it as "en" (English only, a few words); otherwise omit "en". ' +
-  'Respond with exactly this JSON: {"words": [{"de": "...", "en": "..."}, ...]}.';
+  'Respond with exactly this JSON: {"words": [{"de": "...", "en": "...", "kind": "word|phrase"}, ...]}.';
 
 const DEFINE_PROMPT =
   'For each German headword below, write one dictionary entry. Respond with exactly this JSON: ' +
@@ -197,16 +203,21 @@ Deno.serve(async (req: Request) => {
         return json({ error: 'AI returned an unexpected format' }, 502);
       }
       const seen = new Set<string>();
-      const words: { de: string; en?: string }[] = [];
+      const words: { de: string; en?: string; kind?: 'phrase' }[] = [];
       for (const w of parsed.words) {
         // Tolerates a bare string too, in case the model drops the object shape.
         const de = (typeof w === 'string' ? w : (w as { de?: unknown })?.de);
         const en = typeof w === 'object' && w ? (w as { en?: unknown }).en : undefined;
+        const kind = typeof w === 'object' && w ? (w as { kind?: unknown }).kind : undefined;
         if (typeof de !== 'string') continue;
         const t = de.trim();
         if (!t || t.length > 60 || seen.has(t.toLowerCase())) continue;
         seen.add(t.toLowerCase());
-        words.push({ de: t, ...(typeof en === 'string' && en.trim() ? { en: en.trim().slice(0, 80) } : {}) });
+        words.push({
+          de: t,
+          ...(typeof en === 'string' && en.trim() ? { en: en.trim().slice(0, 80) } : {}),
+          ...(kind === 'phrase' ? { kind: 'phrase' as const } : {}),
+        });
       }
       return json({ words });
     }

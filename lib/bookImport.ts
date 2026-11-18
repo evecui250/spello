@@ -21,6 +21,10 @@ import { scheduleSync } from './sync';
 export interface ImportCandidate {
   word: Word;
   source: 'corpus' | 'ai';
+  // Where in the book it came from (the PDF's own chapter, see
+  // extractBookWords' sectionOf) — groups the review list.
+  section?: string;
+  kind: 'word' | 'phrase';
 }
 
 export interface ImportResult {
@@ -88,15 +92,25 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return out;
 }
 
+// A phrase keeps only what applies to a phrase — the define step sometimes
+// files "eine Entscheidung treffen" as a verb or "auf jeden Fall" as a noun.
+// Labelled type 'phrase' so a phrase-specific exercise can pick them out.
+function asPhrase(w: Word): Word {
+  const { article: _a, plural: _p, thirdPerson: _t, pastTense: _pt, perfectTense: _pf, ...rest } = w;
+  return { ...rest, type: 'phrase' };
+}
+
 export async function extractBookWords(
   file: File,
   pages: number[],
   bookId: BookLevelId,
   onProgress: (s: ImportStage) => void,
+  sectionOf: (page: number) => string | undefined = () => undefined,
 ): Promise<ImportResult> {
   onProgress({ stage: 'reading' });
   const pageTexts = await extractPdfPagesText(file, pages);
-  const chunks = chunkPageTexts(pageTexts);
+  // Chunked page by page so every chunk still knows its page's section.
+  const chunks = pageTexts.flatMap((t, i) => chunkPageTexts([t]).map(text => ({ text, section: sectionOf(pages[i]) })));
   if (chunks.length === 0) {
     throw new Error("Couldn't find any text on those pages. Scanned (image-only) PDFs aren't supported yet.");
   }
@@ -104,11 +118,14 @@ export async function extractBookWords(
   let aiCalls = 0;
   let done = 0;
   onProgress({ stage: 'extracting', done, total: chunks.length });
-  const perChunk = await mapLimit(chunks, CONCURRENCY, async c => { aiCalls++; return extractHeadwords(c, bookId); },
+  const perChunk = await mapLimit(chunks, CONCURRENCY, async c => {
+    aiCalls++;
+    return (await extractHeadwords(c.text, bookId)).map(h => ({ ...h, section: c.section }));
+  },
     () => onProgress({ stage: 'extracting', done: ++done, total: chunks.length }));
 
   const seen = new Set<string>();
-  const headwords: Headword[] = [];
+  const headwords: (Headword & { section?: string })[] = [];
   for (const w of perChunk.flat()) {
     const k = matchKey(w.de);
     if (!k || seen.has(k)) continue;
@@ -121,9 +138,12 @@ export async function extractBookWords(
   }
 
   // Keeps the book's original order, whichever path each word takes.
+  // The corpus is single words only, so a phrase always gets defined.
   const slots: (ImportCandidate | null)[] = headwords.map(h => {
-    const hit = corpusLookup(h.de);
-    return hit ? { word: { ...hit, id: newCustomWordId(), level: bookId, sourceId: hit.id }, source: 'corpus' } : null;
+    const hit = h.kind === 'phrase' ? undefined : corpusLookup(h.de);
+    return hit
+      ? { word: { ...hit, id: newCustomWordId(), level: bookId, sourceId: hit.id }, source: 'corpus', section: h.section, kind: 'word' }
+      : null;
   });
   const unmatchedIdx = slots.flatMap((s, i) => (s ? [] : [i]));
   const batches: number[][] = [];
@@ -140,7 +160,11 @@ export async function extractBookWords(
     const byKey = new Map(defs.map(d => [matchKey(d.de), d]));
     idxs.forEach((i, pos) => {
       const d = byKey.get(matchKey(headwords[i].de)) ?? (defs.length === idxs.length ? defs[pos] : undefined);
-      if (d) slots[i] = { word: { ...d, id: newCustomWordId(), level: bookId }, source: 'ai' };
+      if (!d) return;
+      const h = headwords[i];
+      const word: Word = { ...d, id: newCustomWordId(), level: bookId };
+      const phrase = h.kind === 'phrase' || word.type === 'phrase';
+      slots[i] = { word: phrase ? asPhrase(word) : word, source: 'ai', section: h.section, kind: phrase ? 'phrase' : 'word' };
     });
   }, () => onProgress({ stage: 'defining', done: ++done, total: batches.length }));
 
