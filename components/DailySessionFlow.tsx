@@ -27,6 +27,8 @@ import SpeakerButton from './SpeakerButton';
 import TextSpeakerButton from './TextSpeakerButton';
 import TranslationChoiceCard from './TranslationChoiceCard';
 import WordMeaningChoiceCard from './WordMeaningChoiceCard';
+import PastTenseCard from './PastTenseCard';
+import { pastTenseEnabled, pickPastTenseVerbs, recordPastTense, perfectFormOf } from '../lib/pastTense';
 import MatchingQuizPage from './MatchingQuizPage';
 import DachshundMascot from './Mascot';
 import { PointsIcon } from './icons';
@@ -1872,6 +1874,19 @@ export default function DailySessionFlow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A past-tense step whose next verb can't be shown (gone from the word
+  // list since, or its forms changed) skips it rather than sticking.
+  useEffect(() => {
+    if (session?.phase !== 'review-past-tense') return;
+    const verb = wordsById((session.pastTenseQueueIds ?? []).slice(0, 1))[0];
+    if (verb && perfectFormOf(verb)) return;
+    const rest = (session.pastTenseQueueIds ?? []).slice(1);
+    persistSession(rest.length > 0
+      ? { ...session, pastTenseQueueIds: rest }
+      : { ...session, pastTenseQueueIds: [], pastTenseDone: true, phase: 'report' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.phase, session?.pastTenseQueueIds]);
+
   // --- report phase: auto-skip when nothing upgraded (same routing as its
   // own "Continue" button — onward into study if there's any today, since
   // review runs first now, otherwise straight to congrats) ---
@@ -2205,7 +2220,44 @@ export default function DailySessionFlow() {
       enterMatchingPhase(ds, 'review');
       return;
     }
+    finishReview(ds);
+  }
+
+  // Review's last step before the report: a few of today's review verbs
+  // in the Perfekt, when the learner has it on (see lib/pastTense.ts).
+  function finishReview(ds: DailySession) {
+    if (!ds.pastTenseDone && pastTenseEnabled()) {
+      const verbs = pickPastTenseVerbs(wordsById(ds.reviewWordIds));
+      if (verbs.length > 0) {
+        persistSession({
+          ...ds, phase: 'review-past-tense',
+          pastTenseQueueIds: verbs.map(v => v.id), pastTenseRetriedIds: [], pastTenseTotal: verbs.length,
+        });
+        return;
+      }
+    }
     persistSession({ ...ds, phase: 'report' });
+  }
+
+  // A miss goes to the back of the step once, like the meaning quizzes.
+  function handlePastTenseDone(correct: boolean) {
+    if (!session) return;
+    const [id, ...rest] = session.pastTenseQueueIds ?? [];
+    if (!id) return;
+    recordPastTense(id, correct);
+    const retried = session.pastTenseRetriedIds ?? [];
+    const retry = !correct && !retried.includes(id);
+    const queue = retry ? [...rest, id] : rest;
+    if (queue.length === 0) {
+      persistSession({ ...session, pastTenseQueueIds: [], pastTenseDone: true, phase: 'report' });
+      return;
+    }
+    persistSession({
+      ...session,
+      pastTenseQueueIds: queue,
+      pastTenseRetriedIds: retry ? [...retried, id] : retried,
+      pastTenseTotal: (session.pastTenseTotal ?? queue.length) + (retry ? 1 : 0),
+    });
   }
 
   // Retried until a clean pass — see enterReviewMcqPhase.
@@ -2442,7 +2494,7 @@ export default function DailySessionFlow() {
     if (ds.phase === 'study-matching') {
       proceedPastStudy(ds);
     } else {
-      persistSession({ ...ds, phase: 'report' });
+      finishReview(ds);
     }
   }
 
@@ -2832,6 +2884,23 @@ export default function DailySessionFlow() {
           onReveal={handleRevealMcqReversed}
         />
         <SkipWordButton key={`skip-${mcqCurrent.word.id}`} word={mcqCurrent.word} onSkip={() => handleSkipWord(mcqCurrent.word)} />
+      </McqStage>
+    );
+  }
+
+  if (session.phase === 'review-past-tense') {
+    const verb = wordsById((session.pastTenseQueueIds ?? []).slice(0, 1))[0];
+    if (!verb || !perfectFormOf(verb)) return null; // see the effect that moves past this
+    const total = session.pastTenseTotal ?? 1;
+    return (
+      <McqStage key={`past-${verb.id}-${session.pastTenseQueueIds?.length}`}>
+        <PastTenseCard
+          word={verb}
+          nativeLanguage={getSettings().nativeLanguage}
+          position={total - (session.pastTenseQueueIds?.length ?? 1) + 1}
+          total={total}
+          onDone={handlePastTenseDone}
+        />
       </McqStage>
     );
   }

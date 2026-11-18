@@ -144,6 +144,9 @@ export interface Settings {
   carryReviewsAsked?: boolean;
   // Home's "almost done — ready for A2?" card was dismissed for this level.
   nextLevelCardDismissed?: boolean;
+  // Review's "Past tense" step (see lib/pastTense.ts). Unset = the level's
+  // default: on from A2 up, off for A1.
+  pastTensePractice?: boolean;
 }
 
 // Every one of these is per-level storage: switching level in Settings is a
@@ -1806,6 +1809,9 @@ export type SessionPhase =
   // actually advances short -> medium, the same way study-mcq's own
   // reversed checkpoint now completes introduction.
   | 'review-mcq' | 'review-mcq-reversed' | 'review-rounds' | 'review-matching'
+  // A few of today's review verbs in the Perfekt, right before the report
+  // (see lib/pastTense.ts) — skipped when off or no verb qualifies.
+  | 'review-past-tense'
   | 'report'
   // The bonus end-of-introduction "Words in Context" exercise (see
   // buildWordsInContextBatches/ParagraphExercise in lib/practice.ts) --
@@ -1986,6 +1992,12 @@ export interface DailySession {
   // round (see DailySessionFlow's beginStudy), so resuming never shows the
   // preview again.
   studyPreviewDone?: boolean;
+  // Review's past-tense step: the verbs still to ask (a missed one goes
+  // to the back once — pastTenseRetriedIds), and whether it has run.
+  pastTenseQueueIds?: string[];
+  pastTenseRetriedIds?: string[];
+  pastTenseTotal?: number; // cards in the step, retries included (for "2 / 4")
+  pastTenseDone?: boolean;
 }
 
 // Backfills any fields a session persisted before they existed would be

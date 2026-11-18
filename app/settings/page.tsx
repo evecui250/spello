@@ -14,6 +14,7 @@ import ReminderSettingsPanel from '../../components/ReminderSettingsPanel';
 import AccountPanel from '../../components/AccountPanel';
 import BugReportButton from '../../components/BugReportButton';
 import SoundPicker from '../../components/SoundPicker';
+import { pastTenseEnabled } from '../../lib/pastTense';
 import ImportBookModal, { BookCodeDisplay } from '../../components/ImportBookModal';
 import JoinBookModal from '../../components/JoinBookModal';
 import CefrLevelSelect from '../../components/CefrLevelSelect';
@@ -113,6 +114,7 @@ function SettingsPageInner() {
   const [autoPlayAudio, setAutoPlayAudio] = useState(true);
   const [wordRepeatCount, setWordRepeatCount] = useState(1);
   const [requireArticle, setRequireArticle] = useState(false);
+  const [pastTense, setPastTense] = useState(false);
   const [sentenceWritingMode, setSentenceWritingMode] = useState(true);
   const [saved, setSaved] = useState(false);
   const [cleared, setCleared] = useState(false);
@@ -150,6 +152,7 @@ function SettingsPageInner() {
     setAutoPlayAudio(s.autoPlayAudio);
     setWordRepeatCount(s.wordRepeatCount ?? 1);
     setRequireArticle(s.requireArticle);
+    setPastTense(pastTenseEnabled(s));
     setSentenceWritingMode(s.sentenceWritingMode);
   };
 
@@ -659,6 +662,21 @@ function SettingsPageInner() {
             checked={requireArticle}
             onChange={e => { setRequireArticle(e.target.checked); persist({ requireArticle: e.target.checked }); }}
             className="w-5 h-5 accent-accent"
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <label className="block font-semibold text-ink">
+              Practice past tense
+            </label>
+            <p className="text-ink-soft text-sm mt-1">A few verbs in the Perfekt after your reviews (er hat gekauft, er ist gegangen).</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={pastTense}
+            onChange={e => { setPastTense(e.target.checked); persist({ pastTensePractice: e.target.checked }); }}
+            className="w-5 h-5 shrink-0 accent-accent"
           />
         </div>
 
