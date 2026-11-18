@@ -21,7 +21,7 @@ export default function PrivacyPage() {
         <h1 className="text-2xl font-bold text-amber-50" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
           Privacy Policy
         </h1>
-        <p className="text-amber-100/70 text-sm">Last updated: 16 August 2026</p>
+        <p className="text-amber-100/70 text-sm">Last updated: 18 November 2026</p>
       </div>
 
       <div className="bg-amber-50/75 backdrop-blur-sm rounded-2xl border border-amber-100/50 shadow-sm p-6 flex flex-col gap-5 text-stone-700 text-sm leading-relaxed">
@@ -70,7 +70,7 @@ export default function PrivacyPage() {
           <h2 className="font-semibold text-stone-800">Third parties</h2>
           <ul className="list-disc pl-5 flex flex-col gap-1">
             <li><strong>Supabase</strong> — authentication and database hosting.</li>
-            <li><strong>OpenAI</strong> — generates practice sentences and corrects your translation attempts. Only the specific sentence/translation being processed is sent, not your email or account history.</li>
+            <li><strong>OpenAI</strong> — generates practice sentences and corrects your translation attempts. Only the specific sentence/translation being processed is sent, not your email or account history. If you tap &ldquo;Say it instead&rdquo;, that short recording is sent to OpenAI to turn it into text; Spello doesn&apos;t store the audio, and the microphone is only used while you&apos;re recording.</li>
           </ul>
         </section>
 
