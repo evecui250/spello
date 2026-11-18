@@ -78,7 +78,7 @@ export default function PrivacyPage() {
           <h2 className="font-semibold text-stone-800">Your choices</h2>
           <ul className="list-disc pl-5 flex flex-col gap-1">
             <li>Erase your learning progress for a single level, or reset your entire account back to brand-new (keeping the same sign-in), anytime from Profile → Reset.</li>
-            <li>Delete your account and sign-in itself entirely by emailing us (below) — we don't yet have a self-service button for that specific step, but we'll act on any request promptly.</li>
+            <li>Delete your account and everything saved with it yourself, any time: Profile → Account → &ldquo;Delete my account&rdquo;. You can also email us (below).</li>
             <li>Sign out anytime from Profile; your local device copy stays until you clear it or a level's progress is erased.</li>
           </ul>
         </section>

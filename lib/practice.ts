@@ -6,7 +6,7 @@ import {
   getDailySession, saveDailySession, SessionPhase, getWordProgress, saveWordProgress,
   getMergedProgressAcrossLevels, ParagraphBlank, ParagraphExercise,
   getAllCustomWords, getAllCustomWordsAcrossLevels, getAllCustomWordsForLevel,
-  cefrLevelFor, DICTIONARY_BOOK_ID, carriedReviewLevels,
+  cefrLevelFor, DICTIONARY_BOOK_ID, carriedReviewLevels, getPetAgeDays,
 } from './storage';
 import { recordMilestonePass, REVIEW_PLAN, MASTERY_DAYS_AFTER_INTRODUCTION } from './srs';
 
@@ -53,6 +53,16 @@ export function hasEnoughWordsForGame(): boolean {
     if (progress[w.id]?.mascotStage && ++count >= GAME_MIN_WORDS_REQUIRED) return true;
   }
   return false;
+}
+
+// The bonus games (after the congrats card, and Play on the roadmap) open
+// up on the learner's 3rd day of studying, so the first days stay short
+// and focused on the words themselves — and only once there are enough
+// learned words to fill a board at all.
+export const GAMES_UNLOCK_DAYS = 3;
+
+export function gamesUnlocked(): boolean {
+  return getPetAgeDays() >= GAMES_UNLOCK_DAYS && hasEnoughWordsForGame();
 }
 
 // Words in Context (the AI-generated fill-in-the-blank paragraph bonus)

@@ -15,9 +15,9 @@ import {
 import {
   wordsById, generateHint, checkAnswer, applyResult, applyReviewResult, requestHint, demoteReviewRound,
   buildMcqChoices, buildReverseMcqChoices, buildMatchingPages, getKnownVocabulary, isBootstrapCopyWord, shuffled,
-  hasEnoughWordsForGame, hasEnoughWordsForParagraph, buildWordsInContextBatches, sharedCategoryHint, parseParagraphResponse,
-  addDistractors, combineParagraphExercises,
+  gamesUnlocked, buildWordsInContextBatches,
 } from '../lib/practice';
+import { generateWordsInContextExercise } from '../lib/wordsInContext';
 import { REVIEW_PLAN, recordMilestonePass, markWordKnown } from '../lib/srs';
 import { recordSentenceBonus } from '../lib/shop';
 import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, findWordByLemma, segmentChineseForClicks, tokenize, isWordToken, diffAgainstAttempt, applyGlossFallback } from '../lib/words';
@@ -36,7 +36,8 @@ import { PointsIcon } from './icons';
 import CongratsModal from './CongratsModal';
 import WordMatchGame from './WordMatchGame';
 import ArtikelBlitzGame from './ArtikelBlitzGame';
-import GamePicker from './GamePicker';
+import GamePicker, { GameId } from './GamePicker';
+import WordsInContextGame from './WordsInContextGame';
 import SignInNudge from './SignInNudge';
 import WordInfoPanel from './WordInfoPanel';
 import GlossPopup from './GlossPopup';
@@ -1473,7 +1474,7 @@ export default function DailySessionFlow() {
   // persisted to DailySession, same reasoning as WordMatchGame's own
   // internal phase state. Reset to the picker every time 'play' is
   // (re)entered, in handleCloseCongrats below.
-  const [activeGame, setActiveGame] = useState<'picker' | 'wortpaare' | 'artikel_blitz'>('picker');
+  const [activeGame, setActiveGame] = useState<'picker' | GameId>('picker');
 
   // Dev/design preview: /practice/?previewSignInNudge=1 shows the sign-in
   // card immediately, without needing to actually reach the real trigger
@@ -2520,20 +2521,13 @@ export default function DailySessionFlow() {
     }
   }
 
-  // The "N words learned" summary's own "Continue" button — routes to the
-  // bonus Words in Context offer when today's batch has enough words for
-  // at least one exercise (see buildWordsInContextBatches) AND the learner
-  // has enough real vocabulary overall to make reading a whole generated
-  // paragraph reasonable (see hasEnoughWordsForParagraph — batches.length
-  // only looks at TODAY's handful of new words, so without this a day-one
-  // A1 learner could be offered a paragraph built almost entirely from
-  // words they'd never seen before today). Otherwise straight to congrats,
-  // same as before this existed.
+  // The "N words learned" summary's own "Continue" button. Words in
+  // Context used to be offered here; it's one of the bonus games now (see
+  // WordsInContextGame), so study ends straight at congrats. Its two
+  // phases below stay only so a session already mid-exercise finishes.
   function handleFinishStudy() {
     if (!session) return;
-    const batches = buildWordsInContextBatches(wordsById(session.studyWordIds), getSettings().level);
-    const offerParagraph = batches.length > 0 && hasEnoughWordsForParagraph();
-    persistSession({ ...session, phase: offerParagraph ? 'study-paragraph-offer' : 'congrats' });
+    persistSession({ ...session, phase: 'congrats' });
   }
 
   function handleSkipParagraph() {
@@ -2577,52 +2571,13 @@ export default function DailySessionFlow() {
     if (!batch) return;
     setParagraphStatus('loading');
     const settings = getSettings();
-    const generateFor = (words: Word[]) => generateParagraphExercise(
-      settings.level,
-      words.map(w => ({ de: w.de, en: w.en, article: w.article, plural: w.plural, type: w.type, thirdPerson: w.thirdPerson, pastTense: w.pastTense, perfectTense: w.perfectTense })),
-      sharedCategoryHint(words),
-      settings.nativeLanguage,
-    ).then(({ paragraph, answers, sentences, translations }) => parseParagraphResponse(paragraph, answers, words, sentences, translations));
-    // Same as generateFor, but a non-fatal failure (anything except
-    // AIUnreachableError/DailyLimitReachedError, which splitting can't
-    // help with anyway) resolves to null instead of rejecting — lets the
-    // split-fallback below treat "the AI gave up after its own retry"
-    // (a rejected promise — generate-paragraph's final structural check
-    // returning a 502) exactly the same as "came back 200 but still
-    // didn't parse" (parseParagraphResponse returning null), which is
-    // the far more common shape now that the server already retries once
-    // internally before ever surfacing an error at all.
-    const tryGenerate = (words: Word[]): Promise<ParagraphExercise | null> => generateFor(words).then(
-      parsed => parsed,
-      err => { if (err instanceof AIUnreachableError || err instanceof DailyLimitReachedError) throw err; return null; },
-    );
-
     // Every word already in today's whole session (not just this one
-    // batch) is off-limits as a decoy -- see addDistractors' own comment
-    // on why a word that's actually due for review today would be a
-    // confusing thing to see sitting in a trap slot.
+    // batch) is off-limits as a decoy (see addDistractors).
     const excludeWordIds = new Set([...session.studyWordIds, ...session.reviewWordIds]);
 
-    tryGenerate(batch)
-      .then(parsed => {
-        if (parsed) return parsed;
-        // Failed even after generate-paragraph's own server-side retry —
-        // as a last resort, split this batch into two smaller ones and
-        // try each separately, stitching the results into one exercise
-        // if both land (see combineParagraphExercises' own comment for
-        // why this stays a single exercise slot rather than growing
-        // today's paragraph count). Only attempted when there's enough
-        // words left for two non-empty halves -- a standalone 1-word
-        // batch that fails just fails, same as before, since there's
-        // nothing left to split it into.
-        if (batch.length < 2) return null;
-        const mid = Math.ceil(batch.length / 2);
-        return Promise.all([tryGenerate(batch.slice(0, mid)), tryGenerate(batch.slice(mid))])
-          .then(([a, b]) => (a && b ? combineParagraphExercises(a, b) : null));
-      })
-      .then(parsed => {
-        if (!parsed) { setParagraphStatus('error'); return; }
-        const withDistractors = addDistractors(parsed, batch, excludeWordIds);
+    generateWordsInContextExercise(batch, settings.level, settings.nativeLanguage, excludeWordIds)
+      .then(withDistractors => {
+        if (!withDistractors) { setParagraphStatus('error'); return; }
         const current = getDailySession();
         if (!current) return;
         persistSession({ ...current, paragraphExercises: { ...current.paragraphExercises, [index]: withDistractors } });
@@ -2732,7 +2687,7 @@ export default function DailySessionFlow() {
     // exact same gate StudyRoadmap already uses to decide whether to show
     // "Play" as a real destination in the first place, so a learner who
     // never sees it promised there never lands on it here either.
-    if (session && hasEnoughWordsForGame()) {
+    if (session && gamesUnlocked()) {
       setActiveGame('picker');
       persistSession({ ...session, phase: 'play' });
       return;
@@ -3182,6 +3137,9 @@ export default function DailySessionFlow() {
     const onChooseGame = () => setActiveGame('picker');
     if (activeGame === 'artikel_blitz') {
       return <ArtikelBlitzGame source="daily_flow" onQuit={handleQuitPlay} onChooseGame={onChooseGame} />;
+    }
+    if (activeGame === 'words_in_context') {
+      return <WordsInContextGame source="daily_flow" onQuit={handleQuitPlay} onChooseGame={onChooseGame} />;
     }
     return <WordMatchGame source="daily_flow" onQuit={handleQuitPlay} onChooseGame={onChooseGame} />;
   }

@@ -25,9 +25,9 @@ import { supabase } from '../../lib/supabase';
 
 // Purely cosmetic — just decides whether to show the "Admin" link at all.
 // The real authorization check lives server-side, in admin-stats' own
-// ADMIN_EMAIL comparison; showing this link to the wrong person would at
+// ADMIN_EMAILS check; showing this link to the wrong person would at
 // worst send them to a page that immediately says "not authorized".
-const ADMIN_EMAIL = 'evecui250@gmail.com';
+const ADMIN_EMAILS = ['evecui250@gmail.com', 'yutong.chen@inf.ethz.ch'];
 
 const FONT_LABEL: Record<FontScale, string> = { small: 'Small', default: 'Default', large: 'Large' };
 
@@ -124,6 +124,9 @@ function SettingsPageInner() {
   // on-page danger-zone button. window.confirm() inside each handler
   // below is still a second, final confirmation layer on top of this.
   const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showPaceInfo, setShowPaceInfo] = useState(false);
   const [theme, setTheme] = useState<Theme>('forest');
   const [cardMode, setCardMode] = useState<CardMode>('auto');
@@ -328,6 +331,24 @@ function SettingsPageInner() {
     router.push('/welcome');
   };
 
+  // Permanently deletes the account on the server (see the delete-account
+  // Edge Function), then signs out and clears this device too, so it
+  // starts over like a fresh install.
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    const { data, error } = await supabase.functions.invoke<{ ok?: boolean }>('delete-account', { body: {} });
+    if (error || !data?.ok) {
+      setDeleting(false);
+      setDeleteError("Couldn't delete your account right now. Check your connection and try again.");
+      return;
+    }
+    await supabase.auth.signOut();
+    resetEverything();
+    setDeleteOpen(false);
+    router.push('/welcome');
+  };
+
   const SECTION_TITLES: Record<Section, string> = {
     account: 'Account', books: 'Books & level', learning: 'Learning', notifications: 'Notifications', appearance: 'Appearance', help: 'Help & about',
     book: bookId ? (isCefrLevel(bookId) ? `${bookId} vocabulary` : levelDisplayName(bookId)) : 'Book',
@@ -373,7 +394,7 @@ function SettingsPageInner() {
       >
         Reset account
       </button>
-          {signedInEmail === ADMIN_EMAIL && (
+          {!!signedInEmail && ADMIN_EMAILS.includes(signedInEmail.toLowerCase()) && (
             <Link href="/admin" className="text-center text-sm text-on-bg/75 hover:text-on-bg underline">Admin</Link>
           )}
         </>
@@ -394,7 +415,53 @@ function SettingsPageInner() {
           </button>
         )}
         <AccountPanel onSync={loadFromStorage} />
+        {!!signedInEmail && (
+          <button
+            type="button"
+            onClick={() => { setDeleteError(null); setDeleteOpen(true); }}
+            className="self-center text-sm font-semibold text-clay hover:underline"
+          >
+            Delete my account
+          </button>
+        )}
       </div>
+      )}
+
+      {deleteOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!deleting) setDeleteOpen(false); }}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-sm bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-3 text-center"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="font-bold text-clay text-lg">Delete your account?</h2>
+            <p className="text-ink-soft text-sm">
+              This permanently deletes your account ({signedInEmail}) and everything saved with it: progress in every book,
+              streaks, coins and accessories, your pet and your imported books. It can&apos;t be undone.
+            </p>
+            {deleteError && <p className="text-clay text-sm">{deleteError}</p>}
+            <div className="flex flex-col gap-2 mt-1">
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleting}
+                className="w-full bg-clay text-white py-3 rounded-xl font-semibold active:scale-95 transition-all disabled:opacity-60"
+              >
+                {deleting ? 'Deleting…' : 'Delete my account'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(false)}
+                disabled={deleting}
+                className="w-full text-ink-soft py-2 text-sm font-semibold hover:text-ink transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {section === 'books' && (

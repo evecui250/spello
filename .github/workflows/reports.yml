@@ -1,0 +1,30 @@
+# Emails Spello's admins the AI-cost / activity reports (see
+# supabase/functions/send-report): weekly every Monday, monthly on the 1st.
+# Run it by hand from the Actions tab to send one now.
+name: Admin reports
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'   # Mondays 07:00 UTC — last 7 days' AI cost
+    - cron: '30 7 1 * *'  # 1st of the month 07:30 UTC — last month's full report
+  workflow_dispatch:
+    inputs:
+      period:
+        description: weekly or monthly
+        default: weekly
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send report
+        env:
+          REPORT_SECRET: ${{ secrets.REPORT_SECRET }}
+          PERIOD: ${{ github.event.inputs.period || (github.event.schedule == '30 7 1 * *' && 'monthly' || 'weekly') }}
+        run: |
+          curl -sS --fail-with-body -X POST \
+            "https://whjiebzglefivvczvpfb.supabase.co/functions/v1/send-report" \
+            -H "apikey: sb_publishable_Ebu1ILGhZKQ6XMiNcHsuwA_ny_A7z5s" \
+            -H "x-report-secret: $REPORT_SECRET" \
+            -H "Content-Type: application/json" \
+            -d "{\"period\":\"$PERIOD\"}"

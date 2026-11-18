@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { getDailySession, getTheme, Theme, THEME_CHANGED_EVENT, PROGRESS_CHANGED_EVENT, SessionPhase } from '../lib/storage';
-import { hasEnoughWordsForGame } from '../lib/practice';
+import { gamesUnlocked } from '../lib/practice';
 import { THEME_CONFIG } from './AppBackground';
 
 type Stage = 'review' | 'learn' | 'play';
@@ -61,7 +61,7 @@ export default function StudyRoadmap() {
 
   useEffect(() => {
     const load = () => {
-      const unlocked = hasEnoughWordsForGame();
+      const unlocked = gamesUnlocked();
       setGameUnlocked(unlocked);
       const session = getDailySession();
       setStage(session ? stageForPhase(session.phase, unlocked) : null);

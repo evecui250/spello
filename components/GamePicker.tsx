@@ -3,7 +3,7 @@
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
 interface Props {
-  onPick: (game: 'wortpaare' | 'artikel_blitz') => void;
+  onPick: (game: GameId) => void;
   // Only shown when provided -- DailySessionFlow's post-goal bonus round
   // passes finishForToday here (a learner who doesn't want to play should
   // be able to say so right on this screen, not only after starting a
@@ -16,9 +16,12 @@ interface Props {
 // (ArtikelBlitzGame.tsx / WordMatchGame.tsx) -- purely a display label, not
 // read from either component, so a future change to one won't automatically
 // update the other.
-const GAMES: { id: 'wortpaare' | 'artikel_blitz'; icon: string; title: string; desc: string; seconds: number }[] = [
-  { id: 'wortpaare', icon: 'icon_game_wortpaare.png', title: 'Wortpaare', desc: 'Match German words to their meaning against the clock.', seconds: 45 },
-  { id: 'artikel_blitz', icon: 'icon_game_artikel_blitz.png', title: 'Artikel Blitz', desc: 'der / die / das — as many nouns as you can.', seconds: 45 },
+export type GameId = 'wortpaare' | 'artikel_blitz' | 'words_in_context';
+
+const GAMES: { id: GameId; icon: string; title: string; desc: string; badge: string }[] = [
+  { id: 'wortpaare', icon: 'icon_game_wortpaare.png', title: 'Wortpaare', desc: 'Match German words to their meaning against the clock.', badge: '45s' },
+  { id: 'artikel_blitz', icon: 'icon_game_artikel_blitz.png', title: 'Artikel Blitz', desc: 'der / die / das — as many nouns as you can.', badge: '45s' },
+  { id: 'words_in_context', icon: 'icon_mistake_notebook.png', title: 'Words in Context', desc: 'A short German text with your recent words — tap each into its blank.', badge: '~2 min' },
 ];
 
 // Sits in front of both games at every real entry point (DailySessionFlow's
@@ -45,7 +48,7 @@ export default function GamePicker({ onPick, onSkip }: Props) {
             className="relative flex items-center gap-4 bg-paper/90 backdrop-blur-sm rounded-2xl border-2 border-paper-line shadow-sm p-4 text-left hover:-translate-y-0.5 hover:shadow-md hover:border-accent/60 active:translate-y-0 active:scale-[0.98] transition-all"
           >
             <span className="absolute -top-2 right-4 bg-accent text-white text-[10px] font-bold uppercase tracking-wide px-2.5 py-0.5 rounded-full shadow-sm">
-              {g.seconds}s
+              {g.badge}
             </span>
             <span className="w-16 h-16 rounded-xl bg-paper-dim flex items-center justify-center shrink-0 overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -12,9 +12,12 @@
 // client, and fine at the data volumes a small/early-stage app actually
 // has. Revisit (move to SQL views, like ai_usage_daily_by_user) if this
 // ever gets slow.
+import { costUsd } from '../_shared/pricing.ts';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ADMIN_EMAIL = Deno.env.get('ADMIN_EMAIL') || 'evecui250@gmail.com';
+// Spello's owner and collaborator. ADMIN_EMAILS (comma-separated) overrides.
+const ADMIN_EMAILS = (Deno.env.get('ADMIN_EMAILS') || 'evecui250@gmail.com,yutong.chen@inf.ethz.ch')
+  .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -53,39 +56,7 @@ interface AiUsageSummary {
   estimatedCostUsd: number;
 }
 
-// Per-model pricing (USD per 1M tokens) -- this used to be a single flat
-// gpt-4o-mini rate applied to EVERY row regardless of which model actually
-// served it, which quietly under/over-estimated cost for anything else
-// (generate-paragraph's old gpt-4o calls were already mispriced this way
-// before its move to gpt-5.6-luna; now there'd be an ADDITIONAL,
-// different mismatch if this stayed flat). tts-1-hd is priced per
-// CHARACTER, not input/output tokens -- generate-word-audio's own comment
-// notes it logs character count into input_tokens as the closest
-// available proxy, output_tokens always 0, so treating that column as
-// "characters" for this one model's rate is correct, not a hack.
-// Pricing current as of when each model was actually wired in here --
-// check OpenAI's current pricing if this drifts.
-const MODEL_PRICING: Record<string, { inputPerM: number; outputPerM: number }> = {
-  'gpt-4o-mini': { inputPerM: 0.15, outputPerM: 0.60 },
-  'gpt-4o': { inputPerM: 2.50, outputPerM: 10.00 },
-  'gpt-5.6-luna': { inputPerM: 0.20, outputPerM: 1.20 },
-  'gpt-5.6-terra': { inputPerM: 2.00, outputPerM: 12.00 },
-  'tts-1-hd': { inputPerM: 30.00, outputPerM: 0 },
-};
-// Any model not in the table above (a future swap this file hasn't been
-// updated for yet) falls back to gpt-4o-mini's rate rather than crashing
-// or silently reporting $0 -- an approximation flagged as such is better
-// than either extreme.
-const DEFAULT_PRICING = MODEL_PRICING['gpt-4o-mini'];
-
-function costUsd(rows: { model?: string | null; input_tokens: number; output_tokens: number }[]): number {
-  let totalMicroCents = 0;
-  for (const r of rows) {
-    const pricing = (r.model && MODEL_PRICING[r.model]) || DEFAULT_PRICING;
-    totalMicroCents += (r.input_tokens ?? 0) * pricing.inputPerM + (r.output_tokens ?? 0) * pricing.outputPerM;
-  }
-  return Math.round(totalMicroCents / 1000000 * 10000) / 10000;
-}
+// Cost estimates: see ../_shared/pricing.ts (shared with send-report).
 
 function summarizeAiUsage(rows: { user_id: string | null; ip_address: string | null; model?: string | null; input_tokens: number; output_tokens: number }[]): AiUsageSummary {
   const callers = new Set(rows.map(r => r.user_id ?? r.ip_address));
@@ -134,7 +105,7 @@ Deno.serve(async (req: Request) => {
     });
     const { data: userData, error: userError } = await callerClient.auth.getUser();
     if (userError || !userData.user) return json({ error: 'Not authenticated' }, 401);
-    if (userData.user.email !== ADMIN_EMAIL) return json({ error: 'Not authorized' }, 403);
+    if (!ADMIN_EMAILS.includes((userData.user.email ?? '').toLowerCase())) return json({ error: 'Not authorized' }, 403);
 
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     // Collected (not just console.error'd) so /admin can show a real error
@@ -437,13 +408,16 @@ Deno.serve(async (req: Request) => {
     // recorded in game_plays — see lib/shop.ts's recordSentenceBonus). Not
     // a game, so counted on their own.
     const sentenceBuilds = { today: 0, last7Days: 0, allTime: 0 };
+    // Finished Words in Context texts (a bonus game since 2026-11-18).
+    const wordsInContextPlays = { today: 0, last7Days: 0, allTime: 0 };
     for (const r of gamePlayRows ?? []) {
       const person = r.user_id ?? r.device_id;
-      if (r.game === 'sentence') {
+      const counter = r.game === 'sentence' ? sentenceBuilds : r.game === 'words_in_context' ? wordsInContextPlays : null;
+      if (counter) {
         const d = dateStr(new Date(r.created_at));
-        sentenceBuilds.allTime += 1;
-        if (d >= last7DaysStart) sentenceBuilds.last7Days += 1;
-        if (d === todayStr) sentenceBuilds.today += 1;
+        counter.allTime += 1;
+        if (d >= last7DaysStart) counter.last7Days += 1;
+        if (d === todayStr) counter.today += 1;
         continue;
       }
       const isBlitz = r.game === 'artikel_blitz';
@@ -467,6 +441,7 @@ Deno.serve(async (req: Request) => {
       wortpaarePlays,
       artikelBlitzPlays,
       sentenceBuilds,
+      wordsInContextPlays,
     };
 
     // Every registered account, most-recently-active first — "who's

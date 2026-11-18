@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import WordMatchGame from '../../components/WordMatchGame';
 import ArtikelBlitzGame from '../../components/ArtikelBlitzGame';
-import GamePicker from '../../components/GamePicker';
+import GamePicker, { GameId } from '../../components/GamePicker';
+import WordsInContextGame from '../../components/WordsInContextGame';
 import { MascotStageId } from '../../lib/storage';
 
 // Standalone page for the game — no longer linked from Settings (owner
@@ -75,7 +76,7 @@ export default function GamePage() {
   // all) -- every review source goes straight to Wortpaare, where a
   // picker makes no sense (Artikel Blitz has no stage-focus/mixed-review
   // concept).
-  const [activeGame, setActiveGame] = useState<'picker' | 'wortpaare' | 'artikel_blitz'>('picker');
+  const [activeGame, setActiveGame] = useState<'picker' | GameId>('picker');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -109,6 +110,7 @@ export default function GamePage() {
   }
 
   if (activeGame === 'picker') return <GamePicker onPick={setActiveGame} />;
+  if (activeGame === 'words_in_context') return <WordsInContextGame source={source === 'daily_flow' ? 'daily_flow' : 'settings_preview'} />;
   if (activeGame === 'artikel_blitz') return <ArtikelBlitzGame source={source as 'settings_preview' | 'daily_flow'} />;
   return <WordMatchGame source={source} />;
 }
