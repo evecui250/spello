@@ -310,9 +310,6 @@ export default function WordsPage() {
     applyParam('familiarity', ['learning', 'mastered'], setFilterFamiliarity);
     applyParam('date', ['all', 'today', '7days', '30days'], setDateFilter);
     applyParam('view', ['search', 'myWords', 'mistakes'], setView);
-    // Same count Home's Notebook button used to badge: this book's own
-    // sentences still waiting for a redo.
-    setMistakeCount(Object.values(getAllProgress(false)).filter(p => !!p.lastMistake).length);
   }, []);
 
   useEffect(() => {
@@ -320,7 +317,12 @@ export default function WordsPage() {
   }, [customWordsVersion]);
 
   useEffect(() => {
-    const load = () => setProgress(getMergedProgressAcrossLevels());
+    const load = () => {
+      setProgress(getMergedProgressAcrossLevels());
+      // The Mistakes tab's badge: this book's own sentences still waiting
+      // for a redo (same count Home's Notebook button used to show).
+      setMistakeCount(Object.values(getAllProgress(false)).filter(p => !!p.lastMistake).length);
+    };
     load();
     window.addEventListener(PROGRESS_CHANGED_EVENT, load);
     return () => window.removeEventListener(PROGRESS_CHANGED_EVENT, load);

@@ -5,8 +5,9 @@ import { createPortal } from 'react-dom';
 import { wordsForLevel, Word, glossFor } from '../lib/words';
 import {
   getAllProgress, getMergedProgressAcrossLevels, getSettings, WordProgress,
-  getAllCustomWordsForLevel, PROGRESS_CHANGED_EVENT,
+  getAllCustomWordsForLevel, PROGRESS_CHANGED_EVENT, getWordProgress, saveWordProgress,
 } from '../lib/storage';
+import { scheduleSync } from '../lib/sync';
 import { articleCandidateWords } from '../lib/practice';
 import { listSavedPetChatReports, SavedPetChatReport } from '../lib/ai';
 import { getOrCreateDeviceId } from '../lib/telemetry';
@@ -135,6 +136,7 @@ export default function MistakesView() {
   // identical redoTarget for why (a successful redo clears lastMistake the
   // instant it saves, which would otherwise unmount the modal showing the
   // result before the learner ever sees it).
+  const [confirmClear, setConfirmClear] = useState(false);
   const [redoTarget, setRedoTarget] = useState<{ word: Word; mistake: NonNullable<WordProgress['lastMistake']> } | null>(null);
 
   // Scoped to the current book only (not merged across every level) — per
@@ -229,6 +231,17 @@ export default function MistakesView() {
 
   const activeWords = tab === 'mistakes' ? mistakeWords : perfectWords;
 
+  // "Clear all": drops every sentence still waiting for a redo. Only the
+  // notebook entry goes — the words' own learning progress is untouched.
+  function clearAllMistakes() {
+    for (const w of mistakeWords) {
+      const p = getWordProgress(w.id);
+      if (p.lastMistake) saveWordProgress({ ...p, lastMistake: undefined });
+    }
+    scheduleSync();
+    setConfirmClear(false);
+  }
+
   return (
     <div className="flex flex-col gap-4 pb-4">
 
@@ -264,20 +277,63 @@ export default function MistakesView() {
               Mistakes to Correct the instant a redo comes back perfect
               (see PROGRESS_CHANGED_EVENT above), so switching tabs is how
               a learner actually watches their own backlog shrink. */}
-          <div className="flex gap-1 bg-black/10 rounded-full p-1 self-start">
-            <button
-              onClick={() => setTab('mistakes')}
-              className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${tab === 'mistakes' ? 'bg-paper text-ink' : 'text-on-bg/70 hover:text-on-bg'}`}
-            >
-              Mistakes{mistakeWords.length > 0 && ` (${mistakeWords.length})`}
-            </button>
-            <button
-              onClick={() => setTab('correct')}
-              className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${tab === 'correct' ? 'bg-paper text-ink' : 'text-on-bg/70 hover:text-on-bg'}`}
-            >
-              Correct{perfectWords.length > 0 && ` (${perfectWords.length})`}
-            </button>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex gap-1 bg-black/10 rounded-full p-1 self-start">
+              <button
+                onClick={() => setTab('mistakes')}
+                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${tab === 'mistakes' ? 'bg-paper text-ink' : 'text-on-bg/70 hover:text-on-bg'}`}
+              >
+                Mistakes{mistakeWords.length > 0 && ` (${mistakeWords.length})`}
+              </button>
+              <button
+                onClick={() => setTab('correct')}
+                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${tab === 'correct' ? 'bg-paper text-ink' : 'text-on-bg/70 hover:text-on-bg'}`}
+              >
+                Correct{perfectWords.length > 0 && ` (${perfectWords.length})`}
+              </button>
+            </div>
+            {tab === 'mistakes' && mistakeWords.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setConfirmClear(true)}
+                className="text-sm font-semibold text-on-bg/75 hover:text-on-bg px-2 py-1.5"
+              >
+                Clear all
+              </button>
+            )}
           </div>
+          {confirmClear && createPortal(
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirmClear(false)}>
+              <div
+                role="dialog"
+                aria-modal="true"
+                className="w-full max-w-sm bg-paper rounded-2xl shadow-xl p-5 flex flex-col gap-3 text-center"
+                onClick={e => e.stopPropagation()}
+              >
+                <h2 className="font-bold text-ink text-lg">Clear all {mistakeWords.length} mistake{mistakeWords.length === 1 ? '' : 's'}?</h2>
+                <p className="text-ink-soft text-sm">
+                  They&apos;ll be removed from this list without a redo. Your progress on these words stays as it is.
+                </p>
+                <div className="flex flex-col gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={clearAllMistakes}
+                    className="w-full bg-clay text-white py-3 rounded-xl font-semibold active:scale-95 transition-all"
+                  >
+                    Clear all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmClear(false)}
+                    className="w-full text-ink-soft py-2 text-sm font-semibold hover:text-ink transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )}
 
           {activeWords.length === 0 ? (
             <p className="text-on-bg/70 text-sm">
