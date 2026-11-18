@@ -35,6 +35,11 @@ const config: CapacitorConfig = {
     contentInset: 'never',
     // Shown for the instant before the page paints (Forest's top color).
     backgroundColor: '#0f3d3a',
+    // Lets the page tell which native shell it runs in (the page itself is
+    // always the live site). "mic" = this build has the microphone
+    // permission text — without it iOS kills the app the moment the page
+    // asks for the mic, so VoiceInputButton hides in older builds.
+    appendUserAgent: 'SpelloApp/mic',
   },
   plugins: {
     // The page sets light/dark status-bar text per theme (AppBackground).

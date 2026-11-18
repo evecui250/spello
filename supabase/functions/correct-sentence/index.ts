@@ -75,6 +75,10 @@ interface RequestBody {
   // flow through as CONTEXT for the model, never as the one correct
   // answer (see the prompt's own "Reference (context only...)" framing).
   canonicalGerman?: string;
+  // The learner said the sentence (see transcribe-speech) rather than
+  // typing it: capitals, punctuation and spelling came from the
+  // transcriber, so only grammar and word choice are theirs.
+  spoken?: boolean;
 }
 
 // Plain Levenshtein edit distance — used below to check that the model's
@@ -215,7 +219,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = (await req.json()) as RequestBody;
-    const { wordId, wordDe, level, englishPrompt, userTranslation, thirdPerson, canonicalGerman } = body;
+    const { wordId, wordDe, level, englishPrompt, userTranslation, thirdPerson, canonicalGerman, spoken } = body;
     if (!wordId || !wordDe || !englishPrompt) {
       return json({ error: 'Missing wordId, wordDe, or englishPrompt' }, 400);
     }
@@ -237,6 +241,7 @@ Deno.serve(async (req: Request) => {
         `Source sentence:\n${englishPrompt}\n\n` +
         `Target German word:\n${wordDe}\n\n` +
         `Learner's German:\n${userTranslation}` +
+        (spoken ? '\n(Spoken aloud and transcribed by speech recognition — any capitalization, punctuation or spelling issue is the transcriber\'s, not the learner\'s.)' : '') +
         referenceLine +
         '\n\nYour task is to return a correct German sentence while preserving the ' +
         "learner's own valid choices as much as possible.\n\n" +

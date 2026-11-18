@@ -308,7 +308,7 @@ export default function WelcomePage() {
               </select>
             </div>
             {sharedBook ? (
-              <p className="text-stone-400 text-sm">You&apos;ll study your class&apos;s book. Your level sets how hard its example sentences, paragraphs and chat are — you can change it any time in Profile.</p>
+              <p className="text-stone-400 text-sm">You&apos;ll study your class&apos;s book. Your level sets how hard its example sentences and paragraphs are — you can change it any time in Profile.</p>
             ) : (
               <p className="text-stone-400 text-sm">Not sure which level? A1 is the easiest, for absolute beginners — B2 is the most advanced available right now.</p>
             )}

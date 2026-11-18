@@ -402,7 +402,7 @@ export default function ImportBookModal({ onClose, onSwitchTo }: {
               />
             </label>
             <label className="flex items-center justify-between gap-3 text-sm text-ink">
-              <span className="font-semibold">Your level <span className="font-normal text-ink-soft text-xs">(for sentences & chat)</span></span>
+              <span className="font-semibold">Your level <span className="font-normal text-ink-soft text-xs">(for example sentences)</span></span>
               <CefrLevelSelect value={cefrLevel} onChange={setCefrLevel} />
             </label>
             <button type="button" onClick={handleSave} disabled={selected.length === 0} className={PRIMARY_BTN}>

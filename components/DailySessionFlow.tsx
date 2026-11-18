@@ -23,6 +23,7 @@ import { recordSentenceBonus } from '../lib/shop';
 import { Word, WordType, Level, resolveClickedWord, glossFor, findWordByEnglishForm, findWordByLemma, segmentChineseForClicks, tokenize, isWordToken, diffAgainstAttempt, applyGlossFallback } from '../lib/words';
 import LetterInputRow, { LetterInputRowHandle } from './LetterInputRow';
 import SpecialCharButtons from './SpecialCharButtons';
+import VoiceInputButton from './VoiceInputButton';
 import SpeakerButton from './SpeakerButton';
 import TextSpeakerButton from './TextSpeakerButton';
 import TranslationChoiceCard from './TranslationChoiceCard';
@@ -658,6 +659,9 @@ function SentenceExercise({
   const [selectedPromptWord, setSelectedPromptWord] = useState<Word | null>(null);
   const [selectedPromptGlossToken, setSelectedPromptGlossToken] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Some of the attempt came from voice entry (see VoiceInputButton) —
+  // the correction then leaves capitals/punctuation/spelling alone.
+  const [spoken, setSpoken] = useState(false);
 
   useEffect(() => {
     if (!correction) return;
@@ -745,7 +749,7 @@ function SentenceExercise({
     textareaRef.current?.blur();
     setStatus('loading');
     try {
-      const result = await correctSentence(word.id, word.de, level, promptSentence, input.trim(), word.thirdPerson);
+      const result = await correctSentence(word.id, word.de, level, promptSentence, input.trim(), word.thirdPerson, undefined, spoken);
       if (!aliveRef.current) return;
       // promptSentenceZh pairs with promptSentence here the same way it's
       // displayed above (corpus exercisePromptZh, or the live generateSentence
@@ -988,6 +992,17 @@ function SentenceExercise({
               OS's on-screen keyboard layout — this row of ä/ö/ü/ß buttons
               is the actual, working fix (see SpecialCharButtons). Hidden
               once corrected, same as the textarea being disabled then. */}
+          {!correction && (
+            <VoiceInputButton
+              wordId={word.id}
+              disabled={status === 'loading' || status === 'limit-reached'}
+              onText={text => {
+                setSpoken(true);
+                onInputChange(input.trim() ? `${input.trim()} ${text}` : text);
+                textareaRef.current?.focus();
+              }}
+            />
+          )}
           {!correction && <SpecialCharButtons inputRef={textareaRef} />}
           {status === 'error' && (
             <p className="text-clay text-sm text-center">Couldn't get a correction — check your connection and try again.</p>

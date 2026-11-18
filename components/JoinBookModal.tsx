@@ -94,7 +94,7 @@ export default function JoinBookModal({ onClose, onJoined }: {
               {found.words.slice(0, 6).map(w => (w.article ? `${w.article} ${w.de}` : w.de)).join(', ')}…
             </span>
             <label className="flex items-center justify-between gap-3 text-sm text-ink">
-              <span>Your level <span className="text-ink-soft text-xs">(for sentences & chat)</span></span>
+              <span>Your level <span className="text-ink-soft text-xs">(for example sentences)</span></span>
               <CefrLevelSelect value={cefrLevel} onChange={setCefrLevel} />
             </label>
             <button

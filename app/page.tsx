@@ -7,6 +7,7 @@ import {
   isOnboardingDone, getDailySession, startDailySession, resetDailyGoalsForExtraRound, DailySession,
   getPetAgeDays, formatPetAge, levelDisplayName,
 } from '../lib/storage';
+import { PET_CHAT_ENABLED } from '../lib/features';
 import { buildStudyWords, buildReviewWords } from '../lib/practice';
 import { SYNCED_EVENT } from '../lib/sync';
 import { getDisplayProfile, getCachedDisplayProfile, heroImageFor, avatarImageFor, EquippedAccessories, NO_ACCESSORIES } from '../lib/shop';
@@ -345,6 +346,7 @@ export default function HomePage() {
             )}
           </Link>
         )}
+        {PET_CHAT_ENABLED && (
         <button
           type="button"
           onClick={() => router.push('/pet-chat/')}
@@ -354,6 +356,7 @@ export default function HomePage() {
           <img src={`${BASE}/${avatarImageFor(avatarId, equipped)}`} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" />
           <span className="font-semibold text-sm">Chat</span>
         </button>
+        )}
       </div>
 
       {nextLevel && <NextLevelCard {...nextLevel} onChange={() => loadRef.current()} />}

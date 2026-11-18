@@ -180,8 +180,10 @@ export async function correctSentence(
   // correct-sentence's own RequestBody comment). Passed through as
   // CONTEXT for the model, never as the one correct answer.
   canonicalGerman?: string,
+  // Said aloud via voice entry (see transcribeSpeech) rather than typed.
+  spoken?: boolean,
 ): Promise<SentenceCorrectionResult> {
-  const { data, error } = await invokeWithTimeout<{ sentence?: string; wordForm?: string; status?: SentenceCorrectionResult['status']; limitReached?: boolean }>('correct-sentence', { wordId, wordDe, level, englishPrompt, userTranslation, thirdPerson, canonicalGerman });
+  const { data, error } = await invokeWithTimeout<{ sentence?: string; wordForm?: string; status?: SentenceCorrectionResult['status']; limitReached?: boolean }>('correct-sentence', { wordId, wordDe, level, englishPrompt, userTranslation, thirdPerson, canonicalGerman, spoken });
   if (error) rethrow(error);
   if (data?.limitReached) throw new DailyLimitReachedError();
   if (!data?.sentence || !data?.wordForm) throw new Error('Malformed AI response');
@@ -350,6 +352,24 @@ export async function lookupWord(term: string, level: string, lang?: 'de' | 'en'
 // define them as full Word entries (same fields as lookupWord). Each call
 // counts once against the daily AI cap, same as every other function.
 const EXTRACT_TIMEOUT_MS = 90000;
+
+// Voice entry for the sentence step (see components/VoiceInputButton.tsx
+// and the transcribe-speech Edge Function) — a short recording -> text.
+export async function transcribeSpeech(audio: Blob, wordId: string): Promise<string> {
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(audio);
+  });
+  const { data, error } = await invokeWithTimeout<{ text?: string; limitReached?: boolean }>(
+    'transcribe-speech', { audio: base64, mimeType: audio.type || 'audio/webm', wordId },
+  );
+  if (error) rethrow(error);
+  if (data?.limitReached) throw new DailyLimitReachedError();
+  if (typeof data?.text !== 'string') throw new Error('Malformed AI response');
+  return data.text;
+}
 
 // `en` is the meaning the book itself gives, when it gives one — passed
 // back into defineHeadwords so the AI defines the book's sense of the word.

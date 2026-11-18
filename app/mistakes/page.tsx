@@ -15,6 +15,7 @@ import SpeakerButton from '../../components/SpeakerButton';
 import MistakeRedoCard from '../../components/MistakeRedoCard';
 import ArtikelBlitzGame from '../../components/ArtikelBlitzGame';
 import { ChatBubble } from '../../components/PetChatFlow';
+import { PET_CHAT_ENABLED } from '../../lib/features';
 
 // One card per saved report, grouped visually by day via a date header
 // whenever the day changes going down the (already newest-first) list —
@@ -247,12 +248,14 @@ export default function MistakesPage() {
         >
           Articles{articleMistakeWords.length > 0 && ` (${articleMistakeWords.length})`}
         </button>
+        {PET_CHAT_ENABLED && (
         <button
           onClick={() => setTopTab('conversations')}
           className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${topTab === 'conversations' ? 'bg-paper text-ink' : 'text-on-bg/70 hover:text-on-bg'}`}
         >
           Conversations
         </button>
+        )}
       </div>
 
       {topTab === 'sentences' && (
