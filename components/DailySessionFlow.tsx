@@ -436,13 +436,16 @@ function SentenceWordHeader({ word }: { word: Word }) {
 // Before study's first round, today's new words are shown once as
 // swipeable cards — round 1 asks for half of each word's letters by ear,
 // so it shouldn't be the first time the learner sees the word at all.
-// Purely a glance: nothing is scored, and "Start" works from any card.
-function NewWordsPreview({ words, nativeLanguage, onDone }: {
+// Purely a glance: nothing is scored, and "Start" works from any card. A
+// word the learner already knows can be marked mastered right here.
+function NewWordsPreview({ words, nativeLanguage, onDone, onMastered }: {
   words: Word[];
   nativeLanguage: 'en' | 'zh';
   onDone: () => void;
+  onMastered: (w: Word) => void;
 }) {
-  const [index, setIndex] = useState(0);
+  const [rawIndex, setIndex] = useState(0);
+  const index = Math.min(rawIndex, words.length - 1);
   const scrollerRef = useRef<HTMLDivElement>(null);
   // Each card says its word as it comes into view (if auto-play is on).
   useEffect(() => {
@@ -481,6 +484,9 @@ function NewWordsPreview({ words, nativeLanguage, onDone }: {
           </div>
         ))}
       </div>
+      {words[index] && (
+        <SkipWordButton key={`preview-skip-${words[index].id}`} word={words[index]} onSkip={() => onMastered(words[index])} />
+      )}
       {words.length > 1 && (
         <div className="flex justify-center gap-1.5">
           {words.map((w, i) => (
@@ -1298,6 +1304,28 @@ function SkipWordButton({ word, onSkip }: { word: Word; onSkip: () => void }) {
   );
 }
 
+// A word marked mastered mid-session (see SkipWordButton) leaves every
+// one of today's queues at once.
+function sessionWithoutWord(session: DailySession, wordId: string): DailySession {
+  const drop = (ids: string[]) => ids.filter(id => id !== wordId);
+  const reviewRounds = Object.fromEntries(Object.entries(session.reviewRounds ?? {}).filter(([id]) => id !== wordId));
+  return {
+    ...session,
+    studyWordIds: drop(session.studyWordIds),
+    reviewWordIds: drop(session.reviewWordIds),
+    studyMcqQueueIds: drop(session.studyMcqQueueIds),
+    studyMcqWrongIds: drop(session.studyMcqWrongIds),
+    reviewMcqQueueIds: drop(session.reviewMcqQueueIds),
+    reviewMcqWrongIds: drop(session.reviewMcqWrongIds),
+    reviewMcqReversedQueueIds: drop(session.reviewMcqReversedQueueIds),
+    reviewMcqReversedWrongIds: drop(session.reviewMcqReversedWrongIds),
+    ...(session.studyQueueIds ? { studyQueueIds: drop(session.studyQueueIds) } : {}),
+    ...(session.reviewQueueIds ? { reviewQueueIds: drop(session.reviewQueueIds) } : {}),
+    ...(session.studyRound1NeededIds ? { studyRound1NeededIds: drop(session.studyRound1NeededIds) } : {}),
+    reviewRounds,
+  };
+}
+
 export function isRoundsDone(id: string, mode: RoundMode): boolean {
   const p = getWordProgress(id);
   if (mode === 'study') return !!p.mascotStage;
@@ -2033,8 +2061,11 @@ export default function DailySessionFlow() {
     }
   };
 
+  // Check works with blanks left (a learner with no idea can still see
+  // the answer — it just counts as a miss); Enter waits for a full fill so
+  // a stray double-Enter can't fail the next card unseen.
   const handleSubmit = () => {
-    if (!word || !wordComplete) return;
+    if (!word) return;
     // Same reasoning as SentenceExercise's own handleSubmit -- dismiss the
     // on-screen keyboard the moment Check fires instead of leaving it up
     // until the learner taps away themselves.
@@ -2349,24 +2380,9 @@ export default function DailySessionFlow() {
     clearTimeout(pendingWordAudioTimer.current);
     saveWordProgress(markWordKnown(getWordProgress(skipped.id)));
     scheduleSync();
-    const drop = (ids: string[]) => ids.filter(id => id !== skipped.id);
-    const reviewRounds = Object.fromEntries(Object.entries(session.reviewRounds ?? {}).filter(([id]) => id !== skipped.id));
-    reviewRoundsRef.current = { ...reviewRounds };
-    const ds: DailySession = {
-      ...session,
-      studyWordIds: drop(session.studyWordIds),
-      reviewWordIds: drop(session.reviewWordIds),
-      studyMcqQueueIds: drop(session.studyMcqQueueIds),
-      studyMcqWrongIds: drop(session.studyMcqWrongIds),
-      reviewMcqQueueIds: drop(session.reviewMcqQueueIds),
-      reviewMcqWrongIds: drop(session.reviewMcqWrongIds),
-      reviewMcqReversedQueueIds: drop(session.reviewMcqReversedQueueIds),
-      reviewMcqReversedWrongIds: drop(session.reviewMcqReversedWrongIds),
-      ...(session.studyQueueIds ? { studyQueueIds: drop(session.studyQueueIds) } : {}),
-      ...(session.reviewQueueIds ? { reviewQueueIds: drop(session.reviewQueueIds) } : {}),
-      ...(session.studyRound1NeededIds ? { studyRound1NeededIds: drop(session.studyRound1NeededIds) } : {}),
-      reviewRounds,
-    };
+    const ds = sessionWithoutWord(session, skipped.id);
+    reviewRoundsRef.current = { ...ds.reviewRounds };
+
     switch (session.phase) {
       case 'study-mcq':
         setMcqCurrent(null);
@@ -2580,6 +2596,28 @@ export default function DailySessionFlow() {
     enterRoundsPhase(next, 'study');
   }
 
+  // "Mastered" on a preview card: same as the in-round button (see
+  // handleSkipWord), minus a queue to advance — the word just leaves the
+  // deck, and an emptied deck goes straight on.
+  function handlePreviewMastered(w: Word) {
+    if (!previewFor) return;
+    stopSpeech();
+    saveWordProgress(markWordKnown(getWordProgress(w.id)));
+    scheduleSync();
+    const ds = sessionWithoutWord(previewFor.ds, w.id);
+    persistSession(ds);
+    const words = previewFor.words.filter(x => x.id !== w.id);
+    if (words.length > 0) {
+      setPreviewFor({ ds, words });
+      return;
+    }
+    const next: DailySession = { ...ds, studyPreviewDone: true };
+    persistSession(next);
+    setPreviewFor(null);
+    if (next.studyWordIds.length > 0) enterRoundsPhase(next, 'study');
+    else persistSession({ ...next, phase: 'congrats' });
+  }
+
   function handleContinueFromReport() {
     if (!session) return;
     if (session.studyWordIds.length > 0) {
@@ -2722,7 +2760,7 @@ export default function DailySessionFlow() {
   }
 
   if (previewFor) {
-    return <NewWordsPreview words={previewFor.words} nativeLanguage={settings.nativeLanguage} onDone={handleFinishPreview} />;
+    return <NewWordsPreview words={previewFor.words} nativeLanguage={settings.nativeLanguage} onDone={handleFinishPreview} onMastered={handlePreviewMastered} />;
   }
 
   if (!session) {
@@ -3310,7 +3348,7 @@ export default function DailySessionFlow() {
                     hint={[true, true, true]}
                     values={articleValues}
                     onChange={setArticleValues}
-                    onSubmit={handleSubmit}
+                    onSubmit={() => { if (wordComplete) handleSubmit(); }}
                     disabled={feedback !== null}
                     showCorrectness={feedback !== null}
                     activeInputRef={activeInputRef}
@@ -3332,7 +3370,7 @@ export default function DailySessionFlow() {
               hint={hint}
               values={values}
               onChange={next => setValues(word.type === 'noun' && next[0] ? [next[0].toUpperCase(), ...next.slice(1)] : next)}
-              onSubmit={handleSubmit}
+              onSubmit={() => { if (wordComplete) handleSubmit(); }}
               disabled={feedback !== null}
               showCorrectness={feedback !== null}
               activeInputRef={activeInputRef}
@@ -3369,7 +3407,6 @@ export default function DailySessionFlow() {
               <div className="flex flex-col gap-3 min-h-48 mt-auto">
                 <button
                   onClick={handleSubmit}
-                  disabled={!wordComplete}
                   className="w-full bg-accent text-white py-3 rounded-xl font-semibold disabled:opacity-40 hover:bg-accent-deep active:scale-95 transition-all"
                 >
                   Check
@@ -3411,6 +3448,16 @@ export default function DailySessionFlow() {
                     </div>
                   )}
                 </div>
+                {feedback && canBuildSentence && (
+                  <button
+                    key="sentence"
+                    onClick={() => setBuildingSentence(true)}
+                    className="w-full border-2 border-accent/60 text-label py-2.5 rounded-xl font-semibold flex items-center justify-center gap-1 hover:bg-accent/10 active:scale-95 transition-all"
+                  >
+                    Build a sentence with it
+                    {signedIn && <> · +1 <PointsIcon className="w-4 h-4" /></>}
+                  </button>
+                )}
                 <button
                   key="next"
                   onClick={handleNext}
@@ -3418,15 +3465,6 @@ export default function DailySessionFlow() {
                 >
                   Next →
                 </button>
-                {feedback && canBuildSentence && (
-                  <button
-                    key="sentence"
-                    onClick={() => setBuildingSentence(true)}
-                    className="w-full border-2 border-accent/60 text-label py-2.5 rounded-xl font-semibold hover:bg-accent/10 active:scale-95 transition-all"
-                  >
-                    Build a sentence with it{signedIn ? ' · +1 coin' : ''}
-                  </button>
-                )}
               </div>
             )}
           </>
