@@ -11,13 +11,15 @@
 // for the one-time signup + API key steps a human still has to do.
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const WEBHOOK_SECRET = Deno.env.get('WEBHOOK_SECRET');
-const NOTIFY_EMAIL = Deno.env.get('NOTIFY_EMAIL') || 'zephyr.he07@gmail.com';
-// Resend's shared sandbox sender — works immediately with zero domain
-// setup, but (Resend's own restriction, not this code's) can only deliver
-// to the email address that owns the Resend account itself. Swap this for
-// a verified custom domain's address later if NOTIFY_EMAIL ever needs to
-// be someone other than the Resend account owner.
-const FROM_ADDRESS = 'Spello <onboarding@resend.dev>';
+// Who gets each report: NOTIFY_EMAIL (the owner, set as a secret) plus
+// the other admins. NOTIFY_EMAILS (comma-separated) replaces the extras.
+const NOTIFY_EMAIL = Deno.env.get('NOTIFY_EMAIL') || 'evecui250@gmail.com';
+const EXTRA_EMAILS = (Deno.env.get('NOTIFY_EMAILS') || 'yutong.chen@inf.ethz.ch').split(',').map(e => e.trim()).filter(Boolean);
+const RECIPIENTS = [...new Set([NOTIFY_EMAIL, ...EXTRA_EMAILS])];
+// Sent from Spello's verified Resend domain (mail.spelloapp.com) — the
+// shared onboarding@resend.dev sender could only reach the Resend
+// account's owner.
+const FROM_ADDRESS = Deno.env.get('NOTIFY_FROM') || 'Spello Bug Reports <bugs@mail.spelloapp.com>';
 
 interface BugReportRow {
   id: number;
@@ -45,32 +47,35 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const record = body.record as BugReportRow;
 
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: FROM_ADDRESS,
-        to: [NOTIFY_EMAIL],
-        subject: `Spello bug report: ${record.message.slice(0, 60)}`,
-        text: [
-          `${record.message}`,
-          '',
-          `Page: ${record.page_path ?? '(unknown)'}`,
-          `Reporter email: ${record.email ?? '(not given)'}`,
-          `User id: ${record.user_id ?? '(signed out)'}`,
-          `Reported at: ${record.created_at}`,
-          `User agent: ${record.user_agent ?? '(unknown)'}`,
-        ].join('\n'),
-      }),
-    });
-
-    if (!res.ok) {
-      console.error('Resend send failed:', await res.text());
-      return new Response('Send failed', { status: 502 });
+    const text = [
+      `${record.message}`,
+      '',
+      `Page: ${record.page_path ?? '(unknown)'}`,
+      `Reporter email: ${record.email ?? '(not given)'}`,
+      `User id: ${record.user_id ?? '(signed out)'}`,
+      `Reported at: ${record.created_at}`,
+      `User agent: ${record.user_agent ?? '(unknown)'}`,
+    ].join('\n');
+    // One email per recipient, so one bad address can't block the others.
+    let sent = 0;
+    for (const to of RECIPIENTS) {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: FROM_ADDRESS,
+          to: [to],
+          subject: `Spello bug report: ${record.message.slice(0, 60)}`,
+          text,
+        }),
+      });
+      if (res.ok) sent++;
+      else console.error(`Resend send to ${to} failed:`, await res.text());
     }
+    if (sent === 0) return new Response('Send failed', { status: 502 });
     return new Response('OK', { status: 200 });
   } catch (err) {
     console.error('notify-bug-report error:', err);
